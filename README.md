@@ -8,7 +8,11 @@ Given `dev.nix`:
 {
   env.FOO = true;
 
-  imports = [ ./frontend/dev.nix ];
+  include = [ ./frontend/dev.nix ];
+
+  enter = ''
+    echo hello
+  '';
 
   packages = [ pkgs.git ];
 
@@ -30,6 +34,8 @@ inputs.nixpkgs.url = ...
 
 ``dev.nix init``: generate `dev.nix`, `dev.yaml` and `.envrc`
 
+``dev.nix ci``
+
 ## Issues
 
 - if we generate flake.nix, errors will come from the wrong file. We should instead import dev.nix!
@@ -38,4 +44,5 @@ inputs.nixpkgs.url = ...
 
 - cachix integration
 - pre-commit.nix
+- postgres module
 - build containters out of the processes
