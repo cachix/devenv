@@ -40,6 +40,8 @@ inputs:
 
 ``dev.nix ci``: build all packages and push them to Cachix
 
+``dev.nix gc``: remove old shells
+
 ## TODO
 
 - integrations via flakes
@@ -47,3 +49,5 @@ inputs:
 - cachix integration: when composing as well
 - pre-commit.nix integration
 - build containters out of the processes
+- registry of dev.nix modules
+- implement a bunch of simple options via yaml
