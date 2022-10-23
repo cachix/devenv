@@ -1,4 +1,4 @@
-# dev.nix - Developer environments
+# dev.nix - Declarative, Reproducible, Composable Developer Environments
 
 Given `dev.nix`:
 
@@ -32,13 +32,13 @@ inputs:
 
 ``dev.nix shell``: make `packages` available and export `env` variables
 
-``dev.nix up``: start processes
+``dev.nix up``: start all `processes`
 
 ``dev.nix init``: generate `dev.nix`, `dev.yaml` and `.envrc`
 
 ``dev.nix update``: bump `dev.lock`
 
-``dev.nix ci``: build all packages and push them to Cachix
+``dev.nix ci``: build all packages and push them to [Cachix](https://cachix.org)
 
 ``dev.nix gc``: remove old shells
 
