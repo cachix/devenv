@@ -3,7 +3,7 @@
 Given `dev.nix`:
 
 ```nix
-{ pkgs }:
+{ pkgs, ... }:
 
 {
   env.FOO = true;
@@ -16,14 +16,16 @@ Given `dev.nix`:
 
   packages = [ pkgs.git ];
 
-  processes.<name>.cmd = "lala";
+  processes."<name>".cmd = "lala";
 }
 ```
 
 And `dev.yaml`:
 
 ```yaml
-inputs.nixpkgs.url = ...
+inputs:
+  - nixpkgs:
+     - url: github:NixOS/nixpkgs/nixos-22.05
 ```
 
 ## Commands
@@ -34,15 +36,14 @@ inputs.nixpkgs.url = ...
 
 ``dev.nix init``: generate `dev.nix`, `dev.yaml` and `.envrc`
 
-``dev.nix ci``
+``dev.nix update``: bump `dev.lock`
 
-## Issues
-
-- if we generate flake.nix, errors will come from the wrong file. We should instead import dev.nix!
+``dev.nix ci``: build all packages and push them to Cachix
 
 ## TODO
 
-- cachix integration
-- pre-commit.nix
+- integrations via flakes
 - postgres module
+- cachix integration: when composing as well
+- pre-commit.nix integration
 - build containters out of the processes
