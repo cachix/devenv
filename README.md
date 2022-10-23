@@ -1,5 +1,7 @@
 # dev.nix - Declarative, Reproducible, Composable Developer Environments
 
+See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a primer.
+
 Given `dev.nix`:
 
 ```nix
