@@ -7,5 +7,6 @@
 
   enterShell = ''
     echo hello from devenv :)
+    git --version
   '';
 }

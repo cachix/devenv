@@ -1,27 +1,25 @@
-{ system }: ''
-
+{ pkgs }: pkgs.writeText "devenv-flake" ''
 {
-  inputs = (builtins.fromJSON (builtins.readFile dev.json)).inputs;
+  inputs = (builtins.fromJSON (builtins.readFile ./devenv.json)).inputs;
 
-  outputs = { nixpkgs }: 
+  outputs = { nixpkgs, ... }@inputs: 
     let
-      pkgs = import nixpkgs { system = "${system}"; };
-      project = (lib.evalModules {
-        specialArgs = { };
+      pkgs = import nixpkgs { system = "${pkgs.system}"; };
+      project = (pkgs.lib.evalModules {
+        specialArgs = inputs // { inherit pkgs; };
         modules = [ 
           ${./module.nix} 
           # TODO: how to improve errors here coming from this file?
           # TODO: this won't work for packages :(
-          ((builtins.fromJSON (builtins.readFile dev.json)).devenv or {})
+          ((builtins.fromJSON (builtins.readFile ./devenv.json)).devenv or {})
         ];
       }).config;
-    in
-    {
-      packages = {
+    in {
+      packages."${pkgs.system}" = {
         build = project.build;
-        procfile project.procfile;
+        procfile = project.procfile;
       };
-      devShell = project.shell;
-    }
+      devShell."${pkgs.system}" = project.shell;
+    };
 }
 ''
