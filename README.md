@@ -1,8 +1,8 @@
-# dev.nix - Fast, Declarative, Reproducible, Composable Developer Environments
+# devenv - Fast, Declarative, Reproducible, Composable Developer Environments
 
 See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a primer.
 
-Given `dev.nix`:
+Given `devenv`:
 
 ```nix
 { pkgs, ... }:
@@ -10,7 +10,7 @@ Given `dev.nix`:
 {
   env.FOO = true;
 
-  include = [ ./frontend/dev.nix ];
+  include = [ ./frontend/devenv ];
 
   enter = ''
     echo hello
@@ -32,17 +32,21 @@ inputs:
 
 ## Commands
 
-``dev.nix shell``: make `packages` available and export `env` variables
+``devenv shell``: make `packages` available and export `env` variables
 
-``dev.nix up``: start all `processes`
+``devenv up``: start all `processes`
 
-``dev.nix init``: generate `dev.nix`, `dev.yaml` and `.envrc`
+``devenv init``: generate `devenv`, `dev.yaml` and `.envrc`
 
-``dev.nix update``: bump `dev.lock`
+``devenv update``: bump `dev.lock`
 
-``dev.nix ci``: build all packages and push them to [Cachix](https://cachix.org)
+``devenv gc``: remove old shells
 
-``dev.nix gc``: remove old shells
+
+## Installation
+
+  $ install nix
+  $ nix-env -if https://github.com/cachix/devenv/tarball/master
 
 ## TODO
 
@@ -50,6 +54,10 @@ inputs:
 - postgres module
 - cachix integration: when composing as well
 - pre-commit.nix integration
-- build containters out of the processes
-- registry of dev.nix modules
+- registry of devenv modules
 - implement a bunch of simple options via yaml
+- top 10 most used languages support
+
+## Roadmap
+
+- support for building containers in a fast way

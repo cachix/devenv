@@ -1,0 +1,19 @@
+name: "Build & Test"
+on:
+  push:
+  pull_request:
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v18
+    - uses: cachix/cachix-action@v11
+      with:
+        name: devenv
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    - run: nix profile install .
+    - run: scripts/test
