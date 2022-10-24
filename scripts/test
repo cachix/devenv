@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# this script runs devenv on all examples
+
+for dir in $(ls examples); do
+   devenv shell
+done
