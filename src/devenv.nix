@@ -1,19 +1,33 @@
-''
+{ pkgs }: pkgs.writeScriptBin "devenv" ''
 #!/bin/sh
 
-function create {
-  # TODO: sanity checks: does devenv.nix exist? does devenv.yml exist?
-  rm -rf .devnix
-  mkdir .devnix
+function assemble {
+  if [[ ! -f devenv.nix ]]; then
+    echo "devenv.nix does not exist. Maybe you want to run first $ devenv init"
+  fi
+  if [[ ! -f devenv.yml ]]; then
+    echo "devenv.yml does not exist. Maybe you want to run first $ devenv init"
+  fi
+
+  rm -rf .devenv
+  mkdir .devenv
   # TODO: validate dev.yml
-  cat dev.yml | yaml2json > .devnix/dev.json
-  mv dev.lock .devnix/flake.lock 
-  cd .devnix
-  cp ${import ./flake.nix { inherit system; }} .devnix/flake.nix
-  git init 
+  cat devenv.yml | ${pkgs.yaml2json}/bin/yaml2json > .devenv/devenv.json
+  cp devenv.nix .devenv/devenv.nix
+  if [[ -f devenv.lock ]]; then
+    cp devenv.lock .devenv/flake.lock 
+  fi
+  cp ${import ./flake.nix { inherit pkgs; }} .devenv/flake.nix
+  pushd .devenv >/dev/null
+  git init -q
   git add .
-  cd ..
-  # TODO: copy lock back
+  popd  >/dev/null
+}
+
+function updateLock {
+  if [[ -f devenv.lock ]]; then
+    cp .devenv/flake.lock devenv.lock
+  fi
 }
 
 mkdir -p $HOME/.devenv
@@ -23,23 +37,25 @@ command=$1
 
 case $command in
   up)
-    create
-    # TODO: eval modules, run foreman
+    assemble
     procfile=$(nix build)
-    foreman start -f $procfile
+    ${pkgs.foreman}/bin/foreman start -f $procfile
     ;;
   shell)
-    create
-    nix develop -f .devnix
+    assemble
+    nix develop .devenv --impure
+    updateLock
     ;;
   init)
+    # TODO: allow templates and list them
     echo "" > .envrc
-    echo "" > dev.nix 
-    echo "" > dev.yaml
+    echo "" > devenv.nix 
+    echo "" > devenv.yaml
     ;;
   update)
-    create
-    nix flake update .direnv
+    assemble
+    nix flake update .devenv
+    updateLock
     ;;
   gc)
     # TODO: check if any of these paths are unreachable and delete them
@@ -48,6 +64,17 @@ case $command in
     ;;
   *)
     echo "Usage: $0 {shell|init|up|gc|update}"
+    echo
+    echo "Commands:"
+    echo 
+    echo "init: "
+    echo "shell: "
+    echo "update: "
+    echo "up: "
+    echo "gc: "
+    echo
     exit 1
 esac
 ''
+
+# TODO: GC: link to $GC_DIR/latest and also $GC_DIR/timestamp

@@ -1,8 +1,8 @@
-# devenv - Fast, Declarative, Reproducible, Composable Developer Environments
+# devenv - Fast, Declarative, Reproducible, and Composable Developer Environments
 
 See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a primer.
 
-Given `devenv`:
+Given `devenv.nix`:
 
 ```nix
 { pkgs, ... }:
@@ -10,35 +10,35 @@ Given `devenv`:
 {
   env.FOO = true;
 
-  include = [ ./frontend/devenv ];
+  include = [ ./frontend ];
 
-  enter = ''
+  enterShell = ''
     echo hello
   '';
 
   packages = [ pkgs.git ];
 
-  processes."<name>".cmd = "lala";
+  processes."<name>".exec = "lala";
 }
 ```
 
-And `dev.yaml`:
+And `devenv.yaml`:
 
 ```yaml
 inputs:
-  - nixpkgs:
-     - url: github:NixOS/nixpkgs/nixos-22.05
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixos-22.05
 ```
 
 ## Commands
+
+``devenv init``: generate `devenv.nix`, `devenv.yaml` and `.envrc`
 
 ``devenv shell``: make `packages` available and export `env` variables
 
 ``devenv up``: start all `processes`
 
-``devenv init``: generate `devenv`, `dev.yaml` and `.envrc`
-
-``devenv update``: bump `dev.lock`
+``devenv update``: bump `devenv.lock`
 
 ``devenv gc``: remove old shells
 
@@ -48,16 +48,8 @@ inputs:
   $ install nix
   $ nix-env -if https://github.com/cachix/devenv/tarball/master
 
-## TODO
-
-- integrations via flakes
-- postgres module
-- cachix integration: when composing as well
-- pre-commit.nix integration
-- registry of devenv modules
-- implement a bunch of simple options via yaml
-- top 10 most used languages support
 
 ## Roadmap
 
+- ``devenv search``
 - support for building containers in a fast way

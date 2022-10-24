@@ -1,6 +1,7 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 let
+  types = lib.types;
   processType = types.submodule ({ config, ... }: {
     options = {
       exec = lib.mkOption {
@@ -9,6 +10,7 @@ let
       };
     };
   });
+  defaultModules = builtins.map (path: ./. + "/modules/${path}") (lib.attrNames (lib.filterAttrs (k: v: v == "regular") (builtins.readDir ./modules)));
 in {
   options = {
     env = lib.mkOption {
@@ -26,6 +28,7 @@ in {
     enterShell = lib.mkOption {
       type = types.lines;
       description = "TODO";
+      default = "";
     };
 
     packages = lib.mkOption {
@@ -56,20 +59,37 @@ in {
       type = types.package;
       internal = true;
     };
+
+    yamls = lib.mkOption {
+      type = types.listOf types.path;
+      internal = true;
+    };
+
+    nixes = lib.mkOption {
+      type = types.listOf types.path;
+      internal = true;
+    };
   };
 
-  config = {
-    procfile = lib.mapAttrs (name: process: "${name}": ${process.cmd}) config.processes;
+  imports = defaultModules;
 
-    shell = pkgs.mkShell {
+  config = {
+    
+    nixes = map (path: path + "/devenv.nix" ) config.includes;
+
+    yamls = map (path: path + "/devenv.yml" ) config.includes;
+
+    procfile = lib.mapAttrs (name: process: "${name}: ${process.cmd}") config.processes;
+
+    shell = pkgs.mkShell ({
       name = "devenv";
       packages = config.packages;
       shellHook = config.enterShell;
-    };
+    } // config.env);
 
-    build = symlinkJoin { 
-      name = "devenv-all"; 
+    build = pkgs.symlinkJoin { 
+      name = "devenv-gc"; 
       paths = [ config.shell config.procfile ];
-    };
+    };    
   };
 }

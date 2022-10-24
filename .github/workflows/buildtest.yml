@@ -16,4 +16,4 @@ jobs:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: nix profile install .
-    - run: scripts/test
+    - run: scripts/run-tests
