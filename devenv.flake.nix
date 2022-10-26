@@ -1,25 +1,23 @@
-{ pkgs }: pkgs.writeText "devenv-flake" ''
 {
   inputs = (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs;
 
   outputs = { nixpkgs, ... }@inputs: 
     let
-      pkgs = import nixpkgs { system = "${pkgs.system}"; };
+      pkgs = import nixpkgs { system = "x86_64-linux"; };
       project = (pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
         modules = [ 
-          ${./module.nix} 
+          /nix/store/xhx6wpxg9n3qk80qzhhrif61vsvy9ibi-module.nix 
           # TODO: how to improve errors here coming from this file?
           # TODO: this won't work for packages :(
           ((builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).devenv or {})
         ];
       }).config;
     in {
-      packages."${pkgs.system}" = {
+      packages."x86_64-linux" = {
         build = project.build;
         procfile = project.procfile;
       };
-      devShell."${pkgs.system}" = project.shell;
+      devShell."x86_64-linux" = project.shell;
     };
 }
-''
