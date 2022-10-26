@@ -1,4 +1,4 @@
-# devenv - Fast, Declarative, Reproducible, and Composable Developer Environments
+# devenv.sh - Fast, Declarative, Reproducible, and Composable Developer Environments
 
 See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a primer.
 
@@ -52,4 +52,4 @@ inputs:
 ## Roadmap
 
 - ``devenv search``
-- support for building containers in a fast way
+- support for building containers using https://github.com/nlewo/nix2container

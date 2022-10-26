@@ -4,7 +4,7 @@
 NIX_FLAGS="--extra-experimental-features nix-command --extra-experimental-features flakes"
 
 # current hack to test if we have resolved all Nix annoyances
-export FLAKE_FILE=devenv.flake.nix
+export FLAKE_FILE=.devenv.flake.nix
 export FLAKE_LOCK=devenv.lock
 PATH=~/dev/nix/outputs/out/bin:$PATH
 
@@ -19,8 +19,8 @@ function assemble {
   mkdir -p .devenv
   # TODO: validate dev.yml
   cat devenv.yml | ${pkgs.yaml2json}/bin/yaml2json > .devenv/devenv.json
-  cp -f ${import ./flake.nix { inherit pkgs; }} devenv.flake.nix
-  chmod +w devenv.flake.nix
+  cp -f ${import ./flake.nix { inherit pkgs; }} $FLAKE_FILE
+  chmod +w $FLAKE_FILE
 }
 
 mkdir -p $HOME/.devenv
