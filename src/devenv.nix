@@ -1,5 +1,12 @@
 { pkgs }: pkgs.writeScriptBin "devenv" ''
-#!/bin/sh
+#!/usr/bin/env bash
+
+NIX_FLAGS="--extra-experimental-features nix-command --extra-experimental-features flakes"
+
+# current hack to test if we have resolved all Nix annoyances
+export FLAKE_FILE=devenv.flake.nix
+export FLAKE_LOCK=devenv.lock
+PATH=~/dev/nix/outputs/out/bin:$PATH
 
 function assemble {
   if [[ ! -f devenv.nix ]]; then
@@ -9,25 +16,11 @@ function assemble {
     echo "devenv.yml does not exist. Maybe you want to run first $ devenv init"
   fi
 
-  rm -rf .devenv
-  mkdir .devenv
+  mkdir -p .devenv
   # TODO: validate dev.yml
   cat devenv.yml | ${pkgs.yaml2json}/bin/yaml2json > .devenv/devenv.json
-  cp devenv.nix .devenv/devenv.nix
-  if [[ -f devenv.lock ]]; then
-    cp devenv.lock .devenv/flake.lock 
-  fi
-  cp ${import ./flake.nix { inherit pkgs; }} .devenv/flake.nix
-  pushd .devenv >/dev/null
-  git init -q
-  git add .
-  popd  >/dev/null
-}
-
-function updateLock {
-  if [[ -f devenv.lock ]]; then
-    cp .devenv/flake.lock devenv.lock
-  fi
+  cp -f ${import ./flake.nix { inherit pkgs; }} devenv.flake.nix
+  chmod +w devenv.flake.nix
 }
 
 mkdir -p $HOME/.devenv
@@ -38,13 +31,12 @@ command=$1
 case $command in
   up)
     assemble
-    procfile=$(nix build)
+    procfile=$(nix $NIX_FLAGS build '.#procfile')
     ${pkgs.foreman}/bin/foreman start -f $procfile
     ;;
   shell)
     assemble
-    nix develop .devenv --impure
-    updateLock
+    nix $NIX_FLAGS develop --impure
     ;;
   init)
     # TODO: allow templates and list them
@@ -54,8 +46,7 @@ case $command in
     ;;
   update)
     assemble
-    nix flake update .devenv
-    updateLock
+    nix $NIX_FLAGS flake update
     ;;
   gc)
     # TODO: check if any of these paths are unreachable and delete them
