@@ -38,7 +38,7 @@ case $command in
     ;;
   shell)
     assemble
-    nix $NIX_FLAGS develop --impure -c which devenv
+    nix $NIX_FLAGS develop --impure
     ;;
   init)
     # TODO: allow templates and list them

@@ -28,7 +28,6 @@ in {
     enterShell = lib.mkOption {
       type = types.lines;
       description = "TODO";
-      default = "";
     };
 
     packages = lib.mkOption {
@@ -81,6 +80,10 @@ in {
 
     procfile = lib.mapAttrs (name: process: "${name}: ${process.cmd}") config.processes;
 
+    enterShell = ''
+      export PS1="(direnv) $PS1"
+    '';
+
     shell = pkgs.mkShell ({
       name = "devenv";
       packages = config.packages;
@@ -88,7 +91,7 @@ in {
     } // config.env);
 
     build = pkgs.symlinkJoin { 
-      name = "devenv-gc"; 
+      name = "devenv-build"; 
       paths = [ config.shell config.procfile ];
     };    
   };

@@ -3,5 +3,7 @@
 {
   packages = [ (import ./src/devenv.nix { inherit pkgs; }) ];
 
-  enterShell = "echo hola";
+  enterShell = ''
+    echo hola
+  '';
 }
