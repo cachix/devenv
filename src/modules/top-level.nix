@@ -10,10 +10,7 @@ let
       };
     };
   });
-  defaultModules = [ 
-    ./postgres.nix 
-    ./pre-commit.nix
-  ];
+  defaultModules = [ ./pre-commit.nix ./postgres.nix ];
 in {
   options = {
     env = lib.mkOption {

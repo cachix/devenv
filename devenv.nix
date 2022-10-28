@@ -1,6 +1,7 @@
 { pkgs, ... }: 
 
 {
-  packages = [ (import ./pkg.nix pkgs) ];
-  a
+  packages = [ (import ./src/devenv.nix { inherit pkgs; }) ];
+
+  enterShell = "echo hola";
 }

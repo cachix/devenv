@@ -5,21 +5,23 @@
   outputs = { nixpkgs, ... }@inputs: 
     let
       pkgs = import nixpkgs { system = "${pkgs.system}"; };
-      project = (pkgs.lib.evalModules {
+      project = pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
         modules = [ 
-          ${./module.nix} 
+          ${./modules}/top-level.nix
           # TODO: how to improve errors here coming from this file?
           # TODO: this won't work for packages :(
+          ./devenv.nix
           ((builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).devenv or {})
         ];
-      }).config;
+      };
+      config = project.config;
     in {
       packages."${pkgs.system}" = {
-        build = project.build;
-        procfile = project.procfile;
+        build = config.build;
+        procfile = config.procfile;
       };
-      devShell."${pkgs.system}" = project.shell;
+      devShell."${pkgs.system}" = config.shell;
     };
 }
 ''
