@@ -9,20 +9,19 @@
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
       mkPackage = pkgs: import ./src/devenv.nix { inherit pkgs; };
       mkDocOptions = pkgs:
-       let
+        let
           eval = pkgs.lib.evalModules {
-            modules = [./src/module.nix ];
+            modules = [ ./src/module.nix ];
           };
           options = pkgs.nixosOptionsDoc {
             options = eval.options;
           };
-
         in options.optionsCommonMark;
     in
       {
         packages = forAllSystems (system: 
           let 
-            pkgs = (import nixpkgs { inherit system; });
+            pkgs = import nixpkgs { inherit system; };
           in {
             devenv = mkPackage pkgs;
             devenv-docs-options = mkDocOptions pkgs;
@@ -32,4 +31,3 @@
         defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
       };
 }
-

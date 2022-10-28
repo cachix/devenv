@@ -6,6 +6,8 @@ NIX_FLAGS="--extra-experimental-features nix-command --extra-experimental-featur
 # current hack to test if we have resolved all Nix annoyances
 export FLAKE_FILE=.devenv.flake.nix
 export FLAKE_LOCK=devenv.lock
+
+# TODO: get the dev version of NIX
 PATH=~/dev/nix/outputs/out/bin:$PATH
 
 function assemble {
@@ -36,7 +38,7 @@ case $command in
     ;;
   shell)
     assemble
-    nix $NIX_FLAGS develop --impure
+    nix $NIX_FLAGS develop --impure -c which devenv
     ;;
   init)
     # TODO: allow templates and list them
