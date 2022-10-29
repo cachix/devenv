@@ -95,9 +95,8 @@ in {
       shellHook = config.enterShell;
     } // config.env);
 
-    build = pkgs.symlinkJoin { 
-      name = "devenv-gc"; 
-      paths = [ config.shell config.procfile ];
-    };    
+    build = pkgs.runCommand "devenv-build" { 
+      buildInputs = [ config.shell config.procfile ];
+    } "echo ok";
   };
 }
