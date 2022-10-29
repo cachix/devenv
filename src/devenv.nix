@@ -19,7 +19,7 @@ function assemble {
   fi
 
   mkdir -p .devenv
-  # TODO: validate dev.yml
+  # TODO: validate dev.yml using jsonschema
   cat devenv.yml | ${pkgs.yaml2json}/bin/yaml2json > .devenv/devenv.json
   cp -f ${import ./flake.nix { inherit pkgs; }} $FLAKE_FILE
   chmod +w $FLAKE_FILE

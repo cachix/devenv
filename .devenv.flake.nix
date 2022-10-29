@@ -7,7 +7,7 @@
       project = pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
         modules = [ 
-          /nix/store/if8sc0xnm3lbl2yl1zhvfsx0fndajrqj-modules/top-level.nix
+          /nix/store/hx4z91yvwbaayagq01r2q7vr2fhs06bd-modules/top-level.nix
           # TODO: how to improve errors here coming from this file?
           # TODO: this won't work for packages :(
           ./devenv.nix

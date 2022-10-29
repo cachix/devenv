@@ -3,5 +3,6 @@
 # this script runs devenv on all examples
 
 for dir in $(ls examples); do
+   devenv ci
    devenv shell
 done
