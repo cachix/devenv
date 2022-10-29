@@ -95,8 +95,10 @@ in {
       shellHook = config.enterShell;
     } // config.env);
 
-    build = pkgs.runCommand "devenv-build" { 
-      buildInputs = [ config.shell config.procfile ];
-    } "echo ok";
+    build = pkgs.runCommand "devenv-build" {} ''
+    ls ${config.shell}
+    ls ${config.procfile}
+    touch $out
+    '';
   };
 }
