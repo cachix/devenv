@@ -53,13 +53,17 @@ case $command in
     assemble
     nix $NIX_FLAGS flake update
     ;;
+  ci)
+    assemble
+    nix $NIX_FLAGS build '.#build' --impure
+    ;;
   gc)
     # TODO: check if any of these paths are unreachable and delete them
     nix-store --delete $(ls $GC_DIR)
     exit 1
     ;;
   *)
-    echo "Usage: $0 {shell|init|up|gc|update}"
+    echo "Usage: $0 {shell|init|up|gc|update|ci}"
     echo
     echo "Commands:"
     echo 
@@ -68,6 +72,7 @@ case $command in
     echo "update: "
     echo "up: "
     echo "gc: "
+    echo "ci: "
     echo
     exit 1
 esac
