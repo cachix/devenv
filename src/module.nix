@@ -49,7 +49,7 @@ in {
     # INTERNAL
 
     procfile = lib.mkOption {
-      type = types.str;
+      type = types.package;
       internal = true;
     };
 
@@ -82,7 +82,7 @@ in {
 
     yamls = map (path: path + "/devenv.yml" ) config.includes;
 
-    procfile = lib.mapAttrs (name: process: "${name}: ${process.cmd}") config.processes;
+    procfile = pkgs.writeText "procfile" (lib.mapAttrs (name: process: "${name}: ${process.cmd}") config.processes);
 
     shell = pkgs.mkShell ({
       name = "devenv";

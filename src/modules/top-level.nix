@@ -10,7 +10,10 @@ let
       };
     };
   });
-  defaultModules = [ ./pre-commit.nix ./postgres.nix ];
+  defaultModules = [ 
+    ./postgres.nix 
+    ./pre-commit.nix
+  ];
 in {
   options = {
     env = lib.mkOption {
@@ -28,6 +31,7 @@ in {
     enterShell = lib.mkOption {
       type = types.lines;
       description = "TODO";
+      default = "";
     };
 
     packages = lib.mkOption {
@@ -45,7 +49,7 @@ in {
     # INTERNAL
 
     procfile = lib.mkOption {
-      type = types.str;
+      type = types.package;
       internal = true;
     };
 
@@ -73,12 +77,13 @@ in {
   imports = defaultModules;
 
   config = {
-    
+
     nixes = map (path: path + "/devenv.nix" ) config.includes;
 
     yamls = map (path: path + "/devenv.yml" ) config.includes;
 
-    procfile = lib.mapAttrs (name: process: "${name}: ${process.cmd}") config.processes;
+    procfile = pkgs.writeText "procfile" 
+      (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));
 
     enterShell = ''
       export PS1="(direnv) $PS1"
@@ -91,7 +96,7 @@ in {
     } // config.env);
 
     build = pkgs.symlinkJoin { 
-      name = "devenv-build"; 
+      name = "devenv-gc"; 
       paths = [ config.shell config.procfile ];
     };    
   };

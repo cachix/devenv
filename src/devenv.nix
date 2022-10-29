@@ -33,8 +33,11 @@ command=$1
 case $command in
   up)
     assemble
-    procfile=$(nix $NIX_FLAGS build '.#procfile')
-    ${pkgs.foreman}/bin/foreman start -f $procfile
+    procfile=$(nix $NIX_FLAGS build --print-out-paths --impure '.#procfile')
+    # TODO: error out if there are no processes set.
+    echo Starting processes ...
+    # TODO: --env
+    ${pkgs.honcho}/bin/honcho start -f $procfile
     ;;
   shell)
     assemble
