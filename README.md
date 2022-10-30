@@ -1,7 +1,9 @@
 # devenv.sh - Fast, Declarative, Reproducible, and Composable Developer Environments
 
-[![](https://dcbadge.vercel.app/api/server/naMgvexb6q)](https://discord.gg/naMgvexb6q)
-[![CI](https://github.com/cachix/devenv.sh/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv.sh/actions/workflows/buildtest.yml)
+[![Join Discord](https://img.shields.io/discord/1036369714731036712?color=7389D8&label=discord&logo=discord&logoColor=ffffff)](https://discord.gg/naMgvexb6q) 
+![License: Apache 2.0](https://img.shields.io/github/license/cachix/devenv) 
+[![version](https://img.shields.io/github/v/release/cachix/devenv?color=green&label=version&sort=semver)](https://github.com/cachix/devenv/releases) 
+[![CI](https://github.com/cachix/devenv/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv/actions/workflows/buildtest.yml?branch=main)
 
 See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a primer.
 
