@@ -14,6 +14,7 @@ let
     ./postgres.nix 
     ./pre-commit.nix
   ];
+  mkDevenv = file: (builtins.fromJSON (builtins.readFile file)).devenv;
 in {
   options = {
     env = lib.mkOption {
@@ -53,6 +54,11 @@ in {
       internal = true;
     };
 
+    procfileEnv = lib.mkOption {
+      type = types.package;
+      internal = true;
+    };
+
     shell = lib.mkOption {
       type = types.package;
       internal = true;
@@ -62,28 +68,17 @@ in {
       type = types.package;
       internal = true;
     };
-
-    yamls = lib.mkOption {
-      type = types.listOf types.path;
-      internal = true;
-    };
-
-    nixes = lib.mkOption {
-      type = types.listOf types.path;
-      internal = true;
-    };
   };
 
-  imports = defaultModules;
+  imports = defaultModules ++ lib.flatten (map (path: [(mkDevenv (path + "/devenv.json")) (path + "/devenv.nix")]) config.includes);
 
   config = {
 
-    nixes = map (path: path + "/devenv.nix" ) config.includes;
-
-    yamls = map (path: path + "/devenv.yml" ) config.includes;
-
     procfile = pkgs.writeText "procfile" 
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));
+    
+    procfileEnv = pkgs.writeText "procfile-env"
+      (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env));
 
     enterShell = ''
       export PS1="(direnv) $PS1"

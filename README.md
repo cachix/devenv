@@ -1,5 +1,8 @@
 # devenv.sh - Fast, Declarative, Reproducible, and Composable Developer Environments
 
+[![](https://dcbadge.vercel.app/api/server/naMgvexb6q)](https://discord.gg/naMgvexb6q)
+[![CI](https://github.com/cachix/devenv.sh/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv.sh/actions/workflows/buildtest.yml)
+
 See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a primer.
 
 Given `devenv.nix`:
@@ -9,8 +12,6 @@ Given `devenv.nix`:
 
 {
   env.FOO = true;
-
-  include = [ ./frontend ];
 
   enterShell = ''
     echo hello
@@ -28,6 +29,9 @@ And `devenv.yaml`:
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixos-22.05
+imports:
+  - ./frontend
+  - ./backend
 ```
 
 ## Commands
