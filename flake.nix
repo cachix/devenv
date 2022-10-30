@@ -11,7 +11,7 @@
       mkDocOptions = pkgs:
         let
           eval = pkgs.lib.evalModules {
-            modules = [ ./src/module.nix ];
+            modules = [ ./src/modules/top-level.nix ];
           };
           options = pkgs.nixosOptionsDoc {
             options = eval.options;

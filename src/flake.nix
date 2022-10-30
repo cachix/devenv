@@ -7,7 +7,7 @@
       pkgs = import nixpkgs { system = "${pkgs.system}"; };
       project = pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
-        modules = [ 
+        modules = [
           ${./modules}/top-level.nix
           # TODO: how to improve errors here coming from this file?
           # TODO: this won't work for packages :(
@@ -20,7 +20,9 @@
       packages."${pkgs.system}" = {
         build = config.build;
         procfile = config.procfile;
+        procfileEnv = config.procfileEnv;
       };
+      includes = config.includes;
       devShell."${pkgs.system}" = config.shell;
     };
 }
