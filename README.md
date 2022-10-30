@@ -42,14 +42,35 @@ inputs:
 
 ``devenv gc``: remove old shells
 
+## Benefits
+
+### Fast
+
+### Declarative
+
+### Reproducible
+
+### Composable
 
 ## Installation
 
-  $ install nix
-  $ nix-env -if https://github.com/cachix/devenv/tarball/master
+1. Install [Nix](https://nixos.org)
 
+```
+    $ sh <(curl -L https://nixos.org/nix/install)
+```
+
+2. Install `devenv`
+
+```
+    $ nix-env -if https://github.com/cachix/devenv/tarball/master
+```
+
+## Usage 
+
+XXX 
 
 ## Roadmap
 
-- ``devenv search``
-- support for building containers using https://github.com/nlewo/nix2container
+- [devenv search](https://github.com/cachix/devenv.sh/issues/4)
+- [support for building containers using https://github.com/nlewo/nix2container](https://github.com/cachix/devenv.sh/issues/5)
