@@ -6,8 +6,8 @@
       pkgs = import nixpkgs { system = "x86_64-linux"; };
       project = pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
-        modules = [ 
-          /nix/store/hx4z91yvwbaayagq01r2q7vr2fhs06bd-modules/top-level.nix
+        modules = [
+          /nix/store/i1y482sfdhzh2rf202f81cpg39y163zr-modules/top-level.nix
           # TODO: how to improve errors here coming from this file?
           # TODO: this won't work for packages :(
           ./devenv.nix
@@ -19,6 +19,7 @@
       packages."x86_64-linux" = {
         build = config.build;
         procfile = config.procfile;
+        procfileEnv = config.procfileEnv;
       };
       devShell."x86_64-linux" = config.shell;
     };

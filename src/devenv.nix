@@ -34,10 +34,14 @@ case $command in
   up)
     assemble
     procfile=$(nix $NIX_FLAGS build --print-out-paths --impure '.#procfile')
-    # TODO: error out if there are no processes set.
-    echo Starting processes ...
-    # TODO: --env
-    ${pkgs.honcho}/bin/honcho start -f $procfile
+    procfileenv=$(nix $NIX_FLAGS build --print-out-paths --impure '.#procfileEnv')
+    if [ "$(cat $procfile)" = "" ]; then
+      echo "No 'processes' option defined."  
+      exit 1
+    else
+      echo Starting processes ...
+      ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
+    fi
     ;;
   shell)
     assemble
