@@ -63,7 +63,8 @@ case $command in
     exit 1
     ;;
   *)
-    echo "Usage: $0 {shell|init|up|gc|update|ci}"
+    echo "Usage: devenv {shell|init|up|gc|update|ci}"
+    echo "Version: 0.1"
     echo
     echo "Commands:"
     echo 
