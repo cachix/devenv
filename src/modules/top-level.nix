@@ -10,23 +10,12 @@ let
       };
     };
   });
-  defaultModules = [ 
-    ./postgres.nix 
-    ./pre-commit.nix
-  ];
-  mkDevenv = file: (builtins.fromJSON (builtins.readFile file)).devenv;
 in {
   options = {
     env = lib.mkOption {
       type = types.attrs;
       description = "TODO";
       default = {};
-    };
-
-    includes = lib.mkOption {
-      type = types.listOf types.path;
-      description = "TODO";
-      default = [];
     };
 
     enterShell = lib.mkOption {
@@ -70,7 +59,10 @@ in {
     };
   };
 
-  imports = defaultModules ++ lib.flatten (map (path: [(mkDevenv (path + "/devenv.json")) (path + "/devenv.nix")]) config.includes);
+  imports = [ 
+    ./postgres.nix 
+    ./pre-commit.nix
+  ];
 
   config = {
 

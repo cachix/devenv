@@ -5,15 +5,22 @@
   outputs = { nixpkgs, ... }@inputs: 
     let
       pkgs = import nixpkgs { system = "${pkgs.system}"; };
+      lib = pkgs.lib;
+      devenv = builtins.fromJSON (builtins.readFile ./.devenv/devenv.json);
+      toModule = path: 
+        if lib.hasPrefix "./" path 
+        then ./. + (builtins.substring 1 255 path) + "/devenv.nix"
+        else let 
+          paths = lib.splitString "/" path;
+          first = builtins.head paths;
+          in inputs.''${first} or (throw "Unknown input ''${first}") + "/''${lib.concatStringsSep "/" (builtins.tail paths)}" + "/devenv.nix";
       project = pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
         modules = [
           ${./modules}/top-level.nix
-          # TODO: how to improve errors here coming from this file?
-          # TODO: this won't work for packages :(
           ./devenv.nix
-          ((builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).devenv or {})
-        ];
+          (devenv.devenv or {})
+        ] ++ (map toModule (devenv.imports or []));
       };
       config = project.config;
     in {
@@ -22,7 +29,6 @@
         procfile = config.procfile;
         procfileEnv = config.procfileEnv;
       };
-      includes = config.includes;
       devShell."${pkgs.system}" = config.shell;
     };
 }
