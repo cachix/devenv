@@ -80,3 +80,8 @@ XXX
 
 - [devenv search](https://github.com/cachix/devenv.sh/issues/4)
 - [support for building containers using https://github.com/nlewo/nix2container](https://github.com/cachix/devenv.sh/issues/5)
+
+## Related projects
+
+- [Home Manager](https://github.com/nix-community/home-manager) manages your home dotfiles in a similar manner
+- [nix-darwin](https://github.com/LnL7/nix-darwin) manages your macOS configuration in a similar manner
