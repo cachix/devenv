@@ -16,7 +16,7 @@
       project = pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
         modules = [
-          /nix/store/kz6sxf9k39mxd1ay581vj7dfnkdiwyy6-modules/top-level.nix
+          /nix/store/yvxx8xjkvzbljqk5prr7vig2nqp0wl55-modules/top-level.nix
           ./devenv.nix
           (devenv.devenv or {})
         ] ++ (map toModule (devenv.imports or []));
