@@ -3,6 +3,9 @@
 set -xe
 
 for dir in $(ls examples); do
+   pushd dir 
    devenv ci
    devenv shell
+   exit
+   popd
 done
