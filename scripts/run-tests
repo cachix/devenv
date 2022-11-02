@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# this script runs devenv on all examples
+set -xe
 
 for dir in $(ls examples); do
    devenv ci
