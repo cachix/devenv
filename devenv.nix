@@ -8,4 +8,16 @@
   enterShell = ''
     echo hola
   '';
+
+  scripts."run-devenv-tests".exec = ''
+    set -xe
+
+    for dir in $(ls examples); do
+      pushd examples/$dir 
+      devenv ci
+      devenv shell
+      exit
+      popd
+    done
+  '';
 }
