@@ -69,6 +69,7 @@ case $command in
     echo "" > .envrc
     echo "" > devenv.nix 
     echo "" > devenv.yaml
+    echo "Make sure to add .devenv* to your .gitignore file!"
     ;;
   update)
     assemble

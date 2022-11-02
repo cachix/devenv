@@ -62,6 +62,7 @@ in {
   imports = [ 
     ./postgres.nix 
     ./pre-commit.nix
+    ./scripts.nix
   ];
 
   config = {
@@ -83,9 +84,9 @@ in {
     } // config.env);
 
     build = pkgs.runCommand "devenv-build" {} ''
-    ls ${config.shell}
-    ls ${config.procfile}
-    touch $out
+      ls ${config.shell}
+      ls ${config.procfile}
+      touch $out
     '';
   };
 }
