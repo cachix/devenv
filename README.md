@@ -1,4 +1,4 @@
-# devenv.sh - Fast, Declarative, Reproducible, and Composable Developer Environments
+# [devenv.sh](https://devenv.sh) - Fast, Declarative, Reproducible, and Composable Developer Environments
 
 [![Join Discord](https://img.shields.io/discord/1036369714731036712?color=7389D8&label=discord&logo=discord&logoColor=ffffff)](https://discord.gg/naMgvexb6q) 
 ![License: Apache 2.0](https://img.shields.io/github/license/cachix/devenv) 
