@@ -67,6 +67,8 @@ in
   ];
 
   config = {
+    env.DEVENV_DOTFILE = ".devenv/";
+    env.DEVENV_STATE = ".devenv/state/";
 
     procfile = pkgs.writeText "procfile"
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));

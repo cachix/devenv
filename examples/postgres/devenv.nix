@@ -1,0 +1,5 @@
+{ ... }:
+
+{
+  postgres.enable = true;
+}
