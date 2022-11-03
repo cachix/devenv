@@ -3,7 +3,7 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
 
-  outputs = { self, nixpkgs, ... }: 
+  outputs = { self, nixpkgs, ... }:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
@@ -16,18 +16,20 @@
           options = pkgs.nixosOptionsDoc {
             options = eval.options;
           };
-        in options.optionsCommonMark;
+        in
+        options.optionsCommonMark;
     in
-      {
-        packages = forAllSystems (system: 
-          let 
-            pkgs = import nixpkgs { inherit system; };
-          in {
-            devenv = mkPackage pkgs;
-            devenv-docs-options = mkDocOptions pkgs;
-          }            
-        );
+    {
+      packages = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        {
+          devenv = mkPackage pkgs;
+          devenv-docs-options = mkDocOptions pkgs;
+        }
+      );
 
-        defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
-      };
+      defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
+    };
 }

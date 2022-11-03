@@ -15,11 +15,12 @@ let
 
     ${script.exec}
   '';
-in {
+in
+{
   options = {
     scripts = lib.mkOption {
       type = types.attrsOf scriptType;
-      default = {};
+      default = { };
       description = "TODO";
     };
   };

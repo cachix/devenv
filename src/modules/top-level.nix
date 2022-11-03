@@ -10,12 +10,13 @@ let
       };
     };
   });
-in {
+in
+{
   options = {
     env = lib.mkOption {
       type = types.attrs;
       description = "TODO";
-      default = {};
+      default = { };
     };
 
     enterShell = lib.mkOption {
@@ -27,12 +28,12 @@ in {
     packages = lib.mkOption {
       type = types.listOf types.package;
       description = "TODO";
-      default = [];
+      default = [ ];
     };
 
     processes = lib.mkOption {
       type = types.attrsOf processType;
-      default = {};
+      default = { };
       description = "TODO";
     };
 
@@ -53,23 +54,23 @@ in {
       internal = true;
     };
 
-    build = lib.mkOption {
-      type = types.package;
+    ci = lib.mkOption {
+      type = types.listOf types.package;
       internal = true;
     };
   };
 
-  imports = [ 
-    ./postgres.nix 
+  imports = [
+    ./postgres.nix
     ./pre-commit.nix
     ./scripts.nix
   ];
 
   config = {
 
-    procfile = pkgs.writeText "procfile" 
+    procfile = pkgs.writeText "procfile"
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));
-    
+
     procfileEnv = pkgs.writeText "procfile-env"
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env));
 
@@ -83,10 +84,6 @@ in {
       shellHook = config.enterShell;
     } // config.env);
 
-    build = pkgs.runCommand "devenv-build" {} ''
-      ls ${config.shell}
-      ls ${config.procfile}
-      touch $out
-    '';
+    ci = [ config.shell config.procfile ];
   };
 }
