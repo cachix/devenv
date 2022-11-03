@@ -1,4 +1,4 @@
-{ pkgs, ... }: 
+{ pkgs, ... }:
 
 {
   packages = [ (import ./src/devenv.nix { inherit pkgs; }) ];
@@ -20,4 +20,9 @@
       popd
     done
   '';
+
+  pre-commit.hooks = {
+    nixpkgs-fmt.enable = true;
+    shellcheck.enable = true;
+  };
 }
