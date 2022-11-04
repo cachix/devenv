@@ -68,7 +68,7 @@ in
 
   config = {
     env.DEVENV_DOTFILE = ".devenv/";
-    env.DEVENV_STATE = ".devenv/state/";
+    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "state/";
 
     procfile = pkgs.writeText "procfile"
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));
@@ -78,6 +78,17 @@ in
 
     enterShell = ''
       export PS1="(direnv) $PS1"
+      
+      # note what environments are active, but make sure we don't repeat them
+      if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
+        export DIRENV_ACTIVE="$PWD:$DIRENV_ACTIVE"
+      fi
+
+      # devenv helper
+      if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
+        echo "You have .envrc but direnv command is not installed."
+        echo "Please install direnv: https://direnv.net/docs/installation.html"
+      fi
     '';
 
     shell = pkgs.mkShell ({
