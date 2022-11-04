@@ -1,4 +1,8 @@
-{ pkgs }: pkgs.writeScriptBin "devenv" ''
+{ pkgs }:
+let
+  examples = ../examples;
+in
+pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
 
   NIX_FLAGS="--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes"
@@ -58,18 +62,22 @@
       ;;
     shell)
       assemble
-      nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
-      # TODO: ideally we could tell nix develop not to enter the environment since we can then use $DEVENV_GC/shell
-      nix $NIX_FLAGS develop --impure --profile $DEVENV_GC/shell
+      env=$(nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
       nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
       ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell 
+      nix $NIX_FLAGS develop $DEVENV_GC/shell
       ;;
     init)
-      # TODO: allow templates and list them
-      echo "" > .envrc
-      echo "" > devenv.nix 
-      echo "" > devenv.yaml
-      echo "Make sure to add .devenv* to your .gitignore file!"
+      # TODO: allow selecting which example and list them
+      example=simple
+      echo "Creating .envrc"
+      cat ${examples}/$example/.envrc > .envrc
+      echo "Creating .devenv.nix"
+      cat ${examples}/$example/.envrc > devenv.nix 
+      echo "Creating .devenv.yaml"
+      cat ${examples}/$example/.envrc > devenv.yaml
+      echo ".devenv*" >> .gitignore
+      echo "Done."
       ;;
     update)
       assemble

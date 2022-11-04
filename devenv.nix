@@ -19,6 +19,9 @@
       exit
       popd
     done
+
+    # TODO: test direnv integration
+    # TODO: test DIRENV_ACTIVE
   '';
 
   pre-commit.hooks = {
