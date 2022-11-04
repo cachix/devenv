@@ -20,6 +20,7 @@
 
   config = lib.mkIf ((lib.filterAttrs (id: value: value.enable) config.pre-commit.hooks) != { }) {
     ci = [ config.pre-commit.run ];
+    packages = [ config.pre-commit.package ];
     enterShell = config.pre-commit.installationScript;
   };
 }
