@@ -18,5 +18,6 @@ jobs:
     - run: nix profile install .
     - name: Run tests
       run: |
+        devenv ci
         devenv shell
         run-devenv-tests
