@@ -2,6 +2,10 @@
   description = "devenv - Developer Environments";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
+  inputs.flake-compat = {
+    url = "github:edolstra/flake-compat";
+    flake = false;
+  };
 
   outputs = { self, nixpkgs, ... }:
     let
