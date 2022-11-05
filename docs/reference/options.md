@@ -1,71 +1,4 @@
-## _module.args
-Additional arguments passed to each module in addition to ones
-like <literal>lib</literal>, <literal>config</literal>,
-and <literal>pkgs</literal>, <literal>modulesPath</literal>.
-
-This option is also available to all submodules. Submodules do not
-inherit args from their parent module, nor do they provide args to
-their parent module or sibling submodules. The sole exception to
-this is the argument <literal>name</literal> which is provided by
-parent modules to a submodule and contains the attribute name
-the submodule is bound to, or a unique generated name if it is
-not bound to an attribute.
-
-Some arguments are already passed by default, of which the
-following <emphasis>cannot</emphasis> be changed with this option:
-
-<itemizedlist>
-<listitem><para><varname>lib</varname>: The nixpkgs library.
-
-</para></listitem>
-<listitem><para><varname>config</varname>: The results of all options after merging the values from all modules together.
-
-</para></listitem>
-<listitem><para><varname>options</varname>: The options declared in all modules.
-
-</para></listitem>
-<listitem><para><varname>specialArgs</varname>: The <literal>specialArgs</literal> argument passed to <literal>evalModules</literal>.
-
-</para></listitem>
-<listitem><para>All attributes of <varname>specialArgs</varname>
-
-Whereas option values can generally depend on other option values
-thanks to laziness, this does not apply to <literal>imports</literal>, which
-must be computed statically before anything else.
-
-For this reason, callers of the module system can provide <literal>specialArgs</literal>
-which are available during import resolution.
-
-For NixOS, <literal>specialArgs</literal> includes
-<varname>modulesPath</varname>, which allows you to import
-extra modules from the nixpkgs package tree without having to
-somehow make the module aware of the location of the
-<literal>nixpkgs</literal> or NixOS directories.
-
-<programlisting>
-{ modulesPath, ... }: {
-  imports = [
-    (modulesPath + "/profiles/minimal.nix")
-  ];
-}
-</programlisting></para></listitem>
-
-</itemizedlist>For NixOS, the default value for this option includes at least this argument:
-
-<itemizedlist>
-<listitem><para><varname>pkgs</varname>: The nixpkgs package set according to
-the <option>nixpkgs.pkgs</option> option.</para></listitem>
-
-</itemizedlist>
-
-
-*_Type_*:
-lazy attribute set of raw value
-
-
-
-
-
+# devenv.nix options
 
 ## enterShell
 TODO
@@ -201,7 +134,7 @@ submodule
 ## pre-commit.default_stages
 A configuration wide option for the stages property.
 Installs hooks to the defined stages.
-See https://pre-commit.com/#confining-hooks-to-run-at-certain-stages
+See <link xlink:href="https://pre-commit.com/#confining-hooks-to-run-at-certain-stages"></link>.
 
 
 *_Type_*:
@@ -234,6 +167,198 @@ list of string
 
 ## pre-commit.hooks
 The hook definitions.
+
+Pre-defined hooks can be enabled by, for example:
+
+<programlisting language="nix">
+hooks.nixpkgs-fmt.enable = true;
+</programlisting>The pre-defined hooks are:
+
+<emphasis role="strong"><literal>actionlint</literal></emphasis>
+
+Static checker for GitHub Actions workflow files.
+
+<emphasis role="strong"><literal>alejandra</literal></emphasis>
+
+The Uncompromising Nix Code Formatter.
+
+<emphasis role="strong"><literal>ansible-lint</literal></emphasis>
+
+Ansible linter.
+
+<emphasis role="strong"><literal>black</literal></emphasis>
+
+The uncompromising Python code formatter.
+
+<emphasis role="strong"><literal>brittany</literal></emphasis>
+
+Haskell source code formatter.
+
+<emphasis role="strong"><literal>cabal-fmt</literal></emphasis>
+
+Format Cabal files
+
+<emphasis role="strong"><literal>cabal2nix</literal></emphasis>
+
+Run <literal>cabal2nix</literal> on all <literal>*.cabal</literal> files to generate corresponding <literal>default.nix</literal> files.
+
+<emphasis role="strong"><literal>cargo-check</literal></emphasis>
+
+Check the cargo package for errors.
+
+<emphasis role="strong"><literal>chktex</literal></emphasis>
+
+LaTeX semantic checker
+
+<emphasis role="strong"><literal>clang-format</literal></emphasis>
+
+Format your code using <literal>clang-format</literal>.
+
+<emphasis role="strong"><literal>clippy</literal></emphasis>
+
+Lint Rust code.
+
+<emphasis role="strong"><literal>deadnix</literal></emphasis>
+
+Scan Nix files for dead code (unused variable bindings).
+
+<emphasis role="strong"><literal>dhall-format</literal></emphasis>
+
+Dhall code formatter.
+
+<emphasis role="strong"><literal>elm-format</literal></emphasis>
+
+Format Elm files.
+
+<emphasis role="strong"><literal>elm-review</literal></emphasis>
+
+Analyzes Elm projects, to help find mistakes before your users find them.
+
+<emphasis role="strong"><literal>elm-test</literal></emphasis>
+
+Run unit tests and fuzz tests for Elm code.
+
+<emphasis role="strong"><literal>eslint</literal></emphasis>
+
+Find and fix problems in your JavaScript code.
+
+<emphasis role="strong"><literal>fourmolu</literal></emphasis>
+
+Haskell code prettifier.
+
+<emphasis role="strong"><literal>govet</literal></emphasis>
+
+Checks correctness of Go programs.
+
+<emphasis role="strong"><literal>hadolint</literal></emphasis>
+
+Dockerfile linter, validate inline bash.
+
+<emphasis role="strong"><literal>hindent</literal></emphasis>
+
+Haskell code prettifier.
+
+<emphasis role="strong"><literal>hlint</literal></emphasis>
+
+HLint gives suggestions on how to improve your source code.
+
+<emphasis role="strong"><literal>hpack</literal></emphasis>
+
+<literal>hpack</literal> converts package definitions in the hpack format (<literal>package.yaml</literal>) to Cabal files.
+
+<emphasis role="strong"><literal>html-tidy</literal></emphasis>
+
+HTML linter.
+
+<emphasis role="strong"><literal>hunspell</literal></emphasis>
+
+Spell checker and morphological analyzer.
+
+<emphasis role="strong"><literal>isort</literal></emphasis>
+
+A Python utility / library to sort imports.
+
+<emphasis role="strong"><literal>latexindent</literal></emphasis>
+
+Perl script to add indentation to LaTeX files.
+
+<emphasis role="strong"><literal>luacheck</literal></emphasis>
+
+A tool for linting and static analysis of Lua code.
+
+<emphasis role="strong"><literal>markdownlint</literal></emphasis>
+
+Style checker and linter for markdown files.
+
+<emphasis role="strong"><literal>mdsh</literal></emphasis>
+
+Markdown shell pre-processor.
+
+<emphasis role="strong"><literal>nix-linter</literal></emphasis>
+
+Linter for the Nix expression language.
+
+<emphasis role="strong"><literal>nixfmt</literal></emphasis>
+
+Nix code prettifier.
+
+<emphasis role="strong"><literal>nixpkgs-fmt</literal></emphasis>
+
+Nix code prettifier.
+
+<emphasis role="strong"><literal>ormolu</literal></emphasis>
+
+Haskell code prettifier.
+
+<emphasis role="strong"><literal>prettier</literal></emphasis>
+
+Opinionated multi-language code formatter.
+
+<emphasis role="strong"><literal>purs-tidy</literal></emphasis>
+
+Format purescript files.
+
+<emphasis role="strong"><literal>purty</literal></emphasis>
+
+Format purescript files.
+
+<emphasis role="strong"><literal>revive</literal></emphasis>
+
+A linter for Go source code.
+
+<emphasis role="strong"><literal>rustfmt</literal></emphasis>
+
+Format Rust code.
+
+<emphasis role="strong"><literal>shellcheck</literal></emphasis>
+
+Format shell files.
+
+<emphasis role="strong"><literal>shfmt</literal></emphasis>
+
+Format shell files.
+
+<emphasis role="strong"><literal>statix</literal></emphasis>
+
+Lints and suggestions for the Nix programming language.
+
+<emphasis role="strong"><literal>stylish-haskell</literal></emphasis>
+
+A simple Haskell code prettifier
+
+<emphasis role="strong"><literal>stylua</literal></emphasis>
+
+An Opinionated Lua Code Formatter.
+
+<emphasis role="strong"><literal>terraform-format</literal></emphasis>
+
+Format terraform (<literal>.tf</literal>) files.
+
+<emphasis role="strong"><literal>yamllint</literal></emphasis>
+
+Yaml linter.
+
+
 
 
 *_Type_*:
@@ -280,7 +405,7 @@ false
 
 
 ## pre-commit.hooks.\<name\>.entry
-The entry point - the executable to run. entry can also contain arguments that will not be overridden such as entry: autopep8 -i.
+The entry point - the executable to run. <option>entry</option> can also contain arguments that will not be overridden, such as <literal>entry = "autopep8 -i";</literal>.
 
 
 *_Type_*:
@@ -349,7 +474,7 @@ string
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"internal name, same as id"}
+{"_type":"literalDocBook","text":"internal name, same as id"}
 ```
 
 
@@ -357,6 +482,7 @@ string
 
 ## pre-commit.hooks.\<name\>.pass_filenames
 Whether to pass filenames as arguments to the entry point.
+
 
 *_Type_*:
 boolean
@@ -388,6 +514,7 @@ attribute set of unspecified value
 ## pre-commit.hooks.\<name\>.stages
 Confines the hook to run at a particular stage.
 
+
 *_Type_*:
 list of string
 
@@ -401,7 +528,7 @@ list of string
 
 
 ## pre-commit.hooks.\<name\>.types
-List of file types to run on. See Filtering files with types (https://pre-commit.com/#plugins).
+List of file types to run on. See <link xlink:href="https://pre-commit.com/#plugins">Filtering files with types</link>.
 
 
 *_Type_*:
@@ -433,7 +560,7 @@ list of string
 
 
 ## pre-commit.installationScript
-A bash snippet that installs nix-pre-commit in the current directory
+A bash snippet that installs nix-pre-commit-hooks in the current directory
 
 
 *_Type_*:
@@ -445,7 +572,7 @@ string
 
 
 ## pre-commit.package
-The pre-commit package to use.
+The <literal>pre-commit</literal> package to use.
 
 
 *_Type_*:
@@ -464,6 +591,9 @@ package
 The source of the project to be checked.
 
 This is used in the derivation that performs the check.
+
+If you use the <literal>flakeModule</literal>, the default is <literal>self.outPath</literal>; the whole flake
+sources.
 
 
 *_Type_*:
@@ -489,14 +619,14 @@ package
 
 *_Default_*
 ```
-{"_type":"derivation","name":"pre-commit-run"}
+"<derivation>"
 ```
 
 
 
 
 ## pre-commit.settings.alejandra.exclude
-Files or directories to exclude from formatting
+Files or directories to exclude from formatting.
 
 *_Type_*:
 list of string
@@ -515,7 +645,7 @@ list of string
 
 
 ## pre-commit.settings.deadnix.fix
-Remove unused code and write to source file
+Remove unused code and write to source file.
 
 *_Type_*:
 boolean
@@ -530,7 +660,7 @@ false
 
 
 ## pre-commit.settings.deadnix.noLambdaArg
-Don't check lambda parameter arguments
+Don't check lambda parameter arguments.
 
 *_Type_*:
 boolean
@@ -545,7 +675,7 @@ false
 
 
 ## pre-commit.settings.deadnix.noLambdaPatternNames
-Don't check lambda pattern names (don't break nixpkgs callPackage)
+Don't check lambda pattern names (don't break nixpkgs <literal>callPackage</literal>).
 
 *_Type_*:
 boolean
@@ -560,7 +690,7 @@ false
 
 
 ## pre-commit.settings.deadnix.noUnderscore
-Don't check any bindings that start with a _
+Don't check any bindings that start with a <literal>_</literal>.
 
 *_Type_*:
 boolean
@@ -575,7 +705,7 @@ false
 
 
 ## pre-commit.settings.deadnix.quiet
-Don't print dead code report
+Don't print a dead code report.
 
 *_Type_*:
 boolean
@@ -590,7 +720,7 @@ false
 
 
 ## pre-commit.settings.eslint.binPath
-Eslint binary path. E.g. if you want to use the eslint in node_modules, use ./node_modules/.bin/eslint
+<literal>eslint</literal> binary path. E.g. if you want to use the <literal>eslint</literal> in <literal>node_modules</literal>, use <literal>./node_modules/.bin/eslint</literal>.
 
 *_Type_*:
 path
@@ -598,14 +728,14 @@ path
 
 *_Default_*
 ```
-"/nix/store/14gw2smdm9gdh1cf9cc9bgmmjwry8pqh-eslint-8.26.0/bin/eslint"
+{"_type":"literalExpression","text":"${tools.eslint}/bin/eslint"}
 ```
 
 
 
 
 ## pre-commit.settings.eslint.extensions
-The pattern of files to run on, see https://pre-commit.com/#hooks-files
+The pattern of files to run on, see <link xlink:href="https://pre-commit.com/#hooks-files"></link>.
 
 *_Type_*:
 string
@@ -620,7 +750,7 @@ string
 
 
 ## pre-commit.settings.hpack.silent
-Should generation should be silent
+Whether generation should be silent.
 
 *_Type_*:
 boolean
@@ -635,7 +765,7 @@ false
 
 
 ## pre-commit.settings.nix-linter.checks
-Available checks (See `nix-linter --help-for [CHECK]` for more details)
+Available checks. See <literal>nix-linter --help-for [CHECK]</literal> for more details.
 
 *_Type_*:
 list of string
@@ -650,7 +780,7 @@ list of string
 
 
 ## pre-commit.settings.ormolu.cabalDefaultExtensions
-Use default-extensions from .cabal files
+Use <literal>default-extensions</literal> from <literal>.cabal</literal> files.
 
 *_Type_*:
 boolean
@@ -665,7 +795,7 @@ false
 
 
 ## pre-commit.settings.ormolu.defaultExtensions
-Haskell language extensions to enable
+Haskell language extensions to enable.
 
 *_Type_*:
 list of string
@@ -680,7 +810,7 @@ list of string
 
 
 ## pre-commit.settings.prettier.binPath
-Prettier binary path. E.g. if you want to use the prettier in node_modules, use ./node_modules/.bin/prettier
+<literal>prettier</literal> binary path. E.g. if you want to use the <literal>prettier</literal> in <literal>node_modules</literal>, use <literal>./node_modules/.bin/prettier</literal>.
 
 *_Type_*:
 path
@@ -688,14 +818,14 @@ path
 
 *_Default_*
 ```
-"/nix/store/69kzc64shbq8mrafkldiy0bnj81kp246-prettier-2.7.1/bin/prettier"
+{"_type":"literalExpression","text":"\"${tools.prettier}/bin/prettier\"\n"}
 ```
 
 
 
 
 ## pre-commit.settings.revive.configPath
-path to the configuration TOML file
+Path to the configuration TOML file.
 
 *_Type_*:
 string
@@ -710,7 +840,7 @@ string
 
 
 ## pre-commit.settings.statix.format
-Error Output format
+Error Output format.
 
 *_Type_*:
 one of "stderr", "errfmt", "json"
@@ -725,7 +855,7 @@ one of "stderr", "errfmt", "json"
 
 
 ## pre-commit.settings.statix.ignore
-Globs of file patterns to skip
+Globs of file patterns to skip.
 
 *_Type_*:
 list of string
@@ -744,8 +874,11 @@ list of string
 
 
 ## pre-commit.src
-Root of the project. By default this will be filtered with the gitignoreSource
-function later, unless rootSrc is specified.
+Root of the project. By default this will be filtered with the <literal>gitignoreSource</literal>
+function later, unless <literal>rootSrc</literal> is specified.
+
+If you use the <literal>flakeModule</literal>, the default is <literal>self.outPath</literal>; the whole flake
+sources.
 
 
 *_Type_*:
@@ -757,9 +890,9 @@ path
 
 
 ## pre-commit.tools
-Tool set from which nix-pre-commit will pick binaries.
+Tool set from which <literal>nix-pre-commit-hooks</literal> will pick binaries.
 
-nix-pre-commit comes with its own set of packages for this purpose.
+<literal>nix-pre-commit-hooks</literal> comes with its own set of packages for this purpose.
 
 
 *_Type_*:
