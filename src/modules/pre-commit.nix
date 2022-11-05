@@ -16,6 +16,7 @@
       shorthandOnlyDefinesConfig = true;
     };
     default = { };
+    description = "Integration of https://github.com/cachix/pre-commit-hooks.nix";
   };
 
   config = lib.mkIf ((lib.filterAttrs (id: value: value.enable) config.pre-commit.hooks) != { }) {

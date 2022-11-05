@@ -47,7 +47,7 @@ in
       type = types.listOf types.lines;
       default = [ "--no-locale" ];
       example = [ "--data-checksums" "--allow-group-access" ];
-      description = lib.mdDoc ''
+      description = ''
         Additional arguments passed to `initdb` during data dir
         initialisation.
       '';
