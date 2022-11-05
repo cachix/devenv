@@ -20,7 +20,7 @@
             specialArgs = { inherit pre-commit-hooks pkgs; };
           };
           options = pkgs.nixosOptionsDoc {
-            options = eval.options;
+            options = builtins.removeAttrs eval.options [ "_module" ];
           };
         in
         options.optionsCommonMark;

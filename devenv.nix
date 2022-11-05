@@ -32,4 +32,11 @@
     shellcheck.enable = true;
     markdownlint.enable = true;
   };
+  pre-commit.settings.markdownlint.config = {
+    MD013 = {
+      line_length = 120;
+    };
+    MD033 = false;
+    MD034 = false;
+  };
 }

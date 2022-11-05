@@ -2,7 +2,6 @@
   inputs = { pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
     } // (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs;
   
-
   outputs = { nixpkgs, ... }@inputs:
     let
       pkgs = import nixpkgs { system = "x86_64-linux"; };
@@ -18,7 +17,7 @@
       project = pkgs.lib.evalModules {
         specialArgs = inputs // { inherit pkgs; };
         modules = [
-          /nix/store/66h0a8yh05k9ilvzf22hp47zr3r8gwbs-modules/top-level.nix
+          /nix/store/ncpvxcnpnafxj0k64ibf80xysilcx1lk-modules/top-level.nix
           ./devenv.nix
           (devenv.devenv or {})
         ] ++ (map toModule (devenv.imports or []));
