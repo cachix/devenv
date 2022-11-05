@@ -3,7 +3,6 @@
     inputs = { pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
       } // (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs;
     
-
     outputs = { nixpkgs, ... }@inputs:
       let
         pkgs = import nixpkgs { system = "${pkgs.system}"; };

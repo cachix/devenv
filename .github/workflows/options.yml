@@ -1,0 +1,25 @@
+name: "Options docs"
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v18
+    - uses: cachix/cachix-action@v11
+      with:
+        name: devenv
+    - name: Run tests
+      run: |
+        nix build '.#devenv-docs-options'
+        echo "# Options" > docs/reference/options.md
+        echo > docs/reference/options.md
+        cp ./result docs/reference/options.md
+    - uses: EndBug/add-and-commit@v9
+      with:
+        default_author: github_actions
+        add:  docs/reference/options.md
+        message: 'Auto generate options'

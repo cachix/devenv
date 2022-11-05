@@ -1,13 +1,14 @@
 {
   description = "devenv - Developer Environments";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.flake-compat = {
     url = "github:edolstra/flake-compat";
     flake = false;
   };
 
-  outputs = { self, nixpkgs, ... }:
+  outputs = { self, nixpkgs, pre-commit-hooks, ... }:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
@@ -16,6 +17,7 @@
         let
           eval = pkgs.lib.evalModules {
             modules = [ ./src/modules/top-level.nix ];
+            specialArgs = { inherit pre-commit-hooks pkgs; };
           };
           options = pkgs.nixosOptionsDoc {
             options = eval.options;
