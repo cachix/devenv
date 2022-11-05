@@ -1,0 +1,27 @@
+site_name: devenv.sh
+site_description: 'Fast, Declarative, Reproducible, and Composable Developer Environments'
+site_url: 'https://devenv.sh'
+repo_name: 'cachix/devenv'
+repo_url: 'https://github.com/cachix/devenv'
+edit_uri: 'edit/mainline/site/content'
+theme:
+  name: material
+  #favicon: assets/images/cli.png
+  palette:
+    primary: blue grey
+    accent: black
+  features:
+    - tabs
+    - instant
+    - navigation.tabs
+nav:
+  - Home: index.md
+  - Documentation:
+    - Getting Started: getting-started.md
+  - Blog:
+      - Hello world: blog/hello-world.md
+  - Community:
+      - Get Involved: community/get-involved.md
+      - Contributing: community/contributing.md
+plugins:
+    - search
