@@ -12,7 +12,7 @@ pkgs.writeScriptBin "devenv" ''
   export FLAKE_LOCK=devenv.lock
 
   # TODO: get the dev version of NIX
-  PATH=~/dev/nix/outputs/out/bin:$PATH
+  CUSTOM_NIX=~/dev/nix/outputs/out
 
   function assemble {
     if [[ ! -f devenv.nix ]]; then
@@ -48,8 +48,8 @@ pkgs.writeScriptBin "devenv" ''
   case $command in
     up)
       assemble
-      procfile=$(nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfile')
-      procfileenv=$(nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileEnv')
+      procfile=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfile')
+      procfileenv=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileEnv')
       add_gc procfile $procfile
       add_gc procfileenv $procfileenv
       if [ "$(cat $procfile)" = "" ]; then
@@ -62,10 +62,10 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     shell)
       assemble
-      env=$(nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
-      nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
+      env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
+      $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
       ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell 
-      nix $NIX_FLAGS develop $DEVENV_GC/shell
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell
       ;;
     init)
       # TODO: allow selecting which example and list them
@@ -81,11 +81,11 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     update)
       assemble
-      nix $NIX_FLAGS flake update
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake update
       ;;
     ci)
       assemble
-      ci=$(nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
+      ci=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
       add_gc ci $ci
       ;;
     gc)
@@ -101,8 +101,8 @@ pkgs.writeScriptBin "devenv" ''
       echo
       candidates=$(${pkgs.findutils}/bin/find $GC_ROOT -type l)
 
-      before=$(nix $NIX_FLAGS path-info $candidates -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
-      paths=$(nix-store -qR $candidates)
+      before=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $candidates -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
+      paths=$($CUSTOM_NIX/bin/nix-store -qR $candidates)
 
       echo "Found $(echo $paths | wc -w) store paths of sum size $(( $before / 1024 / 1024 )) MB."
       echo
@@ -110,7 +110,7 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Note: If you'd like this command to run much faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
 
-      echo $paths  | tr ' ' '\n' | ${pkgs.parallel}/bin/parallel -j8 nix $NIX_FLAGS store delete >/dev/null 2>/dev/null
+      echo $paths  | tr ' ' '\n' | ${pkgs.parallel}/bin/parallel -j8 $CUSTOM_NIX/bin/nix $NIX_FLAGS store delete >/dev/null 2>/dev/null
   
       # after GC delete links again
       for link in $(${pkgs.findutils}/bin/find $GC_ROOT -type l); do
@@ -119,7 +119,7 @@ pkgs.writeScriptBin "devenv" ''
         fi
       done
 
-      after=$(nix $NIX_FLAGS path-info $(${pkgs.findutils}/bin/find $GC_ROOT -type l) -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
+      after=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $(${pkgs.findutils}/bin/find $GC_ROOT -type l) -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
       echo
       echo "Done. Saved $((($before - $after) / 1024 / 1024 )) MB in $SECONDS seconds."
       ;;
