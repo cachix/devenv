@@ -21,7 +21,8 @@ nav:
   - Documentation:
     - Getting Started: getting-started.md
     - Reference:
-      - Options: reference/options.md
+      - devenv.yaml Options: reference/yaml-options.md
+      - devenv.nix Options: reference/options.md
   - Blog:
       - Hello world: blog/hello-world.md
   - Community:
@@ -37,3 +38,5 @@ extra:
       link: https://github.com/cachix/devenv
     - icon: fontawesome/brands/discord 
       link: https://discord.gg/naMgvexb6q
+markdown_extensions:
+  - tables

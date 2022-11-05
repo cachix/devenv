@@ -1,1 +1,1 @@
-{"devenv":{"env":{"foo":1}},"inputs":{"nixpkgs":{"url":"github:NixOS/nixpkgs/nixos-22.05"}}}
+{"devenv":{"env":{"foo":1}},"inputs":{"nixpkgs":{"url":"github:NixOS/nixpkgs/nixpkgs-unstable"}}}
