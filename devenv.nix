@@ -1,9 +1,12 @@
 { pkgs, ... }:
 
 {
-  packages = [ (import ./src/devenv.nix { inherit pkgs; }) ];
+  packages = [
+    (import ./src/devenv.nix { inherit pkgs; })
+    pkgs.python3Packages.mkdocs-material
+  ];
 
-  processes.whileloop.exec = "while true; do echo waiting; sleep 1; done";
+  processes.docs.exec = "mkdocs serve";
 
   enterShell = ''
     echo hola
@@ -27,5 +30,6 @@
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
     shellcheck.enable = true;
+    markdownlint.enable = true;
   };
 }

@@ -48,8 +48,8 @@ pkgs.writeScriptBin "devenv" ''
   case $command in
     up)
       assemble
-      procfile=$(nix $NIX_FLAGS build --print-out-paths --impure '.#procfile')
-      procfileenv=$(nix $NIX_FLAGS build --print-out-paths --impure '.#procfileEnv')
+      procfile=$(nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfile')
+      procfileenv=$(nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileEnv')
       add_gc procfile $procfile
       add_gc procfileenv $procfileenv
       if [ "$(cat $procfile)" = "" ]; then
@@ -85,7 +85,7 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     ci)
       assemble
-      ci=$(nix $NIX_FLAGS build --print-out-paths '.#ci' --impure)
+      ci=$(nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
       add_gc ci $ci
       ;;
     gc)
