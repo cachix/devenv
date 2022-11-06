@@ -3,7 +3,7 @@ site_description: 'Fast, Declarative, Reproducible, and Composable Developer Env
 site_url: 'https://devenv.sh'
 repo_name: 'cachix/devenv'
 repo_url: 'https://github.com/cachix/devenv'
-edit_uri: 'edit/mainline/site/content'
+edit_uri: 'edit/main/docs'
 theme:
   name: material
   #favicon: assets/images/cli.png
