@@ -764,6 +764,21 @@ false
 
 
 
+## pre-commit.settings.markdownlint.config
+See https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.jsonc
+
+*_Type_*:
+attribute set
+
+
+*_Default_*
+```
+{}
+```
+
+
+
+
 ## pre-commit.settings.nix-linter.checks
 Available checks. See <literal>nix-linter --help-for [CHECK]</literal> for more details.
 
@@ -774,6 +789,21 @@ list of string
 *_Default_*
 ```
 []
+```
+
+
+
+
+## pre-commit.settings.nixfmt.width
+Line width.
+
+*_Type_*:
+null or signed integer
+
+
+*_Default_*
+```
+null
 ```
 
 
