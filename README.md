@@ -30,7 +30,7 @@ And `devenv.yaml`:
 ```yaml
 inputs:
   nixpkgs:
-    url: github:NixOS/nixpkgs/nixos-22.05
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
 imports:
   - ./frontend
   - ./backend

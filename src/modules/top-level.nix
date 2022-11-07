@@ -64,7 +64,7 @@ in
     ./postgres.nix
     ./pre-commit.nix
     ./scripts.nix
-  ];
+  ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
   config = {
     env.DEVENV_DOTFILE = ".devenv/";
