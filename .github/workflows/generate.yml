@@ -1,4 +1,4 @@
-name: "Options docs"
+name: "Generate docs/examples"
 on:
   push:
     branches:
@@ -20,3 +20,10 @@ jobs:
         default_author: github_actions
         add:  docs/reference/options.md
         message: 'Auto generate options'
+    - name: Generate all-languages example
+      run: devenv shell generate-languages-example
+    - uses: EndBug/add-and-commit@v9
+      with:
+        default_author: github_actions
+        add: examples/all-languages/devenv.nix
+        message: 'Auto generate al-languages example'

@@ -1,4 +1,4 @@
-{ pkgs, nix, ... }:
+{ pkgs, nix, lib, config, ... }:
 
 {
   packages = [
@@ -30,6 +30,15 @@
     echo "# devenv.nix options" > docs/reference/options.md
     echo >> docs/reference/options.md
     cat $options >> docs/reference/options.md
+  '';
+  scripts."generate-languages-example".exec = ''
+    cat > examples/all-languages/devenv.nix <<EOF
+    { pkgs, ... }: {
+
+      # Enable all languages tooling!
+      ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
+    }
+    EOF
   '';
 
   pre-commit.hooks = {
