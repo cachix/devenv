@@ -11,7 +11,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       stack
-      cabal
+      cabal-install
       zlib
       hpack
     ];

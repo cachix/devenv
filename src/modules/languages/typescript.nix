@@ -9,8 +9,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      typescript
+    packages = [
+      pkgs.typescript
     ];
 
     enterShell = ''
