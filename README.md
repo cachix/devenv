@@ -69,7 +69,7 @@ imports:
 2. Install `devenv`
 
 ```
-    $ nix-env -if https://github.com/cachix/devenv/tarball/master
+    $ nix-env -if https://github.com/cachix/devenv/tarball/main
 ```
 
 ## Usage 
