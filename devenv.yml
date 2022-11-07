@@ -1,6 +1,10 @@
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
+  nix:
+    url: github:domenkozar/nix/relaxed-flakes
+imports:
+  - nix
 devenv:
   env:
     foo: 1

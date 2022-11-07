@@ -13,8 +13,13 @@
           then ./. + (builtins.substring 1 255 path) + "/devenv.nix"
           else let 
             paths = lib.splitString "/" path;
-            first = builtins.head paths;
-            in inputs.''${first} or (throw "Unknown input ''${first}") + "/''${lib.concatStringsSep "/" (builtins.tail paths)}" + "/devenv.nix";
+            name = builtins.head paths;
+            input = inputs.''${name} or (throw "Unknown input ''${name}");
+            subpath = "/''${lib.concatStringsSep "/" (builtins.tail paths)}";
+            devenvpath = input + subpath + "/devenv.nix";
+            in if builtins.pathExists devenvpath
+               then devenvpath
+               else {};
         project = pkgs.lib.evalModules {
           specialArgs = inputs // { inherit pkgs; };
           modules = [

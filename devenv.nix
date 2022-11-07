@@ -1,8 +1,8 @@
-{ pkgs, ... }:
+{ pkgs, nix, ... }:
 
 {
   packages = [
-    (import ./src/devenv.nix { inherit pkgs; })
+    (import ./src/devenv.nix { inherit pkgs nix; })
     pkgs.python3Packages.mkdocs-material
   ];
 
@@ -36,7 +36,7 @@
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
     shellcheck.enable = true;
-    markdownlint.enable = true;
+    #markdownlint.enable = true;
   };
   pre-commit.settings.markdownlint.config = {
     MD013 = {
