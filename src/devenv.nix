@@ -44,6 +44,7 @@ pkgs.writeScriptBin "devenv" ''
   }
 
   command=$1
+  shift
 
   case $command in
     up)
@@ -64,8 +65,12 @@ pkgs.writeScriptBin "devenv" ''
       assemble
       env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
       $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
-      ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell 
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell
+      ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell
+      if [ $# -eq 0 ]; then
+        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell
+      else
+        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell -c "$@"
+      fi
       ;;
     init)
       # TODO: allow selecting which example and list them
@@ -131,7 +136,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "Commands:"
       echo 
       echo "init: "
-      echo "shell: "
+      echo "shell [CMD]] [args]: "
       echo "update: "
       echo "up: "
       echo "gc: "

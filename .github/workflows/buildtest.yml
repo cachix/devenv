@@ -19,5 +19,4 @@ jobs:
     - name: Run tests
       run: |
         devenv ci
-        devenv shell
-        run-devenv-tests
+        devenv shell run-devenv-tests
