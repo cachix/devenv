@@ -14,9 +14,7 @@ jobs:
         name: devenv
     - run: nix profile install .
     - name: Generate doc options
-      run: |
-        devenv shell
-        generate-doc-options
+      run: devenv shell generate-doc-options
     - uses: EndBug/add-and-commit@v9
       with:
         default_author: github_actions

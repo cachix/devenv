@@ -18,8 +18,7 @@
     for dir in $(ls examples); do
       pushd examples/$dir 
       devenv ci
-      devenv shell
-      exit
+      devenv shell ls
       popd
     done
 
