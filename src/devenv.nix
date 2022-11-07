@@ -18,15 +18,15 @@ pkgs.writeScriptBin "devenv" ''
     if [[ ! -f devenv.nix ]]; then
       echo "devenv.nix does not exist. Maybe you want to run first $ devenv init"
     fi
-    if [[ ! -f devenv.yml ]]; then
-      echo "devenv.yml does not exist. Maybe you want to run first $ devenv init"
+    if [[ ! -f devenv.yaml ]]; then
+      echo "devenv.yaml does not exist. Maybe you want to run first $ devenv init"
     fi
 
     export DEVENV_DIR=$(pwd)/.devenv
     export DEVENV_GC=$DEVENV_DIR/gc
     mkdir -p $DEVENV_GC
-    # TODO: validate dev.yml using jsonschema
-    cat devenv.yml | ${pkgs.yaml2json}/bin/yaml2json > $DEVENV_DIR/devenv.json
+    # TODO: validate devenv.yaml using jsonschema
+    cat devenv.yaml | ${pkgs.yaml2json}/bin/yaml2json > $DEVENV_DIR/devenv.json
     cp -f ${import ./flake.nix { inherit pkgs; }} $FLAKE_FILE
     chmod +w $FLAKE_FILE
   }
