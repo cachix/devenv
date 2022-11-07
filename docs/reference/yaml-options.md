@@ -15,7 +15,12 @@ inputs:
     url: github:NixOS/nixpkgs/nixos-22.05
   nixpkgs-2:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
+imports:
+  - ./relative/path
+  - nixpkgs-2
 ```
+
+document: imports
 
 ## URLS
 

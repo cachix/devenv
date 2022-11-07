@@ -1,4 +1,4 @@
-{ pkgs }:
+{ pkgs, nix }:
 let
   examples = ../examples;
 in
@@ -12,7 +12,7 @@ pkgs.writeScriptBin "devenv" ''
   export FLAKE_LOCK=devenv.lock
 
   # TODO: get the dev version of NIX
-  CUSTOM_NIX=~/dev/nix/outputs/out
+  CUSTOM_NIX=${nix.packages.${pkgs.system}.nix}
 
   function assemble {
     if [[ ! -f devenv.nix ]]; then
