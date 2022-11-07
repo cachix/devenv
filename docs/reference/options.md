@@ -373,7 +373,7 @@ attribute set of (submodule)
 
 
 
-## pre-commit.hooks.\<name\>.description
+## pre-commit.hooks.&lt;name&gt;.description
 Description of the hook. used for metadata purposes only.
 
 
@@ -389,7 +389,7 @@ string
 
 
 
-## pre-commit.hooks.\<name\>.enable
+## pre-commit.hooks.&lt;name&gt;.enable
 Whether to enable this pre-commit hook.
 
 *_Type_*:
@@ -404,7 +404,7 @@ false
 
 
 
-## pre-commit.hooks.\<name\>.entry
+## pre-commit.hooks.&lt;name&gt;.entry
 The entry point - the executable to run. <option>entry</option> can also contain arguments that will not be overridden, such as <literal>entry = "autopep8 -i";</literal>.
 
 
@@ -416,7 +416,7 @@ string
 
 
 
-## pre-commit.hooks.\<name\>.excludes
+## pre-commit.hooks.&lt;name&gt;.excludes
 Exclude files that were matched by these patterns.
 
 
@@ -432,7 +432,7 @@ list of string
 
 
 
-## pre-commit.hooks.\<name\>.files
+## pre-commit.hooks.&lt;name&gt;.files
 The pattern of files to run on.
 
 
@@ -448,7 +448,7 @@ string
 
 
 
-## pre-commit.hooks.\<name\>.language
+## pre-commit.hooks.&lt;name&gt;.language
 The language of the hook - tells pre-commit how to install the hook.
 
 
@@ -464,7 +464,7 @@ string
 
 
 
-## pre-commit.hooks.\<name\>.name
+## pre-commit.hooks.&lt;name&gt;.name
 The name of the hook - shown during hook execution.
 
 
@@ -480,7 +480,7 @@ string
 
 
 
-## pre-commit.hooks.\<name\>.pass_filenames
+## pre-commit.hooks.&lt;name&gt;.pass_filenames
 Whether to pass filenames as arguments to the entry point.
 
 
@@ -496,7 +496,7 @@ true
 
 
 
-## pre-commit.hooks.\<name\>.raw
+## pre-commit.hooks.&lt;name&gt;.raw
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
 
@@ -511,7 +511,7 @@ attribute set of unspecified value
 
 
 
-## pre-commit.hooks.\<name\>.stages
+## pre-commit.hooks.&lt;name&gt;.stages
 Confines the hook to run at a particular stage.
 
 
@@ -527,7 +527,7 @@ list of string
 
 
 
-## pre-commit.hooks.\<name\>.types
+## pre-commit.hooks.&lt;name&gt;.types
 List of file types to run on. See <link xlink:href="https://pre-commit.com/#plugins">Filtering files with types</link>.
 
 
@@ -543,7 +543,7 @@ list of string
 
 
 
-## pre-commit.hooks.\<name\>.types_or
+## pre-commit.hooks.&lt;name&gt;.types_or
 List of file types to run on, where only a single type needs to match.
 
 
@@ -952,7 +952,7 @@ attribute set of (submodule)
 
 
 
-## processes.\<name\>.exec
+## processes.&lt;name&gt;.exec
 TODO
 
 *_Type_*:
@@ -978,7 +978,7 @@ attribute set of (submodule)
 
 
 
-## scripts.\<name\>.exec
+## scripts.&lt;name&gt;.exec
 TODO
 
 *_Type_*:
