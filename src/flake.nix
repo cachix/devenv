@@ -1,13 +1,17 @@
 { pkgs }: pkgs.writeText "devenv-flake" ''
   {
-    inputs = { pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
-      } // (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs;
+    inputs = { 
+      pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+      nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    } // (builtins.fromJSON (if builtins.pathExists ./.devenv/devenv.json then builtins.readFile ./.devenv/devenv.json else '''{ "inputs": {}}''')).inputs;
     
     outputs = { nixpkgs, ... }@inputs:
       let
         pkgs = import nixpkgs { system = "${pkgs.system}"; };
         lib = pkgs.lib;
-        devenv = builtins.fromJSON (builtins.readFile ./.devenv/devenv.json);
+        devenv = if builtins.pathExists ./.devenv/devenv.json
+          then builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)
+          else {};
         toModule = path: 
           if lib.hasPrefix "./" path 
           then ./. + (builtins.substring 1 255 path) + "/devenv.nix"
