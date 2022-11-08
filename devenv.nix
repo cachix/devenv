@@ -15,6 +15,10 @@
   scripts."run-devenv-tests".exec = ''
     set -xe
 
+    pushd examples/simple
+      devenv init
+    popd
+
     for dir in $(ls examples); do
       pushd examples/$dir 
       devenv ci
