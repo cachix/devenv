@@ -5,6 +5,9 @@ in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
 
+  # we want subshells to fail the program
+  set -e
+
   NIX_FLAGS="--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes"
 
   # current hack to test if we have resolved all Nix annoyances
