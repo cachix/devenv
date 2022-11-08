@@ -14,7 +14,6 @@ pkgs.writeScriptBin "devenv" ''
   export FLAKE_FILE=.devenv.flake.nix
   export FLAKE_LOCK=devenv.lock
 
-  # TODO: get the dev version of NIX
   CUSTOM_NIX=${nix.packages.${pkgs.system}.nix}
 
   function assemble {
