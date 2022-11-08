@@ -77,7 +77,7 @@ in
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env));
 
     enterShell = ''
-      export PS1="(direnv) $PS1"
+      export PS1="(devenv) $PS1"
       
       # note what environments are active, but make sure we don't repeat them
       if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
