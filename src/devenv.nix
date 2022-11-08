@@ -81,9 +81,10 @@ pkgs.writeScriptBin "devenv" ''
       echo "Creating .envrc"
       cat ${examples}/$example/.envrc > .envrc
       echo "Creating .devenv.nix"
-      cat ${examples}/$example/.envrc > devenv.nix 
+      cat ${examples}/$example/devenv.nix > devenv.nix 
       echo "Creating .devenv.yaml"
-      cat ${examples}/$example/.envrc > devenv.yaml
+      cat ${examples}/$example/devenv.yaml > devenv.yaml
+      echo "Adding .devenv* to .gitignore"
       echo ".devenv*" >> .gitignore
       echo "Done."
       ;;
