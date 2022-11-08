@@ -1,0 +1,1 @@
+Join our community on [Discord](https://discord.gg/naMgvexb6q) to get help using devenv.
