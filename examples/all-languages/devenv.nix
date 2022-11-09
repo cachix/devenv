@@ -18,4 +18,6 @@
   languages.rust.enable = true;
   languages.scala.enable = true;
   languages.typescript.enable = true;
+
+  # If you're missing a language, please contribute it by following examples of other languages <3
 }
