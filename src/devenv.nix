@@ -144,7 +144,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "Commands:"
       echo 
       echo "init: "
-      echo "shell [CMD]] [args]: "
+      echo "shell [CMD] [ARGS]: "
       echo "update: "
       echo "up: "
       echo "gc: "
