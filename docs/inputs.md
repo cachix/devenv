@@ -33,7 +33,7 @@ There are a few special inputs:
 
 See [devenv.yaml reference](reference/yaml-options.md#inputs) for all supported inputs.
 
-# Locking and updating inputs
+## Locking and updating inputs
 
 When you run any of the commands,
 ``devenv`` will resolve inputs like ``github:NixOS/nixpkgs/nixpkgs-unstable`` into a commit revision and write all that to ``devenv.lock`. This ensures that your environment is reproducible.
