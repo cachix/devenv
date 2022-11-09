@@ -25,7 +25,7 @@ nav:
       - Automatic Shell Activation: automatic-shell-activation.md
       - Imports & Inputs: imports-and-inputs.md
       - Composing devenvs: composing.md
-    - Defining devenv.nix:
+    - Writing devenv.nix:
       - Basics: basics.md
       - Packages: packages.md
       - Scripts: scripts.md
