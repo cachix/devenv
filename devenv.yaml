@@ -5,6 +5,3 @@ inputs:
     url: github:domenkozar/nix/relaxed-flakes
 imports:
   - nix
-devenv:
-  env:
-    foo: 1
