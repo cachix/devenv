@@ -35,12 +35,11 @@ Done.
 - ``devenv ci`` builds your developer environment and make sure all checks pass. Useful to run on your Continuous Integration.
 - ``devenv shell`` activates your developer environment.
 - ``devenv update`` updates and pins inputs from ``devenv.yaml`` into ``devenv.lock``.
-- ``devenv gc`` deletes unused environments to save disk space.
+- ``devenv gc`` [deletes unused environments](garbage-collection.md) to save disk space.
 - ``devenv up`` starts [processes](processes.md).
 
 ## Learn more
 
-
 - About ``.envrc`` in [Automatic Shell Activation](automatic-shell-activation.md).
-- About ``devenv.yaml`` in [Imports & Inputs](imports-and-inputs.md).
+- About ``devenv.yaml`` in [Inputs](inputs.md) and [Composing Using Imports](composing-using-imports.md).
 - About ``devenv.nix`` in **Writing devenv.nix** section, starting with [the Basics](basics.md).
