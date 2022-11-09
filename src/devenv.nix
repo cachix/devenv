@@ -47,7 +47,9 @@ pkgs.writeScriptBin "devenv" ''
   }
 
   command=$1
-  shift
+  if [[ ! -z $command ]]; then
+    shift
+  fi
 
   case $command in
     up)
@@ -143,12 +145,13 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Commands:"
       echo 
-      echo "init: Scaffold devenv.yaml, devenv.nix, and .envrc"
-      echo "shell [CMD] [ARGS]: Activate developer environment or run CMD with ARGS in it."
-      echo "update: Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
-      echo "up: Starts processes in foreground. See http://devenv.sh/processes"
-      echo "gc: Removes old devenv generations. See http://devenv.sh/garbage-collection"
-      echo "ci: builds your developer environment and make sure all checks pass."
+      echo "init:           Scaffold devenv.yaml, devenv.nix, and .envrc"
+      echo "shell:          Activate the developer environment"
+      echo "shell CMD ARGS: Run CMD with ARGS in the developer environment."
+      echo "update:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
+      echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
+      echo "gc:             Removes old devenv generations. See http://devenv.sh/garbage-collection"
+      echo "ci:             builds your developer environment and make sure all checks pass."
       echo
       exit 1
   esac
