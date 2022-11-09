@@ -3,7 +3,9 @@
     inputs = { 
       pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
       nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    } // (builtins.fromJSON (if builtins.pathExists ./.devenv/devenv.json then builtins.readFile ./.devenv/devenv.json else '''{ "inputs": {}}''')).inputs;
+    } // (if builtins.pathExists ./.devenv/devenv.json 
+         then (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs
+         else {});
     
     outputs = { nixpkgs, ... }@inputs:
       let

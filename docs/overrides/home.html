@@ -308,15 +308,15 @@
       <div class="md-main__inner">
         <div>
           <h1>Fast, Declarative, Reproducible, and Composable Developer Environments</h1>
-          <p>XXX
-          </p>
+          <p>Build, share, and run your development environments locally with a single command. Without containers.</p>
+        </p>
           <a
             href="/getting-started/"
             title="Get Started"
             class="md-button md-button--primary"
           >
-            Get started 
-            <svg width="11" height="10" viewBox="0 0 11 10" fill="none" style="margin-left:2px"><path d="M1 5.16772H9.5M9.5 5.16772L6.5 1.66772M9.5 5.16772L6.5 8.66772" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            Get Started 
+            
           </a>
         </div>
       </div>
@@ -339,12 +339,14 @@
       <div class="section">
         <div class="component-wrapper">
           <div class="first-column">
-            <h3>Pick from 79228 packages</h3>
+            <h3>Pick from 80000+ prebuilt packages</h3>
             <p>
-              binary ...
+              Any <strong>language or tool</strong> widely adopted in the industry, prebuilt for <strong>Linux/macOS and X64/Arm64</strong>.
+              </p>
+            <p>
+              <a href="https://search.nixos.org/packages?channel=unstable">Explore packages</a> and <a href="/packages/">use them</a> in your dev environment.
             </p>
-            <p>
-              https://search.nixos.org/packages
+              
             </p>
           </div>
           <div class="second-column">
@@ -363,9 +365,11 @@
       <div class="section follow">
         <div class="component-wrapper">
           <div class="first-column">
-            <h3>Start processes</h3>
+            <h3>Start development processes</h3>
             <p>
-             
+             common cases ...
+
+             postgres, redis, etc
             </p>
           </div>
           <div class="second-column">
@@ -378,7 +382,6 @@
             </div>
           </div>
         </div>
-     
       </div>
 
       <!-- scripts -->
@@ -387,7 +390,9 @@
           <div class="first-column">
             <h3>Scripts and pre-commit hooks</h3>
             <p>
-             x
+             pre-commit.com
+
+             scripts..
             </p>
           </div>
           <div class="second-column">
@@ -408,7 +413,7 @@
                 <div class="first-column">
                 <h3>Compose environments</h3>
                 <p>
-                    x
+                    frontend / backend
                 </p>
                 </div>
                 <div class="second-column">
@@ -427,7 +432,7 @@
       <div class="section follow">
         <div class="component-wrapper">
           <div class="first-column">
-            <h3>scripts and pre-commit hooks</h3>
+            <h3>Supports tooling of your favorite languages</h3>
             <p>
              x
             </p>
@@ -443,6 +448,61 @@
           </div>
         </div>
       </div>
+
+      <!-- direnv -->
+      <div class="section follow">
+        <div class="component-wrapper">
+          <div class="first-column">
+            <h3>Automatically load your environment</h3>
+            <p>
+             Using a small glue of <a href="https://direnv.net/">direnv</a> integration,
+             your shell will automatically load your environment when you enter the project directory.
+            </p>
+          </div>
+          <div class="second-column">
+            <div class="image-wrapper">
+              <img
+                src="{{config.site_url}}assets/images/scripts.png"
+                alt=""
+                draggable="false"
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    
+        <!-- nix -->
+        <div class="section follow">
+            <div class="component-wrapper">
+                <div class="first-column">
+                <h3>Built on top of Nix</h3>
+                <p>
+                    After 10 years of experience with <a href="https://nixos.org">Nix toolset</a>, we've built an interface that's intuitive to use.
+                </p>
+                <p>
+                    We're leveraging the power of Nix to build a new generation of developer environments.
+                </p>
+                </div>
+                <div class="second-column">
+                <div class="image-wrapper">
+                    <img
+                    src="{{config.site_url}}assets/images/languages.png"
+                    alt=""
+                    draggable="false"
+                    >
+                </div>
+                </div>
+            
+            </div>
+        </div>
+
+        <div class="section follow">
+            <div style="text-align:center">
+                <h2 style="text-align:center">Built by</h2>
+                <a href="https://cachix.org"><img src="{{config.site_url}}assets/images/cachix.webp" /></a>
+            </div>
+        </div>
+
     </div>
   </div>
 {% endblock %}

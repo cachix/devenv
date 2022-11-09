@@ -28,7 +28,7 @@ pkgs.writeScriptBin "devenv" ''
     if [[ -f devenv.yaml ]]; then
       cat devenv.yaml | ${pkgs.yaml2json}/bin/yaml2json > $DEVENV_DIR/devenv.json
     else
-      [[ -f DEVENV_DIR/devenv.json ]] && rm $DEVENV_DIR/devenv.json
+      [[ -f $DEVENV_DIR/devenv.json ]] && rm $DEVENV_DIR/devenv.json
     fi
     cp -f ${import ./flake.nix { inherit pkgs; }} $FLAKE_FILE
     chmod +w $FLAKE_FILE
@@ -60,16 +60,20 @@ pkgs.writeScriptBin "devenv" ''
         echo "No 'processes' option defined."  
         exit 1
       else
-        echo Starting processes ...
+        echo Starting processes ... >> /dev/stderr
+        echo >> /dev/stderr
         ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
       fi
       ;;
     shell)
       assemble
+      echo Building shell ... >> /dev/stderr
       env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
       $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
       ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell
       if [ $# -eq 0 ]; then
+        echo Entering shell ... >> /dev/stderr
+        echo >> /dev/stderr
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell
       else
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell -c "$@"

@@ -9,20 +9,33 @@ theme:
   #favicon: assets/images/cli.png
   custom_dir: docs/overrides
   palette:
-    primary: blue grey
-    accent: black
+    primary: black
+    accent: white
   features:
     - tabs
     - instant
     - navigation.tabs
     - navigation.expand
+    - content.code.annotate
 nav:
   - Home: index.md
   - Documentation:
     - Getting Started: getting-started.md
+    - Overview:
+      - Automatic Shell Activation: automatic-shell-activation.md
+      - Imports & Inputs: imports-and-inputs.md
+      - Composing devenvs: composing.md
+    - Defining devenv.nix:
+      - Basics: basics.md
+      - Packages: packages.md
+      - Scripts: scripts.md
+      - Languages: languages.md
+      - Processes: processes.md
+      - Pre-Commit Hooks: pre-commit-hooks.md
+    - Examples: examples.md
     - Reference:
-      - devenv.yaml Options: reference/yaml-options.md
-      - devenv.nix Options: reference/options.md
+      - devenv.yaml: reference/yaml-options.md
+      - devenv.nix: reference/options.md
   - Blog:
       - Hello world: blog/hello-world.md
   - Community:
@@ -40,3 +53,9 @@ extra:
       link: https://discord.gg/naMgvexb6q
 markdown_extensions:
   - tables
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
