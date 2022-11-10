@@ -1,3 +1,8 @@
+/* hide site name */
 .md-header__topic {
     visibility: hidden;
+}
+/* mobile hide site name */
+.md-nav__title {
+    font-size: 0!important;
 }
