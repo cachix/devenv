@@ -23,3 +23,9 @@ Version 4.8.4
 ```
 
 See [all-languages](https://github.com/cachix/devenv/blob/main/examples/all-languages/devenv.nix) example to see a list of currently supported languages.
+
+!!! note 
+
+    Currently the latest versions of the tooling is provided,
+    but [in the future package sets and pinning will be supported
+    and documented](https://github.com/cachix/devenv/issues/16).
