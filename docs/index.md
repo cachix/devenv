@@ -1,4 +1,4 @@
 ---
 template: home.html
-title: devenv
+title: Fast, Declarative, Reproducible, and Composable Developer Environments
 ---

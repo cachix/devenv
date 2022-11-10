@@ -1,11 +1,8 @@
-
 {% extends "main.html" %}
 
 <!-- Render hero under tabs -->
 {% block tabs %}
   {{ super() }}
-
-  <!-- Additional styles for landing page -->
 <style>
 
 /* Apply box shadow on smaller screens that don't display tabs */
@@ -323,7 +320,7 @@
     </div>
   </div>
 
-  <div class="md-container">
+  <!--div class="md-container">
     <div class="tx-hero__image">
       <img
         src="{{config.site_url}}assets/images/screen.png"
@@ -331,7 +328,7 @@
         draggable="false"
       >
     </div>
-  </div>
+  </div-->
 
   <div class="md-container secondary-section">
     <div class="g">
@@ -344,7 +341,7 @@
               Any <strong>language or tool</strong> widely adopted in the industry, prebuilt for <strong>Linux/macOS and X64/Arm64</strong>.
               </p>
             <p>
-              <a href="https://search.nixos.org/packages?channel=unstable">Explore packages</a> and <a href="/packages/">use them</a> in your dev environment.
+              <a href="https://search.nixos.org/packages?channel=unstable">Explore packages</a> and <a href="/packages/">load them</a> in your developer environment.
             </p>
               
             </p>
@@ -367,41 +364,21 @@
           <div class="first-column">
             <h3>Start development processes</h3>
             <p>
-             common cases ...
-
-             postgres, redis, etc
+            Define your <a href="/processes/">development processes in a declarative way</a> and start them with <code>devenv up</code>.
             </p>
-          </div>
-          <div class="second-column">
-            <div class="image-wrapper">
-              <img
-                src="{{config.site_url}}assets/images/process.png"
-                alt=""
-                draggable="false"
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- scripts -->
-      <div class="section follow">
-        <div class="component-wrapper">
-          <div class="first-column">
-            <h3>Scripts and pre-commit hooks</h3>
             <p>
-             pre-commit.com
-
-             scripts..
+            Pick from a number of community maintained modules like PostgreSQL, Redis, ...
             </p>
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <img
-                src="{{config.site_url}}assets/images/scripts.png"
-                alt=""
-                draggable="false"
-              >
+              <code language="shell-session"><pre>
+                {
+                  processes.ping.exec = "ping example.com";
+
+                  postgres.enable = true;
+                }
+              <pre></code>
             </div>
           </div>
         </div>
@@ -413,16 +390,21 @@
                 <div class="first-column">
                 <h3>Compose environments</h3>
                 <p>
-                    frontend / backend
+                  Use <a href="/composing-using-imports/">imports</a> to combine
+                  environments from local direcorites like or download them using git/mercurial/tarball.
                 </p>
                 </div>
                 <div class="second-column">
                 <div class="image-wrapper">
-                    <img
-                    src="{{config.site_url}}assets/images/compose.png"
-                    alt=""
-                    draggable="false"
-                    >
+                  <code language="shell-session"><pre>
+                    inputs:
+                      myproject:
+                        url: github:myorg/myproject
+                    imports:
+                      - ./frontend
+                      - ./backend
+                      - myproject
+                  <pre></code>
                 </div>
                 </div>
             </div>
@@ -434,16 +416,19 @@
           <div class="first-column">
             <h3>Supports tooling of your favorite languages</h3>
             <p>
-             x
+              A single toggle to load compiler/tools/language server
+              for <a href="/languages">your favorite language</a>.
             </p>
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <img
-                src="{{config.site_url}}assets/images/languages.png"
-                alt=""
-                draggable="false"
-              >
+              <code language="shell-session"><pre>
+                {
+                  languages.python.enable = true;
+                  languages.rust.enable = true;
+                  languages.go.enable = true;
+                }
+              <pre></code>
             </div>
           </div>
         </div>
@@ -461,11 +446,36 @@
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <img
-                src="{{config.site_url}}assets/images/scripts.png"
-                alt=""
-                draggable="false"
-              >
+              <code language="shell-session"><pre>
+                $ TODO demo
+              <pre></code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- scripts -->
+      <div class="section follow">
+        <div class="component-wrapper">
+          <div class="first-column">
+            <h3>Scripts and pre-commit hooks</h3>
+            <p>
+             Define <a href="/scripts/">scripts</a>
+             and <a href="/pre-commit-hooks/">git pre-commit hooks</a>
+             to automate your development workflow.
+            </p>
+          </div>
+          <div class="second-column">
+            <div class="image-wrapper">
+              <code language="shell-session"><pre>
+                {
+                  # format Python code
+                  pre-commit.hooks.black.enable = true;
+                  
+                  # aliases
+                  scripts."rebase".exec = "git rebase -i";
+                }
+              <pre></code>
             </div>
           </div>
         </div>
@@ -475,7 +485,7 @@
         <div class="section follow">
             <div class="component-wrapper">
                 <div class="first-column">
-                <h3>Built on top of Nix</h3>
+                <h3>Open Source, built on top of Nix</h3>
                 <p>
                     After 10 years of experience with <a href="https://nixos.org">Nix toolset</a>, we've built an interface that's intuitive to use.
                 </p>
@@ -499,7 +509,7 @@
         <div class="section follow">
             <div style="text-align:center">
                 <h2 style="text-align:center">Built by</h2>
-                <a href="https://cachix.org"><img src="{{config.site_url}}assets/images/cachix.webp" /></a>
+                <a href="https://cachix.org"><img src="{{config.site_url}}assets/images/cachix.webp" width="150px"/></a>
             </div>
         </div>
 
