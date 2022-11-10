@@ -6,7 +6,7 @@ let
     options = {
       exec = lib.mkOption {
         type = types.str;
-        description = "TODO";
+        description = "Bash code to execute when the script is ran.";
       };
     };
   });
@@ -21,7 +21,7 @@ in
     scripts = lib.mkOption {
       type = types.attrsOf scriptType;
       default = { };
-      description = "TODO";
+      description = "A set of scripts available when the environment is active.";
     };
   };
 

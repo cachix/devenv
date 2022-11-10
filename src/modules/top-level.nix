@@ -6,7 +6,7 @@ let
     options = {
       exec = lib.mkOption {
         type = types.str;
-        description = "TODO";
+        description = "Bash code to run the process.";
       };
     };
   });
@@ -15,26 +15,26 @@ in
   options = {
     env = lib.mkOption {
       type = types.attrs;
-      description = "TODO";
+      description = "Environment variables to be exposed inside the developer environment.";
       default = { };
     };
 
     enterShell = lib.mkOption {
       type = types.lines;
-      description = "TODO";
+      description = "Bash code to execute when entering the shell.";
       default = "";
     };
 
     packages = lib.mkOption {
       type = types.listOf types.package;
-      description = "TODO";
+      description = "A list of packages to expose inside the developer environment from https://search.nixos.org/packages?channel=unstable";
       default = [ ];
     };
 
     processes = lib.mkOption {
       type = types.attrsOf processType;
       default = { };
-      description = "TODO";
+      description = "Processes can be started with ``devenv up`` and run in foreground mode.";
     };
 
     # INTERNAL
