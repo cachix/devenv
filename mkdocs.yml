@@ -1,16 +1,20 @@
-site_name: devenv.sh
+site_name: devenv
 site_description: 'Fast, Declarative, Reproducible, and Composable Developer Environments'
 site_url: 'https://devenv.sh'
 repo_name: 'cachix/devenv'
 repo_url: 'https://github.com/cachix/devenv'
 edit_uri: 'edit/main/docs'
+extra_css:
+  - assets/extra.css
 theme:
   name: material
-  #favicon: assets/images/cli.png
+  logo: assets/logo.webp
+  favicon: assets/favicon.svg
+
   custom_dir: docs/overrides
   palette:
-    primary: black
-    accent: white
+    primary: white
+    accent: black
   features:
     - tabs
     - instant
