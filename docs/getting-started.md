@@ -12,7 +12,7 @@ sh <(curl -L https://nixos.org/nix/install)
 2. Install [devenv](https://github.com/cachix/devenv)
 
 ```shell-session
-nix-env -if https://github.com/cachix/devenv/tarball/main
+nix-env -if https://devenv.sh/assets/devenv-preview.tar.gz
 ```
 
 *This might take a few minutes, please bear with us until we provide binaries.*
