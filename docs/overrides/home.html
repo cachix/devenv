@@ -349,16 +349,32 @@
             <p>
               <a href="https://search.nixos.org/packages?channel=unstable">Explore packages</a> and <a href="/packages/">load them</a> in your developer environment.
             </p>
-              
+
+            <p>
+              Learn more about <a href="/basics/">the basic</a> features.
             </p>
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <img
-                src="{{config.site_url}}assets/images/packages.png"
-                alt=""
-                draggable="false"
-              >
+              <pre><code class="language-nix">
+$ cat devenv.nix 
+{ pkgs, ... }: {
+  env.GREET = "determinism";
+
+  packages = [ pkgs.git ];
+
+  enterShell = "echo hello $GREET";
+}
+
+$ git --version 
+git: command not found
+
+$ devenv shell
+hello determinism
+
+(devenv) $ git --version
+git version 2.38.1
+</code><pre>
             </div>
           </div>
         </div>
@@ -376,14 +392,22 @@
             Pick from a number of community maintained modules like PostgreSQL, Redis, ...
             </p>
           </div>
-          <div class="second-column">
+          <div class="first-column">
             <div class="image-wrapper">
               <pre><code class="language-nix">
-  {
-    processes.ping.exec = "ping example.com";
+$ cat devenv.nix
+{ pkgs, ... }: {
+  processes.ping.exec = "ping example.com";
 
-    postgres.enable = true;
-  }
+  postgres.enable = true;
+}
+
+$ devenv up
+Starting processes ...
+
+20:37:44 system | ping.1 started (pid=94686)
+20:37:44 system | postgres.1 started (pid=94688)
+...
               </code><pre>
             </div>
           </div>
@@ -396,13 +420,14 @@
                 <div class="first-column">
                 <h3>Compose environments</h3>
                 <p>
-                  Use <a href="/composing-using-imports/">imports</a> to combine
+                  Use <a href="/inputs/">inputs</a> to manage dependencies and <a href="/composing-using-imports/">imports</a> to combine
                   environments from local direcorites like or download them using git/mercurial/tarball.
                 </p>
                 </div>
                 <div class="second-column">
-                <div class="image-wrapper">
+                <div class="image-wrapper" >
                   <pre><code class="language-yaml">
+  $ cat devenv.yaml
   inputs:
     myproject:
       url: github:myorg/myproject
@@ -429,10 +454,18 @@
           <div class="second-column">
             <div class="image-wrapper">
               <code class="language-nix"><pre>
-  {
+  $ cat devenv.nix
+  { pkgs, ... }: {
     languages.python.enable = true;
     languages.rust.enable = true;
     languages.go.enable = true;
+    languages.ruby.enable = true;
+    languages.elm.enable = true;
+    languages.kotlin.enable = true;
+    languages.php.enable = true;
+    languages.typescript.enable = true;
+    languages.perl.enable = true;
+    languages.javascript.enable = true;
   }
               <pre></code>
             </div>
@@ -479,8 +512,13 @@
     pre-commit.hooks.black.enable = true;
     
     # aliases
-    scripts."rebase".exec = "git rebase -i";
+    scripts.gd.exec = "git diff --stat";
   }
+
+  $ devenv shell gd
+  pre-commit installed at .git/hooks/pre-commit
+  devenv.lock     | 74 ++++++
+  1 file changed, 71 insertions(+), 0 deletions(-)
               <pre></code>
             </div>
           </div>
@@ -493,16 +531,17 @@
                 <div class="first-column">
                 <h3>Open Source, built on top of Nix</h3>
                 <p>
-                    After 10 years of experience with <a href="https://nixos.org">Nix toolset</a>, we've built an interface that's intuitive to use.
+                    After 10 years of experience with the <a href="https://nixos.org">Nix ecosystem</a>, we've built an interface that's intuitive to use.
                 </p>
                 <p>
-                    We're leveraging the power of Nix to build a new generation of developer environments.
+                    We're leveraging the power of Nix to build a new generation of developer tools: 
+                    <a href="https://cachix.org">cachix.org</a> (2018), <a href="https://nix.dev">nix.dev</a> (2020), <a href="/">devenv.sh</a> (2022).
                 </p>
                 </div>
                 <div class="second-column">
                 <div class="image-wrapper">
                     <img
-                    src="{{config.site_url}}assets/images/languages.png"
+                    src="{{config.site_url}}assets/images/nixcon.webp"
                     alt=""
                     draggable="false"
                     >
