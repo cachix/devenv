@@ -3,6 +3,12 @@
 <!-- Render hero under tabs -->
 {% block tabs %}
   {{ super() }}
+
+<link rel="stylesheet"
+      href="{{config.site_url}}assets/stackoverflow-light.min.css">
+<script src="{{config.site_url}}assets/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+
 <style>
 
 /* Apply box shadow on smaller screens that don't display tabs */
@@ -305,7 +311,7 @@
       <div class="md-main__inner">
         <div>
           <h1>Fast, Declarative, Reproducible, and Composable Developer Environments</h1>
-          <p>Build, share, and run your development environments locally with a single command. Without containers.</p>
+          <p>Build, share, and run your local development environments with a single command. Without containers.</p>
         </p>
           <a
             href="/getting-started/"
@@ -338,7 +344,7 @@
           <div class="first-column">
             <h3>Pick from 80000+ prebuilt packages</h3>
             <p>
-              Any <strong>language or tool</strong> widely adopted in the industry, prebuilt for <strong>Linux/macOS and X64/Arm64</strong>.
+              Any <strong>language or tool</strong> widely adopted in the industry, prebuilt for <strong>Linux/macOS and X64/Arm64</strong>. Works with WSL.
               </p>
             <p>
               <a href="https://search.nixos.org/packages?channel=unstable">Explore packages</a> and <a href="/packages/">load them</a> in your developer environment.
@@ -372,13 +378,13 @@
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <code language="shell-session"><pre>
-                {
-                  processes.ping.exec = "ping example.com";
+              <pre><code class="language-nix">
+  {
+    processes.ping.exec = "ping example.com";
 
-                  postgres.enable = true;
-                }
-              <pre></code>
+    postgres.enable = true;
+  }
+              </code><pre>
             </div>
           </div>
         </div>
@@ -396,15 +402,15 @@
                 </div>
                 <div class="second-column">
                 <div class="image-wrapper">
-                  <code language="shell-session"><pre>
-                    inputs:
-                      myproject:
-                        url: github:myorg/myproject
-                    imports:
-                      - ./frontend
-                      - ./backend
-                      - myproject
-                  <pre></code>
+                  <pre><code class="language-yaml">
+  inputs:
+    myproject:
+      url: github:myorg/myproject
+  imports:
+    - ./frontend
+    - ./backend
+    - myproject
+                  </code><pre>
                 </div>
                 </div>
             </div>
@@ -422,12 +428,12 @@
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <code language="shell-session"><pre>
-                {
-                  languages.python.enable = true;
-                  languages.rust.enable = true;
-                  languages.go.enable = true;
-                }
+              <code class="language-nix"><pre>
+  {
+    languages.python.enable = true;
+    languages.rust.enable = true;
+    languages.go.enable = true;
+  }
               <pre></code>
             </div>
           </div>
@@ -467,14 +473,14 @@
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <code language="shell-session"><pre>
-                {
-                  # format Python code
-                  pre-commit.hooks.black.enable = true;
-                  
-                  # aliases
-                  scripts."rebase".exec = "git rebase -i";
-                }
+              <code class="language-nix"><pre>
+  {
+    # format Python code on git commit and CI
+    pre-commit.hooks.black.enable = true;
+    
+    # aliases
+    scripts."rebase".exec = "git rebase -i";
+  }
               <pre></code>
             </div>
           </div>
