@@ -1,7 +1,7 @@
 # devenv.nix options
 
 ## enterShell
-TODO
+Bash code to execute when entering the shell.
 
 *_Type_*:
 strings concatenated with "\n"
@@ -16,7 +16,7 @@ strings concatenated with "\n"
 
 
 ## env
-TODO
+Environment variables to be exposed inside the developer environment.
 
 *_Type_*:
 attribute set
@@ -354,7 +354,7 @@ true
 
 
 ## packages
-TODO
+A list of packages to expose inside the developer environment from https://search.nixos.org/packages?channel=unstable
 
 *_Type_*:
 list of package
@@ -1261,7 +1261,7 @@ lazy attribute set of package
 
 
 ## processes
-TODO
+Processes can be started with ``devenv up`` and run in foreground mode.
 
 *_Type_*:
 attribute set of (submodule)
@@ -1276,7 +1276,7 @@ attribute set of (submodule)
 
 
 ## processes.&lt;name&gt;.exec
-TODO
+Bash code to run the process.
 
 *_Type_*:
 string
@@ -1287,7 +1287,7 @@ string
 
 
 ## scripts
-TODO
+A set of scripts available when the environment is active.
 
 *_Type_*:
 attribute set of (submodule)
@@ -1302,7 +1302,7 @@ attribute set of (submodule)
 
 
 ## scripts.&lt;name&gt;.exec
-TODO
+Bash code to execute when the script is ran.
 
 *_Type_*:
 string
