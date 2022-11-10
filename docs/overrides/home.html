@@ -466,8 +466,7 @@ Starting processes ...
     languages.typescript.enable = true;
     languages.perl.enable = true;
     languages.javascript.enable = true;
-  }
-              <pre></code>
+  }<pre></code>
             </div>
           </div>
         </div>
@@ -485,9 +484,18 @@ Starting processes ...
           </div>
           <div class="second-column">
             <div class="image-wrapper">
-              <code language="shell-session"><pre>
-                $ TODO demo
-              <pre></code>
+              <code class="language-shellsession"><pre>
+
+$ cd myproject
+direnv: loading ~/myproject/.envrc
+Building shell ...
+Entering shell ...
+
+(devenv) $ cd ..
+direnv: unloading
+
+$
+<pre></code>
             </div>
           </div>
         </div>
@@ -507,7 +515,8 @@ Starting processes ...
           <div class="second-column">
             <div class="image-wrapper">
               <code class="language-nix"><pre>
-  {
+  $ cat devenv.nix
+  { pkgs, ... }: {
     # format Python code on git commit and CI
     pre-commit.hooks.black.enable = true;
     
