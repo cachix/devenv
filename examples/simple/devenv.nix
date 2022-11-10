@@ -6,7 +6,7 @@
   packages = [ pkgs.git ];
 
   enterShell = ''
-    echo hello from devenv :)
+    echo "hello from devenv :)"
     git --version
   '';
 }
