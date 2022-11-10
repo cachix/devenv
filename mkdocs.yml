@@ -27,9 +27,10 @@ nav:
     - Getting Started: getting-started.md
     - Overview:
       - Automatic Shell Activation: automatic-shell-activation.md
+      - Garbage Collection: garbage-collection.md
+    - Writing devenv.yaml:
       - Inputs: inputs.md
       - Composing Using Imports: composing-using-imports.md
-      - Garbage Collection: garbage-collection.md
     - Writing devenv.nix:
       - Basics: basics.md
       - Packages: packages.md
