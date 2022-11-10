@@ -78,6 +78,7 @@ in
 
     enterShell = ''
       export PS1="(devenv) $PS1"
+      set -e
       
       # note what environments are active, but make sure we don't repeat them
       if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
