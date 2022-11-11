@@ -50,6 +50,7 @@ nav:
       - Contributing: community/contributing.md
 plugins:
   search: {}
+  markdownextradata: {}
 
 extra:
   social:
@@ -59,6 +60,8 @@ extra:
       link: https://github.com/cachix/devenv
     - icon: fontawesome/brands/discord 
       link: https://discord.gg/naMgvexb6q
+  devenv:
+    version: 0.1
 markdown_extensions:
   - tables
   - admonition
