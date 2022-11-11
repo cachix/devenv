@@ -5,7 +5,7 @@
 [![version](https://img.shields.io/github/v/release/cachix/devenv?color=green&label=version&sort=semver)](https://github.com/cachix/devenv/releases) 
 [![CI](https://github.com/cachix/devenv/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv/actions/workflows/buildtest.yml?branch=main)
 
-![logo](logo.svg)
+![logo](docs/assets/logo.webp)
 
 Running ``devenv init`` generates something like ``devenv.nix``:
 
