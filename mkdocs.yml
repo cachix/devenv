@@ -44,12 +44,13 @@ nav:
       - devenv.yaml: reference/yaml-options.md
       - devenv.nix: reference/options.md
   - Blog:
-      - Hello world: blog/hello-world.md
+      - blog/index.md
   - Community:
       - Get Involved: community/get-involved.md
       - Contributing: community/contributing.md
 plugins:
-  - search
+  search: {}
+
 extra:
   social:
     - icon: fontawesome/brands/twitter 

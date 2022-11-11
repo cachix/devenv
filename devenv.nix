@@ -3,10 +3,11 @@
 {
   packages = [
     (import ./src/devenv.nix { inherit pkgs nix; })
-    pkgs.python3Packages.mkdocs-material
+    pkgs.python3Packages.virtualenv
+    pkgs.python3Packages.cairocffi
   ];
 
-  processes.docs.exec = "mkdocs serve";
+  processes.docs.exec = "bin/mkdocs serve --config-file mkdocs.insiders.yml";
 
   enterShell = ''
     echo hola
