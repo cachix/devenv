@@ -3,39 +3,72 @@ Here are the minimal steps to get started.
 ## Installation
 
 
-1. Install [Nix](https://nixos.org)
+a) Install [Nix](https://nixos.org)
 
-    ```shell-session
+=== "Linux"
+
+    ```
+    sh <(curl -L https://nixos.org/nix/install) --daemon
+    ```
+=== "macOS"
+
+    ```
     sh <(curl -L https://nixos.org/nix/install)
     ```
 
-2. Install ``devenv``
+=== "Windows (WSL2)"
+   
+    ```
+    sh <(curl -L https://nixos.org/nix/install) --no-daemon
+    ```
+
+=== "Docker"
+
+    ```
+    docker run -it nixos/nix
+    ```
+
+b) Install Cachix (optional, speeds up the installation by providing binaries)
 
 === "Newcomers"
 
-    ```shell-session
-    nix-env -if https://github.com/cachix/devenv/tarball/v0.1
+    ```
+    nix-env -iA cachix -f https://cachix.org/api/v1/install
+    cachix use devenv
+    ```
+
+=== "Nix 2.4+ (flakes)"
+
+    ```
+    nix profile install github:cachix/cachix/latest
+    cachix use devenv
+    ```
+
+c) Install ``devenv``
+
+=== "Newcomers"
+
+    ```
+    nix-env -if https://github.com/cachix/devenv/tarball/v{{ devenv.version }}
     ```
 
 === "Newcomers (flakes)"
 
-    ```shell-session
-    nix profile install github:cachix/devenv/v0.1
+    ```
+    nix profile install github:cachix/devenv/v{{ devenv.version }}
     ```
 
 === "Declaratively (non-flakes)"
     
     ```nix
-    (import (fetchTarball https://github.com/cachix/devenv/archive/v0.1.tar.gz))
+    (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))
     ```
 
 === "Declaratively (flakes)"
 
     ```nix
-    inputs.devenv.url = github:cachix/devenv/v0.1;
+    inputs.devenv.url = github:cachix/devenv/v{{ devenv.version }};
     ```
-
-*This might take a few minutes, please bear with us until we provide binaries.*
 
 ## Initial setup
 
