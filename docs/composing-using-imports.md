@@ -1,8 +1,9 @@
 You can compose environments either locally or by referencing [inputs](inputs.md).
 
-Let's assume you are writing an application with frontend and backend folders.
-For some reason you wrote your own redis integration that lives in ``devenv/devenv.nix``
-of the ``https://github.com/mycompany/redis.devenv`` repository.
+Imagine you're building a typical web application with separate frontend and backend components
+that live in separate folders.
+You've also written a custom Redis integration in ``devenv/devenv.nix``,
+stored in a remote ``https://github.com/mycompany/redis.devenv`` repository.
 
 ```yaml title="devenv.yaml"
 inputs:
@@ -16,9 +17,10 @@ imports:
 - redis/devenv
 ```
 
-If you enter ``frontend`` directory, the environment will activate based on what's in ``frontend/devenv.nix`` file.
+If you enter the ``frontend`` directory, the environment will activate based on what's in the ``frontend/devenv.nix`` file.
 
-If you enter the top-level project, the environment is combined from what's defined in ``backend/devenv.nix`` and ``frontend/devenv.nix``. For example ``devenv up`` will start frontend and backend processes.
+If you enter the top-level project, the environment is combined with what's defined in ``backend/devenv.nix`` and ``frontend/devenv.nix``.
+For example, ``devenv up`` will start both the frontend and backend processes.
 
 !!! note
 

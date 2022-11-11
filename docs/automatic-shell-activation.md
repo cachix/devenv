@@ -1,21 +1,21 @@
-To make **switching between dev environments** seamless,
-a project called [direnv](https://direnv.net) (not to be confused with devenv)
-is used to **activate your environment when you enter the directory** of your project.
+You can configure ``devenv`` to **seamlessly switch development environments** when navigating between project directories.
+
+This feature relies on a separate tool called [direnv](https://direnv.net) (not to be confused with devenv).
 
 ## Setup
 
-1. [Install the executable](https://direnv.net/docs/installation.html#from-system-packages)
-2. [Insert the hook into your shell](https://direnv.net/docs/hook.html)
+1. [Install direnv](https://direnv.net/docs/installation.html#from-system-packages)
+2. [Add the direnv hook to your shell](https://direnv.net/docs/hook.html)
 
 ## Use
 
-If you have installed it successfully, next time your enter project you should see a warning:
+Once installed, you'll see a warning in your shell the next time you enter the project directory:
 
 ```
 direnv: error ~/myproject/.envrc is blocked. Run `direnv allow` to approve its content
 ```
 
-Once you run ``direnv allow``, it will automatically enter the environment once you change the directory:
+Run ``direnv allow`` to enable the environment. It'll now be automatically loaded and unloaded whenever you enter and exit the project directory.
 
 ```shell-session
 $ cd /home/user/myproject/
