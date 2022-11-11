@@ -14,7 +14,7 @@ Here are the minimal steps to get started.
 === "Newcomers"
 
     ```shell-session
-    nix-env -if https://devenv.sh/assets/devenv-preview.tar.gz
+    nix-env -if https://github.com/cachix/devenv/tarball/v0.1
     ```
 
 === "Non-flakes package"
