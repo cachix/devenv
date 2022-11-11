@@ -14,7 +14,7 @@ theme:
   custom_dir: docs/overrides
   palette:
     primary: white
-    accent: black
+    accent: '#FBFBFB'
   features:
     - tabs
     - instant
