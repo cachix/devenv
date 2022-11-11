@@ -17,16 +17,22 @@ Here are the minimal steps to get started.
     nix-env -if https://github.com/cachix/devenv/tarball/v0.1
     ```
 
-=== "Non-flakes package"
+=== "Newcomers (flakes)"
+
+    ```shell-session
+    nix profile install github:cachix/devenv/v0.1
+    ```
+
+=== "Declaratively (non-flakes)"
     
     ```nix
     (import (fetchTarball https://github.com/cachix/devenv/archive/v0.1.tar.gz))
     ```
 
-=== "Flakes"
+=== "Declaratively (flakes)"
 
     ```nix
-    inputs.devenv.url = "github:cachix/devenv/v0.1";
+    inputs.devenv.url = github:cachix/devenv/v0.1;
     ```
 
 *This might take a few minutes, please bear with us until we provide binaries.*
