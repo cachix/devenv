@@ -7,7 +7,7 @@ authors:
 
 # Hello world: devenv 0.1
 
-After lengthy conversions at [NixCon 2022](https://2022.nixcon.org/)
+After lengthy conversations at [NixCon 2022](https://2022.nixcon.org/)
 about Developer Experience and current painpoints around documentation, I've started 
 [hacking and experimenting](https://github.com/cachix/devenv/commit/17512cf32528039090563438f7c103350810c2ce).
 
