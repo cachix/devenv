@@ -11,7 +11,7 @@ Starting with a simple example:
 }
 ```
 
-To start the processes in foreground run:
+To start the processes in the foreground, run:
 
 ```shell-session
 
@@ -32,4 +32,4 @@ Starting processes ...
 ...
 ```
 
-There's [postgres.enable](reference/options.md#postgresenable) for setting up a postgreSQL process.
+There's [postgres.enable](reference/options.md#postgresenable) for setting up a PostgreSQL process.

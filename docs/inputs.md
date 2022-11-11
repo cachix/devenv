@@ -1,4 +1,4 @@
-Inputs allow you to refer to Nix code outside your project,
+Inputs allow you to refer to Nix code outside of your project,
 while preserving reproducability. 
 
 Think of inputs as dependency management of your developer environment.
@@ -13,7 +13,7 @@ inputs:
     url: github:cachix/pre-commit-hooks.nix
 ```
 
-Input name like ``nixpkgs`` and ``pre-commit-hooks`` are identifiers for what
+Input names like ``nixpkgs`` and ``pre-commit-hooks`` are identifiers for what
  is passsed in the first line of the function:
 
 ```nix title="devenv.nix"
@@ -25,17 +25,17 @@ Input name like ``nixpkgs`` and ``pre-commit-hooks`` are identifiers for what
 
 See [basics](basics.md) for more about ``devenv.nix``.
 
-There are a few special inputs pass into ``devnix.nix``:
+There are a few special inputs passed into ``devnix.nix``:
 
-- ``pkgs`` is ``nixpkgs`` input resolved for your platform and contains all the packages.
-- ``lib`` is [a collection of functions that help manipulate basic data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library).
-- ``config`` is the resolved configuration of the developer environment, so you can reference any other option set in your ``devenv.nix``.
-- ``pre-commit-hooks`` is already wired up by default as an import so you can [set up your hooks](pre-commit-hooks.md).
+- ``pkgs`` is a ``nixpkgs`` input containing all of the available packages for your system.
+- ``lib`` is [a collection of functions for working with Nix data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library).
+- ``config`` is the resolved configuration for your developer environment, which you can use to reference any other options set in ``devenv.nix``.
+- ``pre-commit-hooks`` can be used to [set up git hooks](pre-commit-hooks.md).
 
 
 !!! note
 
-    If you're not referencing an input, you can leave it out from the function arguments as ``...`` catches all the inputs you're not interested in.
+    ``...`` is a catch-all pattern for any additional inputs, so you can safely omit the inputs you're not using.
 
 
 See [devenv.yaml reference](reference/yaml-options.md#inputs) for all supported inputs.
@@ -43,7 +43,7 @@ See [devenv.yaml reference](reference/yaml-options.md#inputs) for all supported 
 ## Locking and updating inputs
 
 When you run any of the commands,
-``devenv`` will resolve inputs like ``github:NixOS/nixpkgs/nixpkgs-unstable`` into a commit revision and write all that to ``devenv.lock``. This ensures that your environment is reproducible.
+``devenv`` resolves inputs like ``github:NixOS/nixpkgs/nixpkgs-unstable`` into a commit revision and writes it to ``devenv.lock``. This ensures that your environment is reproducible.
 
-To update to a newer commit run ``devenv update`` or read [devenv.yaml reference](reference/yaml-options.md#inputs) how to pin down the revision/branch at the input level.
+To update an input to a newer commit, run ``devenv update`` or read [devenv.yaml reference](reference/yaml-options.md#inputs) to learn how to pin down the revision/branch at the input level.
 
