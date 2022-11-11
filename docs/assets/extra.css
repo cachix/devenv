@@ -6,3 +6,8 @@
 .md-nav__title {
     font-size: 0!important;
 }
+
+/* mobile make code snippets scrollable */
+.image-wrapper {
+    overflow: auto!important;
+}
