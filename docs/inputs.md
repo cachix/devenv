@@ -29,7 +29,7 @@ There are a few special inputs pass into ``devnix.nix``:
 
 - ``pkgs`` is ``nixpkgs`` input resolved for your platform and contains all the packages.
 - ``lib`` is [a collection of functions that help manipulate basic data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library).
-- ``config`` is the resolved configuration if the developer environment, so you can reference any other option set in your ``devenv.nix``.
+- ``config`` is the resolved configuration of the developer environment, so you can reference any other option set in your ``devenv.nix``.
 - ``pre-commit-hooks`` is already wired up by default as an import so you can [set up your hooks](pre-commit-hooks.md).
 
 
