@@ -5,83 +5,54 @@
 [![version](https://img.shields.io/github/v/release/cachix/devenv?color=green&label=version&sort=semver)](https://github.com/cachix/devenv/releases) 
 [![CI](https://github.com/cachix/devenv/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv/actions/workflows/buildtest.yml?branch=main)
 
-See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a primer.
+![logo](logo.svg)
 
-Given `devenv.nix`:
+Running ``devenv init`` generates something like ``devenv.nix``:
 
 ```nix
 { pkgs, ... }:
 
 {
-  env.FOO = true;
+  # https://devenv.sh/basics/
+  env.GREET = "devenv";
 
-  enterShell = ''
-    echo hello
-  '';
-
+  # https://devenv.sh/packages/
   packages = [ pkgs.git ];
 
-  processes."<name>".exec = "lala";
+  enterShell = ''
+    hello
+    git --version
+  '';
+
+  # https://devenv.sh/languages/
+  languages.nix.enable = true;
+
+  # https://devenv.sh/scripts/
+  scripts.hello.exec = "echo hello from $GREET";
+
+  # https://devenv.sh/pre-commit-hooks/
+  pre-commit.hooks.shellcheck.enable = true;
+
+  # https://devenv.sh/processes/
+  # processes.ping.exec = "ping example.com";
 }
+
 ```
 
-And `devenv.yaml`:
-
-```yaml
-inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
-imports:
-  - ./frontend
-  - ./backend
-```
+And ``devenv shell`` activates the environment.
 
 ## Commands
 
-``devenv init``: generate `devenv.nix`, `devenv.yaml` and `.envrc`
+- ``devenv init``:           Scaffold devenv.yaml, devenv.nix, and .envrc
+- ``devenv shell``:          Activate the developer environment
+- ``devenv shell CMD ARGS``: Run CMD with ARGS in the developer environment.
+- ``devenv update``:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs
+- ``devenv up``:             Starts processes in foreground. See http://devenv.sh/processes
+- ``devenv gc``:             Removes old devenv generations. See http://devenv.sh/garbage-collection
+- ``devenv ci``:             builds your developer environment and make sure all checks pass.
 
-``devenv shell``: make `packages` available and export `env` variables
+## Documentation
 
-``devenv up``: start all `processes`
-
-``devenv update``: bump `devenv.lock`
-
-``devenv gc``: remove old shells
-
-## Benefits
-
-### Fast
-
-### Declarative
-
-### Reproducible
-
-### Composable
-
-## Installation
-
-1. Install [Nix](https://nixos.org)
-
-```
-    $ sh <(curl -L https://nixos.org/nix/install)
-```
-
-2. Install `devenv`
-
-```
-    $ nix-env -if https://github.com/cachix/devenv/tarball/main
-```
-
-## Usage 
-
-XXX 
-
-## Roadmap
-
-- [devenv search](https://github.com/cachix/devenv.sh/issues/4)
-- [support for building containers using https://github.com/nlewo/nix2container](https://github.com/cachix/devenv.sh/issues/5)
-
-## Related projects
-
-- [Home Manager](https://github.com/nix-community/home-manager) manages your home dotfiles in a similar manner
-- [nix-darwin](https://github.com/LnL7/nix-darwin) manages your macOS configuration in a similar manner
+- [Getting Started](https://devenv.sh/getting-started/)
+- [Basics](https://devenv.sh/basics/)
+- [Blog](https://devenv.sh/blog/)
