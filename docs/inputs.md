@@ -1,5 +1,5 @@
 Inputs allow you to refer to Nix code outside of your project,
-while preserving reproducability. 
+while preserving reproducibility.
 
 Think of inputs as dependency management of your developer environment.
 
@@ -25,7 +25,7 @@ Input names like ``nixpkgs`` and ``pre-commit-hooks`` are identifiers for what
 
 See [basics](basics.md) for more about ``devenv.nix``.
 
-There are a few special inputs passed into ``devnix.nix``:
+There are a few special inputs passed into ``devenv.nix``:
 
 - ``pkgs`` is a ``nixpkgs`` input containing all of the available packages for your system.
 - ``lib`` is [a collection of functions for working with Nix data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library).
