@@ -1,3 +1,7 @@
 result
 .devenv*
-.pre-commit-config.yaml
+/.pre-commit-config.yaml
+/bin
+/include
+/lib
+pyvenv.cfg
