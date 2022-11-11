@@ -41,4 +41,4 @@ that will allow you to read any Nix file.
 
 !!! note
 
-    We're running [a fundraising to improve developer experience around errors messages](https://opencollective.com/nix-errors-enhancement), which enables us to lower the barrier to learning Nix.
+    We're running [a fundraiser to improve the developer experience around errors messages](https://opencollective.com/nix-errors-enhancement), with the goal of lowering the barrier to learning Nix.
