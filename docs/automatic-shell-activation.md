@@ -2,12 +2,12 @@ You can configure ``devenv`` to **seamlessly switch development environments** w
 
 This feature relies on a separate tool called [direnv](https://direnv.net) (not to be confused with devenv).
 
-## Setup
+## Installing ``direnv``
 
 1. [Install direnv](https://direnv.net/docs/installation.html#from-system-packages)
 2. [Add the direnv hook to your shell](https://direnv.net/docs/hook.html)
 
-## Use
+## Using ``direnv``
 
 Once installed, you'll see a warning in your shell the next time you enter the project directory:
 
