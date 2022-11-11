@@ -5,15 +5,29 @@ Here are the minimal steps to get started.
 
 1. Install [Nix](https://nixos.org)
 
-```shell-session
-sh <(curl -L https://nixos.org/nix/install)
-```
+    ```shell-session
+    sh <(curl -L https://nixos.org/nix/install)
+    ```
 
-2. Install [devenv](https://github.com/cachix/devenv)
+2. Install ``devenv``
 
-```shell-session
-nix-env -if https://devenv.sh/assets/devenv-preview.tar.gz
-```
+=== "Newcomers"
+
+    ```shell-session
+    nix-env -if https://devenv.sh/assets/devenv-preview.tar.gz
+    ```
+
+=== "Non-flakes package"
+    
+    ```nix
+    (import (fetchTarball https://github.com/cachix/devenv/archive/v0.1.tar.gz))
+    ```
+
+=== "Flakes"
+
+    ```nix
+    inputs.devenv.url = "github:cachix/devenv/v0.1";
+    ```
 
 *This might take a few minutes, please bear with us until we provide binaries.*
 
