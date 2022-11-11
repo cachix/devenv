@@ -21,6 +21,7 @@ theme:
     - navigation.tabs
     - navigation.expand
     - content.code.annotate
+    - content.tabs.link
 nav:
   - Home: index.md
   - Documentation:
@@ -65,3 +66,5 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true 
