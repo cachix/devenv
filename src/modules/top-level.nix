@@ -37,6 +37,19 @@ in
       description = "Processes can be started with ``devenv up`` and run in foreground mode.";
     };
 
+    procfileScript = lib.mkOption {
+      type = types.lines;
+      description = "Bash code to run when performing ``devenv up``.";
+      default = ''
+        echo Starting processes ... >> /dev/stderr
+        echo >> /dev/stderr
+        ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
+      '';
+      example = ''
+        OVERMIND_ENV=$procfileenv ${pkgs.overmind}/bin/overmind start --procfile "$procfile"
+      '';
+    };
+
     # INTERNAL
 
     procfile = lib.mkOption {
