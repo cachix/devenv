@@ -62,6 +62,7 @@ in
 
   imports = [
     ./postgres.nix
+    ./redis.nix
     ./pre-commit.nix
     ./scripts.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
