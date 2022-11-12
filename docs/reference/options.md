@@ -1286,6 +1286,93 @@ string
 
 
 
+## redis.bind
+The IP interface to bind to.
+<literal>null</literal> means "all interfaces".
+
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+"127.0.0.1"
+```
+
+
+*_Example_*
+```
+"127.0.0.1"
+```
+
+
+## redis.enable
+Whether to enable Add redis process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## redis.extraConfig
+Additional text to be appended to <filename>redis.conf</filename>.
+
+*_Type_*:
+strings concatenated with "\n"
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## redis.package
+Which package of redis to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.redis"
+```
+
+
+
+
+## redis.port
+The TCP port to accept connections.
+If port 0 is specified Redis will not listen on a TCP socket.
+
+
+*_Type_*:
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+*_Default_*
+```
+6379
+```
+
+
+
+
 ## scripts
 A set of scripts available when the environment is active.
 
