@@ -62,20 +62,20 @@ pkgs.writeScriptBin "devenv" ''
         echo "No 'processes' option defined."  
         exit 1
       else
-        echo Starting processes ... >> /dev/stderr
-        echo >> /dev/stderr
+        echo "Starting processes ..." 1>&2
+        echo "" 1>&2
         ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
       fi
       ;;
     shell)
       assemble
-      echo Building shell ... >> /dev/stderr
+      echo "Building shell ..." 1>&2
       env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
       $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
       ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell
       if [ $# -eq 0 ]; then
-        echo Entering shell ... >> /dev/stderr
-        echo >> /dev/stderr
+        echo "Entering shell ..." 1>&2
+        echo "" 1>&2
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell
       else
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell -c "$@"
