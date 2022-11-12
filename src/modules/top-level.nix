@@ -41,12 +41,12 @@ in
       type = types.lines;
       description = "Bash code to run when performing ``devenv up``.";
       default = ''
-        echo Starting processes ... >> /dev/stderr
-        echo >> /dev/stderr
+        echo "Starting processes ..." 1>&2
+        echo "" 1>&2
         ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
       '';
       example = ''
-        OVERMIND_ENV=$procfileenv ${pkgs.overmind}/bin/overmind start --procfile "$procfile"
+        OVERMIND_ENV=$procfileenv ${pkgs.overmind}/bin/overmind start --procfile $procfile
       '';
     };
 
