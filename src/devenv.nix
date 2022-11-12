@@ -54,15 +54,15 @@ pkgs.writeScriptBin "devenv" ''
   case $command in
     up)
       assemble
-      procfile=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#project.config.procfile')
-      procfileenv=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#project.config.procfileEnv')
+      procfile=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfile')
+      procfileenv=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileEnv')
       add_gc procfile $procfile
       add_gc procfileenv $procfileenv
       if [ "$(cat $procfile)" = "" ]; then
         echo "No 'processes' option defined."  
         exit 1
       else
-        procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS eval --impure --raw '.#project.config.procfileScript')
+        procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS eval --impure --raw '.#procfileScript')
         eval "$procfilescript"
       fi
       ;;

@@ -46,7 +46,7 @@ in
         ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
       '';
       example = ''
-        OVERMIND_ENV=$procfileenv ${pkgs.overmind}/bin/overmind start --procfile $procfile
+        OVERMIND_ENV=$procfileenv ''${pkgs.overmind}/bin/overmind start --procfile $procfile
       '';
     };
 
