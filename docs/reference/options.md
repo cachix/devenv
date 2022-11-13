@@ -68,6 +68,40 @@ true
 ```
 
 
+## languages.elixir.enable
+Whether to enable Enable tools for Elixir development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.elixir.package
+Which package of Elixir to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.elixir"
+```
+
+
+
+
 ## languages.elm.enable
 Whether to enable Enable tools for Elm development..
 
