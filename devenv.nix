@@ -7,10 +7,15 @@
     pkgs.python3Packages.cairocffi
   ];
 
-  processes.docs.exec = "bin/mkdocs serve --config-file mkdocs.insiders.yml";
+  # bin/mkdocs serve --config-file mkdocs.insiders.yml
+  processes.docs.exec = "bin/mkdocs serve";
+  processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   enterShell = ''
-    echo hola
+    echo "To Install:"
+    echo
+    echo "virtualenv ."
+    echo "bin/pip install -r requirements.txt"
   '';
 
   scripts."run-devenv-tests".exec = ''
