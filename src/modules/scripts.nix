@@ -10,11 +10,7 @@ let
       };
     };
   });
-  toPackage = name: script: pkgs.writeShellScriptBin name ''
-    #!${pkgs.bash}/bin/bash
-
-    ${script.exec}
-  '';
+  toPackage = name: script: pkgs.writeShellScriptBin name script.exec;
 in
 {
   options = {
