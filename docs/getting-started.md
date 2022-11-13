@@ -59,7 +59,7 @@ c) Install ``devenv``
     ```
 
 === "Advanced (declaratively without flakes)"
-    
+
     ```nix title="configuration.nix"
     environment.systemPackages = [ 
       (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))

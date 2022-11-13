@@ -11,12 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-      with:
-        repository: ${{ github.event.pull_request.head.repo.full_name }}
-        ref: ${{ github.event.pull_request.head.ref }}
-      if: ${{ github.event_name == 'pull_request' }}
-    - uses: actions/checkout@v3
-      if: ${{ github.event_name == 'push' }}
     - uses: cachix/install-nix-action@v18
       with:
         extra_nix_config: |
@@ -28,6 +22,7 @@ jobs:
     - name: Generate doc options
       run: devenv shell generate-doc-options
     - uses: EndBug/add-and-commit@v9
+      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs/reference/options.md
@@ -35,6 +30,7 @@ jobs:
     - name: Generate all-languages example
       run: devenv shell generate-languages-example
     - uses: EndBug/add-and-commit@v9
+      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: examples/all-languages/devenv.nix
