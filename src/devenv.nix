@@ -90,8 +90,9 @@ pkgs.writeScriptBin "devenv" ''
       cat ${examples}/$example/devenv.nix > devenv.nix 
       echo "Creating devenv.yaml"
       cat ${examples}/$example/devenv.yaml > devenv.yaml
-      echo "Appending .devenv* to .gitignore"
+      echo "Appending .devenv* and devenv.local.nix to .gitignore"
       echo ".devenv*" >> .gitignore
+      echo "devenv.local.nix" >> .gitignore
       echo "Done."
       ;;
     update)
