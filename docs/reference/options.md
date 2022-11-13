@@ -68,6 +68,25 @@ true
 ```
 
 
+## languages.dotnet.enable
+Whether to enable Enable tools for .NET development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.elixir.enable
 Whether to enable Enable tools for Elixir development..
 
