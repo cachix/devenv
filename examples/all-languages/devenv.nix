@@ -4,6 +4,7 @@
   languages.c.enable = true;
   languages.cplusplus.enable = true;
   languages.elm.enable = true;
+  languages.erlang.enable = true;
   languages.go.enable = true;
   languages.haskell.enable = true;
   languages.java.enable = true;
