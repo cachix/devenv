@@ -87,6 +87,40 @@ true
 ```
 
 
+## languages.erlang.enable
+Whether to enable Enable tools for Erlang development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.erlang.package
+Which package of Erlang to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.erlang"
+```
+
+
+
+
 ## languages.go.enable
 Whether to enable Enable tools for Go development..
 
