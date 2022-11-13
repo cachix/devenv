@@ -33,14 +33,14 @@ b) Install Cachix (optional, speeds up the installation by providing binaries)
 === "Newcomers"
 
     ```
-    nix-env -iA cachix -f https://cachix.org/api/v1/install
+    nix profile install github:cachix/cachix/latest
     cachix use devenv
     ```
 
-=== "Nix 2.4+ (flakes)"
+=== "Nix 2.3 and lower"
 
     ```
-    nix profile install github:cachix/cachix/latest
+    nix-env -iA cachix -f https://cachix.org/api/v1/install
     cachix use devenv
     ```
 
@@ -49,25 +49,33 @@ c) Install ``devenv``
 === "Newcomers"
 
     ```
-    nix-env -if https://github.com/cachix/devenv/tarball/v{{ devenv.version }}
-    ```
-
-=== "Newcomers (flakes)"
-
-    ```
     nix profile install github:cachix/devenv/v{{ devenv.version }}
     ```
 
-=== "Declaratively (non-flakes)"
-    
-    ```nix
-    (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))
+=== "Nix 2.3 and lower"
+
+    ```
+    nix-env -if https://github.com/cachix/devenv/tarball/v{{ devenv.version }}
     ```
 
-=== "Declaratively (flakes)"
+=== "Advanced (declaratively without flakes)"
+    
+    ```nix title="configuration.nix"
+    environment.systemPackages = [ 
+      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))
+    ];
+    ```
 
-    ```nix
-    inputs.devenv.url = github:cachix/devenv/v{{ devenv.version }};
+=== "Advanced (declaratively with flakes)"
+
+    ```nix title="flake.nix"
+     {
+        inputs.devenv.url = "github:cachix/devenv/v{{ devenv.version }}";
+
+        outputs = { devenv, ... }: {
+            packages = devenv.packages;
+        };
+    }
     ```
 
 ## Initial setup
