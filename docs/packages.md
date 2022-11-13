@@ -32,13 +32,17 @@ jq-1.6
 
 ## Searching
 
-To search for available packages, use [package search](https://search.nixos.org/packages?channel=unstable)
-provided by Nix community.
+To search for available packages, use ``devenv search NAME``:
 
-You need to refer to the **unique package name, highlighted as a link** in the search results. Sometimes also called the attribute name. 
+```shell-session
+$ devenv search ncdu
+name         version  description
+pkgs.ncdu    2.1.2    Disk usage analyzer with an ncurses interface
+pkgs.ncdu_1  1.17     Disk usage analyzer with an ncurses interface
+pkgs.ncdu_2  2.1.2    Disk usage analyzer with an ncurses interface
 
-For example, if you [search for ``ncdu``](https://search.nixos.org/packages?channel=unstable&query=ncdu), you'll find ``ncdu`` and ``ncdu_1`` unique names (besides a few R packages).
+Found 3 results.
+```
 
-!!! note
-
-    If you would find ``devenv search`` command useful, vote for it [here](https://github.com/cachix/devenv/issues/4).
+This will search [available packages](https://search.nixos.org/packages?channel=unstable&query=ncdu),
+for the exact pinned version of nixpkgs input in your ``devenv.lock``.

@@ -81,6 +81,18 @@ pkgs.writeScriptBin "devenv" ''
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell -c "$@"
       fi
       ;;
+    search)
+      name=$1
+      shift
+      results=$($CUSTOM_NIX/bin/nix $NIX_FLAGS search --json nixpkgs $name)
+      if [ "$results" = "{}" ]; then
+        echo "No results found for '$name'."
+      else
+        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (.[]  |map(.) |@tsv)' <<< "$results" | column -ts $'\t'
+        echo
+        echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") results."
+      fi
+      ;;
     init)
       # TODO: allow selecting which example and list them
       example=simple
@@ -146,9 +158,10 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Commands:"
       echo
-      echo "init:           Scaffold devenv.yaml, devenv.nix, and .envrc"
-      echo "shell:          Activate the developer environment"
-      echo "shell CMD ARGS: Run CMD with ARGS in the developer environment."
+      echo "init:           Scaffold devenv.yaml, devenv.nix, and .envrc."
+      echo "search NAME:    Search packages matching NAME in nixpkgs input."
+      echo "shell:          Activate the developer environment."
+      echo "shell CMD ARGS: Run CMD with ARGS in the developer environment. Useful when scripting."
       echo "update:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
       echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
       echo "gc:             Removes old devenv generations. See http://devenv.sh/garbage-collection"
