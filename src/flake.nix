@@ -32,6 +32,7 @@
             ${./modules}/top-level.nix
             ./devenv.nix
             (devenv.devenv or {})
+            (if builtins.pathExists ./devenv.local.nix then ./devenv.local.nix else {})
           ] ++ (map toModule (devenv.imports or []));
         };
         config = project.config;
