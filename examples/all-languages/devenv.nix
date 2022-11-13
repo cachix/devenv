@@ -3,6 +3,7 @@
   # Enable all languages tooling!
   languages.c.enable = true;
   languages.cplusplus.enable = true;
+  languages.elixir.enable = true;
   languages.elm.enable = true;
   languages.erlang.enable = true;
   languages.go.enable = true;
