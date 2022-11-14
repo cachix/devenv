@@ -2,7 +2,10 @@
   {
     inputs = { 
       pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+      pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
       nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+      devenv.url = "github:cachix/devenv";
+      devenv.inputs.nixpkgs.follows = "nixpkgs";
     } // (if builtins.pathExists ./.devenv/devenv.json 
          then (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs
          else {});
@@ -29,7 +32,7 @@
         project = pkgs.lib.evalModules {
           specialArgs = inputs // { inherit pkgs; };
           modules = [
-            ${./modules}/top-level.nix
+            (inputs.devenv.modules + /top-level.nix)
             ./devenv.nix
             (devenv.devenv or {})
             (if builtins.pathExists ./devenv.local.nix then ./devenv.local.nix else {})
