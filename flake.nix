@@ -37,6 +37,8 @@
         }
       );
 
+      modules = ./src/modules;
+
       defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
     };
 }

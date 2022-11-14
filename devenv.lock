@@ -1,5 +1,16 @@
 {
   "nodes": {
+    "devenv": {
+      "locked": {
+        "path": "./src/modules",
+        "type": "path"
+      },
+      "original": {
+        "path": "./src/modules",
+        "type": "path"
+      },
+      "parent": []
+    },
     "flake-utils": {
       "locked": {
         "lastModified": 1667077288,
@@ -98,24 +109,12 @@
         "type": "github"
       }
     },
-    "nixpkgs_3": {
-      "locked": {
-        "lastModified": 1667292599,
-        "narHash": "sha256-7ISOUI1aj6UKMPIL+wwthENL22L3+A9V+jS8Is3QsRo=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ef2f213d9659a274985778bff4ca322f3ef3ac68",
-        "type": "github"
-      },
-      "original": {
-        "id": "nixpkgs",
-        "type": "indirect"
-      }
-    },
     "pre-commit-hooks": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs_3"
+        "nixpkgs": [
+          "nixpkgs"
+        ]
       },
       "locked": {
         "lastModified": 1667760143,
@@ -132,6 +131,7 @@
     },
     "root": {
       "inputs": {
+        "devenv": "devenv",
         "nix": "nix",
         "nixpkgs": "nixpkgs_2",
         "pre-commit-hooks": "pre-commit-hooks"
