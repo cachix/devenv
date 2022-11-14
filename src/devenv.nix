@@ -35,7 +35,12 @@ pkgs.writeScriptBin "devenv" ''
     chmod +w $FLAKE_FILE
   }
 
-  GC_ROOT=$HOME/.devenv/gc
+  if [[ -z $XDG_DATA_HOME ]]; then
+    GC_ROOT=$HOME/.devenv/gc
+  else 
+    GC_ROOT=$XDG_DATA_HOME/devenv/gc
+  fi
+
   mkdir -p $GC_ROOT
   GC_DIR=$GC_ROOT/$(date +%s)
 
