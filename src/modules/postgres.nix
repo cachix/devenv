@@ -59,7 +59,7 @@ in
       cfg.package
     ];
 
-    env.PGDATA = config.env.DEVENV_STATE + "postgres";
+    env.PGDATA = config.env.DEVENV_STATE + "/postgres";
 
     processes.postgres.exec = "${startScript}/bin/start-postgres";
   };

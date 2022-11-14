@@ -68,8 +68,10 @@ in
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
   config = {
-    env.DEVENV_DOTFILE = ".devenv/";
-    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "state/";
+    # TODO: figure out how to get relative path without impure mode
+    env.DEVENV_ROOT = builtins.getEnv "PWD";
+    env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
+    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
 
     procfile = pkgs.writeText "procfile"
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));
