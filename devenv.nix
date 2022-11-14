@@ -47,7 +47,7 @@
     cat $options >> docs/reference/options.md
   '';
   scripts."generate-languages-example".exec = ''
-    cat > examples/all-languages/devenv.nix <<EOF
+    cat > examples/supported-languages/devenv.nix <<EOF
     { pkgs, ... }: {
 
       # Enable all languages tooling!

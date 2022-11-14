@@ -22,7 +22,7 @@ Version 4.8.4
 (devenv) $ 
 ```
 
-See [all-languages](https://github.com/cachix/devenv/blob/main/examples/all-languages/devenv.nix) example to see a list of currently supported languages.
+See [supported-languages](https://github.com/cachix/devenv/blob/main/examples/supported-languages/devenv.nix) example to see a list of currently supported languages.
 
 !!! note 
 
