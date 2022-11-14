@@ -11,7 +11,7 @@ After an intense weekend and lots of incoming contributions, `v0.2` is out!
 
 # Highlights
 
-- All the ``devenv.nix`` options you can define now come as an input (instead of being packaged with each devenv release). To update the options you can run ``devenv update`` and it will match [devenv.nix reference](reference.md#options).
+- All the ``devenv.nix`` options you can define now come as an input (instead of being packaged with each devenv release). To update the options you can run ``devenv update`` and it will match [devenv.nix reference](/reference/options).
 
 - New ``devenv search`` command:
 
