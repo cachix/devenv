@@ -49,13 +49,13 @@ c) Install ``devenv``
 === "Newcomers"
 
     ```
-    nix profile install github:cachix/devenv/v{{ devenv.version }}
-    ```
-
-=== "Nix 2.3 and lower"
-
-    ```
     nix-env -if https://github.com/cachix/devenv/tarball/v{{ devenv.version }}
+    ```
+
+=== "Advanced (flake profiles)"
+
+    ```
+    nix profile install github:cachix/devenv/v{{ devenv.version }}
     ```
 
 === "Advanced (declaratively without flakes)"
