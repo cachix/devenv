@@ -27,7 +27,7 @@ in
 
     packages = lib.mkOption {
       type = types.listOf types.package;
-      description = "A list of packages to expose inside the developer environment from https://search.nixos.org/packages?channel=unstable";
+      description = "A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.";
       default = [ ];
     };
 
