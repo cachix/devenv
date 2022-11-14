@@ -4,8 +4,7 @@
       pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
       pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
       nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-      devenv.url = "github:cachix/devenv";
-      devenv.inputs.nixpkgs.follows = "nixpkgs";
+      devenv.url = "github:cachix/devenv?dir=src/modules";
     } // (if builtins.pathExists ./.devenv/devenv.json 
          then (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs
          else {});
