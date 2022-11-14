@@ -49,8 +49,46 @@ true
 ```
 
 
+## languages.clojure.enable
+Whether to enable Enable tools for Clojure development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.cplusplus.enable
 Whether to enable Enable tools for C++ development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.crystal.enable
+Whether to enable Enable tools for Crystal development..
 
 *_Type_*:
 boolean
