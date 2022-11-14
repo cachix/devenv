@@ -5,6 +5,7 @@
     (import ./src/devenv.nix { inherit pkgs nix; })
     pkgs.python3Packages.virtualenv
     pkgs.python3Packages.cairocffi
+    pkgs.yaml2json
   ];
 
   # bin/mkdocs serve --config-file mkdocs.insiders.yml
@@ -18,6 +19,10 @@
     echo "bin/pip install -r requirements.txt"
   '';
 
+  scripts.bump-version.exec = ''
+    echo assuming you bumped the version in mkdocs.yml, populating src/version
+    cat mkdocs.yml | yaml2json | jq '.extra.devenv.version' > src/version
+  '';
   scripts."run-devenv-tests".exec = ''
     set -xe
 
