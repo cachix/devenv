@@ -1,6 +1,7 @@
 { pkgs, nix }:
 let
   examples = ../examples;
+  lib = pkgs.lib;
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
@@ -152,7 +153,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "Done. Saved $((($before - $after) / 1024 / 1024 )) MB in $SECONDS seconds."
       ;;
     *)
-      echo "https://devenv.sh (version ${builtins.readFile ./version}): Fast, Declarative, Reproducible, and Composable Developer Environments"
+      echo "https://devenv.sh (version ${lib.removeSuffix "\n" (builtins.readFile ./version)}): Fast, Declarative, Reproducible, and Composable Developer Environments"
       echo
       echo "Usage: devenv command [options] [arguments]"
       echo
