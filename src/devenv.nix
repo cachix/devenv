@@ -100,6 +100,13 @@ pkgs.writeScriptBin "devenv" ''
       fi
       ;;
     init)
+      if [ "$#" -eq "1" ]
+      then
+        target="$1"
+        mkdir -p "$target"
+        cd "$target"
+      fi
+
       # TODO: allow selecting which example and list them
       example=simple
       echo "Creating .envrc"
