@@ -288,6 +288,25 @@ true
 ```
 
 
+## languages.ocaml.enable
+Whether to enable Enable tools for OCaml development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.perl.enable
 Whether to enable Enable tools for Perl development..
 
