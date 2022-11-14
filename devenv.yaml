@@ -3,5 +3,7 @@ inputs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
   nix:
     url: github:domenkozar/nix/relaxed-flakes
+  devenv:
+    url: path:./src/modules
 imports:
   - nix
