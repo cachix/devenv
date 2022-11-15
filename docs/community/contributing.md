@@ -6,3 +6,6 @@ When contributing, please note that smaller pull requests have a higher chance o
 
 If you need help with contributions, join us on 
 [Discord](https://discord.gg/naMgvexb6q) as we're still figuring out what guides on contributions to write.
+
+We have the boundary that new features need to come with documentation and tests.
+This is to ensure the project stays healthy.
