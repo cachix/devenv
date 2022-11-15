@@ -2,13 +2,14 @@
 
 let
   cfg = config.languages.java;
+  inherit (lib) types mkEnableOption mkOption mkDefault mkIf optional;
 in
 {
   options.languages.java = {
-    enable = lib.mkEnableOption "Enable tools for Java development.";
+    enable = mkEnableOption "Enable tools for Java development.";
   };
 
-  config = lib.mkIf cfg.enable {
+  config = mkIf cfg.enable {
     packages = with pkgs; [
       gradle
       jdk
