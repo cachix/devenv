@@ -33,14 +33,14 @@ b) Install Cachix (optional, speeds up the installation by providing binaries)
 === "Newcomers"
 
     ```
-    nix profile install github:cachix/cachix/latest
+    nix-env -iA cachix -f https://cachix.org/api/v1/install
     cachix use devenv
     ```
 
-=== "Nix 2.3 and lower"
+=== "Advanced (flake profiles)"
 
     ```
-    nix-env -iA cachix -f https://cachix.org/api/v1/install
+    nix profile install github:cachix/cachix/latest
     cachix use devenv
     ```
 
