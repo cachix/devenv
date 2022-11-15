@@ -288,6 +288,40 @@ true
 ```
 
 
+## languages.lua.enable
+Whether to enable Enable tools for Lua development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.lua.package
+The Lua package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.lua"
+```
+
+
+
+
 ## languages.nix.enable
 Whether to enable Enable tools for Nix development..
 
