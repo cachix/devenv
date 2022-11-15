@@ -36,6 +36,6 @@ Found 3 results.
 
 - Variables like ``env.DEVENV_ROOT``, ``env.DEVENV_STATE`` and ``env.DEVENV_DOTFILE`` are now absolute paths paths
 - [shyim](https://github.com/shyim) fixed ``/dev/stderr`` that is in some environments not available.
-- [domen](https://github.com/domenkozar) fix shell exiting on non-zero exit status code. 
+- [domen](https://github.com/domenkozar) fixed shell exiting on non-zero exit status code. 
 
 Domen
