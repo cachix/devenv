@@ -40,6 +40,7 @@ nav:
       - Processes: processes.md
       - Pre-Commit Hooks: pre-commit-hooks.md
     - Examples: examples.md
+    - Roadmap: roadmap.md
     - Reference:
       - devenv.yaml: reference/yaml-options.md
       - devenv.nix: reference/options.md
@@ -72,3 +73,4 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true 
+  - pymdownx.tasklist
