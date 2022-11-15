@@ -13,6 +13,7 @@
   languages.java.enable = true;
   languages.javascript.enable = true;
   languages.kotlin.enable = true;
+  languages.lua.enable = true;
   languages.nix.enable = true;
   languages.ocaml.enable = true;
   languages.perl.enable = true;
