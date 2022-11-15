@@ -22,5 +22,6 @@ in
     enterShell = ''
       mvn -version
     '';
+    env.JAVA_HOME = cfg.jdk.package.home;
   };
 }
