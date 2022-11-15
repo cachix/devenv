@@ -7,17 +7,20 @@ in
 {
   options.languages.java = {
     enable = mkEnableOption "Enable tools for Java development.";
-    jdk.package = mkOption {
-      type = types.package;
+    jdk.package = mkOption { type = types.package; };
+    maven = {
+      enable = mkEnableOption "maven";
+      package = mkOption { type = types.package; };
     };
   };
 
   config = mkIf cfg.enable {
     languages.java.jdk.package = mkDefault pkgs.jdk;
+    languages.java.maven.package = mkDefault (pkgs.maven.override { jdk = cfg.jdk.package; });
     packages = with pkgs; [
-      maven
       gradle
-    ] ++ (optional cfg.enable cfg.jdk.package);
+    ] ++ (optional cfg.enable cfg.jdk.package)
+    ++ (optional cfg.maven.enable cfg.maven.package);
 
     enterShell = ''
       mvn -version
