@@ -25,9 +25,6 @@ in
       ++ (optional cfg.maven.enable cfg.maven.package)
       ++ (optional cfg.gradle.enable cfg.gradle.package);
 
-    enterShell = ''
-      mvn -version
-    '';
     env.JAVA_HOME = cfg.jdk.package.home;
   };
 }
