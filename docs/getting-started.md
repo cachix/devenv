@@ -40,7 +40,7 @@ b) Install Cachix (optional, speeds up the installation by providing binaries)
 === "Advanced (flake profiles)"
 
     ```
-    nix profile install github:cachix/cachix/latest
+    nix profile install nixpkgs#cachix
     cachix use devenv
     ```
 
