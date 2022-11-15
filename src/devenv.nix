@@ -171,7 +171,7 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Commands:"
       echo
-      echo "init:           Scaffold devenv.yaml, devenv.nix, and .envrc."
+      echo "init TARGET:    Scaffold devenv.yaml, devenv.nix, and .envrc inside TARGET directory."
       echo "search NAME:    Search packages matching NAME in nixpkgs input."
       echo "shell:          Activate the developer environment."
       echo "shell CMD ARGS: Run CMD with ARGS in the developer environment. Useful when scripting."
