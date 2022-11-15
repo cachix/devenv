@@ -4,6 +4,7 @@
   languages.c.enable = true;
   languages.clojure.enable = true;
   languages.cplusplus.enable = true;
+  languages.cue.enable = true;
   languages.dotnet.enable = true;
   languages.elixir.enable = true;
   languages.elm.enable = true;
