@@ -87,6 +87,40 @@ true
 ```
 
 
+## languages.cue.enable
+Whether to enable Enable tools for Cue development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.cue.package
+The CUE package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.cue"
+```
+
+
+
+
 ## languages.dotnet.enable
 Whether to enable Enable tools for .NET development..
 
