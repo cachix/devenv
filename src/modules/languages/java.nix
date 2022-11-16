@@ -32,10 +32,10 @@ in
       enable = mkEnableOption "gradle";
       package = mkOption {
         type = types.package;
-        default = pkgs.gradle;
-        defaultText = literalExpression "pkgs.gradle";
+        defaultText = literalExpression "pkgs.gradle.override { jdk = cfg.jdk.package; }";
         description = ''
           The gradle package to use.
+          The gradle package by default inherits the JDK from `languages.java.jdk.package`.
         '';
       };
     };
@@ -43,6 +43,7 @@ in
 
   config = mkIf cfg.enable {
     languages.java.maven.package = mkDefault (pkgs.maven.override { jdk = cfg.jdk.package; });
+    languages.java.gradle.package = mkDefault (pkgs.gradle.override { java = cfg.jdk.package; });
     packages = (optional cfg.enable cfg.jdk.package)
       ++ (optional cfg.maven.enable cfg.maven.package)
       ++ (optional cfg.gradle.enable cfg.gradle.package);
