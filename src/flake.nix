@@ -19,15 +19,17 @@
         toModule = path: 
           if lib.hasPrefix "./" path 
           then ./. + (builtins.substring 1 255 path) + "/devenv.nix"
-          else let 
+          else if lib.hasPrefix "../" path 
+          then throw "devenv: ../ is not supported for imports"
+          else let
             paths = lib.splitString "/" path;
             name = builtins.head paths;
             input = inputs.''${name} or (throw "Unknown input ''${name}");
             subpath = "/''${lib.concatStringsSep "/" (builtins.tail paths)}";
-            devenvpath = input + subpath + "/devenv.nix";
-            in if builtins.pathExists devenvpath
+            devenvpath = "''${input}/" + subpath + "/devenv.nix";
+            in if (!devenv.inputs.''${name}.flake) && builtins.pathExists devenvpath
                then devenvpath
-               else {};
+               else throw (devenvpath + " file does not exist for input ''${name}.");
         project = pkgs.lib.evalModules {
           specialArgs = inputs // { inherit pkgs; };
           modules = [
