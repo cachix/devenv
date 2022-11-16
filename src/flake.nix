@@ -32,10 +32,11 @@
           specialArgs = inputs // { inherit pkgs; };
           modules = [
             (inputs.devenv.modules + /top-level.nix)
+          ] ++ (map toModule (devenv.imports or [])) ++ [
             ./devenv.nix
             (devenv.devenv or {})
             (if builtins.pathExists ./devenv.local.nix then ./devenv.local.nix else {})
-          ] ++ (map toModule (devenv.imports or []));
+          ];
         };
         config = project.config;
       in {
