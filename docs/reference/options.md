@@ -266,7 +266,7 @@ true
 
 
 ## languages.java.enable
-Whether to enable Enable tools for Java development..
+Whether to enable tools for Java development.
 
 *_Type_*:
 boolean
@@ -282,6 +282,99 @@ false
 ```
 true
 ```
+
+
+## languages.java.gradle.enable
+Whether to enable gradle.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.java.gradle.package
+The gradle package to use.
+The gradle package by default inherits the JDK from `languages.java.jdk.package`.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.gradle.override { jdk = cfg.jdk.package; }"}
+```
+
+
+
+
+## languages.java.jdk.package
+The JDK package to use.
+This will also become available as <literal>JAVA_HOME</literal>.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.jdk"}
+```
+
+
+*_Example_*
+```
+{"_type":"derivation","name":"openjdk-8u322-ga"}
+```
+
+
+## languages.java.maven.enable
+Whether to enable maven.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.java.maven.package
+The maven package to use.
+The maven package by default inherits the JDK from <literal>languages.java.jdk.package</literal>.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.maven.override { jdk = cfg.jdk.package; }"
+```
+
+
 
 
 ## languages.javascript.enable
