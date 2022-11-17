@@ -1,4 +1,4 @@
-{ pkgs, lib, ... }:
+{ pkgs, lib, config, ... }:
 
 {
   options.devenv = {
@@ -18,10 +18,10 @@
     };
   };
 
-  config = lib.mkIf cfg.warnOnNewVersion {
+  config = lib.mkIf config.devenv.warnOnNewVersion {
     enterShell = ''
-      if [ "$DEVENV_VERSION" != "${cfg.latestVersion}" ]; then
-        echo "✨ devenv is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
+      if [ "$DEVENV_VERSION" != "${config.devenv.latestVersion}" ]; then
+        echo "✨ devenv is out of date. Please update to ${config.devenv.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
       fi
     '';
   };

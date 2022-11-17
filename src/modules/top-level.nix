@@ -65,6 +65,7 @@ in
     ./redis.nix
     ./pre-commit.nix
     ./scripts.nix
+    ./update-check.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
   config = {
