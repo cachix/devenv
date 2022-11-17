@@ -29,6 +29,9 @@
     set -xe
 
     pushd examples/simple
+      # this should fail since files already exist
+      devenv init && exit 1
+      rm devenv.nix devenv.yaml .envrc
       devenv init
     popd
 
