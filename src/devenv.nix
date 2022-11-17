@@ -14,6 +14,7 @@ pkgs.writeScriptBin "devenv" ''
   # current hack to test if we have resolved all Nix annoyances
   export FLAKE_FILE=.devenv.flake.nix
   export FLAKE_LOCK=devenv.lock
+  export DEVENV_VERSION=${lib.removeSuffix "\n" (builtins.readFile ./modules/latest-version)}
 
   CUSTOM_NIX=${nix.packages.${pkgs.system}.nix}
 
@@ -133,6 +134,9 @@ pkgs.writeScriptBin "devenv" ''
       assemble
       $CUSTOM_NIX/bin/nix $NIX_FLAGS flake update
       ;;
+    version)
+      echo "devenv: $DEVENV_VERSION"
+      ;;
     ci)
       assemble
       ci=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
@@ -174,7 +178,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "Done. Saved $((($before - $after) / 1024 / 1024 )) MB in $SECONDS seconds."
       ;;
     *)
-      echo "https://devenv.sh (version ${lib.removeSuffix "\n" (builtins.readFile ./version)}): Fast, Declarative, Reproducible, and Composable Developer Environments"
+      echo "https://devenv.sh (version $DEVENV_VERSION): Fast, Declarative, Reproducible, and Composable Developer Environments"
       echo
       echo "Usage: devenv command [options] [arguments]"
       echo
@@ -188,6 +192,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
       echo "gc:             Removes old devenv generations. See http://devenv.sh/garbage-collection"
       echo "ci:             builds your developer environment and make sure all checks pass."
+      echo "version:        Display devenv version"
       echo
       exit 1
   esac
