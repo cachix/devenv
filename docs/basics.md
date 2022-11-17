@@ -13,7 +13,7 @@ Given a hello world example, click on the end of each line to get an explanation
 }
 ```
 
-1. ``devenv.nix`` is a function with inputs. We use a special input ``...`` at the end as a catch-all to avoid enumuerating all of the inputs.
+1. ``devenv.nix`` is a function with inputs. We use a special input ``...`` at the end as a catch-all to avoid enumerating all of the inputs.
 2. Our function is returning an attribute set, similar to an object in JSON.
 3. Attributes can be nested and have a similar values as in JSON.
 4. Values can refer to the inputs. See [Inputs](inputs.md) how to define inputs.
