@@ -525,6 +525,40 @@ true
 ```
 
 
+## languages.purescript.enable
+Whether to enable Enable tools for PureScript development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.purescript.package
+The PureScript package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.purescript"
+```
+
+
+
+
 ## languages.python.enable
 Whether to enable Enable tools for Python development..
 
