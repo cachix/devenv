@@ -17,7 +17,7 @@ It has been 3 days since [0.2](devenv-v0.2.md) release, so it's time for 0.3:
 
 - [bobvanderlinden](https://github.com/bobvanderlinden) contributed [Java customization options](https://devenv.sh/reference/options/#languagesjavaenable).
 
-- ``devenv init`` now optionally accept a directory where to create the structure. Thanks [bobvanderlinden](https://github.com/bobvanderlinden)!
+- ``devenv init`` now optionally accepts a directory where to create the structure. Thanks [bobvanderlinden](https://github.com/bobvanderlinden)!
 
 - Installation instructions of devenv have been improved to be more robust.
 
