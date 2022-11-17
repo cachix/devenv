@@ -25,3 +25,8 @@ Entering shell ...
 
 (devenv) $
 ```
+
+## Customizing PS1
+
+If you'd like to use direnv and have your prompt be aware of it,
+we recommend [installing Starship](https://starship.rs/guide/).
