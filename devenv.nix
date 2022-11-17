@@ -20,8 +20,10 @@
   '';
 
   scripts.bump-version.exec = ''
-    echo assuming you bumped the version in mkdocs.yml, populating src/version
-    cat mkdocs.yml | yaml2json | jq '.extra.devenv.version' > src/version
+    # TODO: ask for the new version
+    # TODO: update the version in the mkdocs.yml
+    echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
+    cat mkdocs.yml | yaml2json | jq '.extra.devenv.version' > src/modules/latest-version
   '';
   scripts."run-devenv-tests".exec = ''
     set -xe
