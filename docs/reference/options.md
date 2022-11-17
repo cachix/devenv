@@ -544,6 +544,21 @@ true
 ```
 
 
+## languages.python.package
+The Python package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.python3"
+```
+
+
+
+
 ## languages.r.enable
 Whether to enable Enable tools for R development..
 
