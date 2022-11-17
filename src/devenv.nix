@@ -52,6 +52,14 @@ pkgs.writeScriptBin "devenv" ''
     ln -sf $storePath $GC_DIR-$name
   }
 
+  function shell {
+    assemble
+    echo "Building shell ..." 1>&2
+    env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
+    $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
+    ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell
+  }
+
   command=$1
   if [[ ! -z $command ]]; then
     shift
@@ -59,7 +67,8 @@ pkgs.writeScriptBin "devenv" ''
 
   case $command in
     up)
-      assemble
+      shell
+      eval "$env"
       procfile=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfile')
       procfileenv=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileEnv')
       add_gc procfile $procfile
@@ -73,12 +82,12 @@ pkgs.writeScriptBin "devenv" ''
         ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
       fi
       ;;
+    print-dev-env)
+      shell
+      echo "$env"
+    ;;
     shell)
-      assemble
-      echo "Building shell ..." 1>&2
-      env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
-      $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
-      ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell
+      shell
       if [ $# -eq 0 ]; then
         echo "Entering shell ..." 1>&2
         echo "" 1>&2
