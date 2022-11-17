@@ -117,6 +117,11 @@ pkgs.writeScriptBin "devenv" ''
         cd "$target"
       fi
 
+      if [[ -f devenv.nix || -f devenv.yaml || -f .envrc ]]; then
+        echo "Aborting since devenv.nix, devenv.yaml or .envrc already exist."
+        exit 1
+      fi
+
       # TODO: allow selecting which example and list them
       example=simple
       echo "Creating .envrc"
@@ -184,6 +189,7 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Commands:"
       echo
+      echo "init:           Scaffold devenv.yaml, devenv.nix, and .envrc inside the current directory."
       echo "init TARGET:    Scaffold devenv.yaml, devenv.nix, and .envrc inside TARGET directory."
       echo "search NAME:    Search packages matching NAME in nixpkgs input."
       echo "shell:          Activate the developer environment."
