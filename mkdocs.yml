@@ -52,6 +52,15 @@ nav:
 plugins:
   search: {}
   markdownextradata: {}
+  social:
+    cards_color:
+      fill: "#FBFBFB"
+      text: "#425C82"
+  rss:
+    match_path: blog/posts/.* 
+    date_from_meta:
+      as_creation: date
+      as_update: date
 
 extra:
   social:
