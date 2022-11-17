@@ -582,6 +582,21 @@ true
 ```
 
 
+## languages.ruby.package
+The Ruby package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.ruby"
+```
+
+
+
+
 ## languages.rust.enable
 Whether to enable Enable tools for Rust development..
 
