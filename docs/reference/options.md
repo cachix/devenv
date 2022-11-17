@@ -1,5 +1,37 @@
 # devenv.nix options
 
+## devenv.latestVersion
+The latest version of devenv.
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"0.2"
+```
+
+
+
+
+## devenv.warnOnNewVersion
+Whether to warn when a new version of devenv is available.
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
 ## enterShell
 Bash code to execute when entering the shell.
 
