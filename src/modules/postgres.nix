@@ -14,7 +14,7 @@ let
     initdb ${lib.concatStringsSep " " cfg.initdbArgs}
     cat >> "$PGDATA/postgresql.conf" <<EOF
       listen_addresses = '''
-      unix_socket_directories = '`pwd`/$PGDATA'
+      unix_socket_directories = '$PGDATA'
     EOF
     ${createDatabase}
   '';
