@@ -6,11 +6,18 @@ in
 {
   options.languages.ruby = {
     enable = lib.mkEnableOption "Enable tools for Ruby development.";
+
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.ruby;
+      defaultText = "pkgs.ruby";
+      description = "The Ruby package to use.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      ruby
+      cfg.package
       bundler
     ];
 
