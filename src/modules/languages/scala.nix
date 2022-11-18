@@ -11,13 +11,19 @@ in
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       scala
+      scala-cli
       sbt
+      coursier
+      scalafmt
     ];
 
     enterShell = ''
       scala --version
-
+      scala-cli --version
       sbt --version
+      scalafmt --version
+      echo cs version
+      cs version
     '';
   };
 }

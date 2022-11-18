@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - main
+    tags:
+      - v*
+  pull_request:
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,14 +22,16 @@ jobs:
     - name: Generate doc options
       run: devenv shell generate-doc-options
     - uses: EndBug/add-and-commit@v9
+      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs/reference/options.md
         message: 'Auto generate docs/reference/options.md'
-    - name: Generate all-languages example
+    - name: Generate supported-languages example
       run: devenv shell generate-languages-example
     - uses: EndBug/add-and-commit@v9
+      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
-        add: examples/all-languages/devenv.nix
-        message: 'Auto generate examples/all-languages/devenv.nix'
+        add: examples/supported-languages/devenv.nix
+        message: 'Auto generate examples/supported-languages/devenv.nix'

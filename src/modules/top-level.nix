@@ -27,7 +27,7 @@ in
 
     packages = lib.mkOption {
       type = types.listOf types.package;
-      description = "A list of packages to expose inside the developer environment from https://search.nixos.org/packages?channel=unstable";
+      description = "A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.";
       default = [ ];
     };
 
@@ -78,11 +78,14 @@ in
     ./redis.nix
     ./pre-commit.nix
     ./scripts.nix
+    ./update-check.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
   config = {
-    env.DEVENV_DOTFILE = ".devenv/";
-    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "state/";
+    # TODO: figure out how to get relative path without impure mode
+    env.DEVENV_ROOT = builtins.getEnv "PWD";
+    env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
+    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
 
     procfile = pkgs.writeText "procfile"
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));

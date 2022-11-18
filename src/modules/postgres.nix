@@ -14,7 +14,7 @@ let
     initdb ${lib.concatStringsSep " " cfg.initdbArgs}
     cat >> "$PGDATA/postgresql.conf" <<EOF
       listen_addresses = '''
-      unix_socket_directories = '`pwd`/$PGDATA'
+      unix_socket_directories = '$PGDATA'
     EOF
     ${createDatabase}
   '';
@@ -59,7 +59,7 @@ in
       cfg.package
     ];
 
-    env.PGDATA = config.env.DEVENV_STATE + "postgres";
+    env.PGDATA = config.env.DEVENV_STATE + "/postgres";
 
     processes.postgres.exec = "${startScript}/bin/start-postgres";
   };

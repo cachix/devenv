@@ -28,7 +28,7 @@ a) Install [Nix](https://nixos.org)
     docker run -it nixos/nix
     ```
 
-b) Install Cachix (optional, speeds up the installation by providing binaries)
+b) Install [Cachix](https://cachix.org) (optional, speeds up the installation by providing binaries)
 
 === "Newcomers"
 
@@ -37,10 +37,10 @@ b) Install Cachix (optional, speeds up the installation by providing binaries)
     cachix use devenv
     ```
 
-=== "Nix 2.4+ (flakes)"
+=== "Advanced (flake profiles)"
 
     ```
-    nix profile install github:cachix/cachix/latest
+    nix profile install nixpkgs#cachix
     cachix use devenv
     ```
 
@@ -52,22 +52,30 @@ c) Install ``devenv``
     nix-env -if https://github.com/cachix/devenv/tarball/v{{ devenv.version }}
     ```
 
-=== "Newcomers (flakes)"
+=== "Advanced (flake profiles)"
 
     ```
     nix profile install github:cachix/devenv/v{{ devenv.version }}
     ```
 
-=== "Declaratively (non-flakes)"
-    
-    ```nix
-    (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))
+=== "Advanced (declaratively without flakes)"
+
+    ```nix title="configuration.nix"
+    environment.systemPackages = [ 
+      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))
+    ];
     ```
 
-=== "Declaratively (flakes)"
+=== "Advanced (declaratively with flakes)"
 
-    ```nix
-    inputs.devenv.url = github:cachix/devenv/v{{ devenv.version }};
+    ```nix title="flake.nix"
+     {
+        inputs.devenv.url = "github:cachix/devenv/v{{ devenv.version }}";
+
+        outputs = { devenv, ... }: {
+            packages = devenv.packages;
+        };
+    }
     ```
 
 ## Initial setup
@@ -87,6 +95,7 @@ Done.
 
 - ``devenv ci`` builds your developer environment and makes sure that all checks pass. Useful to run in your Continuous Integration environment.
 - ``devenv shell`` activates your developer environment.
+- ``devenv search NAME`` Search packages matching NAME in nixpkgs input
 - ``devenv update`` updates and pins inputs from ``devenv.yaml`` into ``devenv.lock``.
 - ``devenv gc`` [deletes unused environments](garbage-collection.md) to save disk space.
 - ``devenv up`` starts [processes](processes.md).
