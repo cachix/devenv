@@ -10,10 +10,12 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = [
+      pkgs.crystal
       pkgs.shards
     ];
 
     enterShell = ''
+      crystal --version
       shards --version
     '';
   };
