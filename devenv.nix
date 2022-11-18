@@ -5,18 +5,33 @@
     (import ./src/devenv.nix { inherit pkgs nix; })
     pkgs.python3Packages.virtualenv
     pkgs.python3Packages.cairocffi
+    pkgs.yaml2json
   ];
 
-  processes.docs.exec = "bin/mkdocs serve --config-file mkdocs.insiders.yml";
+  # bin/mkdocs serve --config-file mkdocs.insiders.yml
+  processes.docs.exec = "bin/mkdocs serve";
+  processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   enterShell = ''
-    echo hola
+    echo "To Install:"
+    echo
+    echo "virtualenv ."
+    echo "bin/pip install -r requirements.txt"
   '';
 
+  scripts.bump-version.exec = ''
+    # TODO: ask for the new version
+    # TODO: update the version in the mkdocs.yml
+    echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
+    cat mkdocs.yml | yaml2json | jq '.extra.devenv.version' > src/modules/latest-version
+  '';
   scripts."run-devenv-tests".exec = ''
     set -xe
 
     pushd examples/simple
+      # this should fail since files already exist
+      devenv init && exit 1
+      rm devenv.nix devenv.yaml .envrc
       devenv init
     popd
 
@@ -37,7 +52,7 @@
     cat $options >> docs/reference/options.md
   '';
   scripts."generate-languages-example".exec = ''
-    cat > examples/all-languages/devenv.nix <<EOF
+    cat > examples/supported-languages/devenv.nix <<EOF
     { pkgs, ... }: {
 
       # Enable all languages tooling!

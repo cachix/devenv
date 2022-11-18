@@ -40,6 +40,7 @@ nav:
       - Processes: processes.md
       - Pre-Commit Hooks: pre-commit-hooks.md
     - Examples: examples.md
+    - Roadmap: roadmap.md
     - Reference:
       - devenv.yaml: reference/yaml-options.md
       - devenv.nix: reference/options.md
@@ -61,7 +62,7 @@ extra:
     - icon: fontawesome/brands/discord 
       link: https://discord.gg/naMgvexb6q
   devenv:
-    version: 0.1
+    version: 0.3
 markdown_extensions:
   - tables
   - admonition
@@ -72,3 +73,4 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true 
+  - pymdownx.tasklist

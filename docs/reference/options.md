@@ -1,5 +1,37 @@
 # devenv.nix options
 
+## devenv.latestVersion
+The latest version of devenv.
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"0.3"
+```
+
+
+
+
+## devenv.warnOnNewVersion
+Whether to warn when a new version of devenv is available.
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
 ## enterShell
 Bash code to execute when entering the shell.
 
@@ -49,6 +81,25 @@ true
 ```
 
 
+## languages.clojure.enable
+Whether to enable Enable tools for Clojure development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.cplusplus.enable
 Whether to enable Enable tools for C++ development..
 
@@ -68,6 +119,93 @@ true
 ```
 
 
+## languages.cue.enable
+Whether to enable Enable tools for Cue development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.cue.package
+The CUE package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.cue"
+```
+
+
+
+
+## languages.dotnet.enable
+Whether to enable Enable tools for .NET development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.elixir.enable
+Whether to enable Enable tools for Elixir development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.elixir.package
+Which package of Elixir to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.elixir"
+```
+
+
+
+
 ## languages.elm.enable
 Whether to enable Enable tools for Elm development..
 
@@ -85,6 +223,40 @@ false
 ```
 true
 ```
+
+
+## languages.erlang.enable
+Whether to enable Enable tools for Erlang development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.erlang.package
+Which package of Erlang to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.erlang"
+```
+
+
 
 
 ## languages.go.enable
@@ -126,7 +298,7 @@ true
 
 
 ## languages.java.enable
-Whether to enable Enable tools for Java development..
+Whether to enable tools for Java development.
 
 *_Type_*:
 boolean
@@ -142,6 +314,99 @@ false
 ```
 true
 ```
+
+
+## languages.java.gradle.enable
+Whether to enable gradle.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.java.gradle.package
+The gradle package to use.
+The gradle package by default inherits the JDK from `languages.java.jdk.package`.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.gradle.override { jdk = cfg.jdk.package; }"}
+```
+
+
+
+
+## languages.java.jdk.package
+The JDK package to use.
+This will also become available as <literal>JAVA_HOME</literal>.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.jdk"}
+```
+
+
+*_Example_*
+```
+{"_type":"derivation","name":"openjdk-8u322-ga"}
+```
+
+
+## languages.java.maven.enable
+Whether to enable maven.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.java.maven.package
+The maven package to use.
+The maven package by default inherits the JDK from <literal>languages.java.jdk.package</literal>.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.maven.override { jdk = cfg.jdk.package; }"
+```
+
+
 
 
 ## languages.javascript.enable
@@ -182,8 +447,61 @@ true
 ```
 
 
+## languages.lua.enable
+Whether to enable Enable tools for Lua development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.lua.package
+The Lua package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.lua"
+```
+
+
+
+
 ## languages.nix.enable
 Whether to enable Enable tools for Nix development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.ocaml.enable
+Whether to enable Enable tools for OCaml development..
 
 *_Type_*:
 boolean
@@ -239,6 +557,40 @@ true
 ```
 
 
+## languages.purescript.enable
+Whether to enable Enable tools for PureScript development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.purescript.package
+The PureScript package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.purescript"
+```
+
+
+
+
 ## languages.python.enable
 Whether to enable Enable tools for Python development..
 
@@ -256,6 +608,21 @@ false
 ```
 true
 ```
+
+
+## languages.python.package
+The Python package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.python3"
+```
+
+
 
 
 ## languages.r.enable
@@ -294,6 +661,21 @@ false
 ```
 true
 ```
+
+
+## languages.ruby.package
+The Ruby package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.ruby"
+```
+
+
 
 
 ## languages.rust.enable
@@ -354,7 +736,7 @@ true
 
 
 ## packages
-A list of packages to expose inside the developer environment from https://search.nixos.org/packages?channel=unstable
+A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
 
 *_Type_*:
 list of package

@@ -1,6 +1,11 @@
 {
   description = "devenv - Developer Environments";
 
+  nixConfig = {
+    extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=";
+    extra-substituters = "https://devenv.cachix.org";
+  };
+
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.flake-compat = {
@@ -36,6 +41,8 @@
           devenv-docs-options = mkDocOptions pkgs;
         }
       );
+
+      modules = ./src/modules;
 
       defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
     };
