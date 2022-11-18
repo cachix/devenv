@@ -61,6 +61,8 @@ in
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
 
+    scripts."psql-devenv".exec = "${cfg.package}/bin/psql -h $(realpath .devenv/state/postgres/) $@";
+
     processes.postgres.exec = "${startScript}/bin/start-postgres";
   };
 }
