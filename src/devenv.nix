@@ -77,12 +77,32 @@ pkgs.writeScriptBin "devenv" ''
       if [ "$(cat $procfile)" = "" ]; then
         echo "No 'processes' option defined."  
         exit 1
+      fi;
+
+      honcho_command="${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv"
+
+      if [[ $# -eq 1 ]] && [[ $1 == "-d" ]]; then
+        echo "Starting background processes ..." 1>&2
+        echo "" 1>&2
+        nohup $honcho_command &> "$DEVENV_DIR/honcho.log" &
+        echo "$!" > "$DEVENV_DIR/honcho.pid"
       else
         echo "Starting processes ..." 1>&2
         echo "" 1>&2
-        ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
+        $honcho_command
       fi
-      ;;
+    ;;
+    down)
+      if [ -r "$DEVENV_DIR/honcho.pid" ]; then
+        echo "Stopping processes ..." 1>&2
+        echo "" 1>&2
+        kill $(cat "$DEVENV_DIR/honcho.pid")
+        rm "$DEVENV_DIR/honcho.pid"
+      fi;
+    ;;
+    logs)
+      $PAGER "$DEVENV_DIR/honcho.log"
+    ;;
     print-dev-env)
       shell
       echo "$env"
@@ -196,8 +216,11 @@ pkgs.writeScriptBin "devenv" ''
       echo "shell CMD ARGS: Run CMD with ARGS in the developer environment. Useful when scripting."
       echo "update:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
       echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
+      echo "up -d:          Starts processes in background."
+      echo "down:           Stops background processes."
+      echo "logs:           Shows logs of running background processes."
       echo "gc:             Removes old devenv generations. See http://devenv.sh/garbage-collection"
-      echo "ci:             builds your developer environment and make sure all checks pass."
+      echo "ci:             Builds your developer environment and make sure all checks pass."
       echo "version:        Display devenv version"
       echo
       exit 1
