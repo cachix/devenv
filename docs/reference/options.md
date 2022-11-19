@@ -767,7 +767,8 @@ true
 
 
 ## postgres.enable
-Whether to enable Add postgresql process and expose utilities..
+Whether to enable Add postgreSQL process and psql-devenv script.
+.
 
 *_Type_*:
 boolean
@@ -784,7 +785,6 @@ false
 true
 ```
 
-Also exports the `psql-devenv` wrapper script which connects to devenv's PostgreSQL server.
 
 ## postgres.initdbArgs
 Additional arguments passed to `initdb` during data dir
