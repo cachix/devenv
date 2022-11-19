@@ -1350,7 +1350,7 @@ list of string
 ```
 
 
-## pre-commit.settings.deadnix.fix
+## pre-commit.settings.deadnix.edit
 Remove unused code and write to source file.
 
 *_Type_*:
