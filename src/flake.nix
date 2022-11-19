@@ -1,4 +1,4 @@
-{ pkgs }: pkgs.writeText "devenv-flake" ''
+{ pkgs, version }: pkgs.writeText "devenv-flake" ''
   {
     inputs = { 
       pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
@@ -34,6 +34,7 @@
           specialArgs = inputs // { inherit pkgs; };
           modules = [
             (inputs.devenv.modules + /top-level.nix)
+            { devenv.cliVersion = "${version}"; }
           ] ++ (map toModule (devenv.imports or [])) ++ [
             ./devenv.nix
             (devenv.devenv or {})

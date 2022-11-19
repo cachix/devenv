@@ -2,6 +2,7 @@
 let
   examples = ../examples;
   lib = pkgs.lib;
+  version = lib.removeSuffix "\n" (builtins.readFile ./modules/latest-version);
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
@@ -14,7 +15,6 @@ pkgs.writeScriptBin "devenv" ''
   # current hack to test if we have resolved all Nix annoyances
   export FLAKE_FILE=.devenv.flake.nix
   export FLAKE_LOCK=devenv.lock
-  export DEVENV_VERSION=${lib.removeSuffix "\n" (builtins.readFile ./modules/latest-version)}
 
   CUSTOM_NIX=${nix.packages.${pkgs.system}.nix}
 
@@ -32,7 +32,7 @@ pkgs.writeScriptBin "devenv" ''
     else
       [[ -f $DEVENV_DIR/devenv.json ]] && rm $DEVENV_DIR/devenv.json
     fi
-    cp -f ${import ./flake.nix { inherit pkgs; }} $FLAKE_FILE
+    cp -f ${import ./flake.nix { inherit pkgs version; }} $FLAKE_FILE
     chmod +w $FLAKE_FILE
   }
 
@@ -140,7 +140,7 @@ pkgs.writeScriptBin "devenv" ''
       $CUSTOM_NIX/bin/nix $NIX_FLAGS flake update
       ;;
     version)
-      echo "devenv: $DEVENV_VERSION"
+      echo "devenv: ${version}"
       ;;
     ci)
       assemble
@@ -183,7 +183,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "Done. Saved $((($before - $after) / 1024 / 1024 )) MB in $SECONDS seconds."
       ;;
     *)
-      echo "https://devenv.sh (version $DEVENV_VERSION): Fast, Declarative, Reproducible, and Composable Developer Environments"
+      echo "https://devenv.sh (version ${version}): Fast, Declarative, Reproducible, and Composable Developer Environments"
       echo
       echo "Usage: devenv command [options] [arguments]"
       echo
