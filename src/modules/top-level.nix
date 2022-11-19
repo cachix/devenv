@@ -71,39 +71,47 @@ in
     ./update-check.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
-  config = {
-    # TODO: figure out how to get relative path without impure mode
-    env.DEVENV_ROOT = builtins.getEnv "PWD";
-    env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
-    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
+  config =
+    let
+      mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
+    in
+    {
+      # TODO: figure out how to get relative path without impure mode
+      env.DEVENV_ROOT = builtins.getEnv "PWD";
+      env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
+      env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
 
-    procfile = pkgs.writeText "procfile"
-      (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));
+      procfile = pkgs.writeText "procfile"
+        (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes));
 
-    procfileEnv = pkgs.writeText "procfile-env"
-      (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env));
+      procfileEnv = pkgs.writeText "procfile-env"
+        (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env));
 
-    enterShell = ''
-      export PS1="(devenv) $PS1"
+      enterShell = ''
+        export PS1="(devenv) $PS1"
       
-      # note what environments are active, but make sure we don't repeat them
-      if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
-        export DIRENV_ACTIVE="$PWD:$DIRENV_ACTIVE"
-      fi
+        # note what environments are active, but make sure we don't repeat them
+        if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
+          export DIRENV_ACTIVE="$PWD:$DIRENV_ACTIVE"
+        fi
 
-      # devenv helper
-      if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
-        echo "You have .envrc but direnv command is not installed."
-        echo "Please install direnv: https://direnv.net/docs/installation.html"
-      fi
-    '';
+        # devenv helper
+        if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
+          echo "You have .envrc but direnv command is not installed."
+          echo "Please install direnv: https://direnv.net/docs/installation.html"
+        fi
+      '';
 
-    shell = pkgs.mkShell ({
-      name = "devenv";
-      packages = config.packages;
-      shellHook = config.enterShell;
-    } // config.env);
+      shell = mkNakedShell {
+        name = "devenv";
+        profile = pkgs.buildEnv {
+          name = "devenv-profile";
+          paths = config.packages;
+        };
+        shellHook = config.enterShell;
+        passthru = config.env;
+      };
 
-    ci = [ config.shell config.procfile ];
-  };
+      ci = [ config.shell config.procfile ];
+    };
 }
