@@ -26,7 +26,9 @@ let
 in
 {
   options.postgres = {
-    enable = lib.mkEnableOption "Add postgresql process and expose utilities.";
+    enable = lib.mkEnableOption ''
+      Add postgreSQL process and psql-devenv script.
+    '';
 
     package = lib.mkOption {
       type = types.package;
