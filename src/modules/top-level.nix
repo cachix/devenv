@@ -63,6 +63,7 @@ in
   imports = [
     ./postgres.nix
     ./redis.nix
+    ./mysql.nix
     ./pre-commit.nix
     ./scripts.nix
     ./update-check.nix
