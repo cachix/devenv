@@ -12,10 +12,6 @@ let
   startScript = pkgs.writeShellScriptBin "start-mysql" ''
     set -euo pipefail
 
-    # Remove when DEVENV_STATE is absolute
-    export MYSQLDATA="$PWD/$MYSQLDATA"
-    export MYSQLSOCKET="$PWD/$MYSQLSOCKET"
-
     if [[ ! -d "$MYSQLDATA" ]]; then
       mkdir -p "$MYSQLDATA"
       ${if isMariaDB then "${cfg.package}/bin/mysql_install_db" else "${cfg.package}/bin/mysqld"} ${mysqldOptions} ${optionalString (!isMariaDB) "--initialize-insecure"}
@@ -124,8 +120,8 @@ in
       cfg.package
     ];
 
-    env.MYSQLDATA = config.env.DEVENV_STATE + "mysql";
-    env.MYSQLSOCKET = config.env.DEVENV_STATE + "mysql.sock";
+    env.MYSQLDATA = config.env.DEVENV_STATE + "/mysql";
+    env.MYSQLSOCKET = config.env.DEVENV_STATE + "/mysql.sock";
 
     scripts.mysql.exec = ''
       exec ${cfg.package}/bin/mysql ${mysqlOptions} --socket=$MYSQLSOCKET $@

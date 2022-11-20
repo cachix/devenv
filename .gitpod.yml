@@ -1,0 +1,6 @@
+tasks:
+  - init: |
+      cachix use devenv
+      nix build
+
+
