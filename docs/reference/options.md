@@ -428,6 +428,21 @@ true
 ```
 
 
+## languages.javascript.package
+The Node package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.nodejs"
+```
+
+
+
+
 ## languages.kotlin.enable
 Whether to enable Enable tools for Kotlin development..
 
