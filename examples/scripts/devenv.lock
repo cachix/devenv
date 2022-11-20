@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "devenv": {
+      "locked": {
+        "dir": "src/modules",
+        "lastModified": 1668884960,
+        "narHash": "sha256-5cF6kFS+J/eB2ZfOqzdVxBiY3nC+jKdbXnIsbRv5Rug=",
+        "owner": "cachix",
+        "repo": "devenv",
+        "rev": "1be455455544b69f34de3955f4628dd9670f1c32",
+        "type": "github"
+      },
+      "original": {
+        "dir": "src/modules",
+        "owner": "cachix",
+        "repo": "devenv",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "locked": {
         "lastModified": 1667077288,
@@ -17,43 +34,33 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1667318659,
+        "lastModified": 1668852955,
+        "narHash": "sha256-1ozaNW9uFRvm3cP9M6FPx+hdqyFQnf49M3HrLQ6nqrk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "b3a8f7ed267e0a7ed100eb7d716c9137ff120fe3",
+        "rev": "2fb6f9fb0ef3ca727cbd9ae30b90d1ce49d5fcca",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "nixos-22.05",
+        "ref": "nixpkgs-unstable",
         "repo": "nixpkgs",
         "type": "github"
-      }
-    },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1667292599,
-        "narHash": "sha256-7ISOUI1aj6UKMPIL+wwthENL22L3+A9V+jS8Is3QsRo=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ef2f213d9659a274985778bff4ca322f3ef3ac68",
-        "type": "github"
-      },
-      "original": {
-        "id": "nixpkgs",
-        "type": "indirect"
       }
     },
     "pre-commit-hooks": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": [
+          "nixpkgs"
+        ]
       },
       "locked": {
-        "lastModified": 1667760143,
+        "lastModified": 1668880995,
+        "narHash": "sha256-1pohNJx6MIVeYpXmsugZG3fUKPSIKpQouttWFVfqsNU=",
         "owner": "cachix",
         "repo": "pre-commit-hooks.nix",
-        "rev": "06f48d63d473516ce5b8abe70d15be96a0147fcd",
+        "rev": "364568e63556045ea9d08d29fafa46febbdb015b",
         "type": "github"
       },
       "original": {
@@ -64,6 +71,7 @@
     },
     "root": {
       "inputs": {
+        "devenv": "devenv",
         "nixpkgs": "nixpkgs",
         "pre-commit-hooks": "pre-commit-hooks"
       }
