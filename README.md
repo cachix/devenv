@@ -7,7 +7,7 @@
 
 ![logo](docs/assets/logo.webp)
 
-Running ``devenv init`` generates something like ``devenv.nix``:
+Running ``devenv init`` generates ``devenv.nix``:
 
 ```nix
 { pkgs, ... }:
@@ -55,4 +55,7 @@ And ``devenv shell`` activates the environment.
 
 - [Getting Started](https://devenv.sh/getting-started/)
 - [Basics](https://devenv.sh/basics/)
+- [Roadmap](https://devenv.sh/roadmap/)
 - [Blog](https://devenv.sh/blog/)
+- [devenv.yaml reference](https://devenv.sh/reference/yaml-options/)
+- [devenv.nix reference](https://devenv.sh/reference/options/)
