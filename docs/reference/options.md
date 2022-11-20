@@ -750,6 +750,110 @@ true
 ```
 
 
+## mysql.enable
+Whether to enable Add mysql process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## mysql.initialDatabases
+List of database names and their initial schemas that should be used to create databases on the first startup
+of MySQL. The schema attribute is optional: If not specified, an empty database is created.
+
+
+*_Type_*:
+list of (submodule)
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+[{"name":"foodatabase","schema":{"_type":"literalExpression","text":"./foodatabase.sql"}},{"name":"bardatabase"}]
+```
+
+
+## mysql.initialDatabases.*.name
+The name of the database to create.
+
+
+*_Type_*:
+string
+
+
+
+
+
+
+## mysql.initialDatabases.*.schema
+The initial schema of the database; if null (the default),
+an empty database is created.
+
+
+*_Type_*:
+null or path
+
+
+*_Default_*
+```
+null
+```
+
+
+
+
+## mysql.package
+Which package of mysql to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.mysql80"
+```
+
+
+
+
+## mysql.settings
+MySQL configuration
+
+
+*_Type_*:
+attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  mysqld = {\n    key_buffer_size = \"6G\";\n    table_cache = 1600;\n    log-error = \"/var/log/mysql_err.log\";\n    plugin-load-add = [ \"server_audit\" \"ed25519=auth_ed25519\" ];\n  };\n  mysqldump = {\n    quick = true;\n    max_allowed_packet = \"16M\";\n  };\n}\n"}
+```
+
+
 ## packages
 A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
 
