@@ -23,42 +23,42 @@ pkgs.writeScriptBin "devenv" ''
       echo "devenv.nix does not exist. Maybe you want to run first $ devenv init"
     fi
 
-    export DEVENV_DIR=$(pwd)/.devenv
-    export DEVENV_GC=$DEVENV_DIR/gc
-    mkdir -p $DEVENV_GC
+    export DEVENV_DIR="$(pwd)/.devenv"
+    export DEVENV_GC="$DEVENV_DIR/gc"
+    mkdir -p "$DEVENV_GC"
     # TODO: validate devenv.yaml using jsonschema
     if [[ -f devenv.yaml ]]; then
-      cat devenv.yaml | ${pkgs.yaml2json}/bin/yaml2json > $DEVENV_DIR/devenv.json
+      cat devenv.yaml | ${pkgs.yaml2json}/bin/yaml2json > "$DEVENV_DIR/devenv.json"
     else
-      [[ -f $DEVENV_DIR/devenv.json ]] && rm $DEVENV_DIR/devenv.json
+      [[ -f "$DEVENV_DIR/devenv.json" ]] && rm "$DEVENV_DIR/devenv.json"
     fi
-    cp -f ${import ./flake.nix { inherit pkgs version; }} $FLAKE_FILE
-    chmod +w $FLAKE_FILE
+    cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
+    chmod +w "$FLAKE_FILE"
   }
 
-  if [[ -z $XDG_DATA_HOME ]]; then
-    GC_ROOT=$HOME/.devenv/gc
+  if [[ -z "$XDG_DATA_HOME" ]]; then
+    GC_ROOT="$HOME/.devenv/gc"
   else 
-    GC_ROOT=$XDG_DATA_HOME/devenv/gc
+    GC_ROOT="$XDG_DATA_HOME/devenv/gc"
   fi
 
-  mkdir -p $GC_ROOT
-  GC_DIR=$GC_ROOT/$(date +%s)
+  mkdir -p "$GC_ROOT"
+  GC_DIR="$GC_ROOT/$(date +%s)"
 
   function add_gc {
     name=$1
     storePath=$2
 
-    nix-store --add-root $DEVENV_GC/$name -r $storePath >/dev/null
-    ln -sf $storePath $GC_DIR-$name
+    nix-store --add-root "$DEVENV_GC/$name" -r $storePath >/dev/null
+    ln -sf $storePath "$GC_DIR-$name"
   }
 
   function shell {
     assemble
     echo "Building shell ..." 1>&2
-    env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
-    $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
-    ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell
+    env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
+    $CUSTOM_NIX/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
+    ln -sf $(readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
   }
 
   command=$1
@@ -92,9 +92,9 @@ pkgs.writeScriptBin "devenv" ''
       if [ $# -eq 0 ]; then
         echo "Entering shell ..." 1>&2
         echo "" 1>&2
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell
+        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
       else
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell -c "$@"
+        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
       fi
       ;;
     search)
