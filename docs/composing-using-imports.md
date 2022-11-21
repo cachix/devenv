@@ -9,12 +9,13 @@ stored in a remote ``https://github.com/mycompany/redis.devenv`` repository.
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
-  redis:
-    url: github:mycompany/redis.devenv
+  devenv:
+    url: github:cachix/devenv
 imports:
 - ./frontend
 - ./backend
-- redis/devenv
+- devenv/examples/supported-languages
+- devenv/examples/scripts
 ```
 
 If you enter the ``frontend`` directory, the environment will activate based on what's in the ``frontend/devenv.nix`` file.
