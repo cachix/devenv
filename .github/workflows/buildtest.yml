@@ -26,4 +26,34 @@ jobs:
     - name: Run tests
       run: |
         devenv ci
-        devenv shell run-devenv-tests
+        devenv shell devenv-run-tests
+  generate-examples:
+    runs-on: ubuntu-latest
+    outputs:                                                                                                            
+      examples: ${{ steps.set-examples.outputs.examples }}                                                                    
+    steps:                                                                                                              
+      - name: Checkout base repo                                                                                        
+        uses: actions/checkout@v3                                                                                      
+      - id: set-examples                                                                                                  
+        run: |                                                                                                          
+          json=$(tree -J -L 1 examples | jq -c '[.[0].contents[] | .name]')
+          echo "examples=$json" >> $GITHUB_OUTPUT                     
+  examples:
+    name: example ${{ matrix.example }} (${{ matrix.os }})
+    needs: [generate-examples]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
+    runs-on: ${{ matrix.os }}
+    steps:
+     - uses: actions/checkout@v3
+     - uses: cachix/install-nix-action@v18
+       with:
+         extra_nix_config: |
+           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+     - uses: cachix/cachix-action@v12
+       with:
+        name: devenv
+     - run: nix profile install .
+     - run: devenv shell devenv-test-example ${{ matrix.example }}
