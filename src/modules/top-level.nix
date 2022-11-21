@@ -76,7 +76,9 @@ in
     ./postgres.nix
     ./redis.nix
     ./mysql.nix
+    ./mongodb.nix
     ./pre-commit.nix
+    ./info.nix
     ./scripts.nix
     ./update-check.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));

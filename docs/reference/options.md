@@ -554,7 +554,7 @@ true
 
 
 ## languages.php.enable
-Whether to enable Enable tools for OHP development..
+Whether to enable Enable tools for PHP development..
 
 *_Type_*:
 boolean
@@ -569,6 +569,30 @@ false
 *_Example_*
 ```
 true
+```
+
+
+## languages.php.package
+Allows to <link xlink:href="https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide">override the default used package</link> to adjust the settings or add more extensions. You can find the extensions using <literal>devenv search 'php extensions'</literal>
+
+<programlisting>
+
+</programlisting>
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.php"
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"pkgs.php.buildEnv {\n  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];\n  extraConfig = ''\n    memory_limit=1G\n  '';\n};\n"}
 ```
 
 
@@ -657,6 +681,40 @@ false
 ```
 true
 ```
+
+
+## languages.robotframework.enable
+Whether to enable Enable tools for Robot Framework development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.robotframework.python
+The Python package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.python3"
+```
+
+
 
 
 ## languages.ruby.enable
@@ -748,6 +806,60 @@ false
 ```
 true
 ```
+
+
+## mongodb.additionalArgs
+Additional arguments passed to `mongod`.
+
+
+*_Type_*:
+list of strings concatenated with "\n"
+
+
+*_Default_*
+```
+["--noauth"]
+```
+
+
+*_Example_*
+```
+["--port","27017","--noauth"]
+```
+
+
+## mongodb.enable
+Whether to enable Add MongoDB process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## mongodb.package
+Which MongoDB package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.mongodb"
+```
+
+
 
 
 ## mysql.enable
@@ -1469,7 +1581,7 @@ list of string
 ```
 
 
-## pre-commit.settings.deadnix.fix
+## pre-commit.settings.deadnix.edit
 Remove unused code and write to source file.
 
 *_Type_*:

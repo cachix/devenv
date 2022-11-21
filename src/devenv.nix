@@ -126,6 +126,12 @@ pkgs.writeScriptBin "devenv" ''
       echo "devenv.local.nix" >> .gitignore
       echo "Done."
       ;;
+    info)
+      assemble
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake metadata | grep Inputs -A10000
+      echo
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
+      ;;
     update)
       assemble
       $CUSTOM_NIX/bin/nix $NIX_FLAGS flake update
@@ -185,6 +191,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "search NAME:    Search packages matching NAME in nixpkgs input."
       echo "shell:          Activate the developer environment."
       echo "shell CMD ARGS: Run CMD with ARGS in the developer environment. Useful when scripting."
+      echo "info:           Print information about the current developer environment."
       echo "update:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
       echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
       echo "gc:             Removes old devenv generations. See http://devenv.sh/garbage-collection"

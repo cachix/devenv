@@ -27,7 +27,7 @@
             input = inputs.''${name} or (throw "Unknown input ''${name}");
             subpath = "/''${lib.concatStringsSep "/" (builtins.tail paths)}";
             devenvpath = "''${input}/" + subpath + "/devenv.nix";
-            in if (!devenv.inputs.''${name}.flake) && builtins.pathExists devenvpath
+            in if (!devenv.inputs.''${name}.flake or true) && builtins.pathExists devenvpath
                then devenvpath
                else throw (devenvpath + " file does not exist for input ''${name}.");
         project = pkgs.lib.evalModules {
@@ -45,7 +45,7 @@
       in {
         packages."${pkgs.system}" = {
           ci = pkgs.runCommand "ci" {} ("ls " + toString config.ci + " && touch $out");
-          inherit (config) procfileScript;
+          inherit (config) info procfileScript;
         };
         devShell."${pkgs.system}" = config.shell;
       };
