@@ -808,6 +808,60 @@ true
 ```
 
 
+## mongodb.additionalArgs
+Additional arguments passed to `mongod`.
+
+
+*_Type_*:
+list of strings concatenated with "\n"
+
+
+*_Default_*
+```
+["--noauth"]
+```
+
+
+*_Example_*
+```
+["--port","27017","--noauth"]
+```
+
+
+## mongodb.enable
+Whether to enable Add MongoDB process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## mongodb.package
+Which MongoDB package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.mongodb"
+```
+
+
+
+
 ## mysql.enable
 Whether to enable Add mysql process and expose utilities..
 
