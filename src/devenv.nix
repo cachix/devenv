@@ -137,6 +137,8 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     info)
       assemble
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake metadata | grep Inputs -A10000
+      echo
       $CUSTOM_NIX/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
       ;;
     update)
