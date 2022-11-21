@@ -11,3 +11,8 @@
 .image-wrapper {
     overflow: auto!important;
 }
+
+/* add some whitespace under hero CTA button */
+.md-main__inner {
+    padding-bottom: 1rem;
+}
