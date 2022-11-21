@@ -682,13 +682,15 @@ true
 The Python package to use.
 
 *_Type_*:
-python
+package
 
 
 *_Default_*
 ```
 "pkgs.python3"
 ```
+
+
 
 
 ## languages.ruby.enable
