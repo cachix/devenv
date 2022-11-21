@@ -64,6 +64,7 @@ in
     ./postgres.nix
     ./redis.nix
     ./mysql.nix
+    ./mongodb.nix
     ./pre-commit.nix
     ./scripts.nix
     ./update-check.nix
