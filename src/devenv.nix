@@ -98,6 +98,9 @@ pkgs.writeScriptBin "devenv" ''
         echo "" 1>&2
         kill $(cat "$DEVENV_DIR/honcho.pid")
         rm "$DEVENV_DIR/honcho.pid"
+      else
+        echo "No running processes were found." 1>&2
+        echo "" 1>&2
       fi;
     ;;
     logs)
