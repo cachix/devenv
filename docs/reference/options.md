@@ -554,7 +554,7 @@ true
 
 
 ## languages.php.enable
-Whether to enable Enable tools for OHP development..
+Whether to enable Enable tools for PHP development..
 
 *_Type_*:
 boolean
@@ -569,6 +569,30 @@ false
 *_Example_*
 ```
 true
+```
+
+
+## languages.php.package
+Allows to <link xlink:href="https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide">override the default used package</link> to adjust the settings or add more extensions. You can find the extensions using <literal>devenv search 'php extensions'</literal>
+
+<programlisting>
+
+</programlisting>
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.php"
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"pkgs.php.buildEnv {\n  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];\n  extraConfig = ''\n    memory_limit=1G\n  '';\n};\n"}
 ```
 
 
