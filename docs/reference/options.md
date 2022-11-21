@@ -659,6 +659,38 @@ true
 ```
 
 
+## languages.robotframework.enable
+Whether to enable Enable tools for Robot Framework development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.robotframework.python
+The Python package to use.
+
+*_Type_*:
+python
+
+
+*_Default_*
+```
+"pkgs.python3"
+```
+
+
 ## languages.ruby.enable
 Whether to enable Enable tools for Ruby development..
 
