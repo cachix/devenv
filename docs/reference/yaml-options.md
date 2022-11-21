@@ -29,6 +29,7 @@ inputs:
     url: github:NixOS/nixpkgs/nixos-22.05
   myproject:
     url: github:owner/repo/myproject
+    flake: false
 imports:
   - ./frontend
   - ./backend
