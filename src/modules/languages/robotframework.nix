@@ -18,7 +18,7 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      (cfg.python.withPackages(ps: [
+      (cfg.python.withPackages (ps: [
         ps.robotframework
       ]))
     ];
