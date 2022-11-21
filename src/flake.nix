@@ -47,6 +47,7 @@
           ci = pkgs.runCommand "ci" {} ("ls " + toString config.ci + " && touch $out");
           procfile = config.procfile;
           procfileEnv = config.procfileEnv;
+          info = config.info;
         };
         devShell."${pkgs.system}" = config.shell;
       };
