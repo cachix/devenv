@@ -15,6 +15,14 @@ in
         Allows to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide) to adjust the settings or add more extensions. You can find the extensions using `devenv search 'php extensions'`
         ```
       '';
+      example = lib.literalExpression ''
+        pkgs.php.buildEnv {
+          extensions = { all, enabled }: with all; enabled ++ [ xdebug ];
+          extraConfig = '''
+            memory_limit=1G
+          ''';
+        };
+      '';
     };
   };
 
