@@ -70,18 +70,9 @@ pkgs.writeScriptBin "devenv" ''
     up)
       shell
       eval "$env"
-      procfile=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfile')
-      procfileenv=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileEnv')
-      add_gc procfile $procfile
-      add_gc procfileenv $procfileenv
-      if [ "$(cat $procfile)" = "" ]; then
-        echo "No 'processes' option defined."  
-        exit 1
-      else
-        procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
-        add_gc procfilescript $procfilescript
-        $procfilescript $procfile $procfileenv
-      fi
+      procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
+      add_gc procfilescript $procfilescript
+      $procfilescript
       ;;
     print-dev-env)
       shell
