@@ -103,13 +103,13 @@ in
       '';
 
       shell = mkNakedShell {
-        name = "devenv";
+        name = "devenv-shell";
+        env = config.env;
         profile = pkgs.buildEnv {
           name = "devenv-profile";
           paths = config.packages;
         };
         shellHook = config.enterShell;
-        passthru = config.env;
       };
 
       ci = [ config.shell config.procfile ];

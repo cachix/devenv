@@ -4,6 +4,7 @@
 , coreutils
 , system
 , writeTextFile
+, lib
 }:
 let
   bashPath = "${bashInteractive}/bin/bash";
@@ -25,11 +26,15 @@ in
 , # A path to a buildEnv that will be loaded by the shell.
   # We assume that the buildEnv contains an ./env.bash script.
   profile
+, env ? { }
 , shellHook ? ""
 , meta ? { }
 , passthru ? { }
 }:
 let
+  # simpler version of https://github.com/numtide/devshell/blob/20d50fc6adf77fd8a652fc824c6e282d7737b85d/modules/env.nix#L41
+  envToBash = name: value: "export ${name}=${lib.escapeShellArg (toString value)}";
+  startupEnv = lib.concatStringsSep "\n" (lib.mapAttrsToList envToBash env);
   derivationArg = {
     inherit name system;
 
@@ -63,6 +68,8 @@ let
       PATH=''${PATH#/path-not-set:}
 
       export PATH="${profile}/bin:$PATH"
+
+      ${startupEnv}
 
       ${shellHook}
     '';
