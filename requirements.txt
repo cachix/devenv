@@ -2,3 +2,4 @@ pillow
 cairosvg
 mkdocs-markdownextradata-plugin
 mkdocs-material
+git+https://github.com/cachix/mkdocs-rss-plugin@no-git
