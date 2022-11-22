@@ -1,7 +1,3 @@
 INHERIT: mkdocs.yml
 plugins:
-  social:
-      cards_color:
-        fill: "#FBFBFB"
-        text: "#425C82"
   blog: {}
