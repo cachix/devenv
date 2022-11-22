@@ -78,6 +78,9 @@ c) Install ``devenv``
     }
     ```
 
+You update `devenv` by reinstalling it, and it will automatically delete the old version
+and install the latest one.
+
 ## Initial setup
 
 Given a git repository, create the initial structure:
