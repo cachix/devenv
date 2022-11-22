@@ -1,5 +1,11 @@
 { inputs, pkgs, lib, config, ... }:
 
+let
+  pre-commit-check = inputs.pre-commit-hooks.run {
+    src = ./.;
+    hooks.shellcheck.enable = true;
+  };
+in
 {
   packages = [
     (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
@@ -13,6 +19,8 @@
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   enterShell = ''
+    ${pre-commit-check.shellHook}
+
     echo "To Install:"
     echo
     echo "virtualenv ."
@@ -61,7 +69,7 @@
 
       # Enable all languages tooling!
       ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
-    
+
       # If you're missing a language, please contribute it by following examples of other languages <3
     }
     EOF
