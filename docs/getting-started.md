@@ -81,7 +81,6 @@ c) Install ``devenv``
 !!! note
 
     To update `devenv` run the installation commands to reinstall.
-and install the latest one.
 
 ## Initial setup
 
