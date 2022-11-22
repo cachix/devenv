@@ -1,4 +1,4 @@
-Here are the minimal steps to get started.
+Here are the minimum steps to get started.
 
 ## Installation
 
@@ -78,13 +78,14 @@ c) Install ``devenv``
     }
     ```
 
+
 !!! note
 
     To update `devenv` run the installation commands to reinstall.
 
-## Initial setup
+## Initial set up
 
-Given a git repository, create the initial structure:
+Given a Git repository, create the initial structure:
 
 ```shell-session
 $ devenv init
@@ -97,15 +98,15 @@ Done.
 
 ## Commands
 
-- ``devenv ci`` builds your developer environment and makes sure that all checks pass. Useful to run in your Continuous Integration environment.
+- ``devenv ci`` builds your developer environment and makes sure that all checks pass. Useful to run in your continuous integration environment.
 - ``devenv shell`` activates your developer environment.
-- ``devenv search NAME`` Search packages matching NAME in nixpkgs input
+- ``devenv search NAME`` searches packages matching NAME in Nixpkgs input.
 - ``devenv update`` updates and pins inputs from ``devenv.yaml`` into ``devenv.lock``.
 - ``devenv gc`` [deletes unused environments](garbage-collection.md) to save disk space.
 - ``devenv up`` starts [processes](processes.md).
 
 ## Learn more
 
-- About ``.envrc`` in [Automatic Shell Activation](automatic-shell-activation.md).
-- About ``devenv.yaml`` in [Inputs](inputs.md) and [Composing Using Imports](composing-using-imports.md).
-- About ``devenv.nix`` in the **Writing devenv.nix** section, starting with [the Basics](basics.md).
+- About ``.envrc`` in [Automatic shell activation](automatic-shell-activation.md).
+- About ``devenv.yaml`` in [Inputs](inputs.md) and [Composing using imports](composing-using-imports.md).
+- About ``devenv.nix`` in the **Writing devenv.nix** section, starting with [the basics](basics.md).
