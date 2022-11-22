@@ -78,7 +78,9 @@ c) Install ``devenv``
     }
     ```
 
-You update `devenv` by reinstalling it, and it will automatically delete the old version
+!!! note
+
+    To update `devenv` run the installation commands to reinstall.
 and install the latest one.
 
 ## Initial setup
