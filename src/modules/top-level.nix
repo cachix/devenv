@@ -112,6 +112,6 @@ in
         shellHook = config.enterShell;
       };
 
-      ci = [ config.shell config.procfile ];
+      ci = [ config.shell.inputDerivation config.procfile ];
     };
 }
