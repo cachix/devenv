@@ -37,6 +37,13 @@ in
       description = "Processes can be started with ``devenv up`` and run in foreground mode.";
     };
 
+    process.implementation = lib.mkOption {
+      type = types.enum [ "honcho" "overmind" ];
+      description = "The implimentation used when performing ``devenv up``.";
+      default = "honcho";
+      example = "overmind";
+    };
+
     # INTERNAL
 
     procfile = lib.mkOption {
@@ -45,6 +52,11 @@ in
     };
 
     procfileEnv = lib.mkOption {
+      type = types.package;
+      internal = true;
+    };
+
+    procfileScript = lib.mkOption {
       type = types.package;
       internal = true;
     };
@@ -63,8 +75,12 @@ in
   imports = [
     ./postgres.nix
     ./redis.nix
+    ./mysql.nix
+    ./mongodb.nix
     ./pre-commit.nix
+    ./info.nix
     ./scripts.nix
+    ./update-check.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
   config = {
@@ -78,6 +94,17 @@ in
 
     procfileEnv = pkgs.writeText "procfile-env"
       (lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env));
+
+    procfileScript = {
+      honcho = pkgs.writeShellScript "honcho-up" ''
+        echo "Starting processes ..." 1>&2
+        echo "" 1>&2
+        ${pkgs.honcho}/bin/honcho start -f ${config.procfile} --env ${config.procfileEnv}
+      '';
+      overmind = pkgs.writeShellScript "overmind-up" ''
+        OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --procfile ${config.procfile}
+      '';
+    }.${config.process.implementation};
 
     enterShell = ''
       export PS1="(devenv) $PS1"

@@ -13,10 +13,10 @@ Given a hello world example, click on the end of each line to get an explanation
 }
 ```
 
-1. ``devenv.nix`` is a function with inputs. We use a special input ``...`` at the end as a catch-all to avoid enumuerating all of the inputs.
+1. ``devenv.nix`` is a function with inputs. We use a special input ``...`` at the end as a catch-all to avoid enumerating all of the inputs.
 2. Our function is returning an attribute set, similar to an object in JSON.
-3. Attributes can be nested and have a similar values as in JSON.
-4. Values can refer to the inputs. See [Inputs](inputs.md) how to define inputs.
+3. Attributes can be nested and have similar values as in JSON.
+4. Values can refer to the inputs. See [Inputs](inputs.md) for how to define inputs.
 
 
 ``enterShell`` allows you to execute bash code once the shell activates, while ``env`` allows you to set environment variables:
@@ -36,9 +36,9 @@ yes
 
 
 
-See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a 1-2 hours deep dive 
+See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a 1-2 hour deep dive 
 that will allow you to read any Nix file.
 
 !!! note
 
-    We're running [a fundraiser to improve the developer experience around errors messages](https://opencollective.com/nix-errors-enhancement), with the goal of lowering the barrier to learning Nix.
+    We're running [a fundraiser to improve the developer experience around error messages](https://opencollective.com/nix-errors-enhancement), with the goal of lowering the barrier to learning Nix.

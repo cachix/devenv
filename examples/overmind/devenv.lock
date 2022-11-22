@@ -2,20 +2,14 @@
   "nodes": {
     "devenv": {
       "locked": {
-        "dir": "src/modules",
-        "lastModified": 1668884960,
-        "narHash": "sha256-5cF6kFS+J/eB2ZfOqzdVxBiY3nC+jKdbXnIsbRv5Rug=",
-        "owner": "cachix",
-        "repo": "devenv",
-        "rev": "1be455455544b69f34de3955f4628dd9670f1c32",
-        "type": "github"
+        "path": "../../src/modules",
+        "type": "path"
       },
       "original": {
-        "dir": "src/modules",
-        "owner": "cachix",
-        "repo": "devenv",
-        "type": "github"
-      }
+        "path": "../../src/modules",
+        "type": "path"
+      },
+      "parent": []
     },
     "flake-utils": {
       "locked": {
@@ -34,11 +28,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1668852955,
-        "narHash": "sha256-1ozaNW9uFRvm3cP9M6FPx+hdqyFQnf49M3HrLQ6nqrk=",
+        "lastModified": 1668681245,
+        "narHash": "sha256-IH8t+b9hCfNwEvdC55UEymn8jL457Fo/hx3N/kNTZso=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "2fb6f9fb0ef3ca727cbd9ae30b90d1ce49d5fcca",
+        "rev": "bd4bfd814e96488febb38b4b4d0549c56b840c7f",
         "type": "github"
       },
       "original": {
@@ -56,11 +50,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1668880995,
-        "narHash": "sha256-1pohNJx6MIVeYpXmsugZG3fUKPSIKpQouttWFVfqsNU=",
+        "lastModified": 1667992213,
+        "narHash": "sha256-8Ens8ozllvlaFMCZBxg6S7oUyynYx2v7yleC5M0jJsE=",
         "owner": "cachix",
         "repo": "pre-commit-hooks.nix",
-        "rev": "364568e63556045ea9d08d29fafa46febbdb015b",
+        "rev": "ebcbfe09d2bd6d15f68de3a0ebb1e4dcb5cd324b",
         "type": "github"
       },
       "original": {

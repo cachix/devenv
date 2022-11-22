@@ -19,26 +19,35 @@
     echo "bin/pip install -r requirements.txt"
   '';
 
-  scripts.bump-version.exec = ''
-    echo assuming you bumped the version in mkdocs.yml, populating src/version
-    cat mkdocs.yml | yaml2json | jq '.extra.devenv.version' > src/version
+  scripts.devenv-bump-version.exec = ''
+    # TODO: ask for the new version
+    # TODO: update the version in the mkdocs.yml
+    echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
+    cat mkdocs.yml | yaml2json | jq '.extra.devenv.version' > src/modules/latest-version
   '';
-  scripts."run-devenv-tests".exec = ''
+  scripts.devenv-run-tests.exec = ''
     set -xe
 
     pushd examples/simple
+      # this should fail since files already exist
+      devenv init && exit 1
+      rm devenv.nix devenv.yaml .envrc
       devenv init
     popd
 
-    for dir in $(ls examples); do
-      pushd examples/$dir 
-      devenv ci
-      devenv shell ls
-      popd
-    done
-
     # TODO: test direnv integration
     # TODO: test DIRENV_ACTIVE
+  '';
+  scripts.devenv-test-all-examples.exec = ''
+    for dir in $(ls examples); do
+      devenv-run-example-test $dir
+    done
+  '';
+  scripts.devenv-test-example.exec = ''
+    pushd examples/$1 
+    devenv ci
+    devenv shell ls
+    popd
   '';
   scripts."generate-doc-options".exec = ''
     options=$(nix build --extra-experimental-features 'flakes nix-command' --print-out-paths --no-link '.#devenv-docs-options')

@@ -78,6 +78,11 @@ c) Install ``devenv``
     }
     ```
 
+
+!!! note
+
+    To update `devenv` run the installation commands to reinstall.
+
 ## Initial set up
 
 Given a Git repository, create the initial structure:
