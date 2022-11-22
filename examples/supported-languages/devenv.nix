@@ -19,8 +19,10 @@
   languages.ocaml.enable = true;
   languages.perl.enable = true;
   languages.php.enable = true;
+  languages.purescript.enable = true;
   languages.python.enable = true;
   languages.r.enable = true;
+  languages.robotframework.enable = true;
   languages.ruby.enable = true;
   languages.rust.enable = true;
   languages.scala.enable = true;

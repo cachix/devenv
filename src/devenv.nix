@@ -2,6 +2,7 @@
 let
   examples = ../examples;
   lib = pkgs.lib;
+  version = lib.removeSuffix "\n" (builtins.readFile ./modules/latest-version);
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
@@ -22,34 +23,42 @@ pkgs.writeScriptBin "devenv" ''
       echo "devenv.nix does not exist. Maybe you want to run first $ devenv init"
     fi
 
-    export DEVENV_DIR=$(pwd)/.devenv
-    export DEVENV_GC=$DEVENV_DIR/gc
-    mkdir -p $DEVENV_GC
+    export DEVENV_DIR="$(pwd)/.devenv"
+    export DEVENV_GC="$DEVENV_DIR/gc"
+    mkdir -p "$DEVENV_GC"
     # TODO: validate devenv.yaml using jsonschema
     if [[ -f devenv.yaml ]]; then
-      cat devenv.yaml | ${pkgs.yaml2json}/bin/yaml2json > $DEVENV_DIR/devenv.json
+      cat devenv.yaml | ${pkgs.yaml2json}/bin/yaml2json > "$DEVENV_DIR/devenv.json"
     else
-      [[ -f $DEVENV_DIR/devenv.json ]] && rm $DEVENV_DIR/devenv.json
+      [[ -f "$DEVENV_DIR/devenv.json" ]] && rm "$DEVENV_DIR/devenv.json"
     fi
-    cp -f ${import ./flake.nix { inherit pkgs; }} $FLAKE_FILE
-    chmod +w $FLAKE_FILE
+    cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
+    chmod +w "$FLAKE_FILE"
   }
 
-  if [[ -z $XDG_DATA_HOME ]]; then
-    GC_ROOT=$HOME/.devenv/gc
+  if [[ -z "$XDG_DATA_HOME" ]]; then
+    GC_ROOT="$HOME/.devenv/gc"
   else 
-    GC_ROOT=$XDG_DATA_HOME/devenv/gc
+    GC_ROOT="$XDG_DATA_HOME/devenv/gc"
   fi
 
-  mkdir -p $GC_ROOT
-  GC_DIR=$GC_ROOT/$(date +%s)
+  mkdir -p "$GC_ROOT"
+  GC_DIR="$GC_ROOT/$(date +%s)"
 
   function add_gc {
     name=$1
     storePath=$2
 
-    nix-store --add-root $DEVENV_GC/$name -r $storePath >/dev/null
-    ln -sf $storePath $GC_DIR-$name
+    nix-store --add-root "$DEVENV_GC/$name" -r $storePath >/dev/null
+    ln -sf $storePath "$GC_DIR-$name"
+  }
+
+  function shell {
+    assemble
+    echo "Building shell ..." 1>&2
+    env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
+    $CUSTOM_NIX/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
+    ln -sf $(readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
   }
 
   command=$1
@@ -59,32 +68,24 @@ pkgs.writeScriptBin "devenv" ''
 
   case $command in
     up)
-      assemble
-      procfile=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfile')
-      procfileenv=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileEnv')
-      add_gc procfile $procfile
-      add_gc procfileenv $procfileenv
-      if [ "$(cat $procfile)" = "" ]; then
-        echo "No 'processes' option defined."  
-        exit 1
-      else
-        echo "Starting processes ..." 1>&2
-        echo "" 1>&2
-        ${pkgs.honcho}/bin/honcho start -f $procfile --env $procfileenv
-      fi
+      shell
+      eval "$env"
+      procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
+      add_gc procfilescript $procfilescript
+      $procfilescript
       ;;
+    print-dev-env)
+      shell
+      echo "$env"
+    ;;
     shell)
-      assemble
-      echo "Building shell ..." 1>&2
-      env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile $DEVENV_GC/shell)
-      $CUSTOM_NIX/bin/nix-env -p $DEVENV_GC/shell --delete-generations old 2>/dev/null
-      ln -sf $(readlink -f $DEVENV_GC/shell) $GC_DIR-shell
+      shell
       if [ $# -eq 0 ]; then
         echo "Entering shell ..." 1>&2
         echo "" 1>&2
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell
+        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
       else
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop $DEVENV_GC/shell -c "$@"
+        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
       fi
       ;;
     search)
@@ -107,6 +108,11 @@ pkgs.writeScriptBin "devenv" ''
         cd "$target"
       fi
 
+      if [[ -f devenv.nix || -f devenv.yaml || -f .envrc ]]; then
+        echo "Aborting since devenv.nix, devenv.yaml or .envrc already exist."
+        exit 1
+      fi
+
       # TODO: allow selecting which example and list them
       example=simple
       echo "Creating .envrc"
@@ -120,9 +126,18 @@ pkgs.writeScriptBin "devenv" ''
       echo "devenv.local.nix" >> .gitignore
       echo "Done."
       ;;
+    info)
+      assemble
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake metadata | grep Inputs -A10000
+      echo
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
+      ;;
     update)
       assemble
       $CUSTOM_NIX/bin/nix $NIX_FLAGS flake update
+      ;;
+    version)
+      echo "devenv: ${version}"
       ;;
     ci)
       assemble
@@ -165,20 +180,23 @@ pkgs.writeScriptBin "devenv" ''
       echo "Done. Saved $((($before - $after) / 1024 / 1024 )) MB in $SECONDS seconds."
       ;;
     *)
-      echo "https://devenv.sh (version ${lib.removeSuffix "\n" (builtins.readFile ./version)}): Fast, Declarative, Reproducible, and Composable Developer Environments"
+      echo "https://devenv.sh (version ${version}): Fast, Declarative, Reproducible, and Composable Developer Environments"
       echo
       echo "Usage: devenv command [options] [arguments]"
       echo
       echo "Commands:"
       echo
+      echo "init:           Scaffold devenv.yaml, devenv.nix, and .envrc inside the current directory."
       echo "init TARGET:    Scaffold devenv.yaml, devenv.nix, and .envrc inside TARGET directory."
       echo "search NAME:    Search packages matching NAME in nixpkgs input."
       echo "shell:          Activate the developer environment."
       echo "shell CMD ARGS: Run CMD with ARGS in the developer environment. Useful when scripting."
+      echo "info:           Print information about the current developer environment."
       echo "update:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
       echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
       echo "gc:             Removes old devenv generations. See http://devenv.sh/garbage-collection"
       echo "ci:             builds your developer environment and make sure all checks pass."
+      echo "version:        Display devenv version"
       echo
       exit 1
   esac

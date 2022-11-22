@@ -1,3 +1,0 @@
-devenv up 
-
-starts postgresql

@@ -4,5 +4,7 @@ inputs:
   getting-started:
     url: github:nix-dot-dev/getting-started-nix-template
     flake: false
+  devenv:
+    url: path:../../src/modules
 imports:
   - getting-started

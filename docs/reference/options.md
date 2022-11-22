@@ -1,5 +1,37 @@
 # devenv.nix options
 
+## devenv.latestVersion
+The latest version of devenv.
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"0.3"
+```
+
+
+
+
+## devenv.warnOnNewVersion
+Whether to warn when a new version of devenv is available.
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
 ## enterShell
 Bash code to execute when entering the shell.
 
@@ -396,6 +428,21 @@ true
 ```
 
 
+## languages.javascript.package
+The Node package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.nodejs"
+```
+
+
+
+
 ## languages.kotlin.enable
 Whether to enable Enable tools for Kotlin development..
 
@@ -507,7 +554,7 @@ true
 
 
 ## languages.php.enable
-Whether to enable Enable tools for OHP development..
+Whether to enable Enable tools for PHP development..
 
 *_Type_*:
 boolean
@@ -523,6 +570,64 @@ false
 ```
 true
 ```
+
+
+## languages.php.package
+Allows to <link xlink:href="https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide">override the default used package</link> to adjust the settings or add more extensions. You can find the extensions using <literal>devenv search 'php extensions'</literal>
+
+<programlisting>
+
+</programlisting>
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.php"
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"pkgs.php.buildEnv {\n  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];\n  extraConfig = ''\n    memory_limit=1G\n  '';\n};\n"}
+```
+
+
+## languages.purescript.enable
+Whether to enable Enable tools for PureScript development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.purescript.package
+The PureScript package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.purescript"
+```
+
+
 
 
 ## languages.python.enable
@@ -544,6 +649,21 @@ true
 ```
 
 
+## languages.python.package
+The Python package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.python3"
+```
+
+
+
+
 ## languages.r.enable
 Whether to enable Enable tools for R development..
 
@@ -563,6 +683,40 @@ true
 ```
 
 
+## languages.robotframework.enable
+Whether to enable Enable tools for Robot Framework development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.robotframework.python
+The Python package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.python3"
+```
+
+
+
+
 ## languages.ruby.enable
 Whether to enable Enable tools for Ruby development..
 
@@ -580,6 +734,21 @@ false
 ```
 true
 ```
+
+
+## languages.ruby.package
+The Ruby package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.ruby"
+```
+
+
 
 
 ## languages.rust.enable
@@ -639,6 +808,164 @@ true
 ```
 
 
+## mongodb.additionalArgs
+Additional arguments passed to `mongod`.
+
+
+*_Type_*:
+list of strings concatenated with "\n"
+
+
+*_Default_*
+```
+["--noauth"]
+```
+
+
+*_Example_*
+```
+["--port","27017","--noauth"]
+```
+
+
+## mongodb.enable
+Whether to enable Add MongoDB process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## mongodb.package
+Which MongoDB package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.mongodb"
+```
+
+
+
+
+## mysql.enable
+Whether to enable Add mysql process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## mysql.initialDatabases
+List of database names and their initial schemas that should be used to create databases on the first startup
+of MySQL. The schema attribute is optional: If not specified, an empty database is created.
+
+
+*_Type_*:
+list of (submodule)
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+[{"name":"foodatabase","schema":{"_type":"literalExpression","text":"./foodatabase.sql"}},{"name":"bardatabase"}]
+```
+
+
+## mysql.initialDatabases.*.name
+The name of the database to create.
+
+
+*_Type_*:
+string
+
+
+
+
+
+
+## mysql.initialDatabases.*.schema
+The initial schema of the database; if null (the default),
+an empty database is created.
+
+
+*_Type_*:
+null or path
+
+
+*_Default_*
+```
+null
+```
+
+
+
+
+## mysql.package
+Which package of mysql to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.mysql80"
+```
+
+
+
+
+## mysql.settings
+MySQL configuration
+
+
+*_Type_*:
+attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  mysqld = {\n    key_buffer_size = \"6G\";\n    table_cache = 1600;\n    log-error = \"/var/log/mysql_err.log\";\n    plugin-load-add = [ \"server_audit\" \"ed25519=auth_ed25519\" ];\n  };\n  mysqldump = {\n    quick = true;\n    max_allowed_packet = \"16M\";\n  };\n}\n"}
+```
+
+
 ## packages
 A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
 
@@ -671,7 +998,8 @@ true
 
 
 ## postgres.enable
-Whether to enable Add postgresql process and expose utilities..
+Whether to enable Add postgreSQL process and psql-devenv script.
+.
 
 *_Type_*:
 boolean
@@ -1253,7 +1581,7 @@ list of string
 ```
 
 
-## pre-commit.settings.deadnix.fix
+## pre-commit.settings.deadnix.edit
 Remove unused code and write to source file.
 
 *_Type_*:
@@ -1544,6 +1872,25 @@ lazy attribute set of package
 ```
 
 
+
+
+## process.implementation
+The implimentation used when performing ``devenv up``.
+
+*_Type_*:
+one of "honcho", "overmind"
+
+
+*_Default_*
+```
+"honcho"
+```
+
+
+*_Example_*
+```
+"overmind"
+```
 
 
 ## processes

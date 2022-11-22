@@ -1,6 +1,6 @@
 You can compose environments either locally or by referencing [inputs](inputs.md).
 
-Imagine you're building a typical web application with separate frontend and backend components
+Imagine you're building a typical web application, with separate frontend and backend components
 that live in separate folders.
 You've also written a custom Redis integration in ``devenv/devenv.nix``,
 stored in a remote ``https://github.com/mycompany/redis.devenv`` repository.
@@ -9,12 +9,13 @@ stored in a remote ``https://github.com/mycompany/redis.devenv`` repository.
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
-  redis:
-    url: github:mycompany/redis.devenv
+  devenv:
+    url: github:cachix/devenv
 imports:
 - ./frontend
 - ./backend
-- redis/devenv
+- devenv/examples/supported-languages
+- devenv/examples/scripts
 ```
 
 If you enter the ``frontend`` directory, the environment will activate based on what's in the ``frontend/devenv.nix`` file.

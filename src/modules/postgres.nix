@@ -14,7 +14,7 @@ let
     initdb ${lib.concatStringsSep " " cfg.initdbArgs}
     cat >> "$PGDATA/postgresql.conf" <<EOF
       listen_addresses = '''
-      unix_socket_directories = '`pwd`/$PGDATA'
+      unix_socket_directories = '$PGDATA'
     EOF
     ${createDatabase}
   '';
@@ -26,7 +26,9 @@ let
 in
 {
   options.postgres = {
-    enable = lib.mkEnableOption "Add postgresql process and expose utilities.";
+    enable = lib.mkEnableOption ''
+      Add postgreSQL process and psql-devenv script.
+    '';
 
     package = lib.mkOption {
       type = types.package;
@@ -60,6 +62,8 @@ in
     ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
+
+    scripts."psql-devenv".exec = "${cfg.package}/bin/psql -h $PGDATA $@";
 
     processes.postgres.exec = "${startScript}/bin/start-postgres";
   };
