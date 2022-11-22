@@ -1875,10 +1875,10 @@ lazy attribute set of package
 
 
 ## process.implementation
-The implimentation used when performing ``devenv up``.
+The implementation used when performing ``devenv up``.
 
 *_Type_*:
-one of "honcho", "overmind"
+one of "honcho", "overmind", "process-compose"
 
 
 *_Default_*
@@ -1890,6 +1890,26 @@ one of "honcho", "overmind"
 *_Example_*
 ```
 "overmind"
+```
+
+
+## process.process-compose
+Top-level process-compose.yaml options when that implementation is used.
+
+
+*_Type_*:
+attribute set
+
+
+*_Default_*
+```
+{"port":9999,"tui":true,"version":"0.5"}
+```
+
+
+*_Example_*
+```
+{"log_level":"fatal","log_location":"/path/to/combined/output/logfile.log","version":"0.5"}
 ```
 
 
@@ -1917,6 +1937,30 @@ string
 
 
 
+
+
+## processes.&lt;name&gt;.process-compose
+process-compose.yaml specific process attributes.
+
+Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml`
+
+Only used when using ``process.implementation = "process-compose";``
+
+
+*_Type_*:
+attribute set
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"availability":{"backoff_seconds":2,"max_restarts":5,"restart":"on_failure"},"depends_on":{"some-other-process":{"condition":"process_completed_successfully"}},"environment":["ENVVAR_FOR_THIS_PROCESS_ONLY=foobar"]}
+```
 
 
 ## redis.bind
