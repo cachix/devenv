@@ -5,7 +5,7 @@ Questions arise where to define them and how to provide the tooling to make sure
 A simple example defining `silly-example` script:
 
 ```nix title="devenv.nix"
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   packages = [ pkgs.curl pkgs.jq ]; # (1)!

@@ -1,7 +1,7 @@
 Starting with a simple example:
 
 ```nix title="devenv.nix"
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   processes = {

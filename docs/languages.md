@@ -1,7 +1,7 @@
 What if you could have the tooling for any programming language by flipping a toggle?
 
 ```nix title="devenv.nix"
-{ pkgs, ... }:
+{ inputs, pkgs, ... }:
 
 {
   languages.python.enable = true;
