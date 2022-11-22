@@ -45,9 +45,7 @@
       in {
         packages."${pkgs.system}" = {
           ci = pkgs.runCommand "ci" {} ("ls " + toString config.ci + " && touch $out");
-          procfile = config.procfile;
-          procfileEnv = config.procfileEnv;
-          info = config.info;
+          inherit (config) info procfileScript procfileEnv procfile;
         };
         devShell."${pkgs.system}" = config.shell;
       };
