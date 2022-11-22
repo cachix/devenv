@@ -1874,6 +1874,25 @@ lazy attribute set of package
 
 
 
+## process.implementation
+The implimentation used when performing ``devenv up``.
+
+*_Type_*:
+one of "honcho", "overmind"
+
+
+*_Default_*
+```
+"honcho"
+```
+
+
+*_Example_*
+```
+"overmind"
+```
+
+
 ## processes
 Processes can be started with ``devenv up`` and run in foreground mode.
 
