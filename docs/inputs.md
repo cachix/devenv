@@ -18,16 +18,16 @@ The dependencies you mention as `inputs` are passsed as an argument to the funct
 ```nix title="devenv.nix"
 { inputs, ... }:
 
+let
+  pre-commit-check = inputs.pre-commit-hooks.run {
+    src = ./.;
+    hooks.shellcheck.enable = true;
+  };
+in
 {
-}
-```
-
-You can also directly access the input fields in the function if you define it like:
-
-```nix title="devenv.nix"
-{ nixpkgs, pre-commit-hooks, ... }:
-
-{
+  enterShell = ''
+    ${pre-commit-check.shellHook}
+  ''
 }
 ```
 
@@ -36,7 +36,7 @@ See [basics](basics.md) for more about ``devenv.nix``.
 There are a few special inputs passed into ``devenv.nix``:
 
 ```nix title="devenv.nix"
-{ pkgs, lib, config, pre-commit-hooks, ... }:
+{ pkgs, lib, config, ... }:
 
 {
 }
@@ -45,7 +45,6 @@ There are a few special inputs passed into ``devenv.nix``:
 - ``pkgs`` is a ``nixpkgs`` input containing all of the available packages for your system.
 - ``lib`` is [a collection of functions for working with Nix data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library).
 - ``config`` is the resolved configuration for your developer environment, which you can use to reference any other options set in ``devenv.nix``.
-- ``pre-commit-hooks`` can be used to [set up Git hooks](pre-commit-hooks.md).
 
 
 !!! note
