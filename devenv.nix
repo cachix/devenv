@@ -1,8 +1,8 @@
-{ pkgs, nix, lib, config, ... }:
+{ inputs, pkgs, lib, config, ... }:
 
 {
   packages = [
-    (import ./src/devenv.nix { inherit pkgs nix; })
+    (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
     pkgs.python3Packages.virtualenv
     pkgs.python3Packages.cairocffi
     pkgs.yaml2json

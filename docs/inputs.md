@@ -13,11 +13,19 @@ inputs:
     url: github:cachix/pre-commit-hooks.nix
 ```
 
-Input names like ``nixpkgs`` and ``pre-commit-hooks`` are identifiers for what
- is passsed in the first line of the function:
+The dependencies you mention as `inputs` are passsed as an argument to the function.
 
 ```nix title="devenv.nix"
-{ pkgs, lib, nixpkgs, pre-commit-hooks, config, ... }:
+{ inputs, ... }:
+
+{
+}
+```
+
+You can also directly access the input fields in the function if you define it like:
+
+```nix title="devenv.nix"
+{ nixpkgs, pre-commit-hooks, ... }:
 
 {
 }
@@ -26,6 +34,13 @@ Input names like ``nixpkgs`` and ``pre-commit-hooks`` are identifiers for what
 See [basics](basics.md) for more about ``devenv.nix``.
 
 There are a few special inputs passed into ``devenv.nix``:
+
+```nix title="devenv.nix"
+{ pkgs, lib, config, pre-commit-hooks, ... }:
+
+{
+}
+```
 
 - ``pkgs`` is a ``nixpkgs`` input containing all of the available packages for your system.
 - ``lib`` is [a collection of functions for working with Nix data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library).
