@@ -1,11 +1,5 @@
 { inputs, pkgs, lib, config, ... }:
 
-let
-  pre-commit-check = inputs.pre-commit-hooks.run {
-    src = ./.;
-    hooks.shellcheck.enable = true;
-  };
-in
 {
   packages = [
     (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
@@ -19,8 +13,6 @@ in
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   enterShell = ''
-    ${pre-commit-check.shellHook}
-
     echo "To Install:"
     echo
     echo "virtualenv ."

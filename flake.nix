@@ -14,7 +14,7 @@
   };
   inputs.nix.url = "github:domenkozar/nix/relaxed-flakes";
 
-  outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }@inputs:
+  outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
