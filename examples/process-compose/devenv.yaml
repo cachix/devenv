@@ -1,0 +1,5 @@
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  devenv:
+    url: path:../../src/modules
