@@ -5,8 +5,6 @@
 
   processes.foo.exec = "echo foo; sleep 5";
 
-  # implicitly creates a postgres process
-  # consider https://github.com/cachix/devenv/issues/75
   postgres.enable = true;
 
   processes.bar = {
