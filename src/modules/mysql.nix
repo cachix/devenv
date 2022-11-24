@@ -8,12 +8,12 @@ let
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
   mysqlOptions = "--defaults-file=${configFile}";
-  mysqldOptions = "${mysqlOptions} --datadir=$MYSQLDATA --basedir=${cfg.package}";
+  mysqldOptions = "${mysqlOptions} --datadir=$MYSQL_HOME --basedir=${cfg.package}";
   startScript = pkgs.writeShellScriptBin "start-mysql" ''
     set -euo pipefail
 
-    if [[ ! -d "$MYSQLDATA" ]]; then
-      mkdir -p "$MYSQLDATA"
+    if [[ ! -d "$MYSQL_HOME" ]]; then
+      mkdir -p "$MYSQL_HOME"
       ${if isMariaDB then "${cfg.package}/bin/mysql_install_db" else "${cfg.package}/bin/mysqld"} ${mysqldOptions} ${optionalString (!isMariaDB) "--initialize-insecure"}
     fi
 
@@ -28,7 +28,7 @@ let
 
     ${concatMapStrings (database: ''
       # Create initial databases
-      if ! test -e "$MYSQLDATA/${database.name}"; then
+      if ! test -e "$MYSQL_HOME/${database.name}"; then
           echo "Creating initial database: ${database.name}"
           ( echo 'create database `${database.name}`;'
             ${optionalString (database.schema != null) ''
@@ -120,7 +120,7 @@ in
       cfg.package
     ];
 
-    env.MYSQLDATA = config.env.DEVENV_STATE + "/mysql";
+    env.MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
     env.MYSQLSOCKET = config.env.DEVENV_STATE + "/mysql.sock";
 
     scripts.mysql.exec = ''
