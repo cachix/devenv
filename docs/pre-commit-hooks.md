@@ -5,7 +5,7 @@ We recommend a two-step approach for integrating your linters and formatters.
 ## 1) At commit time to make sure that commits are well-formatted
 
 ```nix title="devenv.nix"
-{ pkgs, ... }:
+{ inputs, ... }:
 
 {
   pre-commit.hooks = {
