@@ -124,15 +124,15 @@ in
     env.MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
 
     scripts.mysql.exec = ''
-      exec ${cfg.package}/bin/mysql ${mysqlOptions} --socket=$MYSQL_UNIX_PORT $@
+      exec ${cfg.package}/bin/mysql ${mysqlOptions} --socket=$MYSQL_UNIX_PORT "$@"
     '';
 
     scripts.mysqladmin.exec = ''
-      exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} --socket=$MYSQL_UNIX_PORT $@
+      exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} --socket=$MYSQL_UNIX_PORT "$@"
     '';
 
     scripts.mysqldump.exec = ''
-      exec ${cfg.package}/bin/mysqldump ${mysqlOptions} --socket=$MYSQL_UNIX_PORT $@
+      exec ${cfg.package}/bin/mysqldump ${mysqlOptions} --socket=$MYSQL_UNIX_PORT "$@"
     '';
 
     processes.mysql.exec = "${startScript}/bin/start-mysql";
