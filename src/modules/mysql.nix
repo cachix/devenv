@@ -17,12 +17,12 @@ let
       ${if isMariaDB then "${cfg.package}/bin/mysql_install_db" else "${cfg.package}/bin/mysqld"} ${mysqldOptions} ${optionalString (!isMariaDB) "--initialize-insecure"}
     fi
 
-    exec ${cfg.package}/bin/mysqld ${mysqldOptions} --socket=$MYSQLSOCKET
+    exec ${cfg.package}/bin/mysqld ${mysqldOptions} --socket=$MYSQL_UNIX_PORT
   '';
   configureScript = pkgs.writeShellScriptBin "configure-mysql" ''
     set -euo pipefail
 
-    while ! ${cfg.package}/bin/mysqladmin ping -u root --socket=$MYSQLSOCKET --silent; do
+    while ! ${cfg.package}/bin/mysqladmin ping -u root --socket=$MYSQL_UNIX_PORT --silent; do
       sleep 1
     done
 
@@ -43,7 +43,7 @@ let
                 cat ${database.schema}/mysql-databases/*.sql
             fi
             ''}
-          ) | ${cfg.package}/bin/mysql --socket=$MYSQLSOCKET -u root -N
+          ) | ${cfg.package}/bin/mysql --socket=$MYSQL_UNIX_PORT -u root -N
       fi
     '') cfg.initialDatabases}
 
@@ -121,18 +121,18 @@ in
     ];
 
     env.MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
-    env.MYSQLSOCKET = config.env.DEVENV_STATE + "/mysql.sock";
+    env.MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
 
     scripts.mysql.exec = ''
-      exec ${cfg.package}/bin/mysql ${mysqlOptions} --socket=$MYSQLSOCKET $@
+      exec ${cfg.package}/bin/mysql ${mysqlOptions} --socket=$MYSQL_UNIX_PORT $@
     '';
 
     scripts.mysqladmin.exec = ''
-      exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} --socket=$MYSQLSOCKET $@
+      exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} --socket=$MYSQL_UNIX_PORT $@
     '';
 
     scripts.mysqldump.exec = ''
-      exec ${cfg.package}/bin/mysqldump ${mysqlOptions} --socket=$MYSQLSOCKET $@
+      exec ${cfg.package}/bin/mysqldump ${mysqlOptions} --socket=$MYSQL_UNIX_PORT $@
     '';
 
     processes.mysql.exec = "${startScript}/bin/start-mysql";
