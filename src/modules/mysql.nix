@@ -122,6 +122,7 @@ in
 
     env.MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
     env.MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
+    env.MYSQL_TCP_PORT = mkIf (cfg.settings.mysqld ? port) (toString cfg.settings.mysqld.port);
 
     scripts.mysql.exec = ''
       exec ${cfg.package}/bin/mysql ${mysqlOptions} --socket=$MYSQL_UNIX_PORT "$@"
