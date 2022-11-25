@@ -1,6 +1,6 @@
 Given a hello world example, click on the end of each line to get an explanation:
 
-```nix title="devenv.nix"
+```nix title="devenv.nix" tesh-session="basic" tesh-fixture="devenv.nix"
 { pkgs, ... }: # (1)!
 
 { # (2)!
@@ -22,7 +22,7 @@ Given a hello world example, click on the end of each line to get an explanation
 
 ``enterShell`` allows you to execute bash code once the shell activates, while ``env`` allows you to set environment variables:
 
-```shell-session
+```shell-session tesh-session="basic" tesh-ps1="(devenv) $" tesh-setup="setup.sh"
 $ devenv shell
 Building shell ...
 Entering shell ...
@@ -33,9 +33,6 @@ jq-1.6
 (devenv) $ echo $UNICORNS
 yes
 ```
-
-
-
 
 See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a 1-2 hour deep dive 
 that will allow you to read any Nix file.
