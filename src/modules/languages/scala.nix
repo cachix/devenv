@@ -17,6 +17,8 @@ in
       scalafmt
     ];
 
+    languages.java.enable = true;
+
     enterShell = ''
       scala --version
       scala-cli --version
