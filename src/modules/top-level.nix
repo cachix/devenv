@@ -74,6 +74,7 @@ in
       profile = pkgs.buildEnv {
         name = "devenv-profile";
         paths = config.packages;
+        ignoreCollisions = true;
       };
       shellHook = config.enterShell;
     };
