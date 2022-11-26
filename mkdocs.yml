@@ -71,7 +71,7 @@ extra:
     - icon: fontawesome/brands/discord 
       link: https://discord.gg/naMgvexb6q
   devenv:
-    version: 0.3
+    version: 0.4
 markdown_extensions:
   - tables
   - admonition
