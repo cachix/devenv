@@ -1,8 +1,8 @@
-{ pkgs, nix, lib, config, ... }:
+{ inputs, pkgs, lib, config, ... }:
 
 {
   packages = [
-    (import ./src/devenv.nix { inherit pkgs nix; })
+    (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
     pkgs.python3Packages.virtualenv
     pkgs.python3Packages.cairocffi
     pkgs.yaml2json
@@ -61,7 +61,7 @@
 
       # Enable all languages tooling!
       ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
-    
+
       # If you're missing a language, please contribute it by following examples of other languages <3
     }
     EOF
