@@ -66,18 +66,18 @@ in
           echo "You have .envrc but direnv command is not installed."
           echo "Please install direnv: https://direnv.net/docs/installation.html"
         fi
-      '';
+    '';
 
-      shell = mkNakedShell {
-        name = "devenv-shell";
-        env = config.env;
-        profile = pkgs.buildEnv {
-          name = "devenv-profile";
-          paths = config.packages;
-        };
-        shellHook = config.enterShell;
+    shell = mkNakedShell {
+      name = "devenv-shell";
+      env = config.env;
+      profile = pkgs.buildEnv {
+        name = "devenv-profile";
+        paths = config.packages;
       };
-
-      ci = [ config.shell.inputDerivation config.procfile ];
+      shellHook = config.enterShell;
     };
+
+    ci = [ config.shell.inputDerivation config.procfile ];
+  };
 }
