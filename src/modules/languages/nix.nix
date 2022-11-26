@@ -14,6 +14,7 @@ in
       statix
       vulnix
       deadnix
+      nil
     ];
 
     enterShell = ''
@@ -21,6 +22,7 @@ in
       cachix --version
       statix --version
       vulnix --version
+      nil --version
     '';
   };
 }
