@@ -1878,7 +1878,7 @@ lazy attribute set of package
 The implementation used when performing ``devenv up``.
 
 *_Type_*:
-one of "honcho", "overmind", "process-compose"
+one of "honcho", "overmind", "process-compose", "hivemind"
 
 
 *_Default_*
