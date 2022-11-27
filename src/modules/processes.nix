@@ -127,7 +127,7 @@ in
       '';
 
       hivemind = pkgs.writeShellScript "hivemind-up" ''
-        ${pkgs.hivemind}/bin/hivemind ${config.procfile}
+        ${pkgs.hivemind}/bin/hivemind --print-timestamps ${config.procfile}
       '';
     }.${implementation};
 
