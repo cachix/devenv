@@ -27,6 +27,7 @@ nav:
   - Documentation:
     - Getting Started: getting-started.md
     - Overview:
+      - Files And Variables: files-and-variables.md
       - Automatic Shell Activation: automatic-shell-activation.md
       - Garbage Collection: garbage-collection.md
     - Writing devenv.yaml:
