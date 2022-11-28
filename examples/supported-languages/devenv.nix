@@ -15,6 +15,7 @@
   languages.javascript.enable = true;
   languages.kotlin.enable = true;
   languages.lua.enable = true;
+  languages.nim.enable = true;
   languages.nix.enable = true;
   languages.ocaml.enable = true;
   languages.perl.enable = true;
@@ -26,7 +27,9 @@
   languages.ruby.enable = true;
   languages.rust.enable = true;
   languages.scala.enable = true;
+  languages.terraform.enable = true;
   languages.typescript.enable = true;
+  languages.v.enable = true;
 
   # If you're missing a language, please contribute it by following examples of other languages <3
 }
