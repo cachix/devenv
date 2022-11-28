@@ -496,6 +496,40 @@ package
 
 
 
+## languages.nim.enable
+Whether to enable Enable tools for nim development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.nim.package
+The nim package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.nim"
+```
+
+
+
+
 ## languages.nix.enable
 Whether to enable Enable tools for Nix development..
 
@@ -789,6 +823,40 @@ true
 ```
 
 
+## languages.terraform.enable
+Whether to enable Enable tools for terraform development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.terraform.package
+The terraform package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.terraform"
+```
+
+
+
+
 ## languages.typescript.enable
 Whether to enable Enable tools for TypeScript development..
 
@@ -806,6 +874,40 @@ false
 ```
 true
 ```
+
+
+## languages.v.enable
+Whether to enable Enable tools for v development..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.v.package
+The v package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.vlang"
+```
+
+
 
 
 ## mongodb.additionalArgs
