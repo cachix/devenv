@@ -1,7 +1,5 @@
 { config, pkgs, lib, ... }:
-let
-  types = lib.types;
-  mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
+let types = lib.types;
 in
 {
   options = {
@@ -56,29 +54,24 @@ in
     enterShell = ''
       export PS1="(devenv) $PS1"
       
-        # note what environments are active, but make sure we don't repeat them
-        if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
-          export DIRENV_ACTIVE="$PWD:$DIRENV_ACTIVE"
-        fi
+      # note what environments are active, but make sure we don't repeat them
+      if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
+        export DIRENV_ACTIVE="$PWD:$DIRENV_ACTIVE"
+      fi
 
-        # devenv helper
-        if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
-          echo "You have .envrc but direnv command is not installed."
-          echo "Please install direnv: https://direnv.net/docs/installation.html"
-        fi
+      # devenv helper
+      if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
+        echo "You have .envrc but direnv command is not installed."
+        echo "Please install direnv: https://direnv.net/docs/installation.html"
+      fi
     '';
 
-    shell = mkNakedShell {
-      name = "devenv-shell";
-      env = config.env;
-      profile = pkgs.buildEnv {
-        name = "devenv-profile";
-        paths = config.packages;
-        ignoreCollisions = true;
-      };
+    shell = pkgs.mkShell ({
+      name = "devenv";
+      packages = config.packages;
       shellHook = config.enterShell;
-    };
+    } // config.env);
 
-    ci = [ config.shell.inputDerivation config.procfile ];
+    ci = [ config.shell config.procfile ];
   };
 }
