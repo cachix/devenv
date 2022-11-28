@@ -21,6 +21,8 @@ in
       bundler
     ];
 
+    env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
+
     enterShell = ''
       ruby --version
 
