@@ -39,6 +39,7 @@ in
     ./mongodb.nix
     ./pre-commit.nix
     ./info.nix
+    ./files.nix
     ./scripts.nix
     ./processes.nix
     ./update-check.nix
