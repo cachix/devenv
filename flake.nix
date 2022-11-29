@@ -29,7 +29,11 @@
             options = builtins.removeAttrs eval.options [ "_module" ];
           };
         in
-        options.optionsCommonMark;
+          pkgs.runCommand "options.md" {} ''
+            ${pkgs.python3Minimal}/bin/python ${./generateCommonMark.py} \
+              < ${options.optionsJSON}/share/doc/nixos/options.json \
+              > $out
+          '';
     in
     {
       packages = forAllSystems (system:
