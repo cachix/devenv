@@ -55,6 +55,11 @@
 
       defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
 
+      templates.simple = {
+        path = ./templates/simple;
+        description = "A direnv supported Nix flake with devenv integration.";
+      };
+
       lib = {
         mkConfig = { pkgs, inputs, modules }:
           let
