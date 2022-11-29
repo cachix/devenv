@@ -120,9 +120,12 @@ in
       cfg.package
     ];
 
-    env.MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
-    env.MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
-    env.MYSQL_TCP_PORT = mkIf (cfg.settings.mysqld ? port) (toString cfg.settings.mysqld.port);
+    env = {
+      MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
+      MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
+    } // (optionalAttrs (hasAttrByPath [ "mysqld" "port" ] cfg.settings) {
+      MYSQL_TCP_PORT = (toString cfg.settings.mysqld.port);
+    });
 
     scripts.mysql.exec = ''
       exec ${cfg.package}/bin/mysql ${mysqlOptions} "$@"
