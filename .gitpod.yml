@@ -1,6 +1,6 @@
 tasks:
   - init: |
       cachix use devenv
-      nix build
+      nix build --accept-flake-config
 
 
