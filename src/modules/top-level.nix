@@ -220,6 +220,7 @@ in
   imports = [
     ./info.nix
     ./outputs.nix
+    ./files.nix
     ./processes.nix
     ./outputs.nix
     ./scripts.nix
