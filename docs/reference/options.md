@@ -1,5 +1,211 @@
 # devenv.nix options
 
+## caddy.adapter
+Name of the config adapter to use.
+See https://caddyserver.com/docs/config-adapters for the full list.
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"caddyfile"
+```
+
+
+*_Example_*
+```
+"nginx"
+```
+
+
+## caddy.ca
+Certificate authority ACME server. The default (Let's Encrypt
+production server) should be fine for most people. Set it to null if
+you don't want to include any authority (or if you want to write a more
+fine-graned configuration manually)
+
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+"https://acme-v02.api.letsencrypt.org/directory"
+```
+
+
+*_Example_*
+```
+"https://acme-staging-v02.api.letsencrypt.org/directory"
+```
+
+
+## caddy.config
+Verbatim Caddyfile to use.
+Caddy v2 supports multiple config formats via adapters (see <option>services.caddy.adapter</option>).
+
+
+*_Type_*:
+strings concatenated with "\n"
+
+
+*_Default_*
+```
+""
+```
+
+
+*_Example_*
+```
+"example.com {\n  encode gzip\n  log\n  root /srv/http\n}\n"
+```
+
+
+## caddy.dataDir
+The data directory, for storing certificates. Before 17.09, this
+would create a .caddy directory. With 17.09 the contents of the
+.caddy directory are in the specified data directory instead.
+Caddy v2 replaced CADDYPATH with XDG directories.
+See https://caddyserver.com/docs/conventions#file-locations.
+
+
+*_Type_*:
+path
+
+
+*_Default_*
+```
+"/.devenv/state/caddy"
+```
+
+
+
+
+## caddy.email
+Email address (for Let's Encrypt certificate)
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## caddy.enable
+Whether to enable Caddy web server.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## caddy.package
+Caddy package to use.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.caddy"}
+```
+
+
+
+
+## caddy.resume
+Use saved config, if any (and prefer over configuration passed with <option>caddy.config</option>).
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+
+
+## caddy.virtualHosts
+Declarative vhost config
+
+*_Type_*:
+attribute set of (submodule)
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  \"hydra.example.com\" = {\n    serverAliases = [ \"www.hydra.example.com\" ];\n    extraConfig = ''''\n      encode gzip\n      log\n      root /srv/http\n    '''';\n  };\n};\n"}
+```
+
+
+## caddy.virtualHosts.&lt;name&gt;.extraConfig
+These lines go into the vhost verbatim
+
+
+*_Type_*:
+strings concatenated with "\n"
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## caddy.virtualHosts.&lt;name&gt;.serverAliases
+Additional names of virtual hosts served by this virtual host configuration.
+
+
+*_Type_*:
+list of string
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+["www.example.org","example.org"]
+```
+
+
 ## devenv.latestVersion
 The latest version of devenv.
 
