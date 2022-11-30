@@ -33,6 +33,7 @@ in
   };
 
   imports = [
+    ./caddy.nix
     ./postgres.nix
     ./redis.nix
     ./mysql.nix
