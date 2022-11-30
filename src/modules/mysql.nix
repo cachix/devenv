@@ -8,27 +8,27 @@ let
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
   mysqlOptions = "--defaults-file=${configFile}";
-  mysqldOptions = "${mysqlOptions} --datadir=$MYSQLDATA --basedir=${cfg.package}";
+  mysqldOptions = "${mysqlOptions} --datadir=$MYSQL_HOME --basedir=${cfg.package}";
   startScript = pkgs.writeShellScriptBin "start-mysql" ''
     set -euo pipefail
 
-    if [[ ! -d "$MYSQLDATA" ]]; then
-      mkdir -p "$MYSQLDATA"
+    if [[ ! -d "$MYSQL_HOME" ]]; then
+      mkdir -p "$MYSQL_HOME"
       ${if isMariaDB then "${cfg.package}/bin/mysql_install_db" else "${cfg.package}/bin/mysqld"} ${mysqldOptions} ${optionalString (!isMariaDB) "--initialize-insecure"}
     fi
 
-    exec ${cfg.package}/bin/mysqld ${mysqldOptions} --socket=$MYSQLSOCKET
+    exec ${cfg.package}/bin/mysqld ${mysqldOptions}
   '';
   configureScript = pkgs.writeShellScriptBin "configure-mysql" ''
     set -euo pipefail
 
-    while ! ${cfg.package}/bin/mysqladmin ping -u root --socket=$MYSQLSOCKET --silent; do
+    while ! ${cfg.package}/bin/mysqladmin ping -u root --silent; do
       sleep 1
     done
 
     ${concatMapStrings (database: ''
       # Create initial databases
-      if ! test -e "$MYSQLDATA/${database.name}"; then
+      if ! test -e "$MYSQL_HOME/${database.name}"; then
           echo "Creating initial database: ${database.name}"
           ( echo 'create database `${database.name}`;'
             ${optionalString (database.schema != null) ''
@@ -43,7 +43,7 @@ let
                 cat ${database.schema}/mysql-databases/*.sql
             fi
             ''}
-          ) | ${cfg.package}/bin/mysql --socket=$MYSQLSOCKET -u root -N
+          ) | ${cfg.package}/bin/mysql --socket=$MYSQL_UNIX_PORT -u root -N
       fi
     '') cfg.initialDatabases}
 
@@ -120,19 +120,23 @@ in
       cfg.package
     ];
 
-    env.MYSQLDATA = config.env.DEVENV_STATE + "/mysql";
-    env.MYSQLSOCKET = config.env.DEVENV_STATE + "/mysql.sock";
+    env = {
+      MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
+      MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
+    } // (optionalAttrs (hasAttrByPath [ "mysqld" "port" ] cfg.settings) {
+      MYSQL_TCP_PORT = (toString cfg.settings.mysqld.port);
+    });
 
     scripts.mysql.exec = ''
-      exec ${cfg.package}/bin/mysql ${mysqlOptions} --socket=$MYSQLSOCKET $@
+      exec ${cfg.package}/bin/mysql ${mysqlOptions} "$@"
     '';
 
     scripts.mysqladmin.exec = ''
-      exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} --socket=$MYSQLSOCKET $@
+      exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} "$@"
     '';
 
     scripts.mysqldump.exec = ''
-      exec ${cfg.package}/bin/mysqldump ${mysqlOptions} --socket=$MYSQLSOCKET $@
+      exec ${cfg.package}/bin/mysqldump ${mysqlOptions} "$@"
     '';
 
     processes.mysql.exec = "${startScript}/bin/start-mysql";
