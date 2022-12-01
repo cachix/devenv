@@ -45,6 +45,7 @@ in
       type = types.str;
       description = "Listen address";
       default = "";
+      example = "127.0.0.1";
     };
 
     port = lib.mkOption {
