@@ -23,5 +23,8 @@
 
     # processes
     ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "- ${name}: ${process.exec}") config.processes)}
+
+    # files
+    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (filename: file: filename) config.files)}
   '';
 }
