@@ -1554,6 +1554,25 @@ list of strings concatenated with "\n"
 ```
 
 
+## postgres.listen_addresses
+Listen address
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+*_Example_*
+```
+"127.0.0.1"
+```
+
+
 ## postgres.package
 Which version of postgres to use
 
@@ -1564,6 +1583,22 @@ package
 *_Default_*
 ```
 "pkgs.postgresql"
+```
+
+
+
+
+## postgres.port
+The TCP port to accept connections.
+
+
+*_Type_*:
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+*_Default_*
+```
+5432
 ```
 
 
