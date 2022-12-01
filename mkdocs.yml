@@ -20,6 +20,8 @@ theme:
     - instant
     - navigation.tabs
     - navigation.expand
+    - navigation.instant
+    - navigation.tracking
     - content.code.annotate
     - content.tabs.link
 nav:
