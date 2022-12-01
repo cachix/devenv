@@ -61,14 +61,6 @@ in
         type = types.port;
       };
 
-      dataDir = mkOption {
-        type = types.path;
-        default = config.env.DEV;
-        description = ''
-          Data directory for rabbitmq.
-        '';
-      };
-
       cookie = mkOption {
         default = "";
         type = types.str;
