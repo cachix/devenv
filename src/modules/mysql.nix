@@ -43,7 +43,7 @@ let
                 cat ${database.schema}/mysql-databases/*.sql
             fi
             ''}
-          ) | ${cfg.package}/bin/mysql --socket=$MYSQL_UNIX_PORT -u root -N
+          ) | ${cfg.package}/bin/mysql ${mysqlOptions} -u root -N
       fi
     '') cfg.initialDatabases}
 
