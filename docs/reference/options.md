@@ -206,6 +206,25 @@ list of string
 ```
 
 
+## devcontainer.enable
+Whether to enable Generate .devcontainer.json for devenv integration..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## devenv.latestVersion
 The latest version of devenv.
 
