@@ -46,7 +46,7 @@ that will allow you to read any Nix file.
 
     We're running [a fundraiser to improve the developer experience around error messages](https://opencollective.com/nix-errors-enhancement), with the goal of lowering the barrier to learning Nix.
 
-# Environment Summary
+## Environment Summary
 
 If you'd like to print the summary of the current environment:
 
