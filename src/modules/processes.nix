@@ -89,7 +89,7 @@ in
     };
   };
 
-  config = {
+  config = lib.mkIf (config.processes != { }) {
     packages = [ pkgs.${implementation} ];
 
     procfile =
