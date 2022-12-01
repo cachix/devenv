@@ -32,8 +32,7 @@ let
   pkgs-stable = import inputs.nixpkgs-stable { system = pkgs.system; };
 in {
   packages = [ pkgs-stable.git ];
-}
-{
+
   enterShell = ''
     git --version
   ''
