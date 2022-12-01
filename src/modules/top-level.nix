@@ -38,6 +38,7 @@ in
     ./redis.nix
     ./mysql.nix
     ./mongodb.nix
+    ./rabbitmq.nix
     ./pre-commit.nix
     ./info.nix
     ./scripts.nix
