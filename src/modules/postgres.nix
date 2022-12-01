@@ -9,13 +9,17 @@ let
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
     export PATH=${cfg.package}/bin:${pkgs.coreutils}/bin
+
+    # Setup config
+    cat >> "$PGDATA/postgresql.conf" <<EOF
+      listen_addresses = '${cfg.listen_addresses}'
+      port = ${toString cfg.port}
+      unix_socket_directories = '$PGDATA'
+    EOF
+
     # Abort if the data dir already exists
     [[ ! -d "$PGDATA" ]] || exit 0
     initdb ${lib.concatStringsSep " " cfg.initdbArgs}
-    cat >> "$PGDATA/postgresql.conf" <<EOF
-      listen_addresses = '''
-      unix_socket_directories = '$PGDATA'
-    EOF
     ${createDatabase}
   '';
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
@@ -35,6 +39,20 @@ in
       description = "Which version of postgres to use";
       default = pkgs.postgresql;
       defaultText = "pkgs.postgresql";
+    };
+
+    listen_addresses = lib.mkOption {
+      type = types.str;
+      description = "Listen address";
+      default = "";
+    };
+
+    port = lib.mkOption {
+      type = types.port;
+      default = 5432;
+      description = ''
+        The TCP port to accept connections.
+      '';
     };
 
     createDatabase = lib.mkOption {
@@ -62,8 +80,10 @@ in
     ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
+    env.PGHOST = config.env.PGDATA;
+    env.PGPORT = cfg.port;
 
-    scripts."psql-devenv".exec = "${cfg.package}/bin/psql -h $PGDATA $@";
+    scripts."psql-devenv".exec = "${cfg.package}/bin/psql $@";
 
     processes.postgres = {
       exec = "${startScript}/bin/start-postgres";
