@@ -40,6 +40,7 @@ in
     ./mongodb.nix
     ./pre-commit.nix
     ./info.nix
+    ./devcontainer.nix
     ./scripts.nix
     ./processes.nix
     ./update-check.nix
