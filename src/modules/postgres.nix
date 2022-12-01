@@ -83,8 +83,6 @@ in
     env.PGHOST = config.env.PGDATA;
     env.PGPORT = cfg.port;
 
-    scripts."psql-devenv".exec = "${cfg.package}/bin/psql $@";
-
     processes.postgres = {
       exec = "${startScript}/bin/start-postgres";
 
