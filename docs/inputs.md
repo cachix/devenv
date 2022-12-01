@@ -48,12 +48,18 @@ There are a few special inputs passed into `devenv.nix`:
 { pkgs, lib, config, ... }:
 
 {
+  env.GREET = "hello";
+
+  enterShell = ''
+    echo ${config.env.GREET}
+  '';
 }
 ```
 
-- `pkgs` is a `nixpkgs` input containing all of the available packages for your system.
+- `pkgs` is a `nixpkgs` input containing [all of the available packages](./packages.md#searching) for your system.
 - `lib` is [a collection of functions for working with Nix data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library).
-- `config` is the resolved configuration for your developer environment, which you can use to reference any other options set in `devenv.nix`.
+- `config` is the final resolved configuration for your developer environment, which you can use to reference any other options set in [devenv.nix](./reference/options.md). 
+   Since Nix is a lazy evaluated language, you can reference any option you defining in the same file as long as it doesn't reference itself!
 
 !!! note
 
