@@ -166,7 +166,7 @@ in
       settings = mkOption {
         type = with types; attrsOf (oneOf [ str int bool ]);
         default = {
-          error_log = config.env.PHPFPMDIR + "/php-fpm.log";
+          error_log = config.env.DEVENV_STATE + "/php-fpm/php-fpm.log";
         };
         description = ''
           PHP-FPM global directives. Refer to the "List of global php-fpm.conf directives" section of
