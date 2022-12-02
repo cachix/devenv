@@ -48,7 +48,7 @@ in
     ./update-check.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
-  config = {
+  config = let packageEnv = pkgs.buildEnv { name = "devenv"; paths = config.packages; }; in {
 
     # TODO: figure out how to get relative path without impure mode
     env.DEVENV_ROOT = builtins.getEnv "PWD";
@@ -57,6 +57,10 @@ in
 
     enterShell = ''
       export PS1="(devenv) $PS1"
+
+      # setup .devenv/bin
+      rm -f "$DEVENV_DOTFILE/bin"
+      ln -sf ${packageEnv}/bin "$DEVENV_DOTFILE/bin"
       
       # note what environments are active, but make sure we don't repeat them
       if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
@@ -72,7 +76,7 @@ in
 
     shell = pkgs.mkShell ({
       name = "devenv";
-      packages = config.packages;
+      packages = [ packageEnv ];
       shellHook = config.enterShell;
     } // config.env);
 
