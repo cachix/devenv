@@ -48,7 +48,7 @@ in
     ./update-check.nix
   ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
 
-  config = let packageEnv = pkgs.buildEnv { name = "devenv"; paths = config.packages; }; in {
+  config = let packageEnv = pkgs.buildEnv { name = "devenv"; paths = config.packages; ignoreCollisions = true; }; in {
 
     # TODO: figure out how to get relative path without impure mode
     env.DEVENV_ROOT = builtins.getEnv "PWD";
