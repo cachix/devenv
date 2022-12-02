@@ -42,6 +42,7 @@ in
     ./pre-commit.nix
     ./info.nix
     ./devcontainer.nix
+    ./elasticsearch.nix
     ./scripts.nix
     ./processes.nix
     ./update-check.nix
