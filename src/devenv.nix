@@ -85,6 +85,7 @@ pkgs.writeScriptBin "devenv" ''
         echo "" 1>&2
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
       else
+        set -e
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
       fi
       ;;
