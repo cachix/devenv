@@ -257,6 +257,198 @@ true
 
 
 
+## elasticsearch.cluster_name
+Elasticsearch name that identifies your cluster for auto-discovery.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"elasticsearch"
+```
+
+
+
+
+## elasticsearch.enable
+Whether to enable elasticsearch.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+
+
+## elasticsearch.extraCmdLineOptions
+Extra command line options for the elasticsearch launcher.
+
+*_Type_*:
+list of string
+
+
+*_Default_*
+```
+[]
+```
+
+
+
+
+## elasticsearch.extraConf
+Extra configuration for elasticsearch.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+*_Example_*
+```
+"node.name: \"elasticsearch\"\nnode.master: true\nnode.data: false\n"
+```
+
+
+## elasticsearch.extraJavaOptions
+Extra command line options for Java.
+
+*_Type_*:
+list of string
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+["-Djava.net.preferIPv4Stack=true"]
+```
+
+
+## elasticsearch.listenAddress
+Elasticsearch listen address.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"127.0.0.1"
+```
+
+
+
+
+## elasticsearch.logging
+Elasticsearch logging configuration.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"logger.action.name = org.elasticsearch.action\nlogger.action.level = info\nappender.console.type = Console\nappender.console.name = console\nappender.console.layout.type = PatternLayout\nappender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n\nrootLogger.level = info\nrootLogger.appenderRef.console.ref = console\n"
+```
+
+
+
+
+## elasticsearch.package
+Elasticsearch package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.elasticsearch7"}
+```
+
+
+
+
+## elasticsearch.plugins
+Extra elasticsearch plugins
+
+*_Type_*:
+list of package
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"[ pkgs.elasticsearchPlugins.discovery-ec2 ]"}
+```
+
+
+## elasticsearch.port
+Elasticsearch port to listen for HTTP traffic.
+
+*_Type_*:
+signed integer
+
+
+*_Default_*
+```
+9200
+```
+
+
+
+
+## elasticsearch.single_node
+Start a single-node cluster
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
+## elasticsearch.tcp_port
+Elasticsearch port for the node to node communication.
+
+*_Type_*:
+signed integer
+
+
+*_Default_*
+```
+9300
+```
+
+
+
+
 ## enterShell
 Bash code to execute when entering the shell.
 
