@@ -1,5 +1,135 @@
 # devenv.nix options
 
+## blackfire.client-id
+Sets the client id used to authenticate with Blackfire
+You can find your personal client-id at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## blackfire.client-token
+Sets the client token used to authenticate with Blackfire
+You can find your personal client-token at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## blackfire.enable
+Whether to enable Blackfire profiler agent
+
+For PHP you need to install and configure the Blackfire PHP extension.
+
+<programlisting language="nix">
+languages.php.package = pkgs.php.buildEnv {
+  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
+  extraConfig = ''
+    memory_limit = 256M
+    blackfire.agent_socket = "tcp://127.0.0.1:8307";
+  '';
+};
+</programlisting>.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## blackfire.package
+Which package of blackfire to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.blackfire"
+```
+
+
+
+
+## blackfire.server-id
+Sets the server id used to authenticate with Blackfire
+You can find your personal server-id at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## blackfire.server-token
+Sets the server token used to authenticate with Blackfire
+You can find your personal server-token at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## blackfire.socket
+Sets the server socket path
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"tcp://127.0.0.1:8307"
+```
+
+
+
+
 ## caddy.adapter
 Name of the config adapter to use.
 See https://caddyserver.com/docs/config-adapters for the full list.

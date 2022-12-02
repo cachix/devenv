@@ -12,7 +12,21 @@ let
 in
 {
   options.blackfire = {
-    enable = lib.mkEnableOption (lib.mdDoc "Blackfire profiler agent");
+    enable = lib.mkEnableOption (lib.mdDoc ''
+      Blackfire profiler agent
+
+      For PHP you need to install and configure the Blackfire PHP extension.
+
+      ```nix
+      languages.php.package = pkgs.php.buildEnv {
+        extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
+        extraConfig = '''
+          memory_limit = 256M
+          blackfire.agent_socket = "${config.blackfire.socket}";
+        ''';
+      };
+      ```
+    '');
 
     client-id = lib.mkOption {
       type = lib.types.str;
