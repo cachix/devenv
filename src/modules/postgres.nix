@@ -10,17 +10,17 @@ let
     set -euo pipefail
     export PATH=${cfg.package}/bin:${pkgs.coreutils}/bin
 
+    if [[ ! -d "$PGDATA" ]]; then
+      initdb ${lib.concatStringsSep " " cfg.initdbArgs}
+      ${createDatabase}
+    fi
+
     # Setup config
     cat >> "$PGDATA/postgresql.conf" <<EOF
       listen_addresses = '${cfg.listen_addresses}'
       port = ${toString cfg.port}
       unix_socket_directories = '$PGDATA'
     EOF
-
-    # Abort if the data dir already exists
-    [[ ! -d "$PGDATA" ]] || exit 0
-    initdb ${lib.concatStringsSep " " cfg.initdbArgs}
-    ${createDatabase}
   '';
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail
