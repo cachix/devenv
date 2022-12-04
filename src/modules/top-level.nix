@@ -35,12 +35,17 @@ in
   };
 
   imports = [
+    ./blackfire.nix
+    ./caddy.nix
     ./postgres.nix
     ./redis.nix
     ./mysql.nix
     ./mongodb.nix
+    ./rabbitmq.nix
     ./pre-commit.nix
     ./info.nix
+    ./devcontainer.nix
+    ./elasticsearch.nix
     ./scripts.nix
     ./processes.nix
     ./update-check.nix

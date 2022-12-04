@@ -58,7 +58,7 @@ pkgs.writeScriptBin "devenv" ''
     echo "Building shell ..." 1>&2
     env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
     $CUSTOM_NIX/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
-    ln -sf $(readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
+    ln -sf $(${pkgs.coreutils}/bin/readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
   }
 
   command=$1
@@ -85,6 +85,7 @@ pkgs.writeScriptBin "devenv" ''
         echo "" 1>&2
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
       else
+        set -e
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
       fi
       ;;
@@ -122,8 +123,11 @@ pkgs.writeScriptBin "devenv" ''
       echo "Creating devenv.yaml"
       cat ${examples}/$example/devenv.yaml > devenv.yaml
       echo "Appending .devenv* and devenv.local.nix to .gitignore"
+      echo "" >> .gitignore
+      echo "# Devenv" >> .gitignore
       echo ".devenv*" >> .gitignore
       echo "devenv.local.nix" >> .gitignore
+      echo "" >> .gitignore
       echo "Done."
       ;;
     info)

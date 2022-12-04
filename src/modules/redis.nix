@@ -4,6 +4,22 @@ with lib;
 
 let
   cfg = config.redis;
+
+  redisConfig = pkgs.writeText "redis.conf" ''
+    port ${toString cfg.port}
+    ${optionalString (cfg.bind != null) "bind ${cfg.bind}"}
+    ${cfg.extraConfig}
+  '';
+
+  startScript = pkgs.writeShellScriptBin "start-redis" ''
+    set -euo pipefail
+
+    if [[ ! -d "$REDISDATA" ]]; then
+      mkdir -p "$REDISDATA"
+    fi
+
+    exec ${cfg.package}/bin/redis-server ${redisConfig} --dir "$REDISDATA"
+  '';
 in
 {
   options.redis = {
@@ -47,14 +63,8 @@ in
       cfg.package
     ];
 
-    processes.redis.exec =
-      let
-        config = pkgs.writeText "redis.conf" ''
-          port ${toString cfg.port}
-          ${optionalString (cfg.bind != null) "bind ${cfg.bind}"}
-          ${cfg.extraConfig}
-        '';
-      in
-      "${cfg.package}/bin/redis-server ${config}";
+    env.REDISDATA = config.env.DEVENV_STATE + "/redis";
+
+    processes.redis.exec = "${startScript}/bin/start-redis";
   };
 }
