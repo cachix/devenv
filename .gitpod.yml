@@ -1,6 +1,8 @@
 tasks:
-  - init: |
+  -  command: |
       cachix use devenv
-      nix build
+      nix build --accept-flake-config
+      ./result/bin/devenv shell virtualenv .
+      ./result/bin/devenv shell bin/pip install -r requirements.txt
 
 
