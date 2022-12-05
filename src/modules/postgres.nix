@@ -66,7 +66,7 @@ in
 
     initdbArgs = lib.mkOption {
       type = types.listOf types.lines;
-      default = [ "--no-locale" ];
+      default = [ "--locale=C" "--encoding=UTF8" ];
       example = [ "--data-checksums" "--allow-group-access" ];
       description = ''
         Additional arguments passed to `initdb` during data dir
