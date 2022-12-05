@@ -1975,6 +1975,32 @@ The TCP port to accept connections.
 
 
 
+## postgres.settings
+PostgreSQL configuration. Refer to
+<link xlink:href="https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE"></link>
+for an overview of <literal>postgresql.conf</literal>.
+::: {.note}
+String values will automatically be enclosed in single quotes. Single quotes will be
+escaped with two single quotes as described by the upstream documentation linked above.
+:::
+
+
+*_Type_*:
+attribute set of (boolean or floating point number or signed integer or string)
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  log_connections = true;\n  log_statement = \"all\";\n  logging_collector = true\n  log_disconnections = true\n  log_destination = lib.mkForce \"syslog\";\n}\n"}
+```
+
+
 ## pre-commit
 Integration of https://github.com/cachix/pre-commit-hooks.nix
 
