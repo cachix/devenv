@@ -47,6 +47,18 @@ let
       fi
     '') cfg.initialDatabases}
 
+    ${optionalString (cfg.rootPassword != null) ''
+      # Set root password
+
+      if [[ ! -f "$MYSQL_HOME/.root_password_set" ]]; then
+        ${cfg.package}/bin/mysql ${mysqlOptions} -u root -N -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${cfg.rootPassword}';"
+
+        touch "$MYSQL_HOME/.root_password_set"
+
+        echo "MySQL root password has been changed"
+      fi
+    ''}
+
     # We need to sleep until infinity otherwise all processes stop
     sleep infinity
   '';
@@ -60,6 +72,12 @@ in
       description = "Which package of mysql to use";
       default = pkgs.mysql80;
       defaultText = "pkgs.mysql80";
+    };
+
+    rootPassword = mkOption {
+      type = types.nullOr types.string;
+      default = null;
+      description = "Allows to set a MySQL root password";
     };
 
     settings = mkOption {
