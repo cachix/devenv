@@ -51,13 +51,14 @@
     devenv shell ls
     popd
   '';
-  scripts."generate-doc-options".exec = ''
-    options=$(nix build --extra-experimental-features 'flakes nix-command' --print-out-paths --no-link '.#devenv-docs-options')
+  scripts."devenv-generate-doc-options".exec = ''
+    set -e
+    options=$(nix build --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
     echo "# devenv.nix options" > docs/reference/options.md
     echo >> docs/reference/options.md
     cat $options >> docs/reference/options.md
   '';
-  scripts."generate-languages-example".exec = ''
+  scripts."devenv-generate-languages-example".exec = ''
     cat > examples/supported-languages/devenv.nix <<EOF
     { pkgs, ... }: {
 
