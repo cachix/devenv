@@ -1915,7 +1915,7 @@ list of strings concatenated with "\n"
 
 *_Default_*
 ```
-["--no-locale"]
+["--locale=C","--encoding=UTF8"]
 ```
 
 
@@ -1957,6 +1957,10 @@ package
 ```
 
 
+*_Example_*
+```
+{"_type":"literalExpression","text":"# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list\npkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);\n"}
+```
 
 
 ## postgres.port
