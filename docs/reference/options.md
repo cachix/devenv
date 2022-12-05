@@ -1559,6 +1559,36 @@ true
 ```
 
 
+## languages.rust.packages
+Attribute set of packages including rustc and cargo
+
+*_Type_*:
+attribute set of package
+
+
+*_Default_*
+```
+"pkgs"
+```
+
+
+
+
+## languages.rust.version
+Set to stable, beta or latest.
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+null
+```
+
+
+
+
 ## languages.scala.enable
 Whether to enable Enable tools for Scala development..
 
