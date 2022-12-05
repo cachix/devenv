@@ -6,6 +6,14 @@ let
   createDatabase = lib.optionalString cfg.createDatabase ''
     echo "CREATE DATABASE ''${USER:-$(id -nu)};" | postgres --single -E postgres
   '';
+
+  toStr = value:
+    if true == value then "yes"
+    else if false == value then "no"
+    else if lib.isString value then "'${lib.replaceStrings ["'"] ["''"] value}'"
+    else toString value;
+
+  configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n" (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
     export PATH=${cfg.package}/bin:${pkgs.coreutils}/bin
@@ -16,11 +24,7 @@ let
     fi
 
     # Setup config
-    cat >> "$PGDATA/postgresql.conf" <<EOF
-      listen_addresses = '${cfg.listen_addresses}'
-      port = ${toString cfg.port}
-      unix_socket_directories = '$PGDATA'
-    EOF
+    cp ${configFile} "$PGDATA/postgresql.conf"
   '';
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail
@@ -73,6 +77,29 @@ in
         initialisation.
       '';
     };
+
+    settings = lib.mkOption {
+      type = with types; attrsOf (oneOf [ bool float int str ]);
+      default = { };
+      description = lib.mdDoc ''
+        PostgreSQL configuration. Refer to
+        <https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE>
+        for an overview of `postgresql.conf`.
+        ::: {.note}
+        String values will automatically be enclosed in single quotes. Single quotes will be
+        escaped with two single quotes as described by the upstream documentation linked above.
+        :::
+      '';
+      example = lib.literalExpression ''
+        {
+          log_connections = true;
+          log_statement = "all";
+          logging_collector = true
+          log_disconnections = true
+          log_destination = lib.mkForce "syslog";
+        }
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -83,6 +110,12 @@ in
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
     env.PGHOST = config.env.PGDATA;
     env.PGPORT = cfg.port;
+
+    postgres.settings = {
+      listen_addresses = cfg.listen_addresses;
+      port = cfg.port;
+      unix_socket_directories = config.env.PGDATA;
+    };
 
     processes.postgres = {
       exec = "${startScript}/bin/start-postgres";
