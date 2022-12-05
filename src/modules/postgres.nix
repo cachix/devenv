@@ -39,6 +39,10 @@ in
       description = "Which version of postgres to use";
       default = pkgs.postgresql;
       defaultText = "pkgs.postgresql";
+      example = lib.literalExpression ''
+        # see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list
+        pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
+      '';
     };
 
     listen_addresses = lib.mkOption {
