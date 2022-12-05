@@ -4,7 +4,12 @@ let
   file = pkgs.writeText "devcontainer.json" ''
     {
       "image": "ghcr.io/cachix/devenv:latest",
-      "overrideCommand": false
+      "overrideCommand": false,
+      "customizations": {
+        "vscode": {
+          "extensions": ["mkhl.direnv"]
+        }
+      }
     }
   '';
 in
