@@ -16,7 +16,7 @@ pkgs.writeScriptBin "devenv" ''
   export FLAKE_FILE=.devenv.flake.nix
   export FLAKE_LOCK=devenv.lock
 
-  CUSTOM_NIX=${nix.packages.${pkgs.system}.nix-static.overrideAttrs (_: { preHook = ""; })}
+  CUSTOM_NIX=${nix.packages.${pkgs.system}.nix}
 
   function assemble {
     if [[ ! -f devenv.nix ]]; then
