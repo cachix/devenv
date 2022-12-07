@@ -18,7 +18,10 @@
     url = "github:edolstra/flake-compat";
     flake = false;
   };
-  inputs.nix.url = "github:domenkozar/nix/relaxed-flakes";
+  inputs.nix = {
+    url = "github:domenkozar/nix/relaxed-flakes";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }:
     let
@@ -40,7 +43,7 @@
     {
       packages = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = nixpkgs.legacyPackages.${system};
         in
         {
           devenv = mkPackage pkgs;
