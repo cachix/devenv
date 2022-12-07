@@ -12,8 +12,8 @@ RUN wget -O install.sh https://nixos.org/nix/install \
   && addgroup --gid 30000 --system nixbld \
   && for i in $(seq 1 30); do adduser --system --no-create-home --home /var/empty --uid $((30000 + i)) nixbld$i && adduser nixbld$i nixbld ; done \
   && USER=root sh ./install.sh --daemon --no-channel-add --nix-extra-conf-file /nix.conf \
-  && sudo setfacl -k /tmp \
-  && rm -rf /var/cache/apk/* install.sh /nix.conf 
+  && rm -rf /var/cache/apk/* install.sh /nix.conf \
+  && chmod +x /nix-entrypoint.sh
 
 ENV \
     ENV=/etc/profile \
@@ -22,11 +22,13 @@ ENV \
     GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt \
     NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
-RUN nix profile install nixpkgs#direnv nixpkgs#cachix \
+RUN /nix-entrypoint.sh sleep 5 \
+ && sudo setfacl -k /tmp \
+ && nix profile install nixpkgs#direnv nixpkgs#cachix \
  && cachix use devenv \
  && nix profile install github:cachix/devenv/$VERSION \
  && rm -rf ~/.cache/nix \
- && chmod +x /nix-entrypoint.sh \
- && sudo /nix/var/nix/profiles/default/bin/nix-collect-garbage --delete-old
+ && sudo /nix/var/nix/profiles/default/bin/nix-collect-garbage --delete-old \
+ && chown -R root:nixbld /nix
 
 ENTRYPOINT ["/nix-entrypoint.sh", "sleep", "infinity"]

@@ -20,7 +20,7 @@ jobs:
         name: devenv
     - run: nix profile install .
     - name: Generate doc options
-      run: devenv shell generate-doc-options
+      run: devenv shell devenv-generate-doc-options
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
@@ -28,7 +28,7 @@ jobs:
         add: docs/reference/options.md
         message: 'Auto generate docs/reference/options.md'
     - name: Generate supported-languages example
-      run: devenv shell generate-languages-example
+      run: devenv shell devenv-generate-languages-example
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
