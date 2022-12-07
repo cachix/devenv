@@ -20,6 +20,8 @@ theme:
     - instant
     - navigation.tabs
     - navigation.expand
+    - navigation.instant
+    - navigation.tracking
     - content.code.annotate
     - content.tabs.link
 nav:
@@ -27,6 +29,7 @@ nav:
   - Documentation:
     - Getting Started: getting-started.md
     - Overview:
+      - Files And Variables: files-and-variables.md
       - Automatic Shell Activation: automatic-shell-activation.md
       - Garbage Collection: garbage-collection.md
     - Writing devenv.yaml:
@@ -39,6 +42,8 @@ nav:
       - Languages: languages.md
       - Processes: processes.md
       - Pre-Commit Hooks: pre-commit-hooks.md
+    - Integrations:
+      - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
     - Examples: examples.md
     - Roadmap: roadmap.md
     - Reference:

@@ -7,16 +7,28 @@
 
   postgres.enable = true;
 
+  languages.ruby.enable = true;
+
+  packages = [ pkgs.imagemagick6.dev ];
+
+  scripts.compile-rmagick.exec = "gem install --install-dir /tmp rmagick";
+
   processes.bar = {
     exec = (pkgs.writeShellScript "complex-process" ''
-      # testing multiline bash scripts
+      # testing multiline bash scripts, env vars provided by process-compose
       echo "I'm $PC_PROC_NAME, replica: $PC_REPLICA_NUM"
 
+      echo
       echo "how many files did postgres create?"
       ls "$PGDATA" | wc -l
 
+      echo
       echo 'showing off process-specific env var:'
       echo "$BAR"
+
+      echo
+      echo 'can use scripts here as well:'
+      compile-rmagick
     '').outPath;
 
     process-compose = {

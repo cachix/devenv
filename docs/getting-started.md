@@ -73,7 +73,7 @@ c) Install ``devenv``
         inputs.devenv.url = "github:cachix/devenv/v{{ devenv.version }}";
 
         outputs = { devenv, ... }: {
-            packages = devenv.packages;
+            packages.x86_64-linux = [devenv.packages.x86_64-linux.devenv];
         };
     }
     ```
