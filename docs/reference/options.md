@@ -2115,6 +2115,10 @@ Scan Nix files for dead code (unused variable bindings).
 
 Dhall code formatter.
 
+<emphasis role="strong"><literal>editorconfig-checker</literal></emphasis>
+
+Verify that the files are in harmony with the <literal>.editorconfig</literal>.
+
 <emphasis role="strong"><literal>elm-format</literal></emphasis>
 
 Format Elm files.
@@ -2130,6 +2134,10 @@ Run unit tests and fuzz tests for Elm code.
 <emphasis role="strong"><literal>eslint</literal></emphasis>
 
 Find and fix problems in your JavaScript code.
+
+<emphasis role="strong"><literal>flake8</literal></emphasis>
+
+Check the style and quality of Python files.
 
 <emphasis role="strong"><literal>fourmolu</literal></emphasis>
 
@@ -2210,6 +2218,10 @@ Format purescript files.
 <emphasis role="strong"><literal>purty</literal></emphasis>
 
 Format purescript files.
+
+<emphasis role="strong"><literal>pylint</literal></emphasis>
+
+Lint Python files.
 
 <emphasis role="strong"><literal>revive</literal></emphasis>
 
@@ -2642,6 +2654,36 @@ string
 
 
 
+## pre-commit.settings.flake8.binPath
+flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"\"${pkgs.python39Packages.pylint}/bin/flake8\"\n"}
+```
+
+
+
+
+## pre-commit.settings.flake8.format
+Output format.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"default"
+```
+
+
+
+
 ## pre-commit.settings.hpack.silent
 Whether generation should be silent.
 
@@ -2764,6 +2806,51 @@ null or one of "check", "list-different"
 
 ## pre-commit.settings.prettier.write
 Whether to edit files inplace.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
+## pre-commit.settings.pylint.binPath
+Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"\"${pkgs.python39Packages.pylint}/bin/pylint\"\n"}
+```
+
+
+
+
+## pre-commit.settings.pylint.reports
+Whether to display a full report.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+
+
+## pre-commit.settings.pylint.score
+Whether to activate the evaluation score.
 
 *_Type_*:
 boolean
