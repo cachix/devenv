@@ -47,7 +47,7 @@ in
 
     process = {
       implementation = lib.mkOption {
-        type = types.enum [ "honcho" "overmind" "process-compose" ];
+        type = types.enum [ "honcho" "overmind" "process-compose" "hivemind" ];
         description = "The implementation used when performing ``devenv up``.";
         default = "honcho";
         example = "overmind";
@@ -89,7 +89,7 @@ in
     };
   };
 
-  config = {
+  config = lib.mkIf (config.processes != { }) {
     packages = [ pkgs.${implementation} ];
 
     procfile =
@@ -124,6 +124,10 @@ in
         ${pkgs.process-compose}/bin/process-compose --config ${config.procfile} \
            --port $PC_HTTP_PORT \
            --tui=$PC_TUI_ENABLED
+      '';
+
+      hivemind = pkgs.writeShellScript "hivemind-up" ''
+        ${pkgs.hivemind}/bin/hivemind --print-timestamps ${config.procfile}
       '';
     }.${implementation};
 
