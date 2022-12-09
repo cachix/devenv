@@ -44,6 +44,7 @@ in
     ./info.nix
     ./devcontainer.nix
     ./elasticsearch.nix
+    ./memcached.nix
     ./scripts.nix
     ./processes.nix
     ./update-check.nix
