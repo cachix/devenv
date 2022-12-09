@@ -1695,6 +1695,98 @@ package
 
 
 
+## memcached.bind
+The IP interface to bind to.
+<literal>null</literal> means "all interfaces".
+
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+"127.0.0.1"
+```
+
+
+*_Example_*
+```
+"127.0.0.1"
+```
+
+
+## memcached.enable
+Whether to enable Add memcached process..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## memcached.package
+Which package of memcached to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.memcached"
+```
+
+
+
+
+## memcached.port
+The TCP port to accept connections.
+If port 0 is specified Redis will not listen on a TCP socket.
+
+
+*_Type_*:
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+*_Default_*
+```
+11211
+```
+
+
+
+
+## memcached.startArgs
+Additional arguments passed to `memcached` during startup.
+
+
+*_Type_*:
+list of strings concatenated with "\n"
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+["--memory-limit=100M"]
+```
+
+
 ## mongodb.additionalArgs
 Additional arguments passed to `mongod`.
 
