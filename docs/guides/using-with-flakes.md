@@ -1,4 +1,4 @@
-`devenv` can be used without the `devenv` CLI by integrating into [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/) , if you're more familiar with the Nix language/ecosystem.
+`devenv` can be used without the `devenv` CLI by integrating into [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/), if you're more familiar with the Nix language/ecosystem.
 
 Some usecases for using devenv configuration inside flakes is for projects that want to define other Nix flake features, apart from the development shell.
 These include a Nix package for the project, NixOS and home-manager modules related to the project.
