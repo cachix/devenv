@@ -33,6 +33,7 @@ in
   };
 
   imports = [
+    ./adminer.nix
     ./blackfire.nix
     ./caddy.nix
     ./postgres.nix
