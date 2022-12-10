@@ -1,5 +1,54 @@
 # devenv.nix options
 
+## adminer.enable
+Whether to enable Add adminer process..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## adminer.listen
+Listen address for adminer.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"127.0.0.1:8080"
+```
+
+
+
+
+## adminer.package
+Which package of adminer to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.adminer"
+```
+
+
+
+
 ## blackfire.client-id
 Sets the client id used to authenticate with Blackfire
 You can find your personal client-id at https://blackfire.io/my/settings/credentials
@@ -1858,6 +1907,87 @@ false
 ```
 true
 ```
+
+
+## mysql.ensureUsers
+Ensures that the specified users exist and have at least the ensured permissions.
+The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
+same name only, and that without the need for a password.
+This option will never delete existing users or remove permissions, especially not when the value of this
+option is changed. This means that users created and permissions assigned once through this option or
+otherwise have to be removed manually.
+
+
+*_Type_*:
+list of (submodule)
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"[\n  {\n    name = \"devenv\";\n    ensurePermissions = {\n      \"devenv.*\" = \"ALL PRIVILEGES\";\n    };\n  }\n]\n"}
+```
+
+
+## mysql.ensureUsers.*.ensurePermissions
+Permissions to ensure for the user, specified as attribute set.
+The attribute names specify the database and tables to grant the permissions for,
+separated by a dot. You may use wildcards here.
+The attribute values specfiy the permissions to grant.
+You may specify one or multiple comma-separated SQL privileges here.
+For more information on how to specify the target
+and on which privileges exist, see the
+<link xlink:href="https://mariadb.com/kb/en/library/grant/">GRANT syntax</link>.
+The attributes are used as <literal>GRANT ${attrName} ON ${attrValue}</literal>.
+
+
+*_Type_*:
+attribute set of string
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  \"database.*\" = \"ALL PRIVILEGES\";\n  \"*.*\" = \"SELECT, LOCK TABLES\";\n}\n"}
+```
+
+
+## mysql.ensureUsers.*.name
+Name of the user to ensure.
+
+
+*_Type_*:
+string
+
+
+
+
+
+
+## mysql.ensureUsers.*.password
+Password of the user to ensure.
+
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+null
+```
+
+
 
 
 ## mysql.initialDatabases
