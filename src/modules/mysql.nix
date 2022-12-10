@@ -47,6 +47,15 @@ let
       fi
     '') cfg.initialDatabases}
 
+    ${concatMapStrings (user:
+      ''
+        ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '${user.password}'"};"
+          ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
+            echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
+          '') user.ensurePermissions)}
+        ) | ${cfg.package}/bin/mysql ${mysqlOptions} -u root -N
+    '') cfg.ensureUsers}
+
     # We need to sleep until infinity otherwise all processes stop
     sleep infinity
   '';
@@ -112,6 +121,68 @@ in
         { name = "foodatabase"; schema = literalExpression "./foodatabase.sql"; }
         { name = "bardatabase"; }
       ];
+    };
+
+    ensureUsers = lib.mkOption {
+      type = types.listOf (types.submodule {
+        options = {
+          name = lib.mkOption {
+            type = types.str;
+            description = lib.mdDoc ''
+              Name of the user to ensure.
+            '';
+          };
+
+          password = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = lib.mdDoc ''
+              Password of the user to ensure.
+            '';
+          };
+
+          ensurePermissions = lib.mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            description = lib.mdDoc ''
+              Permissions to ensure for the user, specified as attribute set.
+              The attribute names specify the database and tables to grant the permissions for,
+              separated by a dot. You may use wildcards here.
+              The attribute values specfiy the permissions to grant.
+              You may specify one or multiple comma-separated SQL privileges here.
+              For more information on how to specify the target
+              and on which privileges exist, see the
+              [GRANT syntax](https://mariadb.com/kb/en/library/grant/).
+              The attributes are used as `GRANT ''${attrName} ON ''${attrValue}`.
+            '';
+            example = literalExpression ''
+              {
+                "database.*" = "ALL PRIVILEGES";
+                "*.*" = "SELECT, LOCK TABLES";
+              }
+            '';
+          };
+        };
+      });
+      default = [ ];
+      description = lib.mdDoc ''
+        Ensures that the specified users exist and have at least the ensured permissions.
+        The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
+        same name only, and that without the need for a password.
+        This option will never delete existing users or remove permissions, especially not when the value of this
+        option is changed. This means that users created and permissions assigned once through this option or
+        otherwise have to be removed manually.
+      '';
+      example = literalExpression ''
+        [
+          {
+            name = "devenv";
+            ensurePermissions = {
+              "devenv.*" = "ALL PRIVILEGES";
+            };
+          }
+        ]
+      '';
     };
   };
 
