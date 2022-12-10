@@ -2,6 +2,15 @@
 
 let
   cfg = config.devenv;
+  action = {
+    "0" = "";
+    "1" = ''
+      echo "✨ devenv ${cfg.cliVersion} is newer than devenv input in devenv.lock. Run `devenv update` to sync.
+    '';
+    "-1" = ''
+      echo "✨ devenv ${cfg.cliVersion} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
+    '';
+  };
 in
 {
   options.devenv = {
@@ -27,8 +36,6 @@ in
   };
 
   config = lib.mkIf cfg.warnOnNewVersion {
-    enterShell = lib.optionalString (cfg.cliVersion != cfg.latestVersion) ''
-      echo "✨ devenv ${cfg.cliVersion} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
-    '';
+    enterShell = action."${ toString (builtins.compareVersions cfg.cliVersion cfg.latestVersion) }";
   };
 }
