@@ -13,9 +13,5 @@ in
       go
       gotools
     ];
-
-    enterShell = ''
-      go version
-    '';
   };
 }

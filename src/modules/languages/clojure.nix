@@ -13,9 +13,5 @@ in
       clojure
       clojure-lsp
     ];
-
-    enterShell = ''
-      clojure --version
-    '';
   };
 }

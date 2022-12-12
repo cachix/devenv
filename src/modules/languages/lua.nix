@@ -19,9 +19,5 @@ in
     packages = [
       cfg.package
     ];
-
-    enterShell = ''
-      lua -v
-    '';
   };
 }

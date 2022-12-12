@@ -12,9 +12,5 @@ in
     packages = with pkgs; [
       R
     ];
-
-    enterShell = ''
-      R --version
-    '';
   };
 }
