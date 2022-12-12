@@ -399,7 +399,7 @@ $ cat devenv.nix
 { pkgs, ... }: {
   processes.ping.exec = "ping example.com";
 
-  postgres.enable = true;
+  services.postgres.enable = true;
 }
 
 $ devenv up

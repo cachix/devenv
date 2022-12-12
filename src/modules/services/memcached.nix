@@ -1,11 +1,15 @@
 { pkgs, lib, config, ... }:
 
 let
-  cfg = config.memcached;
+  cfg = config.services.memcached;
   types = lib.types;
 in
 {
-  options.memcached = {
+  imports = [
+    (lib.mkRenamedOptionModule [ "memcached" "enable" ] [ "services" "memcached" "enable" ])
+  ];
+
+  options.services.memcached = {
     enable = lib.mkEnableOption "Add memcached process.";
 
     package = lib.mkOption {

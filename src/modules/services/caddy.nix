@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.caddy;
+  cfg = config.services.caddy;
 
   vhostToConfig = vhostName: vhostAttrs: ''
     ${vhostName} ${builtins.concatStringsSep " " vhostAttrs.serverAliases} {
@@ -78,7 +78,11 @@ let
   };
 in
 {
-  options.caddy = {
+  imports = [
+    (lib.mkRenamedOptionModule [ "caddy" "enable" ] [ "services" "caddy" "enable" ])
+  ];
+
+  options.services.caddy = {
     enable = mkEnableOption "Caddy web server";
 
     config = mkOption {
