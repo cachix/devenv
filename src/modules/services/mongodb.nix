@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.mongodb;
+  cfg = config.services.mongodb;
 
   setupScript = pkgs.writeShellScriptBin "setup-mongodb" ''
     set -euo pipefail
@@ -19,7 +19,11 @@ let
   '';
 in
 {
-  options.mongodb = {
+  imports = [
+    (lib.mkRenamedOptionModule [ "mongodb" "enable" ] [ "services" "mongodb" "enable" ])
+  ];
+
+  options.services.mongodb = {
     enable = mkEnableOption "Add MongoDB process and expose utilities.";
 
     package = mkOption {
