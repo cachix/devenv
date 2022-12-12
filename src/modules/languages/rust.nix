@@ -35,11 +35,6 @@ in
         cfg.packages.rustc
         cfg.packages.cargo
       ];
-
-      enterShell = ''
-        rustc --version
-        cargo --version
-      '';
     })
     (lib.mkIf (cfg.version != null) (
       let

@@ -19,9 +19,5 @@ in
     packages = with pkgs; [
       cfg.package
     ];
-
-    enterShell = ''
-      python --version
-    '';
   };
 }

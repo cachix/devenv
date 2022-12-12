@@ -22,9 +22,5 @@ in
         ps.robotframework
       ]))
     ];
-
-    enterShell = ''
-      robot --version
-    '';
   };
 }
