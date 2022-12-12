@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.mysql;
+  cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
@@ -61,7 +61,11 @@ let
   '';
 in
 {
-  options.mysql = {
+  imports = [
+    (lib.mkRenamedOptionModule [ "mysql" "enable" ] [ "services" "mysql" "enable" ])
+  ];
+
+  options.services.mysql = {
     enable = mkEnableOption "Add mysql process and expose utilities.";
 
     package = mkOption {
