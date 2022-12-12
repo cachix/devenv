@@ -71,8 +71,14 @@ pkgs.writeScriptBin "devenv" ''
       shell
       eval "$env"
       procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
-      add_gc procfilescript $procfilescript
-      $procfilescript
+      cat $procfilescript
+      if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
+        echo "No 'processes' option defined: https://devenv.sh/processes/"  
+        exit 1
+      else
+        add_gc procfilescript $procfilescript
+        $procfilescript
+      fi
       ;;
     print-dev-env)
       shell
