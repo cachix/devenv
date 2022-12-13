@@ -12,9 +12,5 @@ in
     packages = with pkgs; [
       perl
     ];
-
-    enterShell = ''
-      perl --version
-    '';
   };
 }

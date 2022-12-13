@@ -20,10 +20,5 @@ in
       cfg.package
       pkgs.nimlsp
     ];
-
-    enterShell = ''
-      nim --version
-      nimlsp --version
-    '';
   };
 }

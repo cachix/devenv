@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.elasticsearch;
+  cfg = config.services.elasticsearch;
   es7 = builtins.compareVersions cfg.package.version "7" >= 0;
 
   esConfig = ''
@@ -81,7 +81,11 @@ let
 
 in
 {
-  options.elasticsearch = {
+  imports = [
+    (lib.mkRenamedOptionModule [ "elasticsearch" "enable" ] [ "services" "elasticsearch" "enable" ])
+  ];
+
+  options.services.elasticsearch = {
     enable = mkOption {
       description = "Whether to enable elasticsearch.";
       default = false;
