@@ -12,9 +12,5 @@ in
     packages = with pkgs; [
       dotnet-sdk
     ];
-
-    enterShell = ''
-      dotnet --version
-    '';
   };
 }

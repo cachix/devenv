@@ -21,11 +21,5 @@ in
       terraform-ls
       tfsec
     ];
-
-    enterShell = ''
-      terraform version
-      terraform-ls --version
-      tfsec --version
-    '';
   };
 }

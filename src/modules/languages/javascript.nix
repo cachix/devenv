@@ -19,10 +19,5 @@ in
     packages = with pkgs; [
       cfg.package
     ];
-
-    enterShell = ''
-      echo node --version
-      node --version
-    '';
   };
 }
