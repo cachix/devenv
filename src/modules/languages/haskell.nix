@@ -15,14 +15,5 @@ in
       zlib
       hpack
     ];
-
-    enterShell = ''
-      echo stack --version
-      stack --version
-
-      cabal --version
-
-      hpack --version
-    '';
   };
 }

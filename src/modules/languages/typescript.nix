@@ -12,10 +12,5 @@ in
     packages = [
       pkgs.typescript
     ];
-
-    enterShell = ''
-      echo tsc --version
-      tsc --version
-    '';
   };
 }

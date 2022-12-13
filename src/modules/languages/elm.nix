@@ -15,15 +15,5 @@ in
       elmPackages.elm-language-server
       elm2nix
     ];
-
-    enterShell = ''
-      echo elm --version
-      elm --version
-
-      which elm-format
-
-      echo elm2nix --version
-      which elm2nix
-    '';
   };
 }

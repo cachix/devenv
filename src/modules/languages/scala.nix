@@ -18,14 +18,5 @@ in
     ];
 
     languages.java.enable = true;
-
-    enterShell = ''
-      scala --version
-      scala-cli --version
-      sbt --version
-      scalafmt --version
-      echo cs version
-      cs version
-    '';
   };
 }
