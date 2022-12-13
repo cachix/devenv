@@ -23,7 +23,6 @@ in
     };
     cliVersion = lib.mkOption {
       type = lib.types.str;
-      default = "0.3";
       internal = true;
     };
     latestVersion = lib.mkOption {

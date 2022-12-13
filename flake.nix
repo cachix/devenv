@@ -31,7 +31,10 @@
       mkDocOptions = pkgs:
         let
           eval = pkgs.lib.evalModules {
-            modules = [ ./src/modules/top-level.nix ];
+            modules = [
+              ./src/modules/top-level.nix
+              { devenv.warnOnNewVersion = false; }
+            ];
             specialArgs = { inherit pre-commit-hooks pkgs; };
           };
           options = pkgs.nixosOptionsDoc {
@@ -71,6 +74,7 @@
               };
               modules = [
                 (self.modules + /top-level.nix)
+                { devenv.warnOnNewVersion = false; }
               ] ++ modules;
             };
           in
