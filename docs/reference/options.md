@@ -3606,3 +3606,107 @@ If port 0 is specified Redis will not listen on a TCP socket.
 
 
 
+## services.wiremock.disableBanner
+Whether to disable print banner logo
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+
+
+## services.wiremock.enable
+Whether to enable wiremock.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.wiremock.mappings
+The mappings to mock.
+See the JSON examples on https://wiremock.org/docs/stubbing/ for more information.
+
+
+*_Type_*:
+JSON value
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+[{"request":{"method":"GET","url":"/body"},"response":{"body":"Literal text to put in the body","headers":{"Content-Type":"text/plain"},"status":200}},{"request":{"method":"GET","url":"/json"},"response":{"jsonBody":{"someField":"someValue"},"status":200}}]
+```
+
+
+## services.wiremock.package
+Which package of wiremock to use.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"derivation","name":"wiremock-2.35.0"}
+```
+
+
+
+
+## services.wiremock.port
+The port number for the HTTP server to listen on.
+
+
+*_Type_*:
+signed integer
+
+
+*_Default_*
+```
+8080
+```
+
+
+
+
+## services.wiremock.verbose
+Whether to log verbosely to stdout
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+
+
