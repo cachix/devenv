@@ -13,8 +13,5 @@ in
       cmake
       clang
     ];
-
-    enterShell = ''
-    '';
   };
 }

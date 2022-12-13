@@ -13,9 +13,5 @@ in
     packages = with pkgs; [
       gcc
     ];
-
-    enterShell = ''
-      gcc --version
-    '';
   };
 }

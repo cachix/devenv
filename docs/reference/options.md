@@ -1,341 +1,5 @@
 # devenv.nix options
 
-## blackfire.client-id
-Sets the client id used to authenticate with Blackfire
-You can find your personal client-id at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.client-token
-Sets the client token used to authenticate with Blackfire
-You can find your personal client-token at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.enable
-Whether to enable Blackfire profiler agent
-
-For PHP you need to install and configure the Blackfire PHP extension.
-
-<programlisting language="nix">
-languages.php.package = pkgs.php.buildEnv {
-  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
-  extraConfig = ''
-    memory_limit = 256M
-    blackfire.agent_socket = "tcp://127.0.0.1:8307";
-  '';
-};
-</programlisting>.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## blackfire.package
-Which package of blackfire to use
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.blackfire"
-```
-
-
-
-
-## blackfire.server-id
-Sets the server id used to authenticate with Blackfire
-You can find your personal server-id at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.server-token
-Sets the server token used to authenticate with Blackfire
-You can find your personal server-token at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.socket
-Sets the server socket path
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"tcp://127.0.0.1:8307"
-```
-
-
-
-
-## caddy.adapter
-Name of the config adapter to use.
-See https://caddyserver.com/docs/config-adapters for the full list.
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"caddyfile"
-```
-
-
-*_Example_*
-```
-"nginx"
-```
-
-
-## caddy.ca
-Certificate authority ACME server. The default (Let's Encrypt
-production server) should be fine for most people. Set it to null if
-you don't want to include any authority (or if you want to write a more
-fine-graned configuration manually)
-
-
-*_Type_*:
-null or string
-
-
-*_Default_*
-```
-"https://acme-v02.api.letsencrypt.org/directory"
-```
-
-
-*_Example_*
-```
-"https://acme-staging-v02.api.letsencrypt.org/directory"
-```
-
-
-## caddy.config
-Verbatim Caddyfile to use.
-Caddy v2 supports multiple config formats via adapters (see <option>services.caddy.adapter</option>).
-
-
-*_Type_*:
-strings concatenated with "\n"
-
-
-*_Default_*
-```
-""
-```
-
-
-*_Example_*
-```
-"example.com {\n  encode gzip\n  log\n  root /srv/http\n}\n"
-```
-
-
-## caddy.dataDir
-The data directory, for storing certificates. Before 17.09, this
-would create a .caddy directory. With 17.09 the contents of the
-.caddy directory are in the specified data directory instead.
-Caddy v2 replaced CADDYPATH with XDG directories.
-See https://caddyserver.com/docs/conventions#file-locations.
-
-
-*_Type_*:
-path
-
-
-*_Default_*
-```
-"/.devenv/state/caddy"
-```
-
-
-
-
-## caddy.email
-Email address (for Let's Encrypt certificate)
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## caddy.enable
-Whether to enable Caddy web server.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## caddy.package
-Caddy package to use.
-
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-{"_type":"literalExpression","text":"pkgs.caddy"}
-```
-
-
-
-
-## caddy.resume
-Use saved config, if any (and prefer over configuration passed with <option>caddy.config</option>).
-
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-
-
-## caddy.virtualHosts
-Declarative vhost config
-
-*_Type_*:
-attribute set of (submodule)
-
-
-*_Default_*
-```
-{}
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"{\n  \"hydra.example.com\" = {\n    serverAliases = [ \"www.hydra.example.com\" ];\n    extraConfig = ''''\n      encode gzip\n      log\n      root /srv/http\n    '''';\n  };\n};\n"}
-```
-
-
-## caddy.virtualHosts.&lt;name&gt;.extraConfig
-These lines go into the vhost verbatim
-
-
-*_Type_*:
-strings concatenated with "\n"
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## caddy.virtualHosts.&lt;name&gt;.serverAliases
-Additional names of virtual hosts served by this virtual host configuration.
-
-
-*_Type_*:
-list of string
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-["www.example.org","example.org"]
-```
-
-
 ## devcontainer.enable
 Whether to enable Generate .devcontainer.json for devenv integration..
 
@@ -382,198 +46,6 @@ boolean
 *_Default_*
 ```
 true
-```
-
-
-
-
-## elasticsearch.cluster_name
-Elasticsearch name that identifies your cluster for auto-discovery.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"elasticsearch"
-```
-
-
-
-
-## elasticsearch.enable
-Whether to enable elasticsearch.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-
-
-## elasticsearch.extraCmdLineOptions
-Extra command line options for the elasticsearch launcher.
-
-*_Type_*:
-list of string
-
-
-*_Default_*
-```
-[]
-```
-
-
-
-
-## elasticsearch.extraConf
-Extra configuration for elasticsearch.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-*_Example_*
-```
-"node.name: \"elasticsearch\"\nnode.master: true\nnode.data: false\n"
-```
-
-
-## elasticsearch.extraJavaOptions
-Extra command line options for Java.
-
-*_Type_*:
-list of string
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-["-Djava.net.preferIPv4Stack=true"]
-```
-
-
-## elasticsearch.listenAddress
-Elasticsearch listen address.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"127.0.0.1"
-```
-
-
-
-
-## elasticsearch.logging
-Elasticsearch logging configuration.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"logger.action.name = org.elasticsearch.action\nlogger.action.level = info\nappender.console.type = Console\nappender.console.name = console\nappender.console.layout.type = PatternLayout\nappender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n\nrootLogger.level = info\nrootLogger.appenderRef.console.ref = console\n"
-```
-
-
-
-
-## elasticsearch.package
-Elasticsearch package to use.
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-{"_type":"literalExpression","text":"pkgs.elasticsearch7"}
-```
-
-
-
-
-## elasticsearch.plugins
-Extra elasticsearch plugins
-
-*_Type_*:
-list of package
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"[ pkgs.elasticsearchPlugins.discovery-ec2 ]"}
-```
-
-
-## elasticsearch.port
-Elasticsearch port to listen for HTTP traffic.
-
-*_Type_*:
-signed integer
-
-
-*_Default_*
-```
-9200
-```
-
-
-
-
-## elasticsearch.single_node
-Start a single-node cluster
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-true
-```
-
-
-
-
-## elasticsearch.tcp_port
-Elasticsearch port for the node to node communication.
-
-*_Type_*:
-signed integer
-
-
-*_Default_*
-```
-9300
 ```
 
 
@@ -1695,256 +1167,6 @@ package
 
 
 
-## memcached.bind
-The IP interface to bind to.
-<literal>null</literal> means "all interfaces".
-
-
-*_Type_*:
-null or string
-
-
-*_Default_*
-```
-"127.0.0.1"
-```
-
-
-*_Example_*
-```
-"127.0.0.1"
-```
-
-
-## memcached.enable
-Whether to enable Add memcached process..
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## memcached.package
-Which package of memcached to use
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.memcached"
-```
-
-
-
-
-## memcached.port
-The TCP port to accept connections.
-If port 0 is specified Redis will not listen on a TCP socket.
-
-
-*_Type_*:
-16 bit unsigned integer; between 0 and 65535 (both inclusive)
-
-
-*_Default_*
-```
-11211
-```
-
-
-
-
-## memcached.startArgs
-Additional arguments passed to `memcached` during startup.
-
-
-*_Type_*:
-list of strings concatenated with "\n"
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-["--memory-limit=100M"]
-```
-
-
-## mongodb.additionalArgs
-Additional arguments passed to `mongod`.
-
-
-*_Type_*:
-list of strings concatenated with "\n"
-
-
-*_Default_*
-```
-["--noauth"]
-```
-
-
-*_Example_*
-```
-["--port","27017","--noauth"]
-```
-
-
-## mongodb.enable
-Whether to enable Add MongoDB process and expose utilities..
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## mongodb.package
-Which MongoDB package to use.
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.mongodb"
-```
-
-
-
-
-## mysql.enable
-Whether to enable Add mysql process and expose utilities..
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## mysql.initialDatabases
-List of database names and their initial schemas that should be used to create databases on the first startup
-of MySQL. The schema attribute is optional: If not specified, an empty database is created.
-
-
-*_Type_*:
-list of (submodule)
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-[{"name":"foodatabase","schema":{"_type":"literalExpression","text":"./foodatabase.sql"}},{"name":"bardatabase"}]
-```
-
-
-## mysql.initialDatabases.*.name
-The name of the database to create.
-
-
-*_Type_*:
-string
-
-
-
-
-
-
-## mysql.initialDatabases.*.schema
-The initial schema of the database; if null (the default),
-an empty database is created.
-
-
-*_Type_*:
-null or path
-
-
-*_Default_*
-```
-null
-```
-
-
-
-
-## mysql.package
-Which package of mysql to use
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.mysql80"
-```
-
-
-
-
-## mysql.settings
-MySQL configuration
-
-
-*_Type_*:
-attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
-
-
-*_Default_*
-```
-{}
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"{\n  mysqld = {\n    key_buffer_size = \"6G\";\n    table_cache = 1600;\n    log-error = \"/var/log/mysql_err.log\";\n    plugin-load-add = [ \"server_audit\" \"ed25519=auth_ed25519\" ];\n  };\n  mysqldump = {\n    quick = true;\n    max_allowed_packet = \"16M\";\n  };\n}\n"}
-```
-
-
 ## packages
 A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
 
@@ -1958,143 +1180,6 @@ list of package
 ```
 
 
-
-
-## postgres.createDatabase
-Create a database named like current user on startup.
-
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-true
-```
-
-
-
-
-## postgres.enable
-Whether to enable Add postgreSQL process and psql-devenv script.
-.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## postgres.initdbArgs
-Additional arguments passed to `initdb` during data dir
-initialisation.
-
-
-*_Type_*:
-list of strings concatenated with "\n"
-
-
-*_Default_*
-```
-["--locale=C","--encoding=UTF8"]
-```
-
-
-*_Example_*
-```
-["--data-checksums","--allow-group-access"]
-```
-
-
-## postgres.listen_addresses
-Listen address
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-*_Example_*
-```
-"127.0.0.1"
-```
-
-
-## postgres.package
-Which version of postgres to use
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.postgresql"
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list\npkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);\n"}
-```
-
-
-## postgres.port
-The TCP port to accept connections.
-
-
-*_Type_*:
-16 bit unsigned integer; between 0 and 65535 (both inclusive)
-
-
-*_Default_*
-```
-5432
-```
-
-
-
-
-## postgres.settings
-PostgreSQL configuration. Refer to
-<link xlink:href="https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE"></link>
-for an overview of <literal>postgresql.conf</literal>.
-::: {.note}
-String values will automatically be enclosed in single quotes. Single quotes will be
-escaped with two single quotes as described by the upstream documentation linked above.
-:::
-
-
-*_Type_*:
-attribute set of (boolean or floating point number or signed integer or string)
-
-
-*_Default_*
-```
-{}
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"{\n  log_connections = true;\n  log_statement = \"all\";\n  logging_collector = true\n  log_disconnections = true\n  log_destination = lib.mkForce \"syslog\";\n}\n"}
-```
 
 
 ## pre-commit
@@ -3173,7 +2258,1078 @@ attribute set
 ```
 
 
-## rabbitmq.configItems
+## scripts
+A set of scripts available when the environment is active.
+
+*_Type_*:
+attribute set of (submodule)
+
+
+*_Default_*
+```
+{}
+```
+
+
+
+
+## scripts.&lt;name&gt;.exec
+Bash code to execute when the script is ran.
+
+*_Type_*:
+string
+
+
+
+
+
+
+## services.adminer.enable
+Whether to enable Add adminer process..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.adminer.listen
+Listen address for adminer.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"127.0.0.1:8080"
+```
+
+
+
+
+## services.adminer.package
+Which package of adminer to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.adminer"
+```
+
+
+
+
+## services.blackfire.client-id
+Sets the client id used to authenticate with Blackfire
+You can find your personal client-id at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## services.blackfire.client-token
+Sets the client token used to authenticate with Blackfire
+You can find your personal client-token at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## services.blackfire.enable
+Whether to enable Blackfire profiler agent
+
+For PHP you need to install and configure the Blackfire PHP extension.
+
+<programlisting language="nix">
+languages.php.package = pkgs.php.buildEnv {
+  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
+  extraConfig = ''
+    memory_limit = 256M
+    blackfire.agent_socket = "tcp://127.0.0.1:8307";
+  '';
+};
+</programlisting>.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.blackfire.package
+Which package of blackfire to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.blackfire"
+```
+
+
+
+
+## services.blackfire.server-id
+Sets the server id used to authenticate with Blackfire
+You can find your personal server-id at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## services.blackfire.server-token
+Sets the server token used to authenticate with Blackfire
+You can find your personal server-token at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## services.blackfire.socket
+Sets the server socket path
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"tcp://127.0.0.1:8307"
+```
+
+
+
+
+## services.caddy.adapter
+Name of the config adapter to use.
+See https://caddyserver.com/docs/config-adapters for the full list.
+
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"caddyfile"
+```
+
+
+*_Example_*
+```
+"nginx"
+```
+
+
+## services.caddy.ca
+Certificate authority ACME server. The default (Let's Encrypt
+production server) should be fine for most people. Set it to null if
+you don't want to include any authority (or if you want to write a more
+fine-graned configuration manually)
+
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+"https://acme-v02.api.letsencrypt.org/directory"
+```
+
+
+*_Example_*
+```
+"https://acme-staging-v02.api.letsencrypt.org/directory"
+```
+
+
+## services.caddy.config
+Verbatim Caddyfile to use.
+Caddy v2 supports multiple config formats via adapters (see <option>services.caddy.adapter</option>).
+
+
+*_Type_*:
+strings concatenated with "\n"
+
+
+*_Default_*
+```
+""
+```
+
+
+*_Example_*
+```
+"example.com {\n  encode gzip\n  log\n  root /srv/http\n}\n"
+```
+
+
+## services.caddy.dataDir
+The data directory, for storing certificates. Before 17.09, this
+would create a .caddy directory. With 17.09 the contents of the
+.caddy directory are in the specified data directory instead.
+Caddy v2 replaced CADDYPATH with XDG directories.
+See https://caddyserver.com/docs/conventions#file-locations.
+
+
+*_Type_*:
+path
+
+
+*_Default_*
+```
+"/.devenv/state/caddy"
+```
+
+
+
+
+## services.caddy.email
+Email address (for Let's Encrypt certificate)
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## services.caddy.enable
+Whether to enable Caddy web server.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.caddy.package
+Caddy package to use.
+
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.caddy"}
+```
+
+
+
+
+## services.caddy.resume
+Use saved config, if any (and prefer over configuration passed with <option>caddy.config</option>).
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+
+
+## services.caddy.virtualHosts
+Declarative vhost config
+
+*_Type_*:
+attribute set of (submodule)
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  \"hydra.example.com\" = {\n    serverAliases = [ \"www.hydra.example.com\" ];\n    extraConfig = ''''\n      encode gzip\n      log\n      root /srv/http\n    '''';\n  };\n};\n"}
+```
+
+
+## services.caddy.virtualHosts.&lt;name&gt;.extraConfig
+These lines go into the vhost verbatim
+
+
+*_Type_*:
+strings concatenated with "\n"
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## services.caddy.virtualHosts.&lt;name&gt;.serverAliases
+Additional names of virtual hosts served by this virtual host configuration.
+
+
+*_Type_*:
+list of string
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+["www.example.org","example.org"]
+```
+
+
+## services.elasticsearch.cluster_name
+Elasticsearch name that identifies your cluster for auto-discovery.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"elasticsearch"
+```
+
+
+
+
+## services.elasticsearch.enable
+Whether to enable elasticsearch.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+
+
+## services.elasticsearch.extraCmdLineOptions
+Extra command line options for the elasticsearch launcher.
+
+*_Type_*:
+list of string
+
+
+*_Default_*
+```
+[]
+```
+
+
+
+
+## services.elasticsearch.extraConf
+Extra configuration for elasticsearch.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+*_Example_*
+```
+"node.name: \"elasticsearch\"\nnode.master: true\nnode.data: false\n"
+```
+
+
+## services.elasticsearch.extraJavaOptions
+Extra command line options for Java.
+
+*_Type_*:
+list of string
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+["-Djava.net.preferIPv4Stack=true"]
+```
+
+
+## services.elasticsearch.listenAddress
+Elasticsearch listen address.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"127.0.0.1"
+```
+
+
+
+
+## services.elasticsearch.logging
+Elasticsearch logging configuration.
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+"logger.action.name = org.elasticsearch.action\nlogger.action.level = info\nappender.console.type = Console\nappender.console.name = console\nappender.console.layout.type = PatternLayout\nappender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n\nrootLogger.level = info\nrootLogger.appenderRef.console.ref = console\n"
+```
+
+
+
+
+## services.elasticsearch.package
+Elasticsearch package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+{"_type":"literalExpression","text":"pkgs.elasticsearch7"}
+```
+
+
+
+
+## services.elasticsearch.plugins
+Extra elasticsearch plugins
+
+*_Type_*:
+list of package
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"[ pkgs.elasticsearchPlugins.discovery-ec2 ]"}
+```
+
+
+## services.elasticsearch.port
+Elasticsearch port to listen for HTTP traffic.
+
+*_Type_*:
+signed integer
+
+
+*_Default_*
+```
+9200
+```
+
+
+
+
+## services.elasticsearch.single_node
+Start a single-node cluster
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
+## services.elasticsearch.tcp_port
+Elasticsearch port for the node to node communication.
+
+*_Type_*:
+signed integer
+
+
+*_Default_*
+```
+9300
+```
+
+
+
+
+## services.memcached.bind
+The IP interface to bind to.
+<literal>null</literal> means "all interfaces".
+
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+"127.0.0.1"
+```
+
+
+*_Example_*
+```
+"127.0.0.1"
+```
+
+
+## services.memcached.enable
+Whether to enable Add memcached process..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.memcached.package
+Which package of memcached to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.memcached"
+```
+
+
+
+
+## services.memcached.port
+The TCP port to accept connections.
+If port 0 is specified Redis will not listen on a TCP socket.
+
+
+*_Type_*:
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+*_Default_*
+```
+11211
+```
+
+
+
+
+## services.memcached.startArgs
+Additional arguments passed to `memcached` during startup.
+
+
+*_Type_*:
+list of strings concatenated with "\n"
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+["--memory-limit=100M"]
+```
+
+
+## services.mongodb.additionalArgs
+Additional arguments passed to `mongod`.
+
+
+*_Type_*:
+list of strings concatenated with "\n"
+
+
+*_Default_*
+```
+["--noauth"]
+```
+
+
+*_Example_*
+```
+["--port","27017","--noauth"]
+```
+
+
+## services.mongodb.enable
+Whether to enable Add MongoDB process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.mongodb.package
+Which MongoDB package to use.
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.mongodb"
+```
+
+
+
+
+## services.mysql.enable
+Whether to enable Add mysql process and expose utilities..
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.mysql.ensureUsers
+Ensures that the specified users exist and have at least the ensured permissions.
+The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
+same name only, and that without the need for a password.
+This option will never delete existing users or remove permissions, especially not when the value of this
+option is changed. This means that users created and permissions assigned once through this option or
+otherwise have to be removed manually.
+
+
+*_Type_*:
+list of (submodule)
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"[\n  {\n    name = \"devenv\";\n    ensurePermissions = {\n      \"devenv.*\" = \"ALL PRIVILEGES\";\n    };\n  }\n]\n"}
+```
+
+
+## services.mysql.ensureUsers.*.ensurePermissions
+Permissions to ensure for the user, specified as attribute set.
+The attribute names specify the database and tables to grant the permissions for,
+separated by a dot. You may use wildcards here.
+The attribute values specfiy the permissions to grant.
+You may specify one or multiple comma-separated SQL privileges here.
+For more information on how to specify the target
+and on which privileges exist, see the
+<link xlink:href="https://mariadb.com/kb/en/library/grant/">GRANT syntax</link>.
+The attributes are used as <literal>GRANT ${attrName} ON ${attrValue}</literal>.
+
+
+*_Type_*:
+attribute set of string
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  \"database.*\" = \"ALL PRIVILEGES\";\n  \"*.*\" = \"SELECT, LOCK TABLES\";\n}\n"}
+```
+
+
+## services.mysql.ensureUsers.*.name
+Name of the user to ensure.
+
+
+*_Type_*:
+string
+
+
+
+
+
+
+## services.mysql.ensureUsers.*.password
+Password of the user to ensure.
+
+
+*_Type_*:
+null or string
+
+
+*_Default_*
+```
+null
+```
+
+
+
+
+## services.mysql.initialDatabases
+List of database names and their initial schemas that should be used to create databases on the first startup
+of MySQL. The schema attribute is optional: If not specified, an empty database is created.
+
+
+*_Type_*:
+list of (submodule)
+
+
+*_Default_*
+```
+[]
+```
+
+
+*_Example_*
+```
+[{"name":"foodatabase","schema":{"_type":"literalExpression","text":"./foodatabase.sql"}},{"name":"bardatabase"}]
+```
+
+
+## services.mysql.initialDatabases.*.name
+The name of the database to create.
+
+
+*_Type_*:
+string
+
+
+
+
+
+
+## services.mysql.initialDatabases.*.schema
+The initial schema of the database; if null (the default),
+an empty database is created.
+
+
+*_Type_*:
+null or path
+
+
+*_Default_*
+```
+null
+```
+
+
+
+
+## services.mysql.package
+Which package of mysql to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.mysql80"
+```
+
+
+
+
+## services.mysql.settings
+MySQL configuration
+
+
+*_Type_*:
+attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  mysqld = {\n    key_buffer_size = \"6G\";\n    table_cache = 1600;\n    log-error = \"/var/log/mysql_err.log\";\n    plugin-load-add = [ \"server_audit\" \"ed25519=auth_ed25519\" ];\n  };\n  mysqldump = {\n    quick = true;\n    max_allowed_packet = \"16M\";\n  };\n}\n"}
+```
+
+
+## services.postgres.createDatabase
+Create a database named like current user on startup.
+
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
+## services.postgres.enable
+Whether to enable Add postgreSQL process and psql-devenv script.
+.
+
+*_Type_*:
+boolean
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.postgres.initdbArgs
+Additional arguments passed to `initdb` during data dir
+initialisation.
+
+
+*_Type_*:
+list of strings concatenated with "\n"
+
+
+*_Default_*
+```
+["--locale=C","--encoding=UTF8"]
+```
+
+
+*_Example_*
+```
+["--data-checksums","--allow-group-access"]
+```
+
+
+## services.postgres.listen_addresses
+Listen address
+
+*_Type_*:
+string
+
+
+*_Default_*
+```
+""
+```
+
+
+*_Example_*
+```
+"127.0.0.1"
+```
+
+
+## services.postgres.package
+Which version of postgres to use
+
+*_Type_*:
+package
+
+
+*_Default_*
+```
+"pkgs.postgresql"
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list\npkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);\n"}
+```
+
+
+## services.postgres.port
+The TCP port to accept connections.
+
+
+*_Type_*:
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+*_Default_*
+```
+5432
+```
+
+
+
+
+## services.postgres.settings
+PostgreSQL configuration. Refer to
+<link xlink:href="https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE"></link>
+for an overview of <literal>postgresql.conf</literal>.
+::: {.note}
+String values will automatically be enclosed in single quotes. Single quotes will be
+escaped with two single quotes as described by the upstream documentation linked above.
+:::
+
+
+*_Type_*:
+attribute set of (boolean or floating point number or signed integer or string)
+
+
+*_Default_*
+```
+{}
+```
+
+
+*_Example_*
+```
+{"_type":"literalExpression","text":"{\n  log_connections = true;\n  log_statement = \"all\";\n  logging_collector = true\n  log_disconnections = true\n  log_destination = lib.mkForce \"syslog\";\n}\n"}
+```
+
+
+## services.rabbitmq.configItems
 Configuration options in RabbitMQ's new config file format,
 which is a simple key-value format that can not express nested
 data structures. This is known as the <literal>rabbitmq.conf</literal> file,
@@ -3203,7 +3359,7 @@ attribute set of string
 ```
 
 
-## rabbitmq.cookie
+## services.rabbitmq.cookie
 Erlang cookie is a string of arbitrary length which must
 be the same for several nodes to be allowed to communicate.
 Leave empty to generate automatically.
@@ -3221,7 +3377,7 @@ string
 
 
 
-## rabbitmq.enable
+## services.rabbitmq.enable
 Whether to enable the RabbitMQ server, an Advanced Message
 Queuing Protocol (AMQP) broker.
 
@@ -3238,7 +3394,7 @@ false
 
 
 
-## rabbitmq.listenAddress
+## services.rabbitmq.listenAddress
 IP address on which RabbitMQ will listen for AMQP
 connections.  Set to the empty string to listen on all
 interfaces.  Note that RabbitMQ creates a user named
@@ -3266,7 +3422,7 @@ string
 ```
 
 
-## rabbitmq.managementPlugin.enable
+## services.rabbitmq.managementPlugin.enable
 Whether to enable the management plugin.
 
 *_Type_*:
@@ -3285,7 +3441,7 @@ true
 ```
 
 
-## rabbitmq.managementPlugin.port
+## services.rabbitmq.managementPlugin.port
 On which port to run the management plugin
 
 
@@ -3301,7 +3457,7 @@ On which port to run the management plugin
 
 
 
-## rabbitmq.package
+## services.rabbitmq.package
 Which rabbitmq package to use.
 
 
@@ -3317,7 +3473,7 @@ package
 
 
 
-## rabbitmq.pluginDirs
+## services.rabbitmq.pluginDirs
 The list of directories containing external plugins
 
 *_Type_*:
@@ -3332,7 +3488,7 @@ list of path
 
 
 
-## rabbitmq.plugins
+## services.rabbitmq.plugins
 The names of plugins to enable
 
 *_Type_*:
@@ -3347,7 +3503,7 @@ list of string
 
 
 
-## rabbitmq.port
+## services.rabbitmq.port
 Port on which RabbitMQ will listen for AMQP connections.
 
 
@@ -3363,7 +3519,7 @@ Port on which RabbitMQ will listen for AMQP connections.
 
 
 
-## redis.bind
+## services.redis.bind
 The IP interface to bind to.
 <literal>null</literal> means "all interfaces".
 
@@ -3384,7 +3540,7 @@ null or string
 ```
 
 
-## redis.enable
+## services.redis.enable
 Whether to enable Add redis process and expose utilities..
 
 *_Type_*:
@@ -3403,7 +3559,7 @@ true
 ```
 
 
-## redis.extraConfig
+## services.redis.extraConfig
 Additional text to be appended to <filename>redis.conf</filename>.
 
 *_Type_*:
@@ -3418,7 +3574,7 @@ strings concatenated with "\n"
 
 
 
-## redis.package
+## services.redis.package
 Which package of redis to use
 
 *_Type_*:
@@ -3433,7 +3589,7 @@ package
 
 
 
-## redis.port
+## services.redis.port
 The TCP port to accept connections.
 If port 0 is specified Redis will not listen on a TCP socket.
 
@@ -3446,32 +3602,6 @@ If port 0 is specified Redis will not listen on a TCP socket.
 ```
 6379
 ```
-
-
-
-
-## scripts
-A set of scripts available when the environment is active.
-
-*_Type_*:
-attribute set of (submodule)
-
-
-*_Default_*
-```
-{}
-```
-
-
-
-
-## scripts.&lt;name&gt;.exec
-Bash code to execute when the script is ran.
-
-*_Type_*:
-string
-
-
 
 
 

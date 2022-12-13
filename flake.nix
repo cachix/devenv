@@ -54,5 +54,28 @@
       modules = ./src/modules;
 
       defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
+
+      templates.simple = {
+        path = ./templates/simple;
+        description = "A direnv supported Nix flake with devenv integration.";
+      };
+
+      lib = {
+        mkConfig = { pkgs, inputs, modules }:
+          let
+            moduleInputs = { inherit pre-commit-hooks; } // inputs;
+            project = inputs.nixpkgs.lib.evalModules {
+              specialArgs = moduleInputs // {
+                inherit pkgs;
+                inputs = moduleInputs;
+              };
+              modules = [
+                (self.modules + /top-level.nix)
+              ] ++ modules;
+            };
+          in
+          project.config;
+        mkShell = args: (self.lib.mkConfig args).shell;
+      };
     };
 }

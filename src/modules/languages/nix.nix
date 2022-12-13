@@ -16,13 +16,5 @@ in
       deadnix
       nil
     ];
-
-    enterShell = ''
-      deadnix --version
-      cachix --version
-      statix --version
-      vulnix --version
-      nil --version
-    '';
   };
 }

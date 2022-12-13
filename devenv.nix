@@ -37,6 +37,16 @@
       devenv init
     popd
 
+    # Test devenv integrated into Nix flake
+    tmp="$(mktemp -d)"
+    pushd "$tmp"
+      nix flake init --template ''${DEVENV_ROOT}#simple
+      nix flake update \
+        --override-input devenv ''${DEVENV_ROOT}
+      nix develop --command echo nix-develop started succesfully
+    popd
+    rm -rf "$tmp"
+
     # TODO: test direnv integration
     # TODO: test DIRENV_ACTIVE
   '';
