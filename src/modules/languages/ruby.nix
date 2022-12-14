@@ -23,10 +23,11 @@ in
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
 
-    enterShell = ''
-      ruby --version
+    env.GEM_HOME = "${config.env.BUNDLE_PATH}/${cfg.package.rubyEngine}/${cfg.package.version.libDir}";
 
-      bundler --version
+    enterShell = ''
+      export GEM_PATH="$GEM_HOME/gems:$GEM_PATH"
+      export PATH="$GEM_HOME/bin:$PATH"
     '';
   };
 }

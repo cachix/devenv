@@ -2,6 +2,9 @@
 let
   types = lib.types;
   mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
+  # Returns a list of all the entries in a folder
+  listEntries = path:
+    map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 in
 {
   options = {
@@ -35,21 +38,16 @@ in
   };
 
   imports = [
-    ./blackfire.nix
-    ./caddy.nix
-    ./postgres.nix
-    ./redis.nix
-    ./mysql.nix
-    ./mongodb.nix
-    ./rabbitmq.nix
-    ./pre-commit.nix
-    ./info.nix
     ./devcontainer.nix
-    ./elasticsearch.nix
-    ./scripts.nix
+    ./info.nix
+    ./pre-commit.nix
     ./processes.nix
+    ./scripts.nix
     ./update-check.nix
-  ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
+  ]
+  ++ (listEntries ./languages)
+  ++ (listEntries ./services)
+  ;
 
   config = {
 

@@ -1,357 +1,23 @@
 # devenv.nix options
 
-## blackfire.client-id
-Sets the client id used to authenticate with Blackfire
-You can find your personal client-id at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.client-token
-Sets the client token used to authenticate with Blackfire
-You can find your personal client-token at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.enable
-Whether to enable Blackfire profiler agent
-
-For PHP you need to install and configure the Blackfire PHP extension.
-
-<programlisting language="nix">
-languages.php.package = pkgs.php.buildEnv {
-  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
-  extraConfig = ''
-    memory_limit = 256M
-    blackfire.agent_socket = "tcp://127.0.0.1:8307";
-  '';
-};
-</programlisting>.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## blackfire.package
-Which package of blackfire to use
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.blackfire"
-```
-
-
-
-
-## blackfire.server-id
-Sets the server id used to authenticate with Blackfire
-You can find your personal server-id at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.server-token
-Sets the server token used to authenticate with Blackfire
-You can find your personal server-token at https://blackfire.io/my/settings/credentials
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## blackfire.socket
-Sets the server socket path
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"tcp://127.0.0.1:8307"
-```
-
-
-
-
-## caddy.adapter
-Name of the config adapter to use.
-See https://caddyserver.com/docs/config-adapters for the full list.
-
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"caddyfile"
-```
-
-
-*_Example_*
-```
-"nginx"
-```
-
-
-## caddy.ca
-Certificate authority ACME server. The default (Let's Encrypt
-production server) should be fine for most people. Set it to null if
-you don't want to include any authority (or if you want to write a more
-fine-graned configuration manually)
-
-
-*_Type_*:
-null or string
-
-
-*_Default_*
-```
-"https://acme-v02.api.letsencrypt.org/directory"
-```
-
-
-*_Example_*
-```
-"https://acme-staging-v02.api.letsencrypt.org/directory"
-```
-
-
-## caddy.config
-Verbatim Caddyfile to use.
-Caddy v2 supports multiple config formats via adapters (see <option>services.caddy.adapter</option>).
-
-
-*_Type_*:
-strings concatenated with "\n"
-
-
-*_Default_*
-```
-""
-```
-
-
-*_Example_*
-```
-"example.com {\n  encode gzip\n  log\n  root /srv/http\n}\n"
-```
-
-
-## caddy.dataDir
-The data directory, for storing certificates. Before 17.09, this
-would create a .caddy directory. With 17.09 the contents of the
-.caddy directory are in the specified data directory instead.
-Caddy v2 replaced CADDYPATH with XDG directories.
-See https://caddyserver.com/docs/conventions#file-locations.
-
-
-*_Type_*:
-path
-
-
-*_Default_*
-```
-"/.devenv/state/caddy"
-```
-
-
-
-
-## caddy.email
-Email address (for Let's Encrypt certificate)
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## caddy.enable
-Whether to enable Caddy web server.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## caddy.package
-Caddy package to use.
-
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-{"_type":"literalExpression","text":"pkgs.caddy"}
-```
-
-
-
-
-## caddy.resume
-Use saved config, if any (and prefer over configuration passed with <option>caddy.config</option>).
-
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-
-
-## caddy.virtualHosts
-Declarative vhost config
-
-*_Type_*:
-attribute set of (submodule)
-
-
-*_Default_*
-```
-{}
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"{\n  \"hydra.example.com\" = {\n    serverAliases = [ \"www.hydra.example.com\" ];\n    extraConfig = ''''\n      encode gzip\n      log\n      root /srv/http\n    '''';\n  };\n};\n"}
-```
-
-
-## caddy.virtualHosts.&lt;name&gt;.extraConfig
-These lines go into the vhost verbatim
-
-
-*_Type_*:
-strings concatenated with "\n"
-
-
-*_Default_*
-```
-""
-```
-
-
-
-
-## caddy.virtualHosts.&lt;name&gt;.serverAliases
-Additional names of virtual hosts served by this virtual host configuration.
-
-
-*_Type_*:
-list of string
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-["www.example.org","example.org"]
-```
-
-
 ## devcontainer.enable
 Whether to enable Generate .devcontainer.json for devenv integration..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
@@ -359,13 +25,15 @@ true
 The latest version of devenv.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-"0.4"
+"\"0.4\""
 ```
 
 
@@ -375,205 +43,15 @@ string
 Whether to warn when a new version of devenv is available.
 
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-true
-```
-
-
-
-
-## elasticsearch.cluster_name
-Elasticsearch name that identifies your cluster for auto-discovery.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"elasticsearch"
-```
-
-
-
-
-## elasticsearch.enable
-Whether to enable elasticsearch.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-
-
-## elasticsearch.extraCmdLineOptions
-Extra command line options for the elasticsearch launcher.
-
-*_Type_*:
-list of string
-
-
-*_Default_*
-```
-[]
-```
-
-
-
-
-## elasticsearch.extraConf
-Extra configuration for elasticsearch.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-*_Example_*
-```
-"node.name: \"elasticsearch\"\nnode.master: true\nnode.data: false\n"
-```
-
-
-## elasticsearch.extraJavaOptions
-Extra command line options for Java.
-
-*_Type_*:
-list of string
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-["-Djava.net.preferIPv4Stack=true"]
-```
-
-
-## elasticsearch.listenAddress
-Elasticsearch listen address.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"127.0.0.1"
-```
-
-
-
-
-## elasticsearch.logging
-Elasticsearch logging configuration.
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-"logger.action.name = org.elasticsearch.action\nlogger.action.level = info\nappender.console.type = Console\nappender.console.name = console\nappender.console.layout.type = PatternLayout\nappender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n\nrootLogger.level = info\nrootLogger.appenderRef.console.ref = console\n"
-```
-
-
-
-
-## elasticsearch.package
-Elasticsearch package to use.
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-{"_type":"literalExpression","text":"pkgs.elasticsearch7"}
-```
-
-
-
-
-## elasticsearch.plugins
-Extra elasticsearch plugins
-
-*_Type_*:
-list of package
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"[ pkgs.elasticsearchPlugins.discovery-ec2 ]"}
-```
-
-
-## elasticsearch.port
-Elasticsearch port to listen for HTTP traffic.
-
-*_Type_*:
-signed integer
-
-
-*_Default_*
-```
-9200
-```
-
-
-
-
-## elasticsearch.single_node
-Start a single-node cluster
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-true
-```
-
-
-
-
-## elasticsearch.tcp_port
-Elasticsearch port for the node to node communication.
-
-*_Type_*:
-signed integer
-
-
-*_Default_*
-```
-9300
+"true"
 ```
 
 
@@ -582,13 +60,15 @@ signed integer
 ## enterShell
 Bash code to execute when entering the shell.
 
-*_Type_*:
+*_Type_*
+```
 strings concatenated with "\n"
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
@@ -597,13 +77,15 @@ strings concatenated with "\n"
 ## env
 Environment variables to be exposed inside the developer environment.
 
-*_Type_*:
+*_Type_*
+```
 attribute set
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
@@ -612,89 +94,99 @@ attribute set
 ## languages.c.enable
 Whether to enable Enable tools for C development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.clojure.enable
 Whether to enable Enable tools for Clojure development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.cplusplus.enable
 Whether to enable Enable tools for C++ development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.cue.enable
 Whether to enable Enable tools for Cue development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.cue.package
 The CUE package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.cue"
+"\"pkgs.cue\""
 ```
 
 
@@ -703,51 +195,57 @@ package
 ## languages.dotnet.enable
 Whether to enable Enable tools for .NET development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.elixir.enable
 Whether to enable Enable tools for Elixir development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.elixir.package
 Which package of Elixir to use
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.elixir"
+"\"pkgs.elixir\""
 ```
 
 
@@ -756,51 +254,57 @@ package
 ## languages.elm.enable
 Whether to enable Enable tools for Elm development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.erlang.enable
 Whether to enable Enable tools for Erlang development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.erlang.package
 Which package of Erlang to use
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.erlang"
+"\"pkgs.erlang\""
 ```
 
 
@@ -809,76 +313,84 @@ package
 ## languages.go.enable
 Whether to enable Enable tools for Go development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.haskell.enable
 Whether to enable Enable tools for Haskell development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.java.enable
 Whether to enable tools for Java development.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.java.gradle.enable
 Whether to enable gradle.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
@@ -887,14 +399,12 @@ The gradle package to use.
 The gradle package by default inherits the JDK from `languages.java.jdk.package`.
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
-*_Default_*
-```
-{"_type":"literalExpression","text":"pkgs.gradle.override { jdk = cfg.jdk.package; }"}
-```
 
 
 
@@ -904,38 +414,42 @@ The JDK package to use.
 This will also become available as <literal>JAVA_HOME</literal>.
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"pkgs.jdk"}
+"pkgs.jdk"
 ```
 
 
 *_Example_*
 ```
-{"_type":"derivation","name":"openjdk-8u322-ga"}
+"<derivation openjdk-8u322-ga>"
 ```
 
 
 ## languages.java.maven.enable
 Whether to enable maven.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
@@ -944,14 +458,12 @@ The maven package to use.
 The maven package by default inherits the JDK from <literal>languages.java.jdk.package</literal>.
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
-*_Default_*
-```
-"pkgs.maven.override { jdk = cfg.jdk.package; }"
-```
 
 
 
@@ -959,32 +471,36 @@ package
 ## languages.javascript.enable
 Whether to enable Enable tools for JavaScript development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.javascript.package
 The Node package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.nodejs"
+"\"pkgs.nodejs\""
 ```
 
 
@@ -993,51 +509,57 @@ package
 ## languages.kotlin.enable
 Whether to enable Enable tools for Kotlin development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.lua.enable
 Whether to enable Enable tools for Lua development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.lua.package
 The Lua package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.lua"
+"\"pkgs.lua\""
 ```
 
 
@@ -1046,32 +568,36 @@ package
 ## languages.nim.enable
 Whether to enable Enable tools for nim development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.nim.package
 The nim package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.nim"
+"\"pkgs.nim\""
 ```
 
 
@@ -1080,76 +606,84 @@ package
 ## languages.nix.enable
 Whether to enable Enable tools for Nix development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.ocaml.enable
 Whether to enable Enable tools for OCaml development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.perl.enable
 Whether to enable Enable tools for Perl development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.php.enable
 Whether to enable Enable tools for PHP development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
@@ -1161,13 +695,15 @@ the PHP-FPM configuration file. Do not specify the options
 NixOS.
 
 
-*_Type_*:
+*_Type_*
+```
 null or strings concatenated with "\n"
+```
 
 
 *_Default_*
 ```
-null
+"null"
 ```
 
 
@@ -1177,19 +713,21 @@ null
 Options appended to the PHP configuration file <filename>php.ini</filename>.
 
 
-*_Type_*:
+*_Type_*
+```
 strings concatenated with "\n"
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
 *_Example_*
 ```
-"date.timezone = \"CET\"\n"
+"''\n  date.timezone = \"CET\"\n''"
 ```
 
 
@@ -1198,19 +736,21 @@ PHP-FPM pools. If no pools are defined, the PHP-FPM
 service is disabled.
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set of (submodule)
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
 *_Example_*
 ```
-{"_type":"literalExpression","text":"{\n  mypool = {\n    user = \"php\";\n    group = \"php\";\n    phpPackage = pkgs.php;\n    settings = {\n      \"pm\" = \"dynamic\";\n      \"pm.max_children\" = 75;\n      \"pm.start_servers\" = 10;\n      \"pm.min_spare_servers\" = 5;\n      \"pm.max_spare_servers\" = 20;\n      \"pm.max_requests\" = 500;\n    };\n  }\n}"}
+"{\n  mypool = {\n    user = \"php\";\n    group = \"php\";\n    phpPackage = pkgs.php;\n    settings = {\n      \"pm\" = \"dynamic\";\n      \"pm.max_children\" = 75;\n      \"pm.start_servers\" = 10;\n      \"pm.min_spare_servers\" = 5;\n      \"pm.max_spare_servers\" = 20;\n      \"pm.max_requests\" = 500;\n    };\n  }\n}"
 ```
 
 
@@ -1220,13 +760,15 @@ See the documentation on <literal>php-fpm.conf</literal> for
 details on configuration directives.
 
 
-*_Type_*:
+*_Type_*
+```
 null or strings concatenated with "\n"
+```
 
 
 *_Default_*
 ```
-null
+"null"
 ```
 
 
@@ -1236,19 +778,21 @@ null
 The address on which to accept FastCGI requests.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
 *_Example_*
 ```
-"/path/to/unix/socket"
+"\"/path/to/unix/socket\""
 ```
 
 
@@ -1256,19 +800,21 @@ string
 Environment variables used for this PHP-FPM pool.
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set of string
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
 *_Example_*
 ```
-{"_type":"literalExpression","text":"{\n  HOSTNAME = \"$HOSTNAME\";\n  TMP = \"/tmp\";\n  TMPDIR = \"/tmp\";\n  TEMP = \"/tmp\";\n}\n"}
+"{\n  HOSTNAME = \"$HOSTNAME\";\n  TMP = \"/tmp\";\n  TMPDIR = \"/tmp\";\n  TEMP = \"/tmp\";\n}\n"
 ```
 
 
@@ -1276,8 +822,10 @@ attribute set of string
 "Options appended to the PHP configuration file <filename>php.ini</filename> used for this PHP-FPM pool."
 
 
-*_Type_*:
+*_Type_*
+```
 strings concatenated with "\n"
+```
 
 
 
@@ -1288,13 +836,15 @@ strings concatenated with "\n"
 The PHP package to use for running this PHP-FPM pool.
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"phpfpm.phpPackage"}
+"phpfpm.phpPackage"
 ```
 
 
@@ -1307,19 +857,21 @@ for details. Note that settings names must be enclosed in quotes (e.g.
 <literal>"pm.max_children"</literal> instead of <literal>pm.max_children</literal>).
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set of (string or signed integer or boolean)
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
 *_Example_*
 ```
-{"_type":"literalExpression","text":"{\n  \"pm\" = \"dynamic\";\n  \"pm.max_children\" = 75;\n  \"pm.start_servers\" = 10;\n  \"pm.min_spare_servers\" = 5;\n  \"pm.max_spare_servers\" = 20;\n  \"pm.max_requests\" = 500;\n}\n"}
+"{\n  \"pm\" = \"dynamic\";\n  \"pm.max_children\" = 75;\n  \"pm.start_servers\" = 10;\n  \"pm.min_spare_servers\" = 5;\n  \"pm.max_spare_servers\" = 20;\n  \"pm.max_requests\" = 500;\n}\n"
 ```
 
 
@@ -1328,15 +880,17 @@ Path to the unix socket file on which to accept FastCGI requests.
 <note><para>This option is read-only and managed by NixOS.</para></note>
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 
 
 *_Example_*
 ```
-"/tmp/<name>.sock"
+"\"/tmp/<name>.sock\""
 ```
 
 
@@ -1349,13 +903,15 @@ You need not specify the options <literal>error_log</literal> or
 <literal>daemonize</literal> here, since they are generated by NixOS.
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set of (string or signed integer or boolean)
+```
 
 
 *_Default_*
 ```
-{"error_log":"/.devenv/state/php-fpm/php-fpm.log"}
+"{\n  error_log = \"/.devenv/state/php-fpm/php-fpm.log\";\n}"
 ```
 
 
@@ -1369,51 +925,57 @@ Allows to <link xlink:href="https://nixos.org/manual/nixpkgs/stable/#ssec-php-us
 </programlisting>
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.php"
+"\"pkgs.php\""
 ```
 
 
 *_Example_*
 ```
-{"_type":"literalExpression","text":"pkgs.php.buildEnv {\n  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];\n  extraConfig = ''\n    memory_limit=1G\n  '';\n};\n"}
+"pkgs.php.buildEnv {\n  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];\n  extraConfig = ''\n    memory_limit=1G\n  '';\n};\n"
 ```
 
 
 ## languages.purescript.enable
 Whether to enable Enable tools for PureScript development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.purescript.package
 The PureScript package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.purescript"
+"\"pkgs.purescript\""
 ```
 
 
@@ -1422,32 +984,36 @@ package
 ## languages.python.enable
 Whether to enable Enable tools for Python development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.python.package
 The Python package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.python3"
+"\"pkgs.python3\""
 ```
 
 
@@ -1456,51 +1022,57 @@ package
 ## languages.r.enable
 Whether to enable Enable tools for R development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.robotframework.enable
 Whether to enable Enable tools for Robot Framework development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.robotframework.python
 The Python package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.python3"
+"\"pkgs.python3\""
 ```
 
 
@@ -1509,32 +1081,36 @@ package
 ## languages.ruby.enable
 Whether to enable Enable tools for Ruby development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.ruby.package
 The Ruby package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.ruby"
+"\"pkgs.ruby\""
 ```
 
 
@@ -1543,32 +1119,36 @@ package
 ## languages.rust.enable
 Whether to enable Enable tools for Rust development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.rust.packages
 Attribute set of packages including rustc and cargo
 
-*_Type_*:
+*_Type_*
+```
 attribute set of package
+```
 
 
 *_Default_*
 ```
-"pkgs"
+"\"pkgs\""
 ```
 
 
@@ -1577,13 +1157,15 @@ attribute set of package
 ## languages.rust.version
 Set to stable, beta or latest.
 
-*_Type_*:
+*_Type_*
+```
 null or string
+```
 
 
 *_Default_*
 ```
-null
+"null"
 ```
 
 
@@ -1592,51 +1174,57 @@ null
 ## languages.scala.enable
 Whether to enable Enable tools for Scala development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.terraform.enable
 Whether to enable Enable tools for terraform development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.terraform.package
 The terraform package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.terraform"
+"\"pkgs.terraform\""
 ```
 
 
@@ -1645,376 +1233,91 @@ package
 ## languages.typescript.enable
 Whether to enable Enable tools for TypeScript development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.v.enable
 Whether to enable Enable tools for v development..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
 ## languages.v.package
 The v package to use.
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.vlang"
+"\"pkgs.vlang\""
 ```
 
 
-
-
-## mongodb.additionalArgs
-Additional arguments passed to `mongod`.
-
-
-*_Type_*:
-list of strings concatenated with "\n"
-
-
-*_Default_*
-```
-["--noauth"]
-```
-
-
-*_Example_*
-```
-["--port","27017","--noauth"]
-```
-
-
-## mongodb.enable
-Whether to enable Add MongoDB process and expose utilities..
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## mongodb.package
-Which MongoDB package to use.
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.mongodb"
-```
-
-
-
-
-## mysql.enable
-Whether to enable Add mysql process and expose utilities..
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## mysql.initialDatabases
-List of database names and their initial schemas that should be used to create databases on the first startup
-of MySQL. The schema attribute is optional: If not specified, an empty database is created.
-
-
-*_Type_*:
-list of (submodule)
-
-
-*_Default_*
-```
-[]
-```
-
-
-*_Example_*
-```
-[{"name":"foodatabase","schema":{"_type":"literalExpression","text":"./foodatabase.sql"}},{"name":"bardatabase"}]
-```
-
-
-## mysql.initialDatabases.*.name
-The name of the database to create.
-
-
-*_Type_*:
-string
-
-
-
-
-
-
-## mysql.initialDatabases.*.schema
-The initial schema of the database; if null (the default),
-an empty database is created.
-
-
-*_Type_*:
-null or path
-
-
-*_Default_*
-```
-null
-```
-
-
-
-
-## mysql.package
-Which package of mysql to use
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.mysql80"
-```
-
-
-
-
-## mysql.settings
-MySQL configuration
-
-
-*_Type_*:
-attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
-
-
-*_Default_*
-```
-{}
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"{\n  mysqld = {\n    key_buffer_size = \"6G\";\n    table_cache = 1600;\n    log-error = \"/var/log/mysql_err.log\";\n    plugin-load-add = [ \"server_audit\" \"ed25519=auth_ed25519\" ];\n  };\n  mysqldump = {\n    quick = true;\n    max_allowed_packet = \"16M\";\n  };\n}\n"}
-```
 
 
 ## packages
 A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
 
-*_Type_*:
+*_Type_*
+```
 list of package
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
-
-
-## postgres.createDatabase
-Create a database named like current user on startup.
-
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-true
-```
-
-
-
-
-## postgres.enable
-Whether to enable Add postgreSQL process and psql-devenv script.
-.
-
-*_Type_*:
-boolean
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## postgres.initdbArgs
-Additional arguments passed to `initdb` during data dir
-initialisation.
-
-
-*_Type_*:
-list of strings concatenated with "\n"
-
-
-*_Default_*
-```
-["--locale=C","--encoding=UTF8"]
-```
-
-
-*_Example_*
-```
-["--data-checksums","--allow-group-access"]
-```
-
-
-## postgres.listen_addresses
-Listen address
-
-*_Type_*:
-string
-
-
-*_Default_*
-```
-""
-```
-
-
-*_Example_*
-```
-"127.0.0.1"
-```
-
-
-## postgres.package
-Which version of postgres to use
-
-*_Type_*:
-package
-
-
-*_Default_*
-```
-"pkgs.postgresql"
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list\npkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);\n"}
-```
-
-
-## postgres.port
-The TCP port to accept connections.
-
-
-*_Type_*:
-16 bit unsigned integer; between 0 and 65535 (both inclusive)
-
-
-*_Default_*
-```
-5432
-```
-
-
-
-
-## postgres.settings
-PostgreSQL configuration. Refer to
-<link xlink:href="https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE"></link>
-for an overview of <literal>postgresql.conf</literal>.
-::: {.note}
-String values will automatically be enclosed in single quotes. Single quotes will be
-escaped with two single quotes as described by the upstream documentation linked above.
-:::
-
-
-*_Type_*:
-attribute set of (boolean or floating point number or signed integer or string)
-
-
-*_Default_*
-```
-{}
-```
-
-
-*_Example_*
-```
-{"_type":"literalExpression","text":"{\n  log_connections = true;\n  log_statement = \"all\";\n  logging_collector = true\n  log_disconnections = true\n  log_destination = lib.mkForce \"syslog\";\n}\n"}
-```
 
 
 ## pre-commit
 Integration of https://github.com/cachix/pre-commit-hooks.nix
 
-*_Type_*:
+*_Type_*
+```
 submodule
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
@@ -2026,13 +1329,15 @@ Installs hooks to the defined stages.
 See <link xlink:href="https://pre-commit.com/#confining-hooks-to-run-at-certain-stages"></link>.
 
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-["commit"]
+"[\n  \"commit\"\n]"
 ```
 
 
@@ -2042,13 +1347,15 @@ list of string
 Exclude files that were matched by these patterns.
 
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
@@ -2106,6 +1413,10 @@ Format your code using <literal>clang-format</literal>.
 <emphasis role="strong"><literal>clippy</literal></emphasis>
 
 Lint Rust code.
+
+<emphasis role="strong"><literal>commitizen</literal></emphasis>
+
+Check whether the current commit message follows commiting rules.
 
 <emphasis role="strong"><literal>deadnix</literal></emphasis>
 
@@ -2266,13 +1577,15 @@ Yaml linter.
 
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set of (submodule)
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
@@ -2282,13 +1595,15 @@ attribute set of (submodule)
 Description of the hook. used for metadata purposes only.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
@@ -2297,13 +1612,15 @@ string
 ## pre-commit.hooks.&lt;name&gt;.enable
 Whether to enable this pre-commit hook.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2313,8 +1630,10 @@ false
 The entry point - the executable to run. <option>entry</option> can also contain arguments that will not be overridden, such as <literal>entry = "autopep8 -i";</literal>.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 
@@ -2325,13 +1644,15 @@ string
 Exclude files that were matched by these patterns.
 
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
@@ -2341,13 +1662,15 @@ list of string
 The pattern of files to run on.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
@@ -2357,13 +1680,15 @@ string
 The language of the hook - tells pre-commit how to install the hook.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-"system"
+"\"system\""
 ```
 
 
@@ -2373,13 +1698,15 @@ string
 The name of the hook - shown during hook execution.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-{"_type":"literalDocBook","text":"internal name, same as id"}
+"internal name, same as id"
 ```
 
 
@@ -2389,13 +1716,15 @@ string
 Whether to pass filenames as arguments to the entry point.
 
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-true
+"true"
 ```
 
 
@@ -2408,8 +1737,10 @@ exposed in case you need to work around something.
 Default: taken from the other hook options.
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set of unspecified value
+```
 
 
 
@@ -2420,13 +1751,15 @@ attribute set of unspecified value
 Confines the hook to run at a particular stage.
 
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"default_stages"}
+"default_stages"
 ```
 
 
@@ -2436,13 +1769,15 @@ list of string
 List of file types to run on. See <link xlink:href="https://pre-commit.com/#plugins">Filtering files with types</link>.
 
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-["file"]
+"[\n  \"file\"\n]"
 ```
 
 
@@ -2452,13 +1787,15 @@ list of string
 List of file types to run on, where only a single type needs to match.
 
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
@@ -2468,8 +1805,10 @@ list of string
 A bash snippet that installs nix-pre-commit-hooks in the current directory
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 
@@ -2480,14 +1819,12 @@ string
 The <literal>pre-commit</literal> package to use.
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
-*_Default_*
-```
-{"_type":"literalExpression","text":"pkgs.pre-commit\n"}
-```
 
 
 
@@ -2501,14 +1838,12 @@ If you use the <literal>flakeModule</literal>, the default is <literal>self.outP
 sources.
 
 
-*_Type_*:
+*_Type_*
+```
 path
+```
 
 
-*_Default_*
-```
-{"_type":"literalExpression","text":"gitignoreSource config.src"}
-```
 
 
 
@@ -2518,13 +1853,15 @@ A derivation that tests whether the pre-commit hooks run cleanly on
 the entire project.
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"<derivation>"
+"\"<derivation>\""
 ```
 
 
@@ -2533,32 +1870,36 @@ package
 ## pre-commit.settings.alejandra.exclude
 Files or directories to exclude from formatting.
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
 *_Example_*
 ```
-["flake.nix","./templates"]
+"[\n  \"flake.nix\"\n  \"./templates\"\n]"
 ```
 
 
 ## pre-commit.settings.deadnix.edit
 Remove unused code and write to source file.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2567,13 +1908,15 @@ false
 ## pre-commit.settings.deadnix.noLambdaArg
 Don't check lambda parameter arguments.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2582,13 +1925,15 @@ false
 ## pre-commit.settings.deadnix.noLambdaPatternNames
 Don't check lambda pattern names (don't break nixpkgs <literal>callPackage</literal>).
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2597,13 +1942,15 @@ false
 ## pre-commit.settings.deadnix.noUnderscore
 Don't check any bindings that start with a <literal>_</literal>.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2612,13 +1959,15 @@ false
 ## pre-commit.settings.deadnix.quiet
 Don't print a dead code report.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2627,13 +1976,15 @@ false
 ## pre-commit.settings.eslint.binPath
 <literal>eslint</literal> binary path. E.g. if you want to use the <literal>eslint</literal> in <literal>node_modules</literal>, use <literal>./node_modules/.bin/eslint</literal>.
 
-*_Type_*:
+*_Type_*
+```
 path
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"${tools.eslint}/bin/eslint"}
+"${tools.eslint}/bin/eslint"
 ```
 
 
@@ -2642,13 +1993,15 @@ path
 ## pre-commit.settings.eslint.extensions
 The pattern of files to run on, see <link xlink:href="https://pre-commit.com/#hooks-files"></link>.
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-"\\.js$"
+"\"\\\\.js$\""
 ```
 
 
@@ -2657,13 +2010,15 @@ string
 ## pre-commit.settings.flake8.binPath
 flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"\"${pkgs.python39Packages.pylint}/bin/flake8\"\n"}
+"\"${pkgs.python39Packages.pylint}/bin/flake8\"\n"
 ```
 
 
@@ -2672,13 +2027,15 @@ string
 ## pre-commit.settings.flake8.format
 Output format.
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-"default"
+"\"default\""
 ```
 
 
@@ -2687,13 +2044,15 @@ string
 ## pre-commit.settings.hpack.silent
 Whether generation should be silent.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2702,13 +2061,15 @@ false
 ## pre-commit.settings.markdownlint.config
 See https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.jsonc
 
-*_Type_*:
+*_Type_*
+```
 attribute set
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
@@ -2717,13 +2078,15 @@ attribute set
 ## pre-commit.settings.nix-linter.checks
 Available checks. See <literal>nix-linter --help-for [CHECK]</literal> for more details.
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
@@ -2732,13 +2095,15 @@ list of string
 ## pre-commit.settings.nixfmt.width
 Line width.
 
-*_Type_*:
+*_Type_*
+```
 null or signed integer
+```
 
 
 *_Default_*
 ```
-null
+"null"
 ```
 
 
@@ -2747,13 +2112,15 @@ null
 ## pre-commit.settings.ormolu.cabalDefaultExtensions
 Use <literal>default-extensions</literal> from <literal>.cabal</literal> files.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2762,13 +2129,15 @@ false
 ## pre-commit.settings.ormolu.defaultExtensions
 Haskell language extensions to enable.
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
@@ -2777,13 +2146,15 @@ list of string
 ## pre-commit.settings.prettier.binPath
 <literal>prettier</literal> binary path. E.g. if you want to use the <literal>prettier</literal> in <literal>node_modules</literal>, use <literal>./node_modules/.bin/prettier</literal>.
 
-*_Type_*:
+*_Type_*
+```
 path
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"\"${tools.prettier}/bin/prettier\"\n"}
+"\"${tools.prettier}/bin/prettier\"\n"
 ```
 
 
@@ -2792,13 +2163,15 @@ path
 ## pre-commit.settings.prettier.output
 Output format.
 
-*_Type_*:
+*_Type_*
+```
 null or one of "check", "list-different"
+```
 
 
 *_Default_*
 ```
-"list-different"
+"\"list-different\""
 ```
 
 
@@ -2807,13 +2180,15 @@ null or one of "check", "list-different"
 ## pre-commit.settings.prettier.write
 Whether to edit files inplace.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-true
+"true"
 ```
 
 
@@ -2822,13 +2197,15 @@ true
 ## pre-commit.settings.pylint.binPath
 Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"\"${pkgs.python39Packages.pylint}/bin/pylint\"\n"}
+"\"${pkgs.python39Packages.pylint}/bin/pylint\"\n"
 ```
 
 
@@ -2837,13 +2214,15 @@ string
 ## pre-commit.settings.pylint.reports
 Whether to display a full report.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2852,13 +2231,15 @@ false
 ## pre-commit.settings.pylint.score
 Whether to activate the evaluation score.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-true
+"true"
 ```
 
 
@@ -2867,13 +2248,15 @@ true
 ## pre-commit.settings.revive.configPath
 Path to the configuration TOML file.
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
@@ -2882,13 +2265,15 @@ string
 ## pre-commit.settings.statix.format
 Error Output format.
 
-*_Type_*:
+*_Type_*
+```
 one of "stderr", "errfmt", "json"
+```
 
 
 *_Default_*
 ```
-"errfmt"
+"\"errfmt\""
 ```
 
 
@@ -2897,32 +2282,36 @@ one of "stderr", "errfmt", "json"
 ## pre-commit.settings.statix.ignore
 Globs of file patterns to skip.
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
 *_Example_*
 ```
-["flake.nix","_*"]
+"[\n  \"flake.nix\"\n  \"_*\"\n]"
 ```
 
 
 ## pre-commit.settings.typos.diff
 Wheter to print a diff of what would change.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2931,13 +2320,15 @@ false
 ## pre-commit.settings.typos.format
 Output format.
 
-*_Type_*:
+*_Type_*
+```
 one of "silent", "brief", "long", "json"
+```
 
 
 *_Default_*
 ```
-"long"
+"\"long\""
 ```
 
 
@@ -2946,13 +2337,15 @@ one of "silent", "brief", "long", "json"
 ## pre-commit.settings.typos.write
 Whether to write fixes out.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
@@ -2966,8 +2359,10 @@ If you use the <literal>flakeModule</literal>, the default is <literal>self.outP
 sources.
 
 
-*_Type_*:
+*_Type_*
+```
 path
+```
 
 
 
@@ -2980,14 +2375,12 @@ Tool set from which <literal>nix-pre-commit-hooks</literal> will pick binaries.
 <literal>nix-pre-commit-hooks</literal> comes with its own set of packages for this purpose.
 
 
-*_Type_*:
+*_Type_*
+```
 lazy attribute set of package
+```
 
 
-*_Default_*
-```
-{"_type":"literalExpression","text":"pre-commit-hooks.nix-pkgs.callPackage tools-dot-nix { inherit (pkgs) system; }"}
-```
 
 
 
@@ -2995,19 +2388,21 @@ lazy attribute set of package
 ## process.implementation
 The implementation used when performing ``devenv up``.
 
-*_Type_*:
+*_Type_*
+```
 one of "honcho", "overmind", "process-compose", "hivemind"
+```
 
 
 *_Default_*
 ```
-"honcho"
+"\"honcho\""
 ```
 
 
 *_Example_*
 ```
-"overmind"
+"\"overmind\""
 ```
 
 
@@ -3015,32 +2410,36 @@ one of "honcho", "overmind", "process-compose", "hivemind"
 Top-level process-compose.yaml options when that implementation is used.
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set
+```
 
 
 *_Default_*
 ```
-{"port":9999,"tui":true,"version":"0.5"}
+"{\n  port = 9999;\n  tui = true;\n  version = \"0.5\";\n}"
 ```
 
 
 *_Example_*
 ```
-{"log_level":"fatal","log_location":"/path/to/combined/output/logfile.log","version":"0.5"}
+"{\n  log_level = \"fatal\";\n  log_location = \"/path/to/combined/output/logfile.log\";\n  version = \"0.5\";\n}"
 ```
 
 
 ## processes
 Processes can be started with ``devenv up`` and run in foreground mode.
 
-*_Type_*:
+*_Type_*
+```
 attribute set of (submodule)
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
@@ -3049,8 +2448,10 @@ attribute set of (submodule)
 ## processes.&lt;name&gt;.exec
 Bash code to run the process.
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 
@@ -3065,23 +2466,1216 @@ Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.
 Only used when using ``process.implementation = "process-compose";``
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
 *_Example_*
 ```
-{"availability":{"backoff_seconds":2,"max_restarts":5,"restart":"on_failure"},"depends_on":{"some-other-process":{"condition":"process_completed_successfully"}},"environment":["ENVVAR_FOR_THIS_PROCESS_ONLY=foobar"]}
+"{\n  availability = {\n    backoff_seconds = 2;\n    max_restarts = 5;\n    restart = \"on_failure\";\n  };\n  depends_on = {\n    some-other-process = {\n      condition = \"process_completed_successfully\";\n    };\n  };\n  environment = [\n    \"ENVVAR_FOR_THIS_PROCESS_ONLY=foobar\"\n  ];\n}"
 ```
 
 
-## rabbitmq.configItems
+## scripts
+A set of scripts available when the environment is active.
+
+*_Type_*
+```
+attribute set of (submodule)
+```
+
+
+*_Default_*
+```
+"{ }"
+```
+
+
+
+
+## scripts.&lt;name&gt;.exec
+Bash code to execute when the script is ran.
+
+*_Type_*
+```
+string
+```
+
+
+
+
+
+
+## services.adminer.enable
+Whether to enable Add adminer process..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.adminer.listen
+Listen address for adminer.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"127.0.0.1:8080\""
+```
+
+
+
+
+## services.adminer.package
+Which package of adminer to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.adminer\""
+```
+
+
+
+
+## services.blackfire.client-id
+Sets the client id used to authenticate with Blackfire
+You can find your personal client-id at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+
+
+## services.blackfire.client-token
+Sets the client token used to authenticate with Blackfire
+You can find your personal client-token at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+
+
+## services.blackfire.enable
+Whether to enable Blackfire profiler agent
+
+For PHP you need to install and configure the Blackfire PHP extension.
+
+<programlisting language="nix">
+languages.php.package = pkgs.php.buildEnv {
+  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
+  extraConfig = ''
+    memory_limit = 256M
+    blackfire.agent_socket = "tcp://127.0.0.1:8307";
+  '';
+};
+</programlisting>.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.blackfire.package
+Which package of blackfire to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.blackfire\""
+```
+
+
+
+
+## services.blackfire.server-id
+Sets the server id used to authenticate with Blackfire
+You can find your personal server-id at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+
+
+## services.blackfire.server-token
+Sets the server token used to authenticate with Blackfire
+You can find your personal server-token at https://blackfire.io/my/settings/credentials
+
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+
+
+## services.blackfire.socket
+Sets the server socket path
+
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"tcp://127.0.0.1:8307\""
+```
+
+
+
+
+## services.caddy.adapter
+Name of the config adapter to use.
+See https://caddyserver.com/docs/config-adapters for the full list.
+
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"caddyfile\""
+```
+
+
+*_Example_*
+```
+"\"nginx\""
+```
+
+
+## services.caddy.ca
+Certificate authority ACME server. The default (Let's Encrypt
+production server) should be fine for most people. Set it to null if
+you don't want to include any authority (or if you want to write a more
+fine-graned configuration manually)
+
+
+*_Type_*
+```
+null or string
+```
+
+
+*_Default_*
+```
+"\"https://acme-v02.api.letsencrypt.org/directory\""
+```
+
+
+*_Example_*
+```
+"\"https://acme-staging-v02.api.letsencrypt.org/directory\""
+```
+
+
+## services.caddy.config
+Verbatim Caddyfile to use.
+Caddy v2 supports multiple config formats via adapters (see <option>services.caddy.adapter</option>).
+
+
+*_Type_*
+```
+strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+*_Example_*
+```
+"''\n  example.com {\n    encode gzip\n    log\n    root /srv/http\n  }\n''"
+```
+
+
+## services.caddy.dataDir
+The data directory, for storing certificates. Before 17.09, this
+would create a .caddy directory. With 17.09 the contents of the
+.caddy directory are in the specified data directory instead.
+Caddy v2 replaced CADDYPATH with XDG directories.
+See https://caddyserver.com/docs/conventions#file-locations.
+
+
+*_Type_*
+```
+path
+```
+
+
+*_Default_*
+```
+"\"/.devenv/state/caddy\""
+```
+
+
+
+
+## services.caddy.email
+Email address (for Let's Encrypt certificate)
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+
+
+## services.caddy.enable
+Whether to enable Caddy web server.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.caddy.package
+Caddy package to use.
+
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"pkgs.caddy"
+```
+
+
+
+
+## services.caddy.resume
+Use saved config, if any (and prefer over configuration passed with <option>caddy.config</option>).
+
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+
+
+## services.caddy.virtualHosts
+Declarative vhost config
+
+*_Type_*
+```
+attribute set of (submodule)
+```
+
+
+*_Default_*
+```
+"{ }"
+```
+
+
+*_Example_*
+```
+"{\n  \"hydra.example.com\" = {\n    serverAliases = [ \"www.hydra.example.com\" ];\n    extraConfig = ''''\n      encode gzip\n      log\n      root /srv/http\n    '''';\n  };\n};\n"
+```
+
+
+## services.caddy.virtualHosts.&lt;name&gt;.extraConfig
+These lines go into the vhost verbatim
+
+
+*_Type_*
+```
+strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+
+
+## services.caddy.virtualHosts.&lt;name&gt;.serverAliases
+Additional names of virtual hosts served by this virtual host configuration.
+
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  \"www.example.org\"\n  \"example.org\"\n]"
+```
+
+
+## services.elasticsearch.cluster_name
+Elasticsearch name that identifies your cluster for auto-discovery.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"elasticsearch\""
+```
+
+
+
+
+## services.elasticsearch.enable
+Whether to enable elasticsearch.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+
+
+## services.elasticsearch.extraCmdLineOptions
+Extra command line options for the elasticsearch launcher.
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+
+
+## services.elasticsearch.extraConf
+Extra configuration for elasticsearch.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+*_Example_*
+```
+"''\n  node.name: \"elasticsearch\"\n  node.master: true\n  node.data: false\n''"
+```
+
+
+## services.elasticsearch.extraJavaOptions
+Extra command line options for Java.
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  \"-Djava.net.preferIPv4Stack=true\"\n]"
+```
+
+
+## services.elasticsearch.listenAddress
+Elasticsearch listen address.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"127.0.0.1\""
+```
+
+
+
+
+## services.elasticsearch.logging
+Elasticsearch logging configuration.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"''\n  logger.action.name = org.elasticsearch.action\n  logger.action.level = info\n  appender.console.type = Console\n  appender.console.name = console\n  appender.console.layout.type = PatternLayout\n  appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n\n  rootLogger.level = info\n  rootLogger.appenderRef.console.ref = console\n''"
+```
+
+
+
+
+## services.elasticsearch.package
+Elasticsearch package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"pkgs.elasticsearch7"
+```
+
+
+
+
+## services.elasticsearch.plugins
+Extra elasticsearch plugins
+
+*_Type_*
+```
+list of package
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[ pkgs.elasticsearchPlugins.discovery-ec2 ]"
+```
+
+
+## services.elasticsearch.port
+Elasticsearch port to listen for HTTP traffic.
+
+*_Type_*
+```
+signed integer
+```
+
+
+*_Default_*
+```
+"9200"
+```
+
+
+
+
+## services.elasticsearch.single_node
+Start a single-node cluster
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"true"
+```
+
+
+
+
+## services.elasticsearch.tcp_port
+Elasticsearch port for the node to node communication.
+
+*_Type_*
+```
+signed integer
+```
+
+
+*_Default_*
+```
+"9300"
+```
+
+
+
+
+## services.memcached.bind
+The IP interface to bind to.
+<literal>null</literal> means "all interfaces".
+
+
+*_Type_*
+```
+null or string
+```
+
+
+*_Default_*
+```
+"\"127.0.0.1\""
+```
+
+
+*_Example_*
+```
+"\"127.0.0.1\""
+```
+
+
+## services.memcached.enable
+Whether to enable Add memcached process..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.memcached.package
+Which package of memcached to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.memcached\""
+```
+
+
+
+
+## services.memcached.port
+The TCP port to accept connections.
+If port 0 is specified Redis will not listen on a TCP socket.
+
+
+*_Type_*
+```
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+```
+
+
+*_Default_*
+```
+"11211"
+```
+
+
+
+
+## services.memcached.startArgs
+Additional arguments passed to `memcached` during startup.
+
+
+*_Type_*
+```
+list of strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  \"--memory-limit=100M\"\n]"
+```
+
+
+## services.mongodb.additionalArgs
+Additional arguments passed to `mongod`.
+
+
+*_Type_*
+```
+list of strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+"[\n  \"--noauth\"\n]"
+```
+
+
+*_Example_*
+```
+"[\n  \"--port\"\n  \"27017\"\n  \"--noauth\"\n]"
+```
+
+
+## services.mongodb.enable
+Whether to enable Add MongoDB process and expose utilities..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.mongodb.package
+Which MongoDB package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.mongodb\""
+```
+
+
+
+
+## services.mysql.enable
+Whether to enable Add mysql process and expose utilities..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.mysql.ensureUsers
+Ensures that the specified users exist and have at least the ensured permissions.
+The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
+same name only, and that without the need for a password.
+This option will never delete existing users or remove permissions, especially not when the value of this
+option is changed. This means that users created and permissions assigned once through this option or
+otherwise have to be removed manually.
+
+
+*_Type_*
+```
+list of (submodule)
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  {\n    name = \"devenv\";\n    ensurePermissions = {\n      \"devenv.*\" = \"ALL PRIVILEGES\";\n    };\n  }\n]\n"
+```
+
+
+## services.mysql.ensureUsers.*.ensurePermissions
+Permissions to ensure for the user, specified as attribute set.
+The attribute names specify the database and tables to grant the permissions for,
+separated by a dot. You may use wildcards here.
+The attribute values specfiy the permissions to grant.
+You may specify one or multiple comma-separated SQL privileges here.
+For more information on how to specify the target
+and on which privileges exist, see the
+<link xlink:href="https://mariadb.com/kb/en/library/grant/">GRANT syntax</link>.
+The attributes are used as <literal>GRANT ${attrName} ON ${attrValue}</literal>.
+
+
+*_Type_*
+```
+attribute set of string
+```
+
+
+*_Default_*
+```
+"{ }"
+```
+
+
+*_Example_*
+```
+"{\n  \"database.*\" = \"ALL PRIVILEGES\";\n  \"*.*\" = \"SELECT, LOCK TABLES\";\n}\n"
+```
+
+
+## services.mysql.ensureUsers.*.name
+Name of the user to ensure.
+
+
+*_Type_*
+```
+string
+```
+
+
+
+
+
+
+## services.mysql.ensureUsers.*.password
+Password of the user to ensure.
+
+
+*_Type_*
+```
+null or string
+```
+
+
+*_Default_*
+```
+"null"
+```
+
+
+
+
+## services.mysql.initialDatabases
+List of database names and their initial schemas that should be used to create databases on the first startup
+of MySQL. The schema attribute is optional: If not specified, an empty database is created.
+
+
+*_Type_*
+```
+list of (submodule)
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  {\n    name = \"foodatabase\";\n    schema = {\n      _type = \"literalExpression\";\n      text = \"./foodatabase.sql\";\n    };\n  }\n  {\n    name = \"bardatabase\";\n  }\n]"
+```
+
+
+## services.mysql.initialDatabases.*.name
+The name of the database to create.
+
+
+*_Type_*
+```
+string
+```
+
+
+
+
+
+
+## services.mysql.initialDatabases.*.schema
+The initial schema of the database; if null (the default),
+an empty database is created.
+
+
+*_Type_*
+```
+null or path
+```
+
+
+*_Default_*
+```
+"null"
+```
+
+
+
+
+## services.mysql.package
+Which package of mysql to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.mysql80\""
+```
+
+
+
+
+## services.mysql.settings
+MySQL configuration
+
+
+*_Type_*
+```
+attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
+```
+
+
+*_Default_*
+```
+"{ }"
+```
+
+
+*_Example_*
+```
+"{\n  mysqld = {\n    key_buffer_size = \"6G\";\n    table_cache = 1600;\n    log-error = \"/var/log/mysql_err.log\";\n    plugin-load-add = [ \"server_audit\" \"ed25519=auth_ed25519\" ];\n  };\n  mysqldump = {\n    quick = true;\n    max_allowed_packet = \"16M\";\n  };\n}\n"
+```
+
+
+## services.postgres.createDatabase
+Create a database named like current user on startup.
+
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"true"
+```
+
+
+
+
+## services.postgres.enable
+Whether to enable Add postgreSQL process and psql-devenv script.
+.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.postgres.initdbArgs
+Additional arguments passed to `initdb` during data dir
+initialisation.
+
+
+*_Type_*
+```
+list of strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+"[\n  \"--locale=C\"\n  \"--encoding=UTF8\"\n]"
+```
+
+
+*_Example_*
+```
+"[\n  \"--data-checksums\"\n  \"--allow-group-access\"\n]"
+```
+
+
+## services.postgres.listen_addresses
+Listen address
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"\""
+```
+
+
+*_Example_*
+```
+"\"127.0.0.1\""
+```
+
+
+## services.postgres.package
+Which version of postgres to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.postgresql\""
+```
+
+
+*_Example_*
+```
+"# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list\npkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);\n"
+```
+
+
+## services.postgres.port
+The TCP port to accept connections.
+
+
+*_Type_*
+```
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+```
+
+
+*_Default_*
+```
+"5432"
+```
+
+
+
+
+## services.postgres.settings
+PostgreSQL configuration. Refer to
+<link xlink:href="https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE"></link>
+for an overview of <literal>postgresql.conf</literal>.
+::: {.note}
+String values will automatically be enclosed in single quotes. Single quotes will be
+escaped with two single quotes as described by the upstream documentation linked above.
+:::
+
+
+*_Type_*
+```
+attribute set of (boolean or floating point number or signed integer or string)
+```
+
+
+*_Default_*
+```
+"{ }"
+```
+
+
+*_Example_*
+```
+"{\n  log_connections = true;\n  log_statement = \"all\";\n  logging_collector = true\n  log_disconnections = true\n  log_destination = lib.mkForce \"syslog\";\n}\n"
+```
+
+
+## services.rabbitmq.configItems
 Configuration options in RabbitMQ's new config file format,
 which is a simple key-value format that can not express nested
 data structures. This is known as the <literal>rabbitmq.conf</literal> file,
@@ -3095,58 +3689,64 @@ See https://www.rabbitmq.com/configure.html#config-items
 For the distinct formats, see https://www.rabbitmq.com/configure.html#config-file-formats
 
 
-*_Type_*:
+*_Type_*
+```
 attribute set of string
+```
 
 
 *_Default_*
 ```
-{}
+"{ }"
 ```
 
 
 *_Example_*
 ```
-{"_type":"literalExpression","text":"{\n  \"auth_backends.1.authn\" = \"rabbit_auth_backend_ldap\";\n  \"auth_backends.1.authz\" = \"rabbit_auth_backend_internal\";\n}\n"}
+"{\n  \"auth_backends.1.authn\" = \"rabbit_auth_backend_ldap\";\n  \"auth_backends.1.authz\" = \"rabbit_auth_backend_internal\";\n}\n"
 ```
 
 
-## rabbitmq.cookie
+## services.rabbitmq.cookie
 Erlang cookie is a string of arbitrary length which must
 be the same for several nodes to be allowed to communicate.
 Leave empty to generate automatically.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
 
 
-## rabbitmq.enable
+## services.rabbitmq.enable
 Whether to enable the RabbitMQ server, an Advanced Message
 Queuing Protocol (AMQP) broker.
 
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 
 
-## rabbitmq.listenAddress
+## services.rabbitmq.listenAddress
 IP address on which RabbitMQ will listen for AMQP
 connections.  Set to the empty string to listen on all
 interfaces.  Note that RabbitMQ creates a user named
@@ -3158,228 +3758,342 @@ configItems."listeners.tcp.1" and it's left for backwards
 compatibility with previous version of this module.
 
 
-*_Type_*:
+*_Type_*
+```
 string
+```
 
 
 *_Default_*
 ```
-"127.0.0.1"
+"\"127.0.0.1\""
 ```
 
 
 *_Example_*
 ```
-""
+"\"\""
 ```
 
 
-## rabbitmq.managementPlugin.enable
+## services.rabbitmq.managementPlugin.enable
 Whether to enable the management plugin.
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
-## rabbitmq.managementPlugin.port
+## services.rabbitmq.managementPlugin.port
 On which port to run the management plugin
 
 
-*_Type_*:
+*_Type_*
+```
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
+```
 
 
 *_Default_*
 ```
-15672
+"15672"
 ```
 
 
 
 
-## rabbitmq.package
+## services.rabbitmq.package
 Which rabbitmq package to use.
 
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-{"_type":"literalExpression","text":"pkgs.rabbitmq-server"}
+"pkgs.rabbitmq-server"
 ```
 
 
 
 
-## rabbitmq.pluginDirs
+## services.rabbitmq.pluginDirs
 The list of directories containing external plugins
 
-*_Type_*:
+*_Type_*
+```
 list of path
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
 
 
-## rabbitmq.plugins
+## services.rabbitmq.plugins
 The names of plugins to enable
 
-*_Type_*:
+*_Type_*
+```
 list of string
+```
 
 
 *_Default_*
 ```
-[]
+"[ ]"
 ```
 
 
 
 
-## rabbitmq.port
+## services.rabbitmq.port
 Port on which RabbitMQ will listen for AMQP connections.
 
 
-*_Type_*:
+*_Type_*
+```
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
+```
 
 
 *_Default_*
 ```
-5672
+"5672"
 ```
 
 
 
 
-## redis.bind
+## services.redis.bind
 The IP interface to bind to.
 <literal>null</literal> means "all interfaces".
 
 
-*_Type_*:
+*_Type_*
+```
 null or string
+```
 
 
 *_Default_*
 ```
-"127.0.0.1"
+"\"127.0.0.1\""
 ```
 
 
 *_Example_*
 ```
-"127.0.0.1"
+"\"127.0.0.1\""
 ```
 
 
-## redis.enable
+## services.redis.enable
 Whether to enable Add redis process and expose utilities..
 
-*_Type_*:
+*_Type_*
+```
 boolean
+```
 
 
 *_Default_*
 ```
-false
+"false"
 ```
 
 
 *_Example_*
 ```
-true
+"true"
 ```
 
 
-## redis.extraConfig
+## services.redis.extraConfig
 Additional text to be appended to <filename>redis.conf</filename>.
 
-*_Type_*:
+*_Type_*
+```
 strings concatenated with "\n"
+```
 
 
 *_Default_*
 ```
-""
+"\"\""
 ```
 
 
 
 
-## redis.package
+## services.redis.package
 Which package of redis to use
 
-*_Type_*:
+*_Type_*
+```
 package
+```
 
 
 *_Default_*
 ```
-"pkgs.redis"
+"\"pkgs.redis\""
 ```
 
 
 
 
-## redis.port
+## services.redis.port
 The TCP port to accept connections.
 If port 0 is specified Redis will not listen on a TCP socket.
 
 
-*_Type_*:
+*_Type_*
+```
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
+```
 
 
 *_Default_*
 ```
-6379
+"6379"
 ```
 
 
 
 
-## scripts
-A set of scripts available when the environment is active.
+## services.wiremock.disableBanner
+Whether to disable print banner logo
 
-*_Type_*:
-attribute set of (submodule)
+
+*_Type_*
+```
+boolean
+```
 
 
 *_Default_*
 ```
-{}
+"false"
 ```
 
 
 
 
-## scripts.&lt;name&gt;.exec
-Bash code to execute when the script is ran.
+## services.wiremock.enable
+Whether to enable wiremock.
 
-*_Type_*:
-string
+*_Type_*
+```
+boolean
+```
 
 
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.wiremock.mappings
+The mappings to mock.
+See the JSON examples on https://wiremock.org/docs/stubbing/ for more information.
+
+
+*_Type_*
+```
+JSON value
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  {\n    request = {\n      method = \"GET\";\n      url = \"/body\";\n    };\n    response = {\n      body = \"Literal text to put in the body\";\n      headers = {\n        Content-Type = \"text/plain\";\n      };\n      status = 200;\n    };\n  }\n  {\n    request = {\n      method = \"GET\";\n      url = \"/json\";\n    };\n    response = {\n      jsonBody = {\n        someField = \"someValue\";\n      };\n      status = 200;\n    };\n  }\n]"
+```
+
+
+## services.wiremock.package
+Which package of wiremock to use.
+
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"<derivation wiremock-2.35.0>"
+```
+
+
+
+
+## services.wiremock.port
+The port number for the HTTP server to listen on.
+
+
+*_Type_*
+```
+signed integer
+```
+
+
+*_Default_*
+```
+"8080"
+```
+
+
+
+
+## services.wiremock.verbose
+Whether to log verbosely to stdout
+
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
 
 
 

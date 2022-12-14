@@ -21,8 +21,5 @@ in
         cfg.package
         erlang-ls
       ];
-
-      enterShell = ''
-      '';
     };
 }

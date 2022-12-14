@@ -1,7 +1,7 @@
 { pkgs, lib, config, ... }:
 
 let
-  cfg = config.postgres;
+  cfg = config.services.postgres;
   types = lib.types;
   createDatabase = lib.optionalString cfg.createDatabase ''
     echo "CREATE DATABASE ''${USER:-$(id -nu)};" | postgres --single -E postgres
@@ -33,7 +33,11 @@ let
   '';
 in
 {
-  options.postgres = {
+  imports = [
+    (lib.mkRenamedOptionModule [ "postgres" "enable" ] [ "services" "postgres" "enable" ])
+  ];
+
+  options.services.postgres = {
     enable = lib.mkEnableOption ''
       Add postgreSQL process and psql-devenv script.
     '';
@@ -115,7 +119,7 @@ in
     env.PGHOST = config.env.PGDATA;
     env.PGPORT = cfg.port;
 
-    postgres.settings = {
+    services.postgres.settings = {
       listen_addresses = cfg.listen_addresses;
       port = cfg.port;
       unix_socket_directories = config.env.PGDATA;

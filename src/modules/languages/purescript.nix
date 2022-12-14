@@ -25,9 +25,5 @@ in
       pkgs.purescript-psa
       pkgs.psc-package
     ];
-
-    enterShell = ''
-      purs --version
-    '';
   };
 }
