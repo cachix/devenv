@@ -13,9 +13,5 @@ in
       kotlin
       gradle
     ];
-
-    enterShell = ''
-      kotlin -version
-    '';
   };
 }

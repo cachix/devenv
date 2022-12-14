@@ -42,6 +42,8 @@ nav:
       - Languages: languages.md
       - Processes: processes.md
       - Pre-Commit Hooks: pre-commit-hooks.md
+    - Guides: 
+      - Using With Flakes: guides/using-with-flakes.md
     - Integrations:
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
     - Examples: examples.md

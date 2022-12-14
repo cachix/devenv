@@ -1,7 +1,7 @@
 { pkgs, lib, config, ... }:
 
 let
-  cfg = config.blackfire;
+  cfg = config.services.blackfire;
 
   configFile = pkgs.writeText "blackfire.conf" ''
     [blackfire]
@@ -11,7 +11,11 @@ let
   '';
 in
 {
-  options.blackfire = {
+  imports = [
+    (lib.mkRenamedOptionModule [ "blackfire" "enable" ] [ "services" "blackfire" "enable" ])
+  ];
+
+  options.services.blackfire = {
     enable = lib.mkEnableOption (lib.mdDoc ''
       Blackfire profiler agent
 
@@ -22,7 +26,7 @@ in
         extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
         extraConfig = '''
           memory_limit = 256M
-          blackfire.agent_socket = "${config.blackfire.socket}";
+          blackfire.agent_socket = "${cfg.socket}";
         ''';
       };
       ```

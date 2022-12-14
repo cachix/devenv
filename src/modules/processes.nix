@@ -86,6 +86,7 @@ in
     procfileScript = lib.mkOption {
       type = types.package;
       internal = true;
+      default = pkgs.writeShellScript "no-processes" "";
     };
   };
 

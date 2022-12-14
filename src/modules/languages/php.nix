@@ -237,11 +237,6 @@ in
 
     env.PHPFPMDIR = config.env.DEVENV_STATE + "/php-fpm";
 
-    enterShell = ''
-      php --version
-      composer --version
-    '';
-
     processes = mapAttrs'
       (pool: poolOpts:
         nameValuePair "phpfpm-${pool}" {

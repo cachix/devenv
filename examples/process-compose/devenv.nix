@@ -5,7 +5,7 @@
 
   processes.foo.exec = "echo foo; sleep 5";
 
-  postgres.enable = true;
+  services.postgres.enable = true;
 
   languages.ruby.enable = true;
 

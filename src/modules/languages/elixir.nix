@@ -21,9 +21,5 @@ in
         cfg.package
         elixir_ls
       ];
-
-      enterShell = ''
-        elixir --version
-      '';
     };
 }
