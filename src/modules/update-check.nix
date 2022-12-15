@@ -27,7 +27,7 @@ in
     };
     latestVersion = lib.mkOption {
       type = lib.types.str;
-      default = lib.removeSuffix "\n" (builtins.readFile ./latest-version);
+      default = lib.fileContents ./latest-version;
       description = ''
         The latest version of devenv.
       '';
