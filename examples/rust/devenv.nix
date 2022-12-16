@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ config, pkgs, inputs, ... }:
 
 {
   languages.rust = {
@@ -11,4 +11,6 @@
     clippy.enable = true;
     rustfmt.enable = true;
   };
+
+  env.RUST_SRC_PATH = "${inputs.fenix.packages.${pkgs.system}.${config.languages.rust.version}.rust-src}/lib/rustlib/src/rust/library";
 }
