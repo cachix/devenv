@@ -3525,7 +3525,7 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string) o
 
 
 ## services.postgres.createDatabase
-Create a database named like current user on startup.
+Create a database named like current user on startup. Only applies when initialDatabases is an empty list.
 
 
 *_Type_*
@@ -3543,7 +3543,7 @@ boolean
 
 
 ## services.postgres.enable
-Whether to enable Add postgreSQL process and psql-devenv script.
+Whether to enable Add postgreSQL process script.
 .
 
 *_Type_*
@@ -3585,6 +3585,62 @@ list of strings concatenated with "\n"
 ```
 "[\n  \"--data-checksums\"\n  \"--allow-group-access\"\n]"
 ```
+
+
+## services.postgres.initialDatabases
+List of database names and their initial schemas that should be used to create databases on the first startup
+of Postgres. The schema attribute is optional: If not specified, an empty database is created.
+
+
+*_Type_*
+```
+list of (submodule)
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  {\n    name = \"foodatabase\";\n    schema = {\n      _type = \"literalExpression\";\n      text = \"./foodatabase.sql\";\n    };\n  }\n  {\n    name = \"bardatabase\";\n  }\n]"
+```
+
+
+## services.postgres.initialDatabases.*.name
+The name of the database to create.
+
+
+*_Type_*
+```
+string
+```
+
+
+
+
+
+
+## services.postgres.initialDatabases.*.schema
+The initial schema of the database; if null (the default),
+an empty database is created.
+
+
+*_Type_*
+```
+null or path
+```
+
+
+*_Default_*
+```
+"null"
+```
+
+
 
 
 ## services.postgres.listen_addresses
