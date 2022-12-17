@@ -205,7 +205,7 @@ in
 
       process-compose = {
         readiness_probe = {
-          exec.command = "${cfg.package}/bin/pg_isready -h $PGDATA";
+          exec.command = "${cfg.package}/bin/pg_isready -h $PGDATA template1";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
