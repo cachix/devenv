@@ -1110,7 +1110,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.ruby\""
+"\"pkgs.ruby_3_1\""
 ```
 
 
