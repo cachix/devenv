@@ -2,7 +2,7 @@
 let
   examples = ../examples;
   lib = pkgs.lib;
-  version = lib.removeSuffix "\n" (builtins.readFile ./modules/latest-version);
+  version = lib.fileContents ./modules/latest-version;
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
