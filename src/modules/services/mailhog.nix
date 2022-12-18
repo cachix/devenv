@@ -23,7 +23,7 @@ in
 
     uiListenAddress = lib.mkOption {
       type = types.str;
-      description = "Listen address for API.";
+      description = "Listen address for UI.";
       default = "127.0.0.1:8025";
     };
 
