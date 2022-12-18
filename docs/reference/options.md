@@ -3157,6 +3157,117 @@ signed integer
 
 
 
+## services.mailhog.additionalArgs
+Additional arguments passed to `mailhog`.
+
+
+*_Type_*
+```
+list of strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+"[ ]"
+```
+
+
+*_Example_*
+```
+"[\n  \"-invite-jim\"\n]"
+```
+
+
+## services.mailhog.apiListenAddress
+Listen address for API.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"127.0.0.1:8025\""
+```
+
+
+
+
+## services.mailhog.enable
+Whether to enable Add mailhog process..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## services.mailhog.package
+Which package of mailhog to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.mailhog\""
+```
+
+
+
+
+## services.mailhog.smtpListenAddress
+Listen address for SMTP.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"127.0.0.1:1025\""
+```
+
+
+
+
+## services.mailhog.uiListenAddress
+Listen address for UI.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"127.0.0.1:8025\""
+```
+
+
+
+
 ## services.memcached.bind
 The IP interface to bind to.
 <literal>null</literal> means "all interfaces".
