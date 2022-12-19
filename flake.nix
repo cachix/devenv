@@ -86,7 +86,13 @@
             };
           in
           project.config;
-        mkShell = args: (self.lib.mkConfig args).shell;
+        mkShell = args:
+          let
+            config = self.lib.mkConfig args;
+          in
+          config.shell // {
+            ci = config.ciDerivation;
+          };
       };
     };
 }
