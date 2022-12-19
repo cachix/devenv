@@ -57,6 +57,23 @@ boolean
 
 
 
+## difftastic.enable
+Integrat difftastic into git: https://difftastic.wilfred.me.uk/
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+
+
 ## enterShell
 Bash code to execute when entering the shell.
 
