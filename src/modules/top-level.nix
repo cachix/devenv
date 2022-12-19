@@ -42,15 +42,14 @@ in
   };
 
   imports = [
-    ./devcontainer.nix
     ./info.nix
-    ./pre-commit.nix
     ./processes.nix
     ./scripts.nix
     ./update-check.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
+  ++ (listEntries ./integrations)
   ;
 
   config = {
