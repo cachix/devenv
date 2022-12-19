@@ -34,6 +34,11 @@ in
       type = types.listOf types.package;
       internal = true;
     };
+
+    ciDerivation = lib.mkOption {
+      type = types.package;
+      internal = true;
+    };
   };
 
   imports = [
@@ -77,5 +82,6 @@ in
     } // config.env);
 
     ci = [ config.shell config.procfile ];
+    ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }
