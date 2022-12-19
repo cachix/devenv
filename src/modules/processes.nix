@@ -132,6 +132,8 @@ in
       '';
     }.${implementation};
 
+    ci = [ config.procfileScript ];
+
     env =
       if implementation == "process-compose" then {
         PC_HTTP_PORT = implementation-options.port;

@@ -81,7 +81,7 @@ in
       shellHook = config.enterShell;
     } // config.env);
 
-    ci = [ config.shell config.procfile ];
+    ci = [ config.shell ];
     ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }
