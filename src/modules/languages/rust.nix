@@ -47,6 +47,8 @@ in
         pre-commit.tools.cargo = lib.mkForce rustPackages.cargo;
         pre-commit.tools.rustfmt = lib.mkForce rustPackages.rustfmt;
         pre-commit.tools.clippy = lib.mkForce rustPackages.clippy;
+
+        env.RUST_SRC_PATH = "${inputs.fenix.packages.${pkgs.system}.${cfg.version}.rust-src}/lib/rustlib/src/rust/library";
       }
     ))
   ];
