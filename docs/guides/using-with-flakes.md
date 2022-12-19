@@ -11,7 +11,7 @@ A Nix flake includes the inputs from `devenv.yaml` as well as the devenv configu
 To quickly set a project up with Nix flakes, use of `nix flake init`, like:
 
 ```console
-$ nix flake init --template github:cachix/devenv
+$ nix flake init --template github:cachix/devenv#simple
 ```
 
 This will create a `flake.nix` with devenv configuration, as well as a `.envrc` direnv configuration.
