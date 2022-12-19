@@ -80,7 +80,7 @@ in
       env = config.env;
       profile = pkgs.buildEnv {
         name = "devenv-profile";
-        paths = config.packages;
+        paths = lib.flatten (builtins.map (package: builtins.map (output: lib.getOutput output package) package.outputs) config.packages);
         ignoreCollisions = true;
       };
       shellHook = config.enterShell;
