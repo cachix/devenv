@@ -9,6 +9,7 @@
   ];
 
   devcontainer.enable = true;
+  difftastic.enable = true;
 
   # bin/mkdocs serve --config-file mkdocs.insiders.yml
   processes.docs.exec = "bin/mkdocs serve";
