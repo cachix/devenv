@@ -35,18 +35,22 @@ in
       type = types.listOf types.package;
       internal = true;
     };
+
+    ciDerivation = lib.mkOption {
+      type = types.package;
+      internal = true;
+    };
   };
 
   imports = [
-    ./devcontainer.nix
     ./info.nix
-    ./pre-commit.nix
     ./processes.nix
     ./scripts.nix
     ./update-check.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
+  ++ (listEntries ./integrations)
   ;
 
   config = {
@@ -82,6 +86,7 @@ in
       shellHook = config.enterShell;
     };
 
-    ci = [ config.shell.inputDerivation config.procfile ];
+    ci = [ config.shell.inputDerivation ];
+    ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }
