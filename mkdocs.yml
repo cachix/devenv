@@ -46,6 +46,7 @@ nav:
       - Using With Flakes: guides/using-with-flakes.md
     - Integrations:
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
+      - Difftastic: integrations/difftastic.md
     - Examples: examples.md
     - Roadmap: roadmap.md
     - Reference:
