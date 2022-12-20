@@ -3,24 +3,64 @@
 let
   cfg = config.services.postgres;
   types = lib.types;
-  createDatabase = lib.optionalString cfg.createDatabase ''
-    echo "CREATE DATABASE ''${USER:-$(id -nu)};" | postgres --single -E postgres
-  '';
+  setupInitialDatabases =
+    if cfg.initialDatabases != [ ] then
+      (lib.concatMapStrings
+        (database: ''
+          echo "Checking presence of database: ${database.name}"
+          # Create initial databases
+          dbAlreadyExists="$(
+            echo "SELECT 1 as exists FROM pg_database WHERE datname = '${database.name}';" | \
+            postgres --single -E postgres | \
+            ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
+          )"
+          echo $dbAlreadyExists
+          if [ 1 -ne "$dbAlreadyExists" ]; then
+            echo "Creating database: ${database.name}"
+            echo 'create database "${database.name}";' | postgres --single -E postgres
+
+
+            ${lib.optionalString (database.schema != null) ''
+            echo "Applying database schema on ${database.name}"
+            if [ -f "${database.schema}" ]
+            then
+              echo "Running file ${database.schema}"
+              cat "${database.schema}" | postgres --single -E ${database.name}
+            elif [ -d "${database.schema}" ]
+            then
+              echo "Running sql files in ${database.schema}"
+              cat "${database.schema}/*.sql" | postgres --single -E ${database.name}
+            else
+              echo "ERROR: Could not determine how to apply schema with ${database.schema}"
+              exit 1
+            fi
+            ''}
+          fi
+        '')
+        cfg.initialDatabases)
+    else
+      lib.optionalString cfg.createDatabase ''
+        echo "CREATE DATABASE ''${USER:-$(id -nu)};" | postgres --single -E postgres '';
 
   toStr = value:
-    if true == value then "yes"
-    else if false == value then "no"
-    else if lib.isString value then "'${lib.replaceStrings ["'"] ["''"] value}'"
-    else toString value;
+    if true == value then
+      "yes"
+    else if false == value then
+      "no"
+    else if lib.isString value then
+      "'${lib.replaceStrings [ "'" ] [ "''" ] value}'"
+    else
+      toString value;
 
-  configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n" (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
+  configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
+    (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
     export PATH=${cfg.package}/bin:${pkgs.coreutils}/bin
 
     if [[ ! -d "$PGDATA" ]]; then
       initdb ${lib.concatStringsSep " " cfg.initdbArgs}
-      ${createDatabase}
+      ${setupInitialDatabases}
     fi
 
     # Setup config
@@ -34,12 +74,16 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "postgres" "enable" ] [ "services" "postgres" "enable" ])
+    (lib.mkRenamedOptionModule [ "postgres" "enable" ] [
+      "services"
+      "postgres"
+      "enable"
+    ])
   ];
 
   options.services.postgres = {
     enable = lib.mkEnableOption ''
-      Add postgreSQL process and psql-devenv script.
+      Add postgreSQL process script.
     '';
 
     package = lib.mkOption {
@@ -72,7 +116,7 @@ in
       type = types.bool;
       default = true;
       description = ''
-        Create a database named like current user on startup.
+        Create a database named like current user on startup. Only applies when initialDatabases is an empty list.
       '';
     };
 
@@ -108,12 +152,43 @@ in
         }
       '';
     };
+
+    initialDatabases = lib.mkOption {
+      type = types.listOf (types.submodule {
+        options = {
+          name = lib.mkOption {
+            type = types.str;
+            description = ''
+              The name of the database to create.
+            '';
+          };
+          schema = lib.mkOption {
+            type = types.nullOr types.path;
+            default = null;
+            description = ''
+              The initial schema of the database; if null (the default),
+              an empty database is created.
+            '';
+          };
+        };
+      });
+      default = [ ];
+      description = ''
+        List of database names and their initial schemas that should be used to create databases on the first startup
+        of Postgres. The schema attribute is optional: If not specified, an empty database is created.
+      '';
+      example = [
+        {
+          name = "foodatabase";
+          schema = lib.literalExpression "./foodatabase.sql";
+        }
+        { name = "bardatabase"; }
+      ];
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [
-      cfg.package
-    ];
+    packages = [ cfg.package startScript ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
     env.PGHOST = config.env.PGDATA;
@@ -130,7 +205,7 @@ in
 
       process-compose = {
         readiness_probe = {
-          exec.command = "${cfg.package}/bin/pg_isready -h $PGDATA";
+          exec.command = "${cfg.package}/bin/pg_isready -h $PGDATA -d template1";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
