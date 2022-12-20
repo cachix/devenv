@@ -35,18 +35,22 @@ in
       type = types.listOf types.package;
       internal = true;
     };
+
+    ciDerivation = lib.mkOption {
+      type = types.package;
+      internal = true;
+    };
   };
 
   imports = [
-    ./devcontainer.nix
     ./info.nix
-    ./pre-commit.nix
     ./processes.nix
     ./scripts.nix
     ./update-check.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
+  ++ (listEntries ./integrations)
   ;
 
   config = {
@@ -76,12 +80,13 @@ in
       env = config.env;
       profile = pkgs.buildEnv {
         name = "devenv-profile";
-        paths = config.packages;
+        paths = lib.flatten (builtins.map (package: builtins.map (output: lib.getOutput output package) package.outputs) config.packages);
         ignoreCollisions = true;
       };
       shellHook = config.enterShell;
     };
 
-    ci = [ config.shell.inputDerivation config.procfile ];
+    ci = [ config.shell.inputDerivation ];
+    ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }

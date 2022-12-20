@@ -45,23 +45,27 @@
     in
     {
       packages = forAllSystems (system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
-        {
+        let pkgs = nixpkgs.legacyPackages.${system};
+        in {
           devenv = mkPackage pkgs;
           devenv-docs-options = mkDocOptions pkgs;
-        }
-      );
+        });
 
       modules = ./src/modules;
 
       defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
 
-      templates.simple = {
-        path = ./templates/simple;
-        description = "A direnv supported Nix flake with devenv integration.";
-      };
+      templates =
+        let
+          simple = {
+            path = ./templates/simple;
+            description = "A direnv supported Nix flake with devenv integration.";
+          };
+        in
+        {
+          inherit simple;
+          default = simple;
+        };
 
       lib = {
         mkConfig = { pkgs, inputs, modules }:
@@ -74,12 +78,21 @@
               };
               modules = [
                 (self.modules + /top-level.nix)
-                { devenv.warnOnNewVersion = false; }
+                {
+                  packages = [ self.packages.${pkgs.system}.devenv ];
+                  devenv.warnOnNewVersion = false;
+                }
               ] ++ modules;
             };
           in
           project.config;
-        mkShell = args: (self.lib.mkConfig args).shell;
+        mkShell = args:
+          let
+            config = self.lib.mkConfig args;
+          in
+          config.shell // {
+            ci = config.ciDerivation;
+          };
       };
     };
 }
