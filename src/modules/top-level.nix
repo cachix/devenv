@@ -1,6 +1,7 @@
 { config, pkgs, lib, ... }:
 let
   types = lib.types;
+  mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
@@ -74,13 +75,18 @@ in
       fi
     '';
 
-    shell = pkgs.mkShell ({
-      name = "devenv";
-      packages = config.packages;
+    shell = mkNakedShell {
+      name = "devenv-shell";
+      env = config.env;
+      profile = pkgs.buildEnv {
+        name = "devenv-profile";
+        paths = lib.flatten (builtins.map (package: builtins.map (output: lib.getOutput output package) package.outputs) config.packages);
+        ignoreCollisions = true;
+      };
       shellHook = config.enterShell;
-    } // config.env);
+    };
 
-    ci = [ config.shell ];
+    ci = [ config.shell.inputDerivation ];
     ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }
