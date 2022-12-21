@@ -98,14 +98,24 @@ pkgs.writeScriptBin "devenv" ''
     search)
       name=$1
       shift
+      assemble
+      options=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#optionsJSON' --impure)
       results=$($CUSTOM_NIX/bin/nix $NIX_FLAGS search --json nixpkgs $name)
+      results_options=$(cat $options/share/doc/nixos/options.json | ${pkgs.jq}/bin/jq "with_entries(select(.key | contains(\"$name\")))")
       if [ "$results" = "{}" ]; then
-        echo "No results found for '$name'."
+        echo "No packages found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (.[]  |map(.) |@tsv)' <<< "$results" | column -ts $'\t'
+        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | column -ts $'\t'
         echo
-        echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") results."
       fi
+      echo
+      if [ "$results_options" = "{}" ]; then
+        echo "No options found for '$name'."
+      else
+        ${pkgs.jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | column -ts $'\t'
+      fi
+      echo
+      echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") packages and $(${pkgs.jq}/bin/jq 'length' <<< "$results_options") options for '$name'."
       ;;
     init)
       if [ "$#" -eq "1" ]

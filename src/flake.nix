@@ -42,8 +42,12 @@
           ];
         };
         config = project.config;
+        options = pkgs.nixosOptionsDoc {
+          options = builtins.removeAttrs project.options [ "_module" ];
+        };
       in {
         packages."${pkgs.system}" = {
+          optionsJSON = options.optionsJSON;
           inherit (config) info procfileScript procfileEnv procfile;
           ci = config.ciDerivation;
         };
