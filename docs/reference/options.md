@@ -1096,7 +1096,7 @@ package
 
 
 ## languages.ruby.enable
-Whether to enable Enable tools for Ruby development..
+Whether to enable Enable tools for Ruby development.
 
 *_Type_*
 ```
