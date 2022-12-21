@@ -1,6 +1,7 @@
 { pkgs, config, lib, inputs, ... }:
 
 let
+  inherit (lib.attrsets) attrValues getAttrs;
   cfg = config.languages.rust;
   setup = ''
     inputs:
@@ -17,7 +18,7 @@ in
 
     packages = lib.mkOption {
       type = lib.types.attrsOf lib.types.package;
-      default = { inherit (pkgs) rustc cargo; };
+      default = { inherit (pkgs) rustc cargo rustfmt clippy rust-analyzer; };
       defaultText = "pkgs";
       description = "Attribute set of packages including rustc and cargo";
     };
@@ -31,10 +32,13 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      packages = [
-        cfg.packages.rustc
-        cfg.packages.cargo
-      ];
+      packages = attrValues (getAttrs [ "rustc" "cargo" "rustfmt" "clippy" "rust-analyzer" ] cfg.packages);
+      pre-commit.tools.cargo = lib.mkForce cfg.packages.cargo;
+      pre-commit.tools.rustfmt = lib.mkForce cfg.packages.rustfmt;
+      pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
+    })
+    (lib.mkIf (cfg.version == null) {
+      env.RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
     })
     (lib.mkIf (cfg.version != null) (
       let
@@ -43,11 +47,6 @@ in
       in
       {
         languages.rust.packages = rustPackages;
-
-        pre-commit.tools.cargo = lib.mkForce rustPackages.cargo;
-        pre-commit.tools.rustfmt = lib.mkForce rustPackages.rustfmt;
-        pre-commit.tools.clippy = lib.mkForce rustPackages.clippy;
-
         env.RUST_SRC_PATH = "${inputs.fenix.packages.${pkgs.system}.${cfg.version}.rust-src}/lib/rustlib/src/rust/library";
       }
     ))
