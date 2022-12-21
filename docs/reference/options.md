@@ -1535,6 +1535,10 @@ Nix code prettifier.
 
 Haskell code prettifier.
 
+<emphasis role="strong"><literal>php-cs-fixer</literal></emphasis>
+
+Lint PHP files.
+
 <emphasis role="strong"><literal>prettier</literal></emphasis>
 
 Opinionated multi-language code formatter.
@@ -2155,6 +2159,23 @@ list of string
 *_Default_*
 ```
 "[ ]"
+```
+
+
+
+
+## pre-commit.settings.php-cs-fixer.binPath
+PHP-CS-Fixer binary path.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"${pkgs.php81Packages.php-cs-fixer}/bin/php-cs-fixer\"\n"
 ```
 
 
