@@ -19,8 +19,16 @@ in
     enable = lib.mkEnableOption "Enable tools for Rust development.";
 
     packages = lib.mkOption {
-      type = lib.types.submodule ({ ... }: {
-        options = genAttrs tools (name: lib.mkOption {
+      type = lib.types.submodule ({
+        options = {
+          rust-src = lib.mkOption {
+            type = lib.types.either lib.types.package lib.types.str;
+            default = pkgs.rustPlatform.rustLibSrc;
+            defaultText = "pkgs.rustPlatform.rustLibSrc";
+            description = "rust-src package";
+          };
+        }
+        // genAttrs tools (name: lib.mkOption {
           type = lib.types.package;
           default = pkgs.${name};
           defaultText = "pkgs.${name}";
@@ -41,12 +49,12 @@ in
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
       packages = attrValues (getAttrs tools cfg.packages);
+
+      env.RUST_SRC_PATH = cfg.packages.rust-src;
+
       pre-commit.tools.cargo = lib.mkForce cfg.packages.cargo;
       pre-commit.tools.rustfmt = lib.mkForce cfg.packages.rustfmt;
       pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
-    })
-    (lib.mkIf (cfg.version == null) {
-      env.RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
     })
     (lib.mkIf (cfg.version != null) (
       let
@@ -54,8 +62,9 @@ in
         rustPackages = fenix.packages.${pkgs.system}.${cfg.version} or (throw "languages.rust.version is set to ${cfg.version}, but should be one of: stable, beta or latest.");
       in
       {
-        languages.rust.packages = genAttrs tools (package: lib.mkDefault rustPackages.${package});
-        env.RUST_SRC_PATH = "${inputs.fenix.packages.${pkgs.system}.${cfg.version}.rust-src}/lib/rustlib/src/rust/library";
+        languages.rust.packages =
+          { rust-src = lib.mkDefault "${rustPackages.rust-src}/lib/rustlib/src/rust/library"; }
+          // genAttrs tools (package: lib.mkDefault rustPackages.${package});
       }
     ))
   ];
