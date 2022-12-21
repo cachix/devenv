@@ -20,6 +20,7 @@ let
     exec ${cfg.package}/bin/mysqld ${mysqldOptions}
   '';
   configureScript = pkgs.writeShellScriptBin "configure-mysql" ''
+    PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
     set -euo pipefail
 
     while ! ${cfg.package}/bin/mysqladmin ping -u root --silent; do
