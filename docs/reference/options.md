@@ -4429,3 +4429,79 @@ boolean
 
 
 
+## starship.config.enable
+Whether to enable Enable Starship config override..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## starship.config.path
+The starship configuration file to use.
+
+*_Type_*
+```
+path
+```
+
+
+*_Default_*
+```
+"\"\\${config.env.DEVENV_ROOT}/starship.toml\""
+```
+
+
+
+
+## starship.enable
+Whether to enable Enable the Starship command prompt..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## starship.package
+The Starship package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.starship\""
+```
+
+
+
+
