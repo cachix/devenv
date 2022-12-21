@@ -2,8 +2,6 @@ You can compose environments either locally or by referencing [inputs](inputs.md
 
 Imagine you're building a typical web application, with separate frontend and backend components
 that live in separate folders.
-You've also written a custom Redis integration in ``devenv/devenv.nix``,
-stored in a remote ``https://github.com/mycompany/redis.devenv`` repository.
 
 ```yaml title="devenv.yaml"
 inputs:
