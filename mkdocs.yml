@@ -28,13 +28,7 @@ nav:
   - Home: index.md
   - Documentation:
     - Getting Started: getting-started.md
-    - Overview:
-      - Files And Variables: files-and-variables.md
-      - Automatic Shell Activation: automatic-shell-activation.md
-      - Garbage Collection: garbage-collection.md
-    - Writing devenv.yaml:
-      - Inputs: inputs.md
-      - Composing Using Imports: composing-using-imports.md
+    - Files And Variables: files-and-variables.md
     - Writing devenv.nix:
       - Basics: basics.md
       - Packages: packages.md
@@ -42,11 +36,17 @@ nav:
       - Languages: languages.md
       - Processes: processes.md
       - Pre-Commit Hooks: pre-commit-hooks.md
-    - Guides: 
-      - Using With Flakes: guides/using-with-flakes.md
+    - Writing devenv.yaml:
+      - Inputs: inputs.md
+      - Composing Using Imports: composing-using-imports.md
+    - Overview:
+      - Automatic Shell Activation: automatic-shell-activation.md
+      - Garbage Collection: garbage-collection.md
     - Integrations:
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
       - Difftastic: integrations/difftastic.md
+    - Guides: 
+      - Using With Flakes: guides/using-with-flakes.md
     - Examples: examples.md
     - Roadmap: roadmap.md
     - Reference:
