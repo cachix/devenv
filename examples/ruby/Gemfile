@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
 source "https://rubygems.org"
+git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
 gem "rails"
+gem "bridgetown", "~> 1.1.0"
+gem "puma", "~> 5.6"
+
+group "bridgetown_plugins" do
+  gem "bulmatown"
+  gem "bridgetown-quick-search"
+end
