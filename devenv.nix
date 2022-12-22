@@ -8,6 +8,8 @@
     pkgs.yaml2json
   ];
 
+  languages.python.enable = true;
+
   devcontainer.enable = true;
   difftastic.enable = true;
 
