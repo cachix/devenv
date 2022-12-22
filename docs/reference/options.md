@@ -1159,13 +1159,111 @@ Attribute set of packages including rustc and cargo
 
 *_Type_*
 ```
-attribute set of package
+submodule
+```
+
+
+
+
+
+
+## languages.rust.packages.cargo
+cargo package
+
+*_Type_*
+```
+package
 ```
 
 
 *_Default_*
 ```
-"\"pkgs\""
+"\"pkgs.cargo\""
+```
+
+
+
+
+## languages.rust.packages.clippy
+clippy package
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.clippy\""
+```
+
+
+
+
+## languages.rust.packages.rust-analyzer
+rust-analyzer package
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.rust-analyzer\""
+```
+
+
+
+
+## languages.rust.packages.rust-src
+rust-src package
+
+*_Type_*
+```
+package or string
+```
+
+
+*_Default_*
+```
+"\"pkgs.rustPlatform.rustLibSrc\""
+```
+
+
+
+
+## languages.rust.packages.rustc
+rustc package
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.rustc\""
+```
+
+
+
+
+## languages.rust.packages.rustfmt
+rustfmt package
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.rustfmt\""
 ```
 
 
