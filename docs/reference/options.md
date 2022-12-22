@@ -58,7 +58,7 @@ boolean
 
 
 ## difftastic.enable
-Integrat difftastic into git: https://difftastic.wilfred.me.uk/
+Integrate difftastic into git: https://difftastic.wilfred.me.uk/
 
 *_Type_*
 ```
