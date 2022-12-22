@@ -19,5 +19,7 @@ in
     packages = with pkgs; [
       cfg.package
     ];
+
+    env.PYTHONPATH = "${config.env.DEVENV_PROFILE}/${cfg.package.sitePackages}";
   };
 }
