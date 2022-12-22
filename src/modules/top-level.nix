@@ -5,6 +5,11 @@ let
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
+  profile = pkgs.buildEnv {
+    name = "devenv-profile";
+    paths = lib.flatten (builtins.map (package: builtins.map (output: lib.getOutput output package) package.outputs) config.packages);
+    ignoreCollisions = true;
+  };
 in
 {
   options = {
@@ -59,6 +64,7 @@ in
     env.DEVENV_ROOT = builtins.getEnv "PWD";
     env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
     env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
+    env.DEVENV_PROFILE = profile;
 
     enterShell = ''
       export PS1="(devenv) $PS1"
@@ -78,11 +84,7 @@ in
     shell = mkNakedShell {
       name = "devenv-shell";
       env = config.env;
-      profile = pkgs.buildEnv {
-        name = "devenv-profile";
-        paths = lib.flatten (builtins.map (package: builtins.map (output: lib.getOutput output package) package.outputs) config.packages);
-        ignoreCollisions = true;
-      };
+      profile = profile;
       shellHook = config.enterShell;
     };
 
