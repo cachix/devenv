@@ -44,13 +44,27 @@
     popd
     rm -rf "$tmp"
 
-    # Test devenv integrated into Nix flake
+    # Test devenv integrated into bare Nix flake
     tmp="$(mktemp -d)"
     pushd "$tmp"
       nix flake init --template ''${DEVENV_ROOT}#simple
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --command echo nix-develop started succesfully
+      nix develop --command echo nix-develop started succesfully |& tee ./console
+      grep -F 'nix-develop started succesfully' <./console
+      grep -F "$(${lib.getExe pkgs.hello})" <./console
+    popd
+    rm -rf "$tmp"
+
+    # Test devenv integrated into flake-parts Nix flake
+    tmp="$(mktemp -d)"
+    pushd "$tmp"
+      nix flake init --template ''${DEVENV_ROOT}#flake-parts
+      nix flake update \
+        --override-input devenv ''${DEVENV_ROOT}
+      nix develop --command echo nix-develop started succesfully |& tee ./console
+      grep -F 'nix-develop started succesfully' <./console
+      grep -F "$(${lib.getExe pkgs.hello})" <./console
     popd
     rm -rf "$tmp"
 
