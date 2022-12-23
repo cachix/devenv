@@ -19,15 +19,20 @@ in
     packages = with pkgs; [
       cfg.package
       bundler
+      gnumake # needed for native extensions
     ];
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
 
     env.GEM_HOME = "${config.env.BUNDLE_PATH}/${cfg.package.rubyEngine}/${cfg.package.version.libDir}";
 
-    enterShell = ''
-      export GEM_PATH="$GEM_HOME/gems:$GEM_PATH"
-      export PATH="$GEM_HOME/bin:$PATH"
-    '';
+    enterShell =
+      let libdir = cfg.package.version.libDir;
+      in
+      ''
+        export RUBYLIB="$DEVENV_PROFILE/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}/${pkgs.system}:$RUBYLIB"
+        export GEM_PATH="$GEM_HOME/gems:$GEM_PATH"
+        export PATH="$GEM_HOME/bin:$PATH"
+      '';
   };
 }
