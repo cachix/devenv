@@ -67,7 +67,7 @@ in
     env.DEVENV_PROFILE = profile;
 
     enterShell = ''
-      export PS1="(devenv) $PS1"
+      export PS1="\e[0;34m(devenv)\e[0m $PS1"
       
       # note what environments are active, but make sure we don't repeat them
       if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
