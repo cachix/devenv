@@ -1,10 +1,7 @@
 { pkgs, ... }:
 
 {
-  languages.ruby = {
-    enable = true;
-    compilers.enable = true;
-  };
+  languages.ruby.enable = true;
 
   enterShell = ''
     echo 'Making sure the basics for native compilation are available:'
