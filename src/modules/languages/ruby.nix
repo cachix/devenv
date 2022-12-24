@@ -13,14 +13,26 @@ in
       defaultText = "pkgs.ruby_3_1";
       description = "The Ruby package to use.";
     };
+
+    compilers = {
+      enable = lib.mkEnableOption "Enable common compiler packages for gem compilation";
+      packages = lib.mkOption {
+        default = [ pkgs.stdenv pkgs.gnumake pkgs.clang pkgs.gcc ];
+        defaultText = lib.literalExpression "[ pkgs.stdenv pkgs.gnumake pkgs.clang pkgs.gcc ]";
+        type = lib.types.listOf lib.types.package;
+        description = lib.mdDoc ''
+          Packages to add to the PATH, so the bundler native extensions can build.
+          Expected to be extended per project, based on the bundler dependencies.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       cfg.package
       bundler
-      gnumake # needed for native extensions
-    ];
+    ] ++ (lib.optionals cfg.compilers.enable cfg.compilers.packages);
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
 
