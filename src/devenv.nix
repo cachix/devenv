@@ -125,25 +125,42 @@ pkgs.writeScriptBin "devenv" ''
         cd "$target"
       fi
 
-      if [[ -f devenv.nix || -f devenv.yaml || -f .envrc ]]; then
-        echo "Aborting since devenv.nix, devenv.yaml or .envrc already exist."
+      if [[ -f devenv.nix && -f devenv.yaml && -f .envrc ]]; then
+        echo "Aborting since devenv.nix, devenv.yaml and .envrc already exist."
         exit 1
       fi
 
       # TODO: allow selecting which example and list them
       example=simple
-      echo "Creating .envrc"
-      cat ${examples}/$example/.envrc > .envrc
-      echo "Creating devenv.nix"
-      cat ${examples}/$example/devenv.nix > devenv.nix 
-      echo "Creating devenv.yaml"
-      cat ${examples}/$example/devenv.yaml > devenv.yaml
-      echo "Appending .devenv* and devenv.local.nix to .gitignore"
-      echo "" >> .gitignore
-      echo "# Devenv" >> .gitignore
-      echo ".devenv*" >> .gitignore
-      echo "devenv.local.nix" >> .gitignore
-      echo "" >> .gitignore
+
+      if [[ ! -f .envrc ]]; then
+        echo "Creating .envrc"
+        cat ${examples}/$example/.envrc > .envrc
+      fi
+
+      if [[ ! -f devenv.nix ]]; then
+        echo "Creating devenv.nix"
+        cat ${examples}/$example/devenv.nix > devenv.nix 
+      fi
+
+      if [[ ! -f devenv.yaml ]]; then
+        echo "Creating devenv.yaml"
+        cat ${examples}/$example/devenv.yaml > devenv.yaml
+      fi
+
+      if [[ ! -f .gitignore ]]; then
+        touch .gitignore
+      fi
+
+      if ! grep -q "devenv" .gitignore; then
+        echo "Appending .devenv* and devenv.local.nix to .gitignore"
+
+        echo "" >> .gitignore
+        echo "# Devenv" >> .gitignore
+        echo ".devenv*" >> .gitignore
+        echo "devenv.local.nix" >> .gitignore
+        echo "" >> .gitignore
+      fi
       echo "Done."
       ;;
     info)
