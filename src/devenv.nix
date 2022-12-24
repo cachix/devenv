@@ -145,6 +145,11 @@ pkgs.writeScriptBin "devenv" ''
       echo "devenv.local.nix" >> .gitignore
       echo "" >> .gitignore
       echo "Done."
+
+      if command -v direnv &> /dev/null; then
+        echo "direnv is installed. Running direnv allow."
+        direnv allow
+      fi
       ;;
     info)
       assemble
