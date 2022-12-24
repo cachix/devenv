@@ -15,7 +15,10 @@ in
     };
 
     compilers = {
-      enable = lib.mkEnableOption "Enable common compiler packages for gem compilation";
+      enable = (lib.mkEnableOption "Enable common compiler packages for gem compilation") // {
+        # enable by default for better DX
+        enable = cfg.enable;
+      };
       packages = lib.mkOption {
         default = [ pkgs.stdenv pkgs.gnumake pkgs.clang pkgs.gcc ];
         defaultText = lib.literalExpression "[ pkgs.stdenv pkgs.gnumake pkgs.clang pkgs.gcc ]";
