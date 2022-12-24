@@ -79,6 +79,9 @@ in
         echo "You have .envrc but direnv command is not installed."
         echo "Please install direnv: https://direnv.net/docs/installation.html"
       fi
+
+      rm -f .devenv/profile
+      ln -s ${profile} .devenv/profile
     '';
 
     shell = mkNakedShell {
