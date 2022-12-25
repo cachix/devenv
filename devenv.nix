@@ -55,10 +55,11 @@
   '';
   scripts.devenv-test-all-examples.exec = ''
     for dir in $(ls examples); do
-      devenv-run-example-test $dir
+      devenv-test-example $dir
     done
   '';
   scripts.devenv-test-example.exec = ''
+    set -e
     pushd examples/$1 
     devenv ci
     devenv shell ls
