@@ -96,7 +96,7 @@ Environment variables to be exposed inside the developer environment.
 
 *_Type_*
 ```
-attribute set
+lazy attribute set of anything
 ```
 
 
