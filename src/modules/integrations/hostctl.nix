@@ -1,7 +1,7 @@
 { pkgs, lib, config, ... }:
 
 let
-  hostContent = lib.concatStringsSep "\n" config.hostctl.hosts;
+  hostContent = lib.concatStringsSep "\n" config.hosts;
   hostHash = builtins.hashString "sha256" hostContent;
   file = pkgs.writeText "hosts" ''
     # ${hostHash}
@@ -9,10 +9,8 @@ let
   '';
 in
 {
-  options.hostctl = {
-    enable = lib.mkEnableOption "Adjust /etc/hosts using hostctl.";
-
-    profile = lib.mkOption {
+  options = {
+    hostsProfile = lib.mkOption {
       type = lib.types.str;
       default = "devenv";
       description = "Profile name to use.";
@@ -25,18 +23,18 @@ in
     };
   };
 
-  config = lib.mkIf config.hostctl.enable {
+  config = lib.mkIf (builtins.length config.hosts != 0) {
     packages = [
       (pkgs.writeShellScriptBin "deactivate-hosts" ''
         rm -f "$DEVENV_STATE/hostctl"
-        exec sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostctl.profile} 
+        exec sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfile} 
       ''
       )
     ];
 
     enterShell = ''
       if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
-        sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostctl.profile} --from ${file}
+        sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfile} --from ${file}
         echo "Hosts file updated. Run 'deactivate-hosts' to revert changes."
         mkdir -p "$DEVENV_STATE"
         echo "${hostHash}" > "$DEVENV_STATE/hostctl"
