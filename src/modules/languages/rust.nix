@@ -36,6 +36,7 @@ in
         });
       });
       defaultText = "pkgs";
+      default = { };
       description = "Attribute set of packages including rustc and cargo";
     };
 
