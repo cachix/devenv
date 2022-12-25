@@ -14,7 +14,7 @@ in
 {
   options = {
     env = lib.mkOption {
-      type = types.attrs;
+      type = types.lazyAttrsOf types.anything;
       description = "Environment variables to be exposed inside the developer environment.";
       default = { };
     };
@@ -59,7 +59,6 @@ in
   ;
 
   config = {
-
     # TODO: figure out how to get relative path without impure mode
     env.DEVENV_ROOT = builtins.getEnv "PWD";
     env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
