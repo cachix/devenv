@@ -16,10 +16,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # enable C tooling by default so native extensions can be built
+    languages.c.enable = lib.mkDefault true;
+
     packages = with pkgs; [
       cfg.package
       bundler
-      gnumake # needed for native extensions
     ];
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";

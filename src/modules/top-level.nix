@@ -5,9 +5,15 @@ let
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
+
+  drvOrPackageToPaths = drvOrPackage:
+    if drvOrPackage ? outputs then
+      builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
+    else
+      [ drvOrPackage ];
   profile = pkgs.buildEnv {
     name = "devenv-profile";
-    paths = lib.flatten (builtins.map (package: builtins.map (output: lib.getOutput output package) package.outputs) config.packages);
+    paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
     ignoreCollisions = true;
   };
 in
