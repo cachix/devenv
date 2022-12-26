@@ -36,9 +36,14 @@
     pushd examples/simple
       # this should fail since files already exist
       devenv init && exit 1
-      rm devenv.nix devenv.yaml .envrc
-      devenv init
     popd
+
+    tmp="$(mktemp -d)"
+    devenv init "$tmp"
+    pushd "$tmp"
+      devenv ci
+    popd
+    rm -rf "$tmp"
 
     # Test devenv integrated into Nix flake
     tmp="$(mktemp -d)"

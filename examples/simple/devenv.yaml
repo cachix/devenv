@@ -1,5 +1,4 @@
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
-  devenv:
-    url: path:../../src/modules
+# can't point to the local modules here as it's used as a template
