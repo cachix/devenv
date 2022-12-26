@@ -10,9 +10,9 @@ let
 in
 {
   options = {
-    hostsProfile = lib.mkOption {
+    hostsProfileName = lib.mkOption {
       type = lib.types.str;
-      default = "devenv";
+      default = "devenv-${builtins.hashString "sha256" config.env.DEVENV_ROOT}";
       description = "Profile name to use.";
     };
 
@@ -27,14 +27,14 @@ in
     packages = [
       (pkgs.writeShellScriptBin "deactivate-hosts" ''
         rm -f "$DEVENV_STATE/hostctl"
-        exec sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfile} 
+        exec sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName} 
       ''
       )
     ];
 
     enterShell = ''
       if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
-        sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfile} --from ${file}
+        sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
         echo "Hosts file updated. Run 'deactivate-hosts' to revert changes."
         mkdir -p "$DEVENV_STATE"
         echo "${hostHash}" > "$DEVENV_STATE/hostctl"
