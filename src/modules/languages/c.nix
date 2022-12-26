@@ -8,10 +8,13 @@ in
     enable = lib.mkEnableOption "Enable tools for C development.";
   };
 
-
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
+      stdenv
+      gnumake
+      clang
       gcc
+      pkg-config
     ];
   };
 }
