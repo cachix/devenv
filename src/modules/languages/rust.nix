@@ -51,6 +51,9 @@ in
     (lib.mkIf cfg.enable {
       packages = attrValues (getAttrs tools cfg.packages);
 
+      # enable compiler tooling by default to expose things like cc
+      languages.c.enable = lib.mkDefault true;
+
       env.RUST_SRC_PATH = cfg.packages.rust-src;
 
       pre-commit.tools.cargo = lib.mkForce cfg.packages.cargo;
