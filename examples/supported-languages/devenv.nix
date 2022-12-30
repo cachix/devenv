@@ -29,6 +29,7 @@
   languages.scala.enable = true;
   languages.terraform.enable = true;
   languages.typescript.enable = true;
+  languages.deno.enable = true;
   languages.v.enable = true;
 
   # If you're missing a language, please contribute it by following examples of other languages <3
