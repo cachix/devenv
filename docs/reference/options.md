@@ -208,7 +208,7 @@ package
 
 
 ## languages.deno.enable
-Whether to enable Enable tools for Deno development..
+Whether to enable Enable tools for Deno development.
 
 *_Type_*
 ```
