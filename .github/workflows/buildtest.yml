@@ -3,9 +3,9 @@ name: Reusable workflow example
 on:
   workflow_call:
     inputs:
-      runs-on:
+      trusted:
         required: true
-        type: array
+        type: boolean
     secrets:
       CACHIX_AUTH_TOKEN:
         required: true
@@ -14,7 +14,12 @@ jobs:
   build:
     strategy:
       matrix:
-        os: ${{ inputs.runs-on }}
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+        trusted:
+          - ${{ inputs.trusted }}
+        exclude:
+          - trusted: false
+            os: [self-hosted, macOS]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
@@ -49,8 +54,13 @@ jobs:
     needs: [generate-examples]
     strategy:
       matrix:
-        os: ${{ inputs.runs-on }}
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
+        trusted:
+          - ${{ inputs.trusted }}
+        exclude:
+          - trusted: false
+            os: [self-hosted, macOS]
     runs-on: ${{ matrix.os }}
     steps:
      - uses: actions/checkout@v3

@@ -6,5 +6,5 @@ jobs:
   buildtest:
     uses: ./.github/workflows/buildtest.yml 
     with:
-      runs-on: [[ubuntu-latest], [macos-latest]]
+      trusted: false
     secrets: inherit
