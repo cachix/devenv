@@ -1,16 +1,25 @@
-name: "Build & Test"
+name: Reusable workflow example
+
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - v*
-  pull_request:
+  workflow_call:
+    inputs:
+      trusted:
+        required: true
+        type: boolean
+    secrets:
+      CACHIX_AUTH_TOKEN:
+        required: true
+
 jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+        trusted:
+          - ${{ inputs.trusted }}
+        exclude:
+          - trusted: false
+            os: [self-hosted, macOS]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
@@ -22,7 +31,9 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix profile install .
+    - run: |
+        nix profile remove '.*'
+        nix profile install .
     - name: Run tests
       run: |
         devenv ci
@@ -39,12 +50,17 @@ jobs:
           json=$(tree -J -L 1 examples | jq -c '[.[0].contents[] | .name]')
           echo "examples=$json" >> $GITHUB_OUTPUT                     
   examples:
-    name: example ${{ matrix.example }} (${{ matrix.os }})
+    name: example ${{ matrix.example }} (${{ join(matrix.os) }})
     needs: [generate-examples]
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
+        trusted:
+          - ${{ inputs.trusted }}
+        exclude:
+          - trusted: false
+            os: [self-hosted, macOS]
     runs-on: ${{ matrix.os }}
     steps:
      - uses: actions/checkout@v3
@@ -55,5 +71,8 @@ jobs:
      - uses: cachix/cachix-action@v12
        with:
         name: devenv
-     - run: nix profile install .
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+     - run: |
+          nix profile remove '.*'
+          nix profile install .
      - run: devenv shell devenv-test-example ${{ matrix.example }}

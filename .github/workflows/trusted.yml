@@ -1,0 +1,14 @@
+name: "Build & Test"
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+
+jobs:
+  buildtest:
+    uses: ./.github/workflows/buildtest.yml
+    with:
+      trusted: true
+    secrets: inherit
