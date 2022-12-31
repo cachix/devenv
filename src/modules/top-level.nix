@@ -85,6 +85,7 @@ in
         echo "Please install direnv: https://direnv.net/docs/installation.html"
       fi
 
+      mkdir -p .devenv
       rm -f .devenv/profile
       ln -s ${profile} .devenv/profile
     '';
