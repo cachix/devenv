@@ -39,11 +39,11 @@ jobs:
           json=$(tree -J -L 1 examples | jq -c '[.[0].contents[] | .name]')
           echo "examples=$json" >> $GITHUB_OUTPUT                     
   examples:
-    name: example ${{ matrix.example }} (${{ matrix.os }})
+    name: example ${{ matrix.example }} (${{ join(matrix.os) }})
     needs: [generate-examples]
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, [self-hosted, macOS]]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
     steps:
