@@ -1662,6 +1662,14 @@ Haskell code prettifier.
 
 Lint PHP files.
 
+<emphasis role="strong"><literal>phpcbf</literal></emphasis>
+
+Lint PHP files.
+
+<emphasis role="strong"><literal>phpcs</literal></emphasis>
+
+Lint PHP files.
+
 <emphasis role="strong"><literal>prettier</literal></emphasis>
 
 Opinionated multi-language code formatter.
@@ -2299,6 +2307,40 @@ string
 *_Default_*
 ```
 "\"${pkgs.php81Packages.php-cs-fixer}/bin/php-cs-fixer\"\n"
+```
+
+
+
+
+## pre-commit.settings.phpcbf.binPath
+PHP_CodeSniffer binary path.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"${pkgs.php80Packages.phpcbf}/bin/phpcbf\"\n"
+```
+
+
+
+
+## pre-commit.settings.phpcs.binPath
+PHP_CodeSniffer binary path.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"\"${pkgs.php80Packages.phpcs}/bin/phpcs\"\n"
 ```
 
 
