@@ -10,7 +10,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, [self-hosted, macOS]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
@@ -43,7 +43,7 @@ jobs:
     needs: [generate-examples]
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, [self-hosted, macOS]]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
     steps:
