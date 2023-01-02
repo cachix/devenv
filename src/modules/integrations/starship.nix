@@ -34,12 +34,8 @@
           else '''';
       in
       starshipConfExport + ''
-        		  # Identify user's terminal to call the appropiate 'starship init' command
-                  _DEVENV_SHELL=$(ps -o cmd= $$ | awk '{print $1}')
-
-                  eval "$(starship init $_DEVENV_SHELL)"
-
-                  unset _DEVENV_SHELL
+        # Identify user's terminal to call the appropiate 'starship init' command
+        eval "$(starship init $(echo $0))"
       '';
   };
 }
