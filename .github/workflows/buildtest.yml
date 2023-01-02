@@ -8,7 +8,7 @@ on:
         type: boolean
     secrets:
       CACHIX_AUTH_TOKEN:
-        required: true
+        required: false # for pull requests
 
 jobs:
   build:
