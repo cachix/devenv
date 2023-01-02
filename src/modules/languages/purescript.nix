@@ -2,6 +2,12 @@
 
 let
   cfg = config.languages.purescript;
+  # supported via rosetta
+  supportAarch64Darwin = package: package.overrideAttrs (attrs: {
+    meta = attrs.meta // {
+      platforms = lib.platforms.linux ++ lib.platforms.darwin;
+    };
+  });
 in
 {
   options.languages.purescript = {
@@ -9,7 +15,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.purescript;
+      default = (supportAarch64Darwin pkgs.purescript);
       defaultText = "pkgs.purescript";
       description = "The PureScript package to use.";
     };
@@ -23,7 +29,7 @@ in
       pkgs.nodePackages.purs-tidy
       pkgs.spago
       pkgs.purescript-psa
-      pkgs.psc-package
+      (supportAarch64Darwin pkgs.psc-package)
     ];
   };
 }
