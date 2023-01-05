@@ -98,6 +98,7 @@
           in
           config.shell // {
             ci = config.ciDerivation;
+            inherit config;
           };
       };
     };
