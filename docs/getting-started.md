@@ -62,7 +62,7 @@ c) Install ``devenv``
 
     ```nix title="configuration.nix"
     environment.systemPackages = [ 
-      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))
+      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz)).default
     ];
     ```
 
