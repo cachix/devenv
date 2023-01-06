@@ -2,20 +2,14 @@
   "nodes": {
     "devenv": {
       "locked": {
-        "dir": "src/modules",
-        "lastModified": 1671986436,
-        "narHash": "sha256-j/p3owTIlpJ6i7fgczRQ9DNJ3B/0wbKbHDAv3JhU4lE=",
-        "owner": "cachix",
-        "repo": "devenv",
-        "rev": "a14d697e0cf1a1da8a8b6aac4c2bbd3cb36fb663",
-        "type": "github"
+        "path": "../../src/modules",
+        "type": "path"
       },
       "original": {
-        "dir": "src/modules",
-        "owner": "cachix",
-        "repo": "devenv",
-        "type": "github"
-      }
+        "path": "../../src/modules",
+        "type": "path"
+      },
+      "parent": []
     },
     "flake-compat": {
       "flake": false,

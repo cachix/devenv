@@ -10,7 +10,8 @@ let
       };
     };
   });
-  toPackage = name: script: pkgs.writeShellScriptBin name script.exec;
+  # lib.hiPrioSet: prioritize scripts over plain packages
+  toPackage = name: script: lib.hiPrioSet (pkgs.writeShellScriptBin name script.exec);
 in
 {
   options = {
