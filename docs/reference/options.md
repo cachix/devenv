@@ -1391,6 +1391,44 @@ boolean
 ```
 
 
+## languages.unison.enable
+Whether to enable Enable tools for Unison development..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## languages.unison.package
+Which package of Unison to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.unison-ucm\""
+```
+
+
+
+
 ## languages.v.enable
 Whether to enable Enable tools for v development..
 
