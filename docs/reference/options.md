@@ -1429,6 +1429,44 @@ package
 
 
 
+## languages.zig.enable
+Whether to enable Enable tools for Zig development..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+*_Example_*
+```
+"true"
+```
+
+
+## languages.zig.package
+Which package of Zig to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"\"pkgs.zig\""
+```
+
+
+
+
 ## packages
 A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
 
