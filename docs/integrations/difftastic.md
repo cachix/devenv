@@ -5,7 +5,7 @@ To get started using [diffstatic - a structural diff that understands syntax for
 { pkgs, ... }:
 
 {
-    diffstatic.enable = true;
+    difftastic.enable = true;
 }
 ```
 
