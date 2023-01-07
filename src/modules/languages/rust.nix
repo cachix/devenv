@@ -24,18 +24,18 @@ in
           rust-src = lib.mkOption {
             type = lib.types.either lib.types.package lib.types.str;
             default = pkgs.rustPlatform.rustLibSrc;
-            defaultText = "pkgs.rustPlatform.rustLibSrc";
+            defaultText = lib.literalExpression "pkgs.rustPlatform.rustLibSrc";
             description = "rust-src package";
           };
         }
         // genAttrs tools (name: lib.mkOption {
           type = lib.types.package;
           default = pkgs.${name};
-          defaultText = "pkgs.${name}";
+          defaultText = lib.literalExpression "pkgs.${name}";
           description = "${name} package";
         });
       });
-      defaultText = "pkgs";
+      defaultText = lib.literalExpression "pkgs";
       default = { };
       description = "Attribute set of packages including rustc and cargo";
     };

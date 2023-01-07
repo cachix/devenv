@@ -16,7 +16,7 @@ in
       type = types.package;
       description = "Which package of memcached to use";
       default = pkgs.memcached;
-      defaultText = "pkgs.memcached";
+      defaultText = lib.literalExpression "pkgs.memcached";
     };
 
     bind = lib.mkOption {

@@ -16,7 +16,7 @@ in
       type = types.package;
       description = "Which package of adminer to use";
       default = pkgs.adminer;
-      defaultText = "pkgs.adminer";
+      defaultText = lib.literalExpression "pkgs.adminer";
     };
 
     listen = lib.mkOption {

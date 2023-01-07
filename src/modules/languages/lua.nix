@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.lua;
-      defaultText = "pkgs.lua";
+      defaultText = lib.literalExpression "pkgs.lua";
       description = "The Lua package to use.";
     };
   };

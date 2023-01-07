@@ -18,6 +18,7 @@ in
     package = mkOption {
       type = types.package;
       default = pkgs.wiremock;
+      defaultText = lib.literalExpression "pkgs.wiremock";
       description = mdDoc ''
         Which package of wiremock to use.
       '';

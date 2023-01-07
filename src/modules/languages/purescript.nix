@@ -16,7 +16,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = (supportAarch64Darwin pkgs.purescript);
-      defaultText = "pkgs.purescript";
+      defaultText = lib.literalExpression "pkgs.purescript";
       description = "The PureScript package to use.";
     };
 

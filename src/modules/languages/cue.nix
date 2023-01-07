@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.cue;
-      defaultText = "pkgs.cue";
+      defaultText = lib.literalExpression "pkgs.cue";
       description = "The CUE package to use.";
     };
   };
