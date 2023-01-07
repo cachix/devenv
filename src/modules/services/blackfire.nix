@@ -80,7 +80,7 @@ in
       type = lib.types.package;
       description = "Which package of blackfire to use";
       default = pkgs.blackfire;
-      defaultText = "pkgs.blackfire";
+      defaultText = lib.literalExpression "pkgs.blackfire";
     };
   };
 

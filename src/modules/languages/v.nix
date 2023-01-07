@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.vlang;
-      defaultText = "pkgs.vlang";
+      defaultText = lib.literalExpression "pkgs.vlang";
       description = "The v package to use.";
     };
   };

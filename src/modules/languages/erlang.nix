@@ -11,7 +11,7 @@ in
       type = lib.types.package;
       description = "Which package of Erlang to use";
       default = pkgs.erlang;
-      defaultText = "pkgs.erlang";
+      defaultText = lib.literalExpression "pkgs.erlang";
     };
   };
 

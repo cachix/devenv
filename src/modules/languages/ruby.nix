@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.ruby_3_1;
-      defaultText = "pkgs.ruby_3_1";
+      defaultText = lib.literalExpression "pkgs.ruby_3_1";
       description = "The Ruby package to use.";
     };
   };

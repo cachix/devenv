@@ -10,13 +10,13 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.python3;
-      defaultText = "pkgs.python3";
+      defaultText = lib.literalExpression "pkgs.python3";
       description = "The Python package to use.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
+    packages = [
       cfg.package
     ];
 
