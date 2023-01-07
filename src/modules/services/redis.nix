@@ -33,7 +33,7 @@ in
       type = types.package;
       description = "Which package of redis to use";
       default = pkgs.redis;
-      defaultText = "pkgs.redis";
+      defaultText = lib.literalExpression "pkgs.redis";
     };
 
     bind = mkOption {

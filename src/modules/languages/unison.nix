@@ -11,7 +11,7 @@ in
       type = lib.types.package;
       description = "Which package of Unison to use";
       default = pkgs.unison-ucm;
-      defaultText = "pkgs.unison-ucm";
+      defaultText = lib.literalExpression "pkgs.unison-ucm";
     };
   };
 

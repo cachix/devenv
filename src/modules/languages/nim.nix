@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.nim;
-      defaultText = "pkgs.nim";
+      defaultText = lib.literalExpression "pkgs.nim";
       description = "The nim package to use.";
     };
   };

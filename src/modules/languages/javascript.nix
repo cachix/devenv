@@ -10,13 +10,13 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.nodejs;
-      defaultText = "pkgs.nodejs";
+      defaultText = lib.literalExpression "pkgs.nodejs";
       description = "The Node package to use.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
+    packages = [
       cfg.package
     ];
   };
