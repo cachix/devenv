@@ -11,7 +11,7 @@ in
       type = lib.types.package;
       description = "Which package of Elixir to use";
       default = pkgs.elixir;
-      defaultText = "pkgs.elixir";
+      defaultText = lib.literalExpression "pkgs.elixir";
     };
   };
 

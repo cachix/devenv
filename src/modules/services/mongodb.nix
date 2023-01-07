@@ -30,7 +30,7 @@ in
       type = types.package;
       description = "Which MongoDB package to use.";
       default = pkgs.mongodb;
-      defaultText = "pkgs.mongodb";
+      defaultText = lib.literalExpression "pkgs.mongodb";
     };
 
     additionalArgs = lib.mkOption {

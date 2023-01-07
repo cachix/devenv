@@ -12,7 +12,7 @@ in
       type = types.package;
       description = "Which package of mailhog to use";
       default = pkgs.mailhog;
-      defaultText = "pkgs.mailhog";
+      defaultText = lib.literalExpression "pkgs.mailhog";
     };
 
     apiListenAddress = lib.mkOption {

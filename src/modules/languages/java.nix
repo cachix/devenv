@@ -9,7 +9,7 @@ in
     enable = mkEnableOption "tools for Java development";
     jdk.package = mkOption {
       type = types.package;
-      example = pkgs.jdk8;
+      example = literalExpression "pkgs.jdk8";
       default = pkgs.jdk;
       defaultText = literalExpression "pkgs.jdk";
       description = mdDoc ''

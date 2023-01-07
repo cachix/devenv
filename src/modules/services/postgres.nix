@@ -90,7 +90,7 @@ in
       type = types.package;
       description = "Which version of postgres to use";
       default = pkgs.postgresql;
-      defaultText = "pkgs.postgresql";
+      defaultText = lib.literalExpression "pkgs.postgresql";
       example = lib.literalExpression ''
         # see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list
         pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
@@ -177,13 +177,15 @@ in
         List of database names and their initial schemas that should be used to create databases on the first startup
         of Postgres. The schema attribute is optional: If not specified, an empty database is created.
       '';
-      example = [
-        {
-          name = "foodatabase";
-          schema = lib.literalExpression "./foodatabase.sql";
-        }
-        { name = "bardatabase"; }
-      ];
+      example = lib.literalExpression ''
+        [
+          {
+            name = "foodatabase";
+            schema = ./foodatabase.sql;
+          }
+          { name = "bardatabase"; }
+        ]
+      '';
     };
   };
 

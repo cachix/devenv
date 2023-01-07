@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.terraform;
-      defaultText = "pkgs.terraform";
+      defaultText = lib.literalExpression "pkgs.terraform";
       description = "The terraform package to use.";
     };
   };

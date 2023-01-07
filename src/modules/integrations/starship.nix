@@ -7,7 +7,7 @@
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.starship;
-      defaultText = "pkgs.starship";
+      defaultText = lib.literalExpression "pkgs.starship";
       description = "The Starship package to use.";
     };
 
@@ -16,7 +16,7 @@
     config.path = lib.mkOption {
       type = lib.types.path;
       default = config.env.DEVENV_ROOT + "/starship.toml";
-      defaultText = "\${config.env.DEVENV_ROOT}/starship.toml";
+      defaultText = lib.literalExpression "\${config.env.DEVENV_ROOT}/starship.toml";
       description = "The starship configuration file to use.";
     };
   };

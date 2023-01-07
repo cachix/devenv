@@ -147,12 +147,12 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.php;
-      defaultText = "pkgs.php";
+      defaultText = literalExpression "pkgs.php";
       description = lib.mdDoc ''
         Allows to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide) to adjust the settings or add more extensions. You can find the extensions using `devenv search 'php extensions'`
         ```
       '';
-      example = lib.literalExpression ''
+      example = literalExpression ''
         pkgs.php.buildEnv {
           extensions = { all, enabled }: with all; enabled ++ [ xdebug ];
           extraConfig = '''
