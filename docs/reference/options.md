@@ -203,7 +203,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.cue\""
+"pkgs.cue"
 ```
 
 
@@ -283,7 +283,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.elixir\""
+"pkgs.elixir"
 ```
 
 
@@ -342,7 +342,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.erlang\""
+"pkgs.erlang"
 ```
 
 
@@ -466,7 +466,7 @@ package
 
 *_Example_*
 ```
-"<derivation openjdk-8u322-ga>"
+"pkgs.jdk8"
 ```
 
 
@@ -538,7 +538,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.nodejs\""
+"pkgs.nodejs"
 ```
 
 
@@ -597,7 +597,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.lua\""
+"pkgs.lua"
 ```
 
 
@@ -635,7 +635,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.nim\""
+"pkgs.nim"
 ```
 
 
@@ -971,7 +971,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.php\""
+"pkgs.php"
 ```
 
 
@@ -1013,7 +1013,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.purescript\""
+"pkgs.purescript"
 ```
 
 
@@ -1051,7 +1051,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.python3\""
+"pkgs.python3"
 ```
 
 
@@ -1110,7 +1110,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.python3\""
+"pkgs.python3"
 ```
 
 
@@ -1148,7 +1148,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.ruby_3_1\""
+"pkgs.ruby_3_1"
 ```
 
 
@@ -1186,7 +1186,7 @@ submodule
 
 *_Default_*
 ```
-"\"pkgs\""
+"pkgs"
 ```
 
 
@@ -1203,7 +1203,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.cargo\""
+"pkgs.cargo"
 ```
 
 
@@ -1220,7 +1220,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.clippy\""
+"pkgs.clippy"
 ```
 
 
@@ -1237,7 +1237,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.rust-analyzer\""
+"pkgs.rust-analyzer"
 ```
 
 
@@ -1254,7 +1254,7 @@ package or string
 
 *_Default_*
 ```
-"\"pkgs.rustPlatform.rustLibSrc\""
+"pkgs.rustPlatform.rustLibSrc"
 ```
 
 
@@ -1271,7 +1271,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.rustc\""
+"pkgs.rustc"
 ```
 
 
@@ -1288,7 +1288,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.rustfmt\""
+"pkgs.rustfmt"
 ```
 
 
@@ -1364,7 +1364,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.terraform\""
+"pkgs.terraform"
 ```
 
 
@@ -1423,7 +1423,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.unison-ucm\""
+"pkgs.unison-ucm"
 ```
 
 
@@ -1461,7 +1461,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.vlang\""
+"pkgs.vlang"
 ```
 
 
@@ -1499,7 +1499,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.zig\""
+"pkgs.zig"
 ```
 
 
@@ -2842,7 +2842,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.adminer\""
+"pkgs.adminer"
 ```
 
 
@@ -2930,7 +2930,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.blackfire\""
+"pkgs.blackfire"
 ```
 
 
@@ -3507,7 +3507,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.mailhog\""
+"pkgs.mailhog"
 ```
 
 
@@ -3602,7 +3602,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.memcached\""
+"pkgs.memcached"
 ```
 
 
@@ -3850,7 +3850,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.mongodb\""
+"pkgs.mongodb"
 ```
 
 
@@ -3985,7 +3985,7 @@ list of (submodule)
 
 *_Example_*
 ```
-"[\n  {\n    name = \"foodatabase\";\n    schema = {\n      _type = \"literalExpression\";\n      text = \"./foodatabase.sql\";\n    };\n  }\n  {\n    name = \"bardatabase\";\n  }\n]"
+"[\n  { name = \"foodatabase\"; schema = ./foodatabase.sql; }\n  { name = \"bardatabase\"; }\n]\n"
 ```
 
 
@@ -4033,7 +4033,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.mysql80\""
+"pkgs.mysql80"
 ```
 
 
@@ -4143,7 +4143,7 @@ list of (submodule)
 
 *_Example_*
 ```
-"[\n  {\n    name = \"foodatabase\";\n    schema = {\n      _type = \"literalExpression\";\n      text = \"./foodatabase.sql\";\n    };\n  }\n  {\n    name = \"bardatabase\";\n  }\n]"
+"[\n  {\n    name = \"foodatabase\";\n    schema = ./foodatabase.sql;\n  }\n  { name = \"bardatabase\"; }\n]\n"
 ```
 
 
@@ -4212,7 +4212,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.postgresql\""
+"pkgs.postgresql"
 ```
 
 
@@ -4550,7 +4550,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.redis\""
+"pkgs.redis"
 ```
 
 
@@ -4649,7 +4649,7 @@ package
 
 *_Default_*
 ```
-"<derivation wiremock-2.35.0>"
+"pkgs.wiremock"
 ```
 
 
@@ -4723,7 +4723,7 @@ path
 
 *_Default_*
 ```
-"\"\\${config.env.DEVENV_ROOT}/starship.toml\""
+"${config.env.DEVENV_ROOT}/starship.toml"
 ```
 
 
@@ -4761,7 +4761,7 @@ package
 
 *_Default_*
 ```
-"\"pkgs.starship\""
+"pkgs.starship"
 ```
 
 
