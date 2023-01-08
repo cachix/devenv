@@ -23,7 +23,7 @@ let
     PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
     set -euo pipefail
 
-    while ! ${cfg.package}/bin/mysqladmin ping ${lib.optionalString (!isMariaDB) "-u root --password=''"} --silent; do
+    while ! ${cfg.package}/bin/mysqladmin ping ${optionalString (!isMariaDB) "-u root --password=''"} --silent; do
       sleep 1
     done
 
