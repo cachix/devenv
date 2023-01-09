@@ -60,6 +60,10 @@ in
       pre-commit.tools.rustfmt = lib.mkForce cfg.packages.rustfmt;
       pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
     })
+    (lib.mkIf pkgs.stdenv.isDarwin {
+      env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+      env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+    })
     (lib.mkIf (cfg.version != null) (
       let
         fenix = inputs.fenix or (throw "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}");
