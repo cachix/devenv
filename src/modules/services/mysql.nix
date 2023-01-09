@@ -23,7 +23,7 @@ let
     PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
     set -euo pipefail
 
-    while ! ${cfg.package}/bin/mysqladmin ping ${optionalString (!isMariaDB) "-u root"} --silent; do
+    while ! ${cfg.package}/bin/mysqladmin ping ${optionalString (!isMariaDB) "-u root --password=''"} --silent; do
       sleep 1
     done
 
@@ -44,7 +44,7 @@ let
                 cat ${database.schema}/mysql-databases/*.sql
             fi
             ''}
-          ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root"} -N
+          ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
       fi
     '') cfg.initialDatabases}
 
@@ -54,7 +54,7 @@ let
           ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
             echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
           '') user.ensurePermissions)}
-        ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root"} -N
+        ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
     '') cfg.ensureUsers}
 
     # We need to sleep until infinity otherwise all processes stop
