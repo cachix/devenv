@@ -1078,6 +1078,23 @@ boolean
 ```
 
 
+## languages.r.package
+The R package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"pkgs.R"
+```
+
+
+
+
 ## languages.robotframework.enable
 Whether to enable Enable tools for Robot Framework development..
 
