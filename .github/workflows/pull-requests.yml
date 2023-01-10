@@ -6,5 +6,5 @@ jobs:
   buildtest:
     uses: ./.github/workflows/buildtest.yml 
     with:
-      trusted: false
+      trusted: true
     secrets: inherit

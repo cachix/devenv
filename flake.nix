@@ -19,7 +19,7 @@
     flake = false;
   };
   inputs.nix = {
-    url = "github:domenkozar/nix/relaxed-flakes";
+    url = "github:domenkozar/nix/debug-assert";
     inputs.nixpkgs.follows = "nixpkgs";
   };
 
