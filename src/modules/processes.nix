@@ -36,9 +36,12 @@ let
   envList =
     lib.mapAttrsToList
       (name: value: "${name}=${toString value}")
-      # avoid infinite recursion in the scenario the `config` parameter is used
-      # in a `processes` declaration inside a devenv module.
-      (builtins.removeAttrs config.env [ "DEVENV_PROFILE" ]);
+      (if config.devenv.flakesIntegration then
+      # avoid infinite recursion in the scenario the `config` parameter is
+      # used in a `processes` declaration inside a devenv module.
+        builtins.removeAttrs config.env [ "DEVENV_PROFILE" ]
+      else
+        config.env);
 in
 {
   options = {
