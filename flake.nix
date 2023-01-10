@@ -87,6 +87,7 @@
                 {
                   packages = [ self.packages.${pkgs.system}.devenv ];
                   devenv.warnOnNewVersion = false;
+                  devenv.flakesIntegration = true;
                 }
               ] ++ modules;
             };

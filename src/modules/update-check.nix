@@ -14,6 +14,13 @@ let
 in
 {
   options.devenv = {
+    flakesIntegration = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Tells if devenv is being imported by a flake.nix file
+      '';
+    };
     warnOnNewVersion = lib.mkOption {
       type = lib.types.bool;
       default = true;
