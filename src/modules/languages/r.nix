@@ -6,11 +6,17 @@ in
 {
   options.languages.r = {
     enable = lib.mkEnableOption "Enable tools for R development.";
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.R;
+      defaultText = lib.literalExpression "pkgs.R";
+      description = "The R package to use.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      R
+      cfg.package
     ];
   };
 }
