@@ -50,7 +50,8 @@ let
 
     ${concatMapStrings (user:
       ''
-        ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '${user.password}'"};"
+        ${optionalString (user.password != null) "password='${user.password}'"}
+        ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"
           ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
             echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
           '') user.ensurePermissions)}
