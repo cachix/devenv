@@ -34,7 +34,14 @@ let
   implementation = config.process.implementation;
   implementation-options = config.process.${implementation};
   envList =
-    (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env);
+    lib.mapAttrsToList
+      (name: value: "${name}=${toString value}")
+      (if config.devenv.flakesIntegration then
+      # avoid infinite recursion in the scenario the `config` parameter is
+      # used in a `processes` declaration inside a devenv module.
+        builtins.removeAttrs config.env [ "DEVENV_PROFILE" ]
+      else
+        config.env);
 in
 {
   options = {
