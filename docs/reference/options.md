@@ -21,6 +21,24 @@ boolean
 ```
 
 
+## devenv.flakesIntegration
+Tells if devenv is being imported by a flake.nix file
+
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+"false"
+```
+
+
+
+
 ## devenv.latestVersion
 The latest version of devenv.
 
