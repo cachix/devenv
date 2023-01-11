@@ -11,13 +11,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -33,7 +33,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -51,7 +51,7 @@ string
 
 *_Default_*
 ```
-"\"0.5\""
+"0.5"
 ```
 
 
@@ -69,7 +69,7 @@ boolean
 
 *_Default_*
 ```
-"true"
+true
 ```
 
 
@@ -86,7 +86,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -103,7 +103,7 @@ strings concatenated with "\n"
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -120,7 +120,7 @@ lazy attribute set of anything
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
@@ -137,13 +137,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -158,13 +158,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -179,13 +179,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -200,13 +200,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -221,7 +221,7 @@ package
 
 *_Default_*
 ```
-"pkgs.cue"
+pkgs.cue
 ```
 
 
@@ -238,13 +238,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -259,13 +259,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -280,13 +280,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -301,7 +301,7 @@ package
 
 *_Default_*
 ```
-"pkgs.elixir"
+pkgs.elixir
 ```
 
 
@@ -318,13 +318,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -339,13 +339,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -360,7 +360,7 @@ package
 
 *_Default_*
 ```
-"pkgs.erlang"
+pkgs.erlang
 ```
 
 
@@ -377,13 +377,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -398,13 +398,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -419,13 +419,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -440,13 +440,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -478,13 +478,13 @@ package
 
 *_Default_*
 ```
-"pkgs.jdk"
+pkgs.jdk
 ```
 
 
 *_Example_*
 ```
-"pkgs.jdk8"
+pkgs.jdk8
 ```
 
 
@@ -499,13 +499,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -535,13 +535,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -556,7 +556,7 @@ package
 
 *_Default_*
 ```
-"pkgs.nodejs"
+pkgs.nodejs
 ```
 
 
@@ -573,13 +573,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -594,13 +594,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -615,7 +615,7 @@ package
 
 *_Default_*
 ```
-"pkgs.lua"
+pkgs.lua
 ```
 
 
@@ -632,13 +632,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -653,7 +653,7 @@ package
 
 *_Default_*
 ```
-"pkgs.nim"
+pkgs.nim
 ```
 
 
@@ -670,13 +670,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -691,13 +691,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -712,13 +712,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -733,13 +733,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -759,7 +759,7 @@ null or strings concatenated with "\n"
 
 *_Default_*
 ```
-"null"
+null
 ```
 
 
@@ -777,13 +777,15 @@ strings concatenated with "\n"
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
 *_Example_*
 ```
-"''\n  date.timezone = \"CET\"\n''"
+''
+  date.timezone = "CET"
+''
 ```
 
 
@@ -800,13 +802,27 @@ attribute set of (submodule)
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  mypool = {\n    user = \"php\";\n    group = \"php\";\n    phpPackage = pkgs.php;\n    settings = {\n      \"pm\" = \"dynamic\";\n      \"pm.max_children\" = 75;\n      \"pm.start_servers\" = 10;\n      \"pm.min_spare_servers\" = 5;\n      \"pm.max_spare_servers\" = 20;\n      \"pm.max_requests\" = 500;\n    };\n  }\n}"
+{
+  mypool = {
+    user = "php";
+    group = "php";
+    phpPackage = pkgs.php;
+    settings = {
+      "pm" = "dynamic";
+      "pm.max_children" = 75;
+      "pm.start_servers" = 10;
+      "pm.min_spare_servers" = 5;
+      "pm.max_spare_servers" = 20;
+      "pm.max_requests" = 500;
+    };
+  }
+}
 ```
 
 
@@ -824,7 +840,7 @@ null or strings concatenated with "\n"
 
 *_Default_*
 ```
-"null"
+null
 ```
 
 
@@ -842,13 +858,13 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
 *_Example_*
 ```
-"\"/path/to/unix/socket\""
+"/path/to/unix/socket"
 ```
 
 
@@ -864,13 +880,19 @@ attribute set of string
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  HOSTNAME = \"$HOSTNAME\";\n  TMP = \"/tmp\";\n  TMPDIR = \"/tmp\";\n  TEMP = \"/tmp\";\n}\n"
+{
+  HOSTNAME = "$HOSTNAME";
+  TMP = "/tmp";
+  TMPDIR = "/tmp";
+  TEMP = "/tmp";
+}
+
 ```
 
 
@@ -900,7 +922,7 @@ package
 
 *_Default_*
 ```
-"phpfpm.phpPackage"
+phpfpm.phpPackage
 ```
 
 
@@ -921,13 +943,21 @@ attribute set of (string or signed integer or boolean)
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  \"pm\" = \"dynamic\";\n  \"pm.max_children\" = 75;\n  \"pm.start_servers\" = 10;\n  \"pm.min_spare_servers\" = 5;\n  \"pm.max_spare_servers\" = 20;\n  \"pm.max_requests\" = 500;\n}\n"
+{
+  "pm" = "dynamic";
+  "pm.max_children" = 75;
+  "pm.start_servers" = 10;
+  "pm.min_spare_servers" = 5;
+  "pm.max_spare_servers" = 20;
+  "pm.max_requests" = 500;
+}
+
 ```
 
 
@@ -946,7 +976,7 @@ string
 
 *_Example_*
 ```
-"\"/tmp/<name>.sock\""
+"/tmp/<name>.sock"
 ```
 
 
@@ -967,7 +997,9 @@ attribute set of (string or signed integer or boolean)
 
 *_Default_*
 ```
-"{\n  error_log = \"/.devenv/state/php-fpm/php-fpm.log\";\n}"
+{
+  error_log = "/.devenv/state/php-fpm/php-fpm.log";
+}
 ```
 
 
@@ -989,13 +1021,19 @@ package
 
 *_Default_*
 ```
-"pkgs.php"
+pkgs.php
 ```
 
 
 *_Example_*
 ```
-"pkgs.php.buildEnv {\n  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];\n  extraConfig = ''\n    memory_limit=1G\n  '';\n};\n"
+pkgs.php.buildEnv {
+  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];
+  extraConfig = ''
+    memory_limit=1G
+  '';
+};
+
 ```
 
 
@@ -1010,13 +1048,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1031,7 +1069,7 @@ package
 
 *_Default_*
 ```
-"pkgs.purescript"
+pkgs.purescript
 ```
 
 
@@ -1048,13 +1086,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1069,7 +1107,7 @@ package
 
 *_Default_*
 ```
-"pkgs.python3"
+pkgs.python3
 ```
 
 
@@ -1086,13 +1124,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1107,7 +1145,7 @@ package
 
 *_Default_*
 ```
-"pkgs.R"
+pkgs.R
 ```
 
 
@@ -1124,13 +1162,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1145,7 +1183,7 @@ package
 
 *_Default_*
 ```
-"pkgs.python3"
+pkgs.python3
 ```
 
 
@@ -1162,13 +1200,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1183,7 +1221,7 @@ package
 
 *_Default_*
 ```
-"pkgs.ruby_3_1"
+pkgs.ruby_3_1
 ```
 
 
@@ -1200,13 +1238,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1221,7 +1259,7 @@ submodule
 
 *_Default_*
 ```
-"pkgs"
+pkgs
 ```
 
 
@@ -1238,7 +1276,7 @@ package
 
 *_Default_*
 ```
-"pkgs.cargo"
+pkgs.cargo
 ```
 
 
@@ -1255,7 +1293,7 @@ package
 
 *_Default_*
 ```
-"pkgs.clippy"
+pkgs.clippy
 ```
 
 
@@ -1272,7 +1310,7 @@ package
 
 *_Default_*
 ```
-"pkgs.rust-analyzer"
+pkgs.rust-analyzer
 ```
 
 
@@ -1289,7 +1327,7 @@ package or string
 
 *_Default_*
 ```
-"pkgs.rustPlatform.rustLibSrc"
+pkgs.rustPlatform.rustLibSrc
 ```
 
 
@@ -1306,7 +1344,7 @@ package
 
 *_Default_*
 ```
-"pkgs.rustc"
+pkgs.rustc
 ```
 
 
@@ -1323,7 +1361,7 @@ package
 
 *_Default_*
 ```
-"pkgs.rustfmt"
+pkgs.rustfmt
 ```
 
 
@@ -1340,7 +1378,7 @@ null or string
 
 *_Default_*
 ```
-"null"
+null
 ```
 
 
@@ -1357,13 +1395,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1378,13 +1416,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1399,7 +1437,7 @@ package
 
 *_Default_*
 ```
-"pkgs.terraform"
+pkgs.terraform
 ```
 
 
@@ -1416,13 +1454,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1437,13 +1475,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1458,7 +1496,7 @@ package
 
 *_Default_*
 ```
-"pkgs.unison-ucm"
+pkgs.unison-ucm
 ```
 
 
@@ -1475,13 +1513,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1496,7 +1534,7 @@ package
 
 *_Default_*
 ```
-"pkgs.vlang"
+pkgs.vlang
 ```
 
 
@@ -1513,13 +1551,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -1534,7 +1572,7 @@ package
 
 *_Default_*
 ```
-"pkgs.zig"
+pkgs.zig
 ```
 
 
@@ -1551,7 +1589,7 @@ list of package
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -1568,7 +1606,7 @@ submodule
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
@@ -1588,7 +1626,9 @@ list of string
 
 *_Default_*
 ```
-"[\n  \"commit\"\n]"
+[
+  "commit"
+]
 ```
 
 
@@ -1606,7 +1646,7 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -1704,6 +1744,14 @@ Check the style and quality of Python files.
 <emphasis role="strong"><literal>fourmolu</literal></emphasis>
 
 Haskell code prettifier.
+
+<emphasis role="strong"><literal>gofmt</literal></emphasis>
+
+A tool that automatically formats Go source code
+
+<emphasis role="strong"><literal>gotest</literal></emphasis>
+
+Run go tests
 
 <emphasis role="strong"><literal>govet</literal></emphasis>
 
@@ -1813,6 +1861,10 @@ Format shell files.
 
 Format shell files.
 
+<emphasis role="strong"><literal>staticcheck</literal></emphasis>
+
+State of the art linter for the Go programming language
+
 <emphasis role="strong"><literal>statix</literal></emphasis>
 
 Lints and suggestions for the Nix programming language.
@@ -1848,7 +1900,7 @@ attribute set of (submodule)
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
@@ -1866,7 +1918,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -1883,7 +1935,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -1915,7 +1967,7 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -1933,7 +1985,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -1951,7 +2003,7 @@ string
 
 *_Default_*
 ```
-"\"system\""
+"system"
 ```
 
 
@@ -1969,7 +2021,7 @@ string
 
 *_Default_*
 ```
-"internal name, same as id"
+internal name, same as id
 ```
 
 
@@ -1987,7 +2039,7 @@ boolean
 
 *_Default_*
 ```
-"true"
+true
 ```
 
 
@@ -2022,7 +2074,7 @@ list of string
 
 *_Default_*
 ```
-"default_stages"
+default_stages
 ```
 
 
@@ -2040,7 +2092,9 @@ list of string
 
 *_Default_*
 ```
-"[\n  \"file\"\n]"
+[
+  "file"
+]
 ```
 
 
@@ -2058,7 +2112,7 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -2124,7 +2178,7 @@ package
 
 *_Default_*
 ```
-"\"<derivation>\""
+"<derivation>"
 ```
 
 
@@ -2141,14 +2195,34 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"flake.nix\"\n  \"./templates\"\n]"
+[
+  "flake.nix"
+  "./templates"
+]
 ```
+
+
+## pre-commit.settings.clippy.denyWarnings
+Fail when warnings are present
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
 
 
 ## pre-commit.settings.deadnix.edit
@@ -2162,7 +2236,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2179,7 +2253,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2196,7 +2270,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2213,7 +2287,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2230,7 +2304,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2247,7 +2321,7 @@ path
 
 *_Default_*
 ```
-"${tools.eslint}/bin/eslint"
+${tools.eslint}/bin/eslint
 ```
 
 
@@ -2264,7 +2338,7 @@ string
 
 *_Default_*
 ```
-"\"\\\\.js$\""
+"\\.js$"
 ```
 
 
@@ -2281,7 +2355,8 @@ string
 
 *_Default_*
 ```
-"\"${pkgs.python39Packages.pylint}/bin/flake8\"\n"
+"${pkgs.python39Packages.pylint}/bin/flake8"
+
 ```
 
 
@@ -2298,7 +2373,7 @@ string
 
 *_Default_*
 ```
-"\"default\""
+"default"
 ```
 
 
@@ -2315,7 +2390,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2332,7 +2407,7 @@ attribute set
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
@@ -2349,7 +2424,7 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -2366,7 +2441,7 @@ null or signed integer
 
 *_Default_*
 ```
-"null"
+null
 ```
 
 
@@ -2383,7 +2458,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2400,7 +2475,7 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -2417,7 +2492,8 @@ string
 
 *_Default_*
 ```
-"\"${pkgs.php81Packages.php-cs-fixer}/bin/php-cs-fixer\"\n"
+"${pkgs.php81Packages.php-cs-fixer}/bin/php-cs-fixer"
+
 ```
 
 
@@ -2434,7 +2510,8 @@ string
 
 *_Default_*
 ```
-"\"${pkgs.php80Packages.phpcbf}/bin/phpcbf\"\n"
+"${pkgs.php80Packages.phpcbf}/bin/phpcbf"
+
 ```
 
 
@@ -2451,7 +2528,8 @@ string
 
 *_Default_*
 ```
-"\"${pkgs.php80Packages.phpcs}/bin/phpcs\"\n"
+"${pkgs.php80Packages.phpcs}/bin/phpcs"
+
 ```
 
 
@@ -2468,7 +2546,8 @@ path
 
 *_Default_*
 ```
-"\"${tools.prettier}/bin/prettier\"\n"
+"${tools.prettier}/bin/prettier"
+
 ```
 
 
@@ -2485,7 +2564,7 @@ null or one of "check", "list-different"
 
 *_Default_*
 ```
-"\"list-different\""
+"list-different"
 ```
 
 
@@ -2502,7 +2581,7 @@ boolean
 
 *_Default_*
 ```
-"true"
+true
 ```
 
 
@@ -2519,7 +2598,8 @@ string
 
 *_Default_*
 ```
-"\"${pkgs.python39Packages.pylint}/bin/pylint\"\n"
+"${pkgs.python39Packages.pylint}/bin/pylint"
+
 ```
 
 
@@ -2536,7 +2616,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2553,7 +2633,7 @@ boolean
 
 *_Default_*
 ```
-"true"
+true
 ```
 
 
@@ -2570,7 +2650,24 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
+```
+
+
+
+
+## pre-commit.settings.rust.cargoManifestPath
+Path to Cargo.toml
+
+*_Type_*
+```
+null or string
+```
+
+
+*_Default_*
+```
+null
 ```
 
 
@@ -2587,7 +2684,7 @@ one of "stderr", "errfmt", "json"
 
 *_Default_*
 ```
-"\"errfmt\""
+"errfmt"
 ```
 
 
@@ -2604,13 +2701,16 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"flake.nix\"\n  \"_*\"\n]"
+[
+  "flake.nix"
+  "_*"
+]
 ```
 
 
@@ -2625,7 +2725,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -2642,7 +2742,7 @@ one of "silent", "brief", "long", "json"
 
 *_Default_*
 ```
-"\"long\""
+"long"
 ```
 
 
@@ -2659,7 +2759,24 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
+```
+
+
+
+
+## pre-commit.settings.yamllint.relaxed
+Use the relaxed configuration
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
 ```
 
 
@@ -2710,13 +2827,13 @@ one of "honcho", "overmind", "process-compose", "hivemind"
 
 *_Default_*
 ```
-"\"honcho\""
+"honcho"
 ```
 
 
 *_Example_*
 ```
-"\"overmind\""
+"overmind"
 ```
 
 
@@ -2732,13 +2849,21 @@ attribute set
 
 *_Default_*
 ```
-"{\n  port = 9999;\n  tui = true;\n  version = \"0.5\";\n}"
+{
+  port = 9999;
+  tui = true;
+  version = "0.5";
+}
 ```
 
 
 *_Example_*
 ```
-"{\n  log_level = \"fatal\";\n  log_location = \"/path/to/combined/output/logfile.log\";\n  version = \"0.5\";\n}"
+{
+  log_level = "fatal";
+  log_location = "/path/to/combined/output/logfile.log";
+  version = "0.5";
+}
 ```
 
 
@@ -2753,7 +2878,7 @@ attribute set of (submodule)
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
@@ -2788,13 +2913,27 @@ attribute set
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  availability = {\n    backoff_seconds = 2;\n    max_restarts = 5;\n    restart = \"on_failure\";\n  };\n  depends_on = {\n    some-other-process = {\n      condition = \"process_completed_successfully\";\n    };\n  };\n  environment = [\n    \"ENVVAR_FOR_THIS_PROCESS_ONLY=foobar\"\n  ];\n}"
+{
+  availability = {
+    backoff_seconds = 2;
+    max_restarts = 5;
+    restart = "on_failure";
+  };
+  depends_on = {
+    some-other-process = {
+      condition = "process_completed_successfully";
+    };
+  };
+  environment = [
+    "ENVVAR_FOR_THIS_PROCESS_ONLY=foobar"
+  ];
+}
 ```
 
 
@@ -2809,7 +2948,7 @@ attribute set of (submodule)
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
@@ -2839,13 +2978,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -2860,7 +2999,7 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1:8080\""
+"127.0.0.1:8080"
 ```
 
 
@@ -2877,7 +3016,7 @@ package
 
 *_Default_*
 ```
-"pkgs.adminer"
+pkgs.adminer
 ```
 
 
@@ -2896,7 +3035,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -2915,7 +3054,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -2944,13 +3083,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -2965,7 +3104,7 @@ package
 
 *_Default_*
 ```
-"pkgs.blackfire"
+pkgs.blackfire
 ```
 
 
@@ -2984,7 +3123,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -3003,7 +3142,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -3021,7 +3160,7 @@ string
 
 *_Default_*
 ```
-"\"tcp://127.0.0.1:8307\""
+"tcp://127.0.0.1:8307"
 ```
 
 
@@ -3040,13 +3179,13 @@ string
 
 *_Default_*
 ```
-"\"caddyfile\""
+"caddyfile"
 ```
 
 
 *_Example_*
 ```
-"\"nginx\""
+"nginx"
 ```
 
 
@@ -3065,13 +3204,13 @@ null or string
 
 *_Default_*
 ```
-"\"https://acme-v02.api.letsencrypt.org/directory\""
+"https://acme-v02.api.letsencrypt.org/directory"
 ```
 
 
 *_Example_*
 ```
-"\"https://acme-staging-v02.api.letsencrypt.org/directory\""
+"https://acme-staging-v02.api.letsencrypt.org/directory"
 ```
 
 
@@ -3088,13 +3227,19 @@ strings concatenated with "\n"
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
 *_Example_*
 ```
-"''\n  example.com {\n    encode gzip\n    log\n    root /srv/http\n  }\n''"
+''
+  example.com {
+    encode gzip
+    log
+    root /srv/http
+  }
+''
 ```
 
 
@@ -3114,7 +3259,7 @@ path
 
 *_Default_*
 ```
-"\"/.devenv/state/caddy\""
+"/.devenv/state/caddy"
 ```
 
 
@@ -3131,7 +3276,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -3148,13 +3293,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -3170,7 +3315,7 @@ package
 
 *_Default_*
 ```
-"pkgs.caddy"
+pkgs.caddy
 ```
 
 
@@ -3188,7 +3333,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -3205,13 +3350,23 @@ attribute set of (submodule)
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  \"hydra.example.com\" = {\n    serverAliases = [ \"www.hydra.example.com\" ];\n    extraConfig = ''''\n      encode gzip\n      log\n      root /srv/http\n    '''';\n  };\n};\n"
+{
+  "hydra.example.com" = {
+    serverAliases = [ "www.hydra.example.com" ];
+    extraConfig = ''''
+      encode gzip
+      log
+      root /srv/http
+    '''';
+  };
+};
+
 ```
 
 
@@ -3227,7 +3382,7 @@ strings concatenated with "\n"
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -3245,13 +3400,16 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"www.example.org\"\n  \"example.org\"\n]"
+[
+  "www.example.org"
+  "example.org"
+]
 ```
 
 
@@ -3266,7 +3424,7 @@ string
 
 *_Default_*
 ```
-"\"elasticsearch\""
+"elasticsearch"
 ```
 
 
@@ -3283,7 +3441,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -3300,7 +3458,7 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -3317,13 +3475,17 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
 *_Example_*
 ```
-"''\n  node.name: \"elasticsearch\"\n  node.master: true\n  node.data: false\n''"
+''
+  node.name: "elasticsearch"
+  node.master: true
+  node.data: false
+''
 ```
 
 
@@ -3338,13 +3500,15 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"-Djava.net.preferIPv4Stack=true\"\n]"
+[
+  "-Djava.net.preferIPv4Stack=true"
+]
 ```
 
 
@@ -3359,7 +3523,7 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1\""
+"127.0.0.1"
 ```
 
 
@@ -3376,7 +3540,16 @@ string
 
 *_Default_*
 ```
-"''\n  logger.action.name = org.elasticsearch.action\n  logger.action.level = info\n  appender.console.type = Console\n  appender.console.name = console\n  appender.console.layout.type = PatternLayout\n  appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n\n  rootLogger.level = info\n  rootLogger.appenderRef.console.ref = console\n''"
+''
+  logger.action.name = org.elasticsearch.action
+  logger.action.level = info
+  appender.console.type = Console
+  appender.console.name = console
+  appender.console.layout.type = PatternLayout
+  appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+  rootLogger.level = info
+  rootLogger.appenderRef.console.ref = console
+''
 ```
 
 
@@ -3393,7 +3566,7 @@ package
 
 *_Default_*
 ```
-"pkgs.elasticsearch7"
+pkgs.elasticsearch7
 ```
 
 
@@ -3410,13 +3583,13 @@ list of package
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[ pkgs.elasticsearchPlugins.discovery-ec2 ]"
+[ pkgs.elasticsearchPlugins.discovery-ec2 ]
 ```
 
 
@@ -3431,7 +3604,7 @@ signed integer
 
 *_Default_*
 ```
-"9200"
+9200
 ```
 
 
@@ -3448,7 +3621,7 @@ boolean
 
 *_Default_*
 ```
-"true"
+true
 ```
 
 
@@ -3465,7 +3638,7 @@ signed integer
 
 *_Default_*
 ```
-"9300"
+9300
 ```
 
 
@@ -3483,13 +3656,15 @@ list of strings concatenated with "\n"
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"-invite-jim\"\n]"
+[
+  "-invite-jim"
+]
 ```
 
 
@@ -3504,7 +3679,7 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1:8025\""
+"127.0.0.1:8025"
 ```
 
 
@@ -3521,13 +3696,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -3542,7 +3717,7 @@ package
 
 *_Default_*
 ```
-"pkgs.mailhog"
+pkgs.mailhog
 ```
 
 
@@ -3559,7 +3734,7 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1:1025\""
+"127.0.0.1:1025"
 ```
 
 
@@ -3576,7 +3751,7 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1:8025\""
+"127.0.0.1:8025"
 ```
 
 
@@ -3595,13 +3770,13 @@ null or string
 
 *_Default_*
 ```
-"\"127.0.0.1\""
+"127.0.0.1"
 ```
 
 
 *_Example_*
 ```
-"\"127.0.0.1\""
+"127.0.0.1"
 ```
 
 
@@ -3616,13 +3791,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -3637,7 +3812,7 @@ package
 
 *_Default_*
 ```
-"pkgs.memcached"
+pkgs.memcached
 ```
 
 
@@ -3656,7 +3831,7 @@ If port 0 is specified Redis will not listen on a TCP socket.
 
 *_Default_*
 ```
-"11211"
+11211
 ```
 
 
@@ -3674,13 +3849,15 @@ list of strings concatenated with "\n"
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"--memory-limit=100M\"\n]"
+[
+  "--memory-limit=100M"
+]
 ```
 
 
@@ -3698,7 +3875,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -3715,7 +3892,7 @@ boolean
 
 *_Default_*
 ```
-"true"
+true
 ```
 
 
@@ -3732,7 +3909,7 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1:9001\""
+"127.0.0.1:9001"
 ```
 
 
@@ -3749,13 +3926,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -3770,7 +3947,7 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1:9000\""
+"127.0.0.1:9000"
 ```
 
 
@@ -3787,7 +3964,7 @@ package
 
 *_Default_*
 ```
-"pkgs.minio"
+pkgs.minio
 ```
 
 
@@ -3805,7 +3982,7 @@ string
 
 *_Default_*
 ```
-"\"us-east-1\""
+"us-east-1"
 ```
 
 
@@ -3825,7 +4002,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -3843,13 +4020,19 @@ list of strings concatenated with "\n"
 
 *_Default_*
 ```
-"[\n  \"--noauth\"\n]"
+[
+  "--noauth"
+]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"--port\"\n  \"27017\"\n  \"--noauth\"\n]"
+[
+  "--port"
+  "27017"
+  "--noauth"
+]
 ```
 
 
@@ -3864,13 +4047,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -3885,7 +4068,7 @@ package
 
 *_Default_*
 ```
-"pkgs.mongodb"
+pkgs.mongodb
 ```
 
 
@@ -3902,13 +4085,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -3929,13 +4112,21 @@ list of (submodule)
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  {\n    name = \"devenv\";\n    ensurePermissions = {\n      \"devenv.*\" = \"ALL PRIVILEGES\";\n    };\n  }\n]\n"
+[
+  {
+    name = "devenv";
+    ensurePermissions = {
+      "devenv.*" = "ALL PRIVILEGES";
+    };
+  }
+]
+
 ```
 
 
@@ -3959,13 +4150,17 @@ attribute set of string
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  \"database.*\" = \"ALL PRIVILEGES\";\n  \"*.*\" = \"SELECT, LOCK TABLES\";\n}\n"
+{
+  "database.*" = "ALL PRIVILEGES";
+  "*.*" = "SELECT, LOCK TABLES";
+}
+
 ```
 
 
@@ -3995,7 +4190,7 @@ null or string
 
 *_Default_*
 ```
-"null"
+null
 ```
 
 
@@ -4014,13 +4209,17 @@ list of (submodule)
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  { name = \"foodatabase\"; schema = ./foodatabase.sql; }\n  { name = \"bardatabase\"; }\n]\n"
+[
+  { name = "foodatabase"; schema = ./foodatabase.sql; }
+  { name = "bardatabase"; }
+]
+
 ```
 
 
@@ -4051,7 +4250,7 @@ null or path
 
 *_Default_*
 ```
-"null"
+null
 ```
 
 
@@ -4068,7 +4267,7 @@ package
 
 *_Default_*
 ```
-"pkgs.mysql80"
+pkgs.mysql80
 ```
 
 
@@ -4086,13 +4285,25 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string) o
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  mysqld = {\n    key_buffer_size = \"6G\";\n    table_cache = 1600;\n    log-error = \"/var/log/mysql_err.log\";\n    plugin-load-add = [ \"server_audit\" \"ed25519=auth_ed25519\" ];\n  };\n  mysqldump = {\n    quick = true;\n    max_allowed_packet = \"16M\";\n  };\n}\n"
+{
+  mysqld = {
+    key_buffer_size = "6G";
+    table_cache = 1600;
+    log-error = "/var/log/mysql_err.log";
+    plugin-load-add = [ "server_audit" "ed25519=auth_ed25519" ];
+  };
+  mysqldump = {
+    quick = true;
+    max_allowed_packet = "16M";
+  };
+}
+
 ```
 
 
@@ -4108,7 +4319,7 @@ boolean
 
 *_Default_*
 ```
-"true"
+true
 ```
 
 
@@ -4126,13 +4337,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -4149,13 +4360,19 @@ list of strings concatenated with "\n"
 
 *_Default_*
 ```
-"[\n  \"--locale=C\"\n  \"--encoding=UTF8\"\n]"
+[
+  "--locale=C"
+  "--encoding=UTF8"
+]
 ```
 
 
 *_Example_*
 ```
-"[\n  \"--data-checksums\"\n  \"--allow-group-access\"\n]"
+[
+  "--data-checksums"
+  "--allow-group-access"
+]
 ```
 
 
@@ -4172,13 +4389,20 @@ list of (submodule)
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  {\n    name = \"foodatabase\";\n    schema = ./foodatabase.sql;\n  }\n  { name = \"bardatabase\"; }\n]\n"
+[
+  {
+    name = "foodatabase";
+    schema = ./foodatabase.sql;
+  }
+  { name = "bardatabase"; }
+]
+
 ```
 
 
@@ -4209,7 +4433,7 @@ null or path
 
 *_Default_*
 ```
-"null"
+null
 ```
 
 
@@ -4226,13 +4450,13 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
 *_Example_*
 ```
-"\"127.0.0.1\""
+"127.0.0.1"
 ```
 
 
@@ -4247,13 +4471,15 @@ package
 
 *_Default_*
 ```
-"pkgs.postgresql"
+pkgs.postgresql
 ```
 
 
 *_Example_*
 ```
-"# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list\npkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);\n"
+# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list
+pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
+
 ```
 
 
@@ -4269,7 +4495,7 @@ The TCP port to accept connections.
 
 *_Default_*
 ```
-"5432"
+5432
 ```
 
 
@@ -4293,13 +4519,20 @@ attribute set of (boolean or floating point number or signed integer or string)
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  log_connections = true;\n  log_statement = \"all\";\n  logging_collector = true\n  log_disconnections = true\n  log_destination = lib.mkForce \"syslog\";\n}\n"
+{
+  log_connections = true;
+  log_statement = "all";
+  logging_collector = true
+  log_disconnections = true
+  log_destination = lib.mkForce "syslog";
+}
+
 ```
 
 
@@ -4325,13 +4558,17 @@ attribute set of string
 
 *_Default_*
 ```
-"{ }"
+{ }
 ```
 
 
 *_Example_*
 ```
-"{\n  \"auth_backends.1.authn\" = \"rabbit_auth_backend_ldap\";\n  \"auth_backends.1.authz\" = \"rabbit_auth_backend_internal\";\n}\n"
+{
+  "auth_backends.1.authn" = "rabbit_auth_backend_ldap";
+  "auth_backends.1.authz" = "rabbit_auth_backend_internal";
+}
+
 ```
 
 
@@ -4349,7 +4586,7 @@ string
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -4368,7 +4605,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -4394,13 +4631,13 @@ string
 
 *_Default_*
 ```
-"\"127.0.0.1\""
+"127.0.0.1"
 ```
 
 
 *_Example_*
 ```
-"\"\""
+""
 ```
 
 
@@ -4415,13 +4652,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -4437,7 +4674,7 @@ On which port to run the management plugin
 
 *_Default_*
 ```
-"15672"
+15672
 ```
 
 
@@ -4455,7 +4692,7 @@ package
 
 *_Default_*
 ```
-"pkgs.rabbitmq-server"
+pkgs.rabbitmq-server
 ```
 
 
@@ -4472,7 +4709,7 @@ list of path
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -4489,7 +4726,7 @@ list of string
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
@@ -4507,7 +4744,7 @@ Port on which RabbitMQ will listen for AMQP connections.
 
 *_Default_*
 ```
-"5672"
+5672
 ```
 
 
@@ -4526,13 +4763,13 @@ null or string
 
 *_Default_*
 ```
-"\"127.0.0.1\""
+"127.0.0.1"
 ```
 
 
 *_Example_*
 ```
-"\"127.0.0.1\""
+"127.0.0.1"
 ```
 
 
@@ -4547,13 +4784,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -4568,7 +4805,7 @@ strings concatenated with "\n"
 
 *_Default_*
 ```
-"\"\""
+""
 ```
 
 
@@ -4585,7 +4822,7 @@ package
 
 *_Default_*
 ```
-"pkgs.redis"
+pkgs.redis
 ```
 
 
@@ -4604,7 +4841,7 @@ If port 0 is specified Redis will not listen on a TCP socket.
 
 *_Default_*
 ```
-"6379"
+6379
 ```
 
 
@@ -4622,7 +4859,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -4639,13 +4876,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -4662,13 +4899,39 @@ JSON value
 
 *_Default_*
 ```
-"[ ]"
+[ ]
 ```
 
 
 *_Example_*
 ```
-"[\n  {\n    request = {\n      method = \"GET\";\n      url = \"/body\";\n    };\n    response = {\n      body = \"Literal text to put in the body\";\n      headers = {\n        Content-Type = \"text/plain\";\n      };\n      status = 200;\n    };\n  }\n  {\n    request = {\n      method = \"GET\";\n      url = \"/json\";\n    };\n    response = {\n      jsonBody = {\n        someField = \"someValue\";\n      };\n      status = 200;\n    };\n  }\n]"
+[
+  {
+    request = {
+      method = "GET";
+      url = "/body";
+    };
+    response = {
+      body = "Literal text to put in the body";
+      headers = {
+        Content-Type = "text/plain";
+      };
+      status = 200;
+    };
+  }
+  {
+    request = {
+      method = "GET";
+      url = "/json";
+    };
+    response = {
+      jsonBody = {
+        someField = "someValue";
+      };
+      status = 200;
+    };
+  }
+]
 ```
 
 
@@ -4684,7 +4947,7 @@ package
 
 *_Default_*
 ```
-"pkgs.wiremock"
+pkgs.wiremock
 ```
 
 
@@ -4702,7 +4965,7 @@ signed integer
 
 *_Default_*
 ```
-"8080"
+8080
 ```
 
 
@@ -4720,7 +4983,7 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
@@ -4737,13 +5000,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -4758,7 +5021,7 @@ path
 
 *_Default_*
 ```
-"${config.env.DEVENV_ROOT}/starship.toml"
+${config.env.DEVENV_ROOT}/starship.toml
 ```
 
 
@@ -4775,13 +5038,13 @@ boolean
 
 *_Default_*
 ```
-"false"
+false
 ```
 
 
 *_Example_*
 ```
-"true"
+true
 ```
 
 
@@ -4796,7 +5059,7 @@ package
 
 *_Default_*
 ```
-"pkgs.starship"
+pkgs.starship
 ```
 
 
