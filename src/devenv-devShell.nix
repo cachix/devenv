@@ -32,6 +32,8 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     *)
       echo "https://devenv.sh (version ${version}): Fast, Declarative, Reproducible, and Composable Developer Environments"
+      echo 
+      echo "This is a flake integration wrapper that comes with a subset of functionality from the flakeless devenv CLI."
       echo
       echo "Usage: devenv command"
       echo
