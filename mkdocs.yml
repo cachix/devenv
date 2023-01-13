@@ -36,6 +36,7 @@ nav:
       - Languages: languages.md
       - Processes: processes.md
       - Pre-Commit Hooks: pre-commit-hooks.md
+      - Common Patterns: common-patterns.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
       - Composing Using Imports: composing-using-imports.md
