@@ -6,7 +6,7 @@ let
 in
 {
   options.services.mailhog = {
-    enable = lib.mkEnableOption "Add mailhog process.";
+    enable = lib.mkEnableOption "mailhog process";
 
     package = lib.mkOption {
       type = types.package;

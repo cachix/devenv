@@ -68,7 +68,7 @@ in
   ];
 
   options.services.mysql = {
-    enable = mkEnableOption "Add mysql process and expose utilities.";
+    enable = mkEnableOption "mysql process and expose utilities";
 
     package = mkOption {
       type = types.package;

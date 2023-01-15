@@ -24,7 +24,7 @@ in
   ];
 
   options.services.mongodb = {
-    enable = mkEnableOption "Add MongoDB process and expose utilities.";
+    enable = mkEnableOption "MongoDB process and expose utilities";
 
     package = mkOption {
       type = types.package;

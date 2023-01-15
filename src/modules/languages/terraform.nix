@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.terraform = {
-    enable = lib.mkEnableOption "Enable tools for terraform development.";
+    enable = lib.mkEnableOption "tools for terraform development";
 
     package = lib.mkOption {
       type = lib.types.package;
