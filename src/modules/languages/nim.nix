@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.nim = {
-    enable = lib.mkEnableOption "Enable tools for nim development.";
+    enable = lib.mkEnableOption "tools for nim development";
 
     package = lib.mkOption {
       type = lib.types.package;

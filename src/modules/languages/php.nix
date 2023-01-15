@@ -142,7 +142,7 @@ let
 in
 {
   options.languages.php = {
-    enable = lib.mkEnableOption "Enable tools for PHP development.";
+    enable = lib.mkEnableOption "tools for PHP development";
 
     package = lib.mkOption {
       type = lib.types.package;

@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.dotnet = {
-    enable = lib.mkEnableOption "Enable tools for .NET development.";
+    enable = lib.mkEnableOption "tools for .NET development";
   };
 
   config = lib.mkIf cfg.enable {
