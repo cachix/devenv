@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.elm = {
-    enable = lib.mkEnableOption "Enable tools for Elm development.";
+    enable = lib.mkEnableOption "tools for Elm development";
   };
 
   config = lib.mkIf cfg.enable {

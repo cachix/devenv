@@ -2,7 +2,7 @@
 
 {
   options.starship = {
-    enable = lib.mkEnableOption "Enable the Starship command prompt.";
+    enable = lib.mkEnableOption "the Starship command prompt";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -11,7 +11,7 @@
       description = "The Starship package to use.";
     };
 
-    config.enable = lib.mkEnableOption "Enable Starship config override.";
+    config.enable = lib.mkEnableOption "Starship config override";
 
     config.path = lib.mkOption {
       type = lib.types.path;

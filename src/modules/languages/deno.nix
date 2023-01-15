@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.deno = {
-    enable = lib.mkEnableOption "Enable tools for Deno development.";
+    enable = lib.mkEnableOption "tools for Deno development";
   };
 
   config = lib.mkIf cfg.enable {

@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.ruby = {
-    enable = lib.mkEnableOption "Enable tools for Ruby development";
+    enable = lib.mkEnableOption "tools for Ruby development";
 
     package = lib.mkOption {
       type = lib.types.package;

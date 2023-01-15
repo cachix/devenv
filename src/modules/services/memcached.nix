@@ -10,7 +10,7 @@ in
   ];
 
   options.services.memcached = {
-    enable = lib.mkEnableOption "Add memcached process.";
+    enable = lib.mkEnableOption "memcached process";
 
     package = lib.mkOption {
       type = types.package;
