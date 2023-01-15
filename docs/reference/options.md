@@ -1,7 +1,7 @@
 # devenv.nix options
 
 ## devcontainer.enable
-Whether to enable Generate .devcontainer.json for devenv integration..
+Whether to enable generation .devcontainer.json for devenv integration.
 
 *_Type_*
 ```
@@ -127,7 +127,7 @@ lazy attribute set of anything
 
 
 ## languages.c.enable
-Whether to enable Enable tools for C development..
+Whether to enable tools for C development.
 
 *_Type_*
 ```
@@ -148,7 +148,7 @@ true
 
 
 ## languages.clojure.enable
-Whether to enable Enable tools for Clojure development..
+Whether to enable tools for Clojure development.
 
 *_Type_*
 ```
@@ -169,7 +169,7 @@ true
 
 
 ## languages.cplusplus.enable
-Whether to enable Enable tools for C++ development..
+Whether to enable tools for C++ development.
 
 *_Type_*
 ```
@@ -190,7 +190,7 @@ true
 
 
 ## languages.cue.enable
-Whether to enable Enable tools for Cue development..
+Whether to enable tools for Cue development.
 
 *_Type_*
 ```
@@ -228,7 +228,7 @@ pkgs.cue
 
 
 ## languages.deno.enable
-Whether to enable Enable tools for Deno development..
+Whether to enable tools for Deno development.
 
 *_Type_*
 ```
@@ -249,7 +249,7 @@ true
 
 
 ## languages.dotnet.enable
-Whether to enable Enable tools for .NET development..
+Whether to enable tools for .NET development.
 
 *_Type_*
 ```
@@ -270,7 +270,7 @@ true
 
 
 ## languages.elixir.enable
-Whether to enable Enable tools for Elixir development..
+Whether to enable tools for Elixir development.
 
 *_Type_*
 ```
@@ -308,7 +308,7 @@ pkgs.elixir
 
 
 ## languages.elm.enable
-Whether to enable Enable tools for Elm development..
+Whether to enable tools for Elm development.
 
 *_Type_*
 ```
@@ -329,7 +329,7 @@ true
 
 
 ## languages.erlang.enable
-Whether to enable Enable tools for Erlang development..
+Whether to enable tools for Erlang development.
 
 *_Type_*
 ```
@@ -367,7 +367,7 @@ pkgs.erlang
 
 
 ## languages.go.enable
-Whether to enable Enable tools for Go development..
+Whether to enable tools for Go development.
 
 *_Type_*
 ```
@@ -388,7 +388,7 @@ true
 
 
 ## languages.haskell.enable
-Whether to enable Enable tools for Haskell development..
+Whether to enable tools for Haskell development.
 
 *_Type_*
 ```
@@ -525,7 +525,7 @@ package
 
 
 ## languages.javascript.enable
-Whether to enable Enable tools for JavaScript development..
+Whether to enable tools for JavaScript development.
 
 *_Type_*
 ```
@@ -563,7 +563,7 @@ pkgs.nodejs
 
 
 ## languages.kotlin.enable
-Whether to enable Enable tools for Kotlin development..
+Whether to enable tools for Kotlin development.
 
 *_Type_*
 ```
@@ -584,7 +584,7 @@ true
 
 
 ## languages.lua.enable
-Whether to enable Enable tools for Lua development..
+Whether to enable tools for Lua development.
 
 *_Type_*
 ```
@@ -622,7 +622,7 @@ pkgs.lua
 
 
 ## languages.nim.enable
-Whether to enable Enable tools for nim development..
+Whether to enable tools for nim development.
 
 *_Type_*
 ```
@@ -660,7 +660,7 @@ pkgs.nim
 
 
 ## languages.nix.enable
-Whether to enable Enable tools for Nix development..
+Whether to enable tools for Nix development.
 
 *_Type_*
 ```
@@ -681,7 +681,7 @@ true
 
 
 ## languages.ocaml.enable
-Whether to enable Enable tools for OCaml development..
+Whether to enable tools for OCaml development.
 
 *_Type_*
 ```
@@ -702,7 +702,7 @@ true
 
 
 ## languages.perl.enable
-Whether to enable Enable tools for Perl development..
+Whether to enable tools for Perl development.
 
 *_Type_*
 ```
@@ -723,7 +723,7 @@ true
 
 
 ## languages.php.enable
-Whether to enable Enable tools for PHP development..
+Whether to enable tools for PHP development.
 
 *_Type_*
 ```
@@ -1038,7 +1038,7 @@ pkgs.php.buildEnv {
 
 
 ## languages.purescript.enable
-Whether to enable Enable tools for PureScript development..
+Whether to enable tools for PureScript development.
 
 *_Type_*
 ```
@@ -1076,7 +1076,7 @@ pkgs.purescript
 
 
 ## languages.python.enable
-Whether to enable Enable tools for Python development..
+Whether to enable tools for Python development.
 
 *_Type_*
 ```
@@ -1114,7 +1114,7 @@ pkgs.python3
 
 
 ## languages.r.enable
-Whether to enable Enable tools for R development..
+Whether to enable tools for R development.
 
 *_Type_*
 ```
@@ -1152,7 +1152,7 @@ pkgs.R
 
 
 ## languages.robotframework.enable
-Whether to enable Enable tools for Robot Framework development..
+Whether to enable tools for Robot Framework development.
 
 *_Type_*
 ```
@@ -1190,7 +1190,7 @@ pkgs.python3
 
 
 ## languages.ruby.enable
-Whether to enable Enable tools for Ruby development.
+Whether to enable tools for Ruby development.
 
 *_Type_*
 ```
@@ -1228,7 +1228,7 @@ pkgs.ruby_3_1
 
 
 ## languages.rust.enable
-Whether to enable Enable tools for Rust development..
+Whether to enable tools for Rust development.
 
 *_Type_*
 ```
@@ -1385,7 +1385,7 @@ null
 
 
 ## languages.scala.enable
-Whether to enable Enable tools for Scala development..
+Whether to enable tools for Scala development.
 
 *_Type_*
 ```
@@ -1406,7 +1406,7 @@ true
 
 
 ## languages.terraform.enable
-Whether to enable Enable tools for terraform development..
+Whether to enable tools for terraform development.
 
 *_Type_*
 ```
@@ -1444,7 +1444,7 @@ pkgs.terraform
 
 
 ## languages.typescript.enable
-Whether to enable Enable tools for TypeScript development..
+Whether to enable tools for TypeScript development.
 
 *_Type_*
 ```
@@ -1465,7 +1465,7 @@ true
 
 
 ## languages.unison.enable
-Whether to enable Enable tools for Unison development..
+Whether to enable tools for Unison development.
 
 *_Type_*
 ```
@@ -1503,7 +1503,7 @@ pkgs.unison-ucm
 
 
 ## languages.v.enable
-Whether to enable Enable tools for v development..
+Whether to enable tools for v development.
 
 *_Type_*
 ```
@@ -1541,7 +1541,7 @@ pkgs.vlang
 
 
 ## languages.zig.enable
-Whether to enable Enable tools for Zig development..
+Whether to enable tools for Zig development.
 
 *_Type_*
 ```
@@ -2968,7 +2968,7 @@ string
 
 
 ## services.adminer.enable
-Whether to enable Add adminer process..
+Whether to enable adminer process.
 
 *_Type_*
 ```
@@ -3686,7 +3686,7 @@ string
 
 
 ## services.mailhog.enable
-Whether to enable Add mailhog process..
+Whether to enable mailhog process.
 
 *_Type_*
 ```
@@ -3781,7 +3781,7 @@ null or string
 
 
 ## services.memcached.enable
-Whether to enable Add memcached process..
+Whether to enable memcached process.
 
 *_Type_*
 ```
@@ -4037,7 +4037,7 @@ list of strings concatenated with "\n"
 
 
 ## services.mongodb.enable
-Whether to enable Add MongoDB process and expose utilities..
+Whether to enable MongoDB process and expose utilities.
 
 *_Type_*
 ```
@@ -4075,7 +4075,7 @@ pkgs.mongodb
 
 
 ## services.mysql.enable
-Whether to enable Add mysql process and expose utilities..
+Whether to enable mysql process and expose utilities.
 
 *_Type_*
 ```
@@ -4774,7 +4774,7 @@ null or string
 
 
 ## services.redis.enable
-Whether to enable Add redis process and expose utilities..
+Whether to enable redis process and expose utilities.
 
 *_Type_*
 ```
@@ -4990,7 +4990,7 @@ false
 
 
 ## starship.config.enable
-Whether to enable Enable Starship config override..
+Whether to enable Starship config override.
 
 *_Type_*
 ```
@@ -5028,7 +5028,7 @@ ${config.env.DEVENV_ROOT}/starship.toml
 
 
 ## starship.enable
-Whether to enable Enable the Starship command prompt..
+Whether to enable the Starship command prompt.
 
 *_Type_*
 ```
