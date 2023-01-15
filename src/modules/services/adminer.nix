@@ -10,7 +10,7 @@ in
   ];
 
   options.services.adminer = {
-    enable = lib.mkEnableOption "Add adminer process.";
+    enable = lib.mkEnableOption "adminer process";
 
     package = lib.mkOption {
       type = types.package;

@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.scala = {
-    enable = lib.mkEnableOption "Enable tools for Scala development.";
+    enable = lib.mkEnableOption "tools for Scala development";
   };
 
   config = lib.mkIf cfg.enable {

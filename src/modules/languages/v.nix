@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.v = {
-    enable = lib.mkEnableOption "Enable tools for v development.";
+    enable = lib.mkEnableOption "tools for v development";
 
     package = lib.mkOption {
       type = lib.types.package;

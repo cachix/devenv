@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.lua = {
-    enable = lib.mkEnableOption "Enable tools for Lua development.";
+    enable = lib.mkEnableOption "tools for Lua development";
 
     package = lib.mkOption {
       type = lib.types.package;

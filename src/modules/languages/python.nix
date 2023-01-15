@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.python = {
-    enable = lib.mkEnableOption "Enable tools for Python development.";
+    enable = lib.mkEnableOption "tools for Python development";
 
     package = lib.mkOption {
       type = lib.types.package;

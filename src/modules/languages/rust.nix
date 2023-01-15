@@ -16,7 +16,7 @@ let
 in
 {
   options.languages.rust = {
-    enable = lib.mkEnableOption "Enable tools for Rust development.";
+    enable = lib.mkEnableOption "tools for Rust development";
 
     packages = lib.mkOption {
       type = lib.types.submodule ({
