@@ -1,7 +1,11 @@
 { pkgs, lib, config, ... }:
 
 let
-  hostContent = lib.concatStringsSep "\n" config.hosts;
+  entries = lib.mapAttrsToList (hostname: ip: { inherit hostname ip; }) config.hosts;
+  entriesByIp = builtins.groupBy ({ ip, ... }: ip) entries;
+  hostnamesByIp = builtins.mapAttrs (hostname: entries: builtins.map ({ hostname, ... }: hostname) entries) entriesByIp;
+  lines = lib.mapAttrsToList (ip: hostnames: "${ip} ${lib.concatStringsSep " " hostnames}") hostnamesByIp;
+  hostContent = lib.concatStringsSep "\n" lines;
   hostHash = builtins.hashString "sha256" hostContent;
   file = pkgs.writeText "hosts" ''
     # ${hostHash}
@@ -17,28 +21,28 @@ in
     };
 
     hosts = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
+      type = lib.types.attrsOf lib.types.str;
       default = [ ];
       description = "List of hosts entries.";
+      example = {
+        "example.com" = "127.0.0.1";
+      };
     };
   };
 
-  config = lib.mkIf (builtins.length config.hosts != 0) {
-    packages = [
-      (pkgs.writeShellScriptBin "deactivate-hosts" ''
-        rm -f "$DEVENV_STATE/hostctl"
-        exec sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName} 
-      ''
-      )
-    ];
-
-    enterShell = ''
+  config = lib.mkIf (hostContent != "") {
+    beforeUp = ''
       if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
         sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
         echo "Hosts file updated. Run 'deactivate-hosts' to revert changes."
         mkdir -p "$DEVENV_STATE"
         echo "${hostHash}" > "$DEVENV_STATE/hostctl"
       fi
+    '';
+
+    afterUp = ''
+      rm -f "$DEVENV_STATE/hostctl"
+      sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName} 
     '';
   };
 }
