@@ -22,7 +22,7 @@ in
 
     hosts = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
-      default = {};
+      default = { };
       description = "List of hosts entries.";
       example = {
         "example.com" = "127.0.0.1";
