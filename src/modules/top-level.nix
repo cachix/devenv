@@ -25,18 +25,6 @@ in
       default = { };
     };
 
-    beforeUp = lib.mkOption {
-      type = types.lines;
-      description = "Bash code to execute before starting processes.";
-      default = "";
-    };
-
-    afterUp = lib.mkOption {
-      type = types.lines;
-      description = "Bash code to execute after stopping processes.";
-      default = "";
-    };
-
     enterShell = lib.mkOption {
       type = types.lines;
       description = "Bash code to execute when entering the shell.";

@@ -97,6 +97,18 @@ in
           log_level = "fatal";
         };
       };
+
+      before = lib.mkOption {
+        type = types.lines;
+        description = "Bash code to execute before starting processes.";
+        default = "";
+      };
+
+      after = lib.mkOption {
+        type = types.lines;
+        description = "Bash code to execute after stopping processes.";
+        default = "";
+      };
     };
 
     # INTERNAL
@@ -138,7 +150,7 @@ in
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
     procfileScript = pkgs.writeShellScript "devenv-up" ''
-      ${config.beforeUp}
+      ${config.process.before}
 
       ${procfileScripts.${implementation}}
 
@@ -151,7 +163,7 @@ in
         kill -TERM $(cat "$DEVENV_STATE/devenv.pid")
         rm "$DEVENV_STATE/devenv.pid"
         wait
-        ${config.afterUp}
+        ${config.process.after}
         echo "Processes stopped."
       }
 
