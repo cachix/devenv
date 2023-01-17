@@ -71,7 +71,6 @@ pkgs.writeScriptBin "devenv" ''
       shell
       eval "$env"
       procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
-      cat $procfilescript
       if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"  
         exit 1
