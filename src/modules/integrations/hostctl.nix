@@ -31,16 +31,15 @@ in
   };
 
   config = lib.mkIf (hostContent != "") {
-    beforeUp = ''
+    process.before = ''
       if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
         sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
-        echo "Hosts file updated. Run 'deactivate-hosts' to revert changes."
         mkdir -p "$DEVENV_STATE"
         echo "${hostHash}" > "$DEVENV_STATE/hostctl"
       fi
     '';
 
-    afterUp = ''
+    process.after = ''
       rm -f "$DEVENV_STATE/hostctl"
       sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName} 
     '';
