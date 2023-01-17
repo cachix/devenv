@@ -126,6 +126,46 @@ lazy attribute set of anything
 
 
 
+## hosts
+List of hosts entries.
+
+*_Type_*
+```
+attribute set of string
+```
+
+
+*_Default_*
+```
+{ }
+```
+
+
+*_Example_*
+```
+{
+  "example.com" = "127.0.0.1";
+}
+```
+
+
+## hostsProfileName
+Profile name to use.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"devenv-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+```
+
+
+
+
 ## languages.c.enable
 Whether to enable tools for C development.
 
@@ -2812,6 +2852,40 @@ lazy attribute set of package
 ```
 
 
+
+
+
+
+## process.after
+Bash code to execute after stopping processes.
+
+*_Type_*
+```
+strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
+## process.before
+Bash code to execute before starting processes.
+
+*_Type_*
+```
+strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+""
+```
 
 
 
