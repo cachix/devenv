@@ -20,7 +20,7 @@ For example, if you have a `devenv.yaml` file like:
 ```yaml title="devenv.yaml"
 inputs:
   nixpkgs-stable:
-    url: github:NixOS/nixpkgs/nixos-22.05
+    url: github:NixOS/nixpkgs/nixos-22.11
 ```
 
 You can access the stable packages via the `inputs` field:
