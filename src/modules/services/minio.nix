@@ -12,7 +12,7 @@ let
       mkdir -p "$MINIO_CONFIG_DIR"
     fi
 
-    for bucket in ${lib.escapeShellArgs cfg.ensureBuckets}; do
+    for bucket in ${lib.escapeShellArgs cfg.buckets}; do
       mkdir -p "$MINIO_DATA_DIR/$bucket"
     done
 
@@ -77,7 +77,7 @@ in
       description = lib.mdDoc "Minio package to use.";
     };
 
-    ensureBuckets = lib.mkOption {
+    buckets = lib.mkOption {
       default = [ ];
       type = types.listOf types.str;
       description = lib.mdDoc ''
