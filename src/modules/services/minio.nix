@@ -12,6 +12,10 @@ let
       mkdir -p "$MINIO_CONFIG_DIR"
     fi
 
+    for bucket in ${lib.escapeShellArgs cfg.ensureBuckets}; do
+      mkdir -p "$MINIO_DATA_DIR/$bucket"
+    done
+
     exec ${cfg.package}/bin/minio server --json --address ${cfg.listenAddress} --console-address ${cfg.consoleAddress} "--config-dir=$MINIO_CONFIG_DIR" "$MINIO_DATA_DIR"
   '';
 in
@@ -71,6 +75,14 @@ in
       defaultText = lib.literalExpression "pkgs.minio";
       type = types.package;
       description = lib.mdDoc "Minio package to use.";
+    };
+
+    ensureBuckets = lib.mkOption {
+      default = [ ];
+      type = types.listOf types.str;
+      description = lib.mdDoc ''
+        List of buckets to ensure exist on startup.
+      '';
     };
   };
 
