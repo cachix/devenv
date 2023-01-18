@@ -20,7 +20,6 @@
   };
   inputs.nix = {
     url = "github:domenkozar/nix/relaxed-flakes";
-    inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }:
