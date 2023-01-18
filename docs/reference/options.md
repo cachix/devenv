@@ -3972,6 +3972,24 @@ true
 
 
 
+## services.minio.buckets
+List of buckets to ensure exist on startup.
+
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+[ ]
+```
+
+
+
+
 ## services.minio.consoleAddress
 IP address and port of the web UI (console).
 
