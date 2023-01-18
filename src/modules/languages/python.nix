@@ -25,7 +25,10 @@ in
     env.PYTHONPATH = "${config.env.DEVENV_PROFILE}/${cfg.package.sitePackages}";
 
     enterShell = lib.mkIf cfg.venv.enable ''
-      python -m venv ${config.env.DEVENV_STATE}/venv
+      if [ ! -d ${config.env.DEVENV_STATE}/venv ]
+      then
+        python -m venv ${config.env.DEVENV_STATE}/venv
+      fi
       source ${config.env.DEVENV_STATE}/venv/bin/activate
     '';
   };
