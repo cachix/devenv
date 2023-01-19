@@ -1445,6 +1445,24 @@ true
 ```
 
 
+## languages.scala.package
+The Scala package to use.
+
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"pkgs.scala_3"
+```
+
+
+
+
 ## languages.terraform.enable
 Whether to enable tools for terraform development.
 
