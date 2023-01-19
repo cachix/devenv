@@ -1153,6 +1153,27 @@ pkgs.python3
 
 
 
+## languages.python.venv.enable
+Whether to enable Python virtual environment.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.r.enable
 Whether to enable tools for R development.
 
