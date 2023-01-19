@@ -22,8 +22,6 @@ in
     packages = with pkgs; [
       (cfg.package.override
         { jre = java.jdk.package; })
-      (scala-cli.override
-        { jre = java.jdk.package; })
       (sbt.override
         { jre = java.jdk.package; })
       (metals.override
@@ -31,6 +29,9 @@ in
       (coursier.override
         { jre = java.jdk.package; })
       (scalafmt.override
+        { jre = java.jdk.package; })
+    ] ++ lib.optionals (lib.versionAtLeast java.jdk.package.version "17") [
+      (scala-cli.override
         { jre = java.jdk.package; })
     ];
 
