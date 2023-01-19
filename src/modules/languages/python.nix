@@ -13,6 +13,8 @@ in
       defaultText = lib.literalExpression "pkgs.python3";
       description = "The Python package to use.";
     };
+
+    venv.enable = lib.mkEnableOption "Python virtual environment";
   };
 
   config = lib.mkIf cfg.enable {
@@ -21,5 +23,13 @@ in
     ];
 
     env.PYTHONPATH = "${config.env.DEVENV_PROFILE}/${cfg.package.sitePackages}";
+
+    enterShell = lib.mkIf cfg.venv.enable ''
+      if [ ! -d ${config.env.DEVENV_STATE}/venv ]
+      then
+        python -m venv ${config.env.DEVENV_STATE}/venv
+      fi
+      source ${config.env.DEVENV_STATE}/venv/bin/activate
+    '';
   };
 }
