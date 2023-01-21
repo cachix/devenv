@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.python = {
-    enable = lib.mkEnableOption "Enable tools for Python development.";
+    enable = lib.mkEnableOption "tools for Python development";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -38,14 +38,17 @@ in
 
     enterShell = lib.concatStringsSep "\n" (
       (lib.optional cfg.venv.enable ''
-        python -m venv ${config.env.DEVENV_STATE}/venv
+        if [ ! -d ${config.env.DEVENV_STATE}/venv ]
+        then
+          python -m venv ${config.env.DEVENV_STATE}/venv
+        fi
         source ${config.env.DEVENV_STATE}/venv/bin/activate
       '') ++ (lib.optional cfg.poetry.enable ''
         if [ -f pyproject.toml ]
         then
-          poetry install --no-interaction --quiet
+          time poetry install --no-interaction --quiet
         else
-          echo "No pyproject.toml found. Run 'poetry init'." >&2
+          echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
         fi
       '')
     );

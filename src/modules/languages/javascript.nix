@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.javascript = {
-    enable = lib.mkEnableOption "Enable tools for JavaScript development.";
+    enable = lib.mkEnableOption "tools for JavaScript development";
 
     package = lib.mkOption {
       type = lib.types.package;

@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.c = {
-    enable = lib.mkEnableOption "Enable tools for C development.";
+    enable = lib.mkEnableOption "tools for C development";
   };
 
   config = lib.mkIf cfg.enable {

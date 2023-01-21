@@ -11,7 +11,7 @@ let
 in
 {
   options.languages.purescript = {
-    enable = lib.mkEnableOption "Enable tools for PureScript development.";
+    enable = lib.mkEnableOption "tools for PureScript development";
 
     package = lib.mkOption {
       type = lib.types.package;
