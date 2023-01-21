@@ -14,7 +14,11 @@ let
 
     if [[ ! -d "$MYSQL_HOME" ]]; then
       mkdir -p "$MYSQL_HOME"
-      ${if isMariaDB then "${cfg.package}/bin/mysql_install_db" else "${cfg.package}/bin/mysqld"} ${mysqldOptions} ${optionalString (!isMariaDB) "--initialize-insecure"}
+      ${
+        if isMariaDB
+          then "${cfg.package}/bin/mysql_install_db ${mysqldOptions} --auth-root-authentication-method=normal"
+          else "${cfg.package}/bin/mysqld ${mysqldOptions} --initialize-insecure"
+      }
     fi
 
     exec ${cfg.package}/bin/mysqld ${mysqldOptions}
@@ -23,16 +27,16 @@ let
     PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
     set -euo pipefail
 
-    while ! ${cfg.package}/bin/mysqladmin ping ${optionalString (!isMariaDB) "-u root --password=''"} --silent; do
+    while ! MYSQL_PWD="" ${cfg.package}/bin/mysqladmin ping  -u root --silent; do
       sleep 1
     done
 
     ${concatMapStrings (database: ''
       # Create initial databases
       if ! test -e "$MYSQL_HOME/${database.name}"; then
-          echo "Creating initial database: ${database.name}"
-          ( echo 'create database `${database.name}`;'
-            ${optionalString (database.schema != null) ''
+        echo "Creating initial database: ${database.name}"
+        ( echo 'create database `${database.name}`;'
+          ${optionalString (database.schema != null) ''
             echo 'use `${database.name}`;'
             # TODO: this silently falls through if database.schema does not exist,
             # we should catch this somehow and exit, but can't do it here because we're in a subshell.
@@ -43,19 +47,20 @@ let
             then
                 cat ${database.schema}/mysql-databases/*.sql
             fi
-            ''}
-          ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
+          ''}
+        ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root
       fi
     '') cfg.initialDatabases}
 
     ${concatMapStrings (user:
       ''
+        echo "Adding user: ${user.name}"
         ${optionalString (user.password != null) "password='${user.password}'"}
         ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"
           ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
             echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
           '') user.ensurePermissions)}
-        ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
+        ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root -N
     '') cfg.ensureUsers}
 
     # We need to sleep until infinity otherwise all processes stop
