@@ -9,7 +9,7 @@
          then (builtins.fromJSON (builtins.readFile ./.devenv/devenv.json)).inputs
          else {});
 
-    outputs = { nixpkgs, ... }@inputs:
+    outputs = { self, nixpkgs, ... }@inputs:
       let
         pkgs = import nixpkgs { system = "${pkgs.system}"; };
         lib = pkgs.lib;
