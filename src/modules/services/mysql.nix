@@ -27,7 +27,7 @@ let
     PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
     set -euo pipefail
 
-    while ! MYSQL_PWD="" ${cfg.package}/bin/mysqladmin ping  -u root --silent; do
+    while ! MYSQL_PWD="" ${cfg.package}/bin/mysqladmin ping -u root --silent; do
       sleep 1
     done
 
