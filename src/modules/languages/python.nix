@@ -44,11 +44,14 @@ in
         fi
         source ${config.env.DEVENV_STATE}/venv/bin/activate
       '') ++ (lib.optional cfg.poetry.enable ''
-        if [ -f pyproject.toml ]
+        if [ ! -f pyproject.toml ]
         then
-          time poetry install --no-interaction --quiet
-        else
           echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
+        elif [ ! -f poetry.lock ]
+        then
+          echo "No poetry.lock found. Run 'poetry install' to create one from pyproject.toml." >&2
+        else
+          poetry install --no-interaction --quiet
         fi
       '')
     );
