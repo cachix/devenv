@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.zig = {
-    enable = lib.mkEnableOption "Enable tools for Zig development.";
+    enable = lib.mkEnableOption "tools for Zig development";
 
     package = lib.mkOption {
       type = lib.types.package;

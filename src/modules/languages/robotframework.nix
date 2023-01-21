@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.robotframework = {
-    enable = lib.mkEnableOption "Enable tools for Robot Framework development.";
+    enable = lib.mkEnableOption "tools for Robot Framework development";
 
     python = lib.mkOption {
       type = lib.types.package;

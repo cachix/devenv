@@ -44,6 +44,7 @@ nav:
       - Automatic Shell Activation: automatic-shell-activation.md
       - Garbage Collection: garbage-collection.md
     - Integrations:
+      - GitHub Actions: integrations/github-actions.md
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
       - Difftastic: integrations/difftastic.md
     - Guides: 

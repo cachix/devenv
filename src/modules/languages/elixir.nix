@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.elixir = {
-    enable = lib.mkEnableOption "Enable tools for Elixir development.";
+    enable = lib.mkEnableOption "tools for Elixir development";
 
     package = lib.mkOption {
       type = lib.types.package;

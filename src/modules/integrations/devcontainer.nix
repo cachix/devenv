@@ -15,7 +15,7 @@ let
 in
 {
   options.devcontainer = {
-    enable = lib.mkEnableOption "Generate .devcontainer.json for devenv integration.";
+    enable = lib.mkEnableOption "generation .devcontainer.json for devenv integration";
   };
 
   config = lib.mkIf config.devcontainer.enable {

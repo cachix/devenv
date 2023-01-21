@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.erlang = {
-    enable = lib.mkEnableOption "Enable tools for Erlang development.";
+    enable = lib.mkEnableOption "tools for Erlang development";
 
     package = lib.mkOption {
       type = lib.types.package;
