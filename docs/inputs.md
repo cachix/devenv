@@ -13,7 +13,7 @@ inputs:
     url: github:cachix/pre-commit-hooks.nix
 ```
 
-The dependencies you mention as `inputs` are passsed as an argument to the function.
+The dependencies you mention as `inputs` are passed as an argument to the function.
 
 For example, if you have a `devenv.yaml` file like:
 
@@ -58,7 +58,7 @@ There are a few special inputs passed into `devenv.nix`:
 - `pkgs` is a `nixpkgs` input containing [all of the available packages](./packages.md#searching) for your system.
 - `lib` is [a collection of functions for working with Nix data structures](https://nixos.org/manual/nixpkgs/stable/#sec-functions-library). You can use [noogle](https://noogle.dev/) to search for a function.
 - `config` is the final resolved configuration for your developer environment, which you can use to reference any other options set in [devenv.nix](./reference/options.md). 
-   Since Nix is a lazy evaluated language, you can reference any option you defining in the same file as long as it doesn't reference itself!
+   Since Nix supports lazy evaluation, you can reference any option you define in the same file as long as it doesn't reference itself!
 
 !!! note
 
@@ -68,7 +68,6 @@ See [devenv.yaml reference](reference/yaml-options.md#inputs) for all supported 
 
 ## Locking and updating inputs
 
-When you run any of the commands,
-`devenv` resolves inputs like `github:NixOS/nixpkgs/nixpkgs-unstable` into a commit revision and writes it to `devenv.lock`. This ensures that your environment is reproducible.
+When you run any of the commands, `devenv` resolves inputs like `github:NixOS/nixpkgs/nixpkgs-unstable` into a commit revision and writes them to `devenv.lock`. This ensures that your environment is reproducible.
 
-To update an input to a newer commit, run `devenv update` or read [devenv.yaml reference](reference/yaml-options.md#inputs) to learn how to pin down the revision/branch at the input level.
+To update an input to a newer commit, run `devenv update` or read the [devenv.yaml reference](reference/yaml-options.md#inputs) to learn how to pin down the revision/branch at the input level.
