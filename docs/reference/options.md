@@ -4570,6 +4570,31 @@ null
 
 
 
+## services.postgres.initialScript
+Initial SQL commands to run during database initialization. This can be multiple
+SQL expressions separated by a semi-colon.
+
+
+*_Type_*
+```
+null or string
+```
+
+
+*_Default_*
+```
+null
+```
+
+
+*_Example_*
+```
+CREATE USER postgres SUPERUSER;
+CREATE USER bar;
+
+```
+
+
 ## services.postgres.listen_addresses
 Listen address
 
