@@ -1153,6 +1153,44 @@ pkgs.python3
 
 
 
+## languages.python.poetry.enable
+Whether to enable poetry.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.python.poetry.package
+The poetry package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+config.languages.python.package.pkgs.poetry
+```
+
+
+
+
 ## languages.python.venv.enable
 Whether to enable Python virtual environment.
 
