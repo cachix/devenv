@@ -2,7 +2,7 @@
 
 We recommend a two-step approach for integrating your linters and formatters.
 
-## 1) At commit time to make sure that commits are well-formatted
+## 1) Make sure that commits are well-formatted at commit time
 
 ```nix title="devenv.nix"
 { inputs, ... }:
@@ -29,9 +29,9 @@ Entering shell ...
 pre-commit installed at .git/hooks/pre-commit
 ```
 
-If you commit a Python file, markdown file or a script, these hooks will run at commit time.
+If you commit a Python or Markdown file or a script, these hooks will run at commit time.
 
-## 2) Once again in CI to verify formatting
+## 2) Verify formatting in CI
 
 Run ``devenv ci``.
 
