@@ -2,7 +2,7 @@
 let
   examples = ../examples;
   lib = pkgs.lib;
-  version = lib.removeSuffix "\n" (builtins.readFile ./modules/latest-version);
+  version = lib.fileContents ./modules/latest-version;
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
@@ -71,7 +71,6 @@ pkgs.writeScriptBin "devenv" ''
       shell
       eval "$env"
       procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
-      cat $procfilescript
       if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"  
         exit 1
@@ -98,14 +97,24 @@ pkgs.writeScriptBin "devenv" ''
     search)
       name=$1
       shift
+      assemble
+      options=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#optionsJSON' --impure)
       results=$($CUSTOM_NIX/bin/nix $NIX_FLAGS search --json nixpkgs $name)
+      results_options=$(cat $options/share/doc/nixos/options.json | ${pkgs.jq}/bin/jq "with_entries(select(.key | contains(\"$name\")))")
       if [ "$results" = "{}" ]; then
-        echo "No results found for '$name'."
+        echo "No packages found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (.[]  |map(.) |@tsv)' <<< "$results" | column -ts $'\t'
+        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | column -ts $'\t'
         echo
-        echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") results."
       fi
+      echo
+      if [ "$results_options" = "{}" ]; then
+        echo "No options found for '$name'."
+      else
+        ${pkgs.jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | column -ts $'\t'
+      fi
+      echo
+      echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") packages and $(${pkgs.jq}/bin/jq 'length' <<< "$results_options") options for '$name'."
       ;;
     init)
       if [ "$#" -eq "1" ]
@@ -115,26 +124,48 @@ pkgs.writeScriptBin "devenv" ''
         cd "$target"
       fi
 
-      if [[ -f devenv.nix || -f devenv.yaml || -f .envrc ]]; then
-        echo "Aborting since devenv.nix, devenv.yaml or .envrc already exist."
+      if [[ -f devenv.nix && -f devenv.yaml && -f .envrc ]]; then
+        echo "Aborting since devenv.nix, devenv.yaml and .envrc already exist."
         exit 1
       fi
 
       # TODO: allow selecting which example and list them
       example=simple
-      echo "Creating .envrc"
-      cat ${examples}/$example/.envrc > .envrc
-      echo "Creating devenv.nix"
-      cat ${examples}/$example/devenv.nix > devenv.nix 
-      echo "Creating devenv.yaml"
-      cat ${examples}/$example/devenv.yaml > devenv.yaml
-      echo "Appending .devenv* and devenv.local.nix to .gitignore"
-      echo "" >> .gitignore
-      echo "# Devenv" >> .gitignore
-      echo ".devenv*" >> .gitignore
-      echo "devenv.local.nix" >> .gitignore
-      echo "" >> .gitignore
+
+      if [[ ! -f .envrc ]]; then
+        echo "Creating .envrc"
+        cat ${examples}/$example/.envrc > .envrc
+      fi
+
+      if [[ ! -f devenv.nix ]]; then
+        echo "Creating devenv.nix"
+        cat ${examples}/$example/devenv.nix > devenv.nix 
+      fi
+
+      if [[ ! -f devenv.yaml ]]; then
+        echo "Creating devenv.yaml"
+        cat ${examples}/$example/devenv.yaml > devenv.yaml
+      fi
+
+      if [[ ! -f .gitignore ]]; then
+        touch .gitignore
+      fi
+
+      if ! grep -q "devenv" .gitignore; then
+        echo "Appending .devenv* and devenv.local.nix to .gitignore"
+
+        echo "" >> .gitignore
+        echo "# Devenv" >> .gitignore
+        echo ".devenv*" >> .gitignore
+        echo "devenv.local.nix" >> .gitignore
+        echo "" >> .gitignore
+      fi
       echo "Done."
+
+      if command -v direnv &> /dev/null; then
+        echo "direnv is installed. Running direnv allow."
+        direnv allow
+      fi
       ;;
     info)
       assemble

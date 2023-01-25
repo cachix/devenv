@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.nix = {
-    enable = lib.mkEnableOption "Enable tools for Nix development.";
+    enable = lib.mkEnableOption "tools for Nix development";
   };
 
   config = lib.mkIf cfg.enable {
@@ -16,13 +16,5 @@ in
       deadnix
       nil
     ];
-
-    enterShell = ''
-      deadnix --version
-      cachix --version
-      statix --version
-      vulnix --version
-      nil --version
-    '';
   };
 }

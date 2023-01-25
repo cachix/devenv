@@ -5,12 +5,12 @@ let
 in
 {
   options.languages.terraform = {
-    enable = lib.mkEnableOption "Enable tools for terraform development.";
+    enable = lib.mkEnableOption "tools for terraform development";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.terraform;
-      defaultText = "pkgs.terraform";
+      defaultText = lib.literalExpression "pkgs.terraform";
       description = "The terraform package to use.";
     };
   };
@@ -21,11 +21,5 @@ in
       terraform-ls
       tfsec
     ];
-
-    enterShell = ''
-      terraform version
-      terraform-ls --version
-      tfsec --version
-    '';
   };
 }

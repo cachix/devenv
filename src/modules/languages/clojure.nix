@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.clojure = {
-    enable = lib.mkEnableOption "Enable tools for Clojure development.";
+    enable = lib.mkEnableOption "tools for Clojure development";
   };
 
   config = lib.mkIf cfg.enable {
@@ -13,9 +13,5 @@ in
       clojure
       clojure-lsp
     ];
-
-    enterShell = ''
-      clojure --version
-    '';
   };
 }

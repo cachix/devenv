@@ -1,18 +1,22 @@
 { pkgs, lib, config, ... }:
 
 let
-  cfg = config.adminer;
+  cfg = config.services.adminer;
   types = lib.types;
 in
 {
-  options.adminer = {
-    enable = lib.mkEnableOption "Add adminer process.";
+  imports = [
+    (lib.mkRenamedOptionModule [ "adminer" "enable" ] [ "services" "adminer" "enable" ])
+  ];
+
+  options.services.adminer = {
+    enable = lib.mkEnableOption "adminer process";
 
     package = lib.mkOption {
       type = types.package;
       description = "Which package of adminer to use";
       default = pkgs.adminer;
-      defaultText = "pkgs.adminer";
+      defaultText = lib.literalExpression "pkgs.adminer";
     };
 
     listen = lib.mkOption {

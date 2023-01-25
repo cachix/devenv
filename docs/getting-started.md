@@ -28,7 +28,7 @@ a) Install [Nix](https://nixos.org)
     docker run -it nixos/nix
     ```
 
-b) Install [Cachix](https://cachix.org) (optional, speeds up the installation by providing binaries)
+b) Install [Cachix](https://cachix.org) (recommended, speeds up the installation by providing binaries)
 
 === "Newcomers"
 
@@ -62,7 +62,7 @@ c) Install ``devenv``
 
     ```nix title="configuration.nix"
     environment.systemPackages = [ 
-      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz))
+      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz)).default
     ];
     ```
 

@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.redis;
+  cfg = config.services.redis;
 
   redisConfig = pkgs.writeText "redis.conf" ''
     port ${toString cfg.port}
@@ -22,14 +22,18 @@ let
   '';
 in
 {
-  options.redis = {
-    enable = mkEnableOption "Add redis process and expose utilities.";
+  imports = [
+    (lib.mkRenamedOptionModule [ "redis" "enable" ] [ "services" "redis" "enable" ])
+  ];
+
+  options.services.redis = {
+    enable = mkEnableOption "redis process and expose utilities";
 
     package = mkOption {
       type = types.package;
       description = "Which package of redis to use";
       default = pkgs.redis;
-      defaultText = "pkgs.redis";
+      defaultText = lib.literalExpression "pkgs.redis";
     };
 
     bind = mkOption {

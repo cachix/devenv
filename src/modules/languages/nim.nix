@@ -5,12 +5,12 @@ let
 in
 {
   options.languages.nim = {
-    enable = lib.mkEnableOption "Enable tools for nim development.";
+    enable = lib.mkEnableOption "tools for nim development";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.nim;
-      defaultText = "pkgs.nim";
+      defaultText = lib.literalExpression "pkgs.nim";
       description = "The nim package to use.";
     };
   };
@@ -20,10 +20,5 @@ in
       cfg.package
       pkgs.nimlsp
     ];
-
-    enterShell = ''
-      nim --version
-      nimlsp --version
-    '';
   };
 }

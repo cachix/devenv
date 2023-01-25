@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.mysql;
+  cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
@@ -20,9 +20,10 @@ let
     exec ${cfg.package}/bin/mysqld ${mysqldOptions}
   '';
   configureScript = pkgs.writeShellScriptBin "configure-mysql" ''
+    PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
     set -euo pipefail
 
-    while ! ${cfg.package}/bin/mysqladmin ping -u root --silent; do
+    while ! ${cfg.package}/bin/mysqladmin ping ${optionalString (!isMariaDB) "-u root --password=''"} --silent; do
       sleep 1
     done
 
@@ -43,17 +44,18 @@ let
                 cat ${database.schema}/mysql-databases/*.sql
             fi
             ''}
-          ) | ${cfg.package}/bin/mysql ${mysqlOptions} -u root -N
+          ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
       fi
     '') cfg.initialDatabases}
 
     ${concatMapStrings (user:
       ''
-        ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '${user.password}'"};"
+        ${optionalString (user.password != null) "password='${user.password}'"}
+        ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"
           ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
             echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
           '') user.ensurePermissions)}
-        ) | ${cfg.package}/bin/mysql ${mysqlOptions} -u root -N
+        ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
     '') cfg.ensureUsers}
 
     # We need to sleep until infinity otherwise all processes stop
@@ -61,14 +63,18 @@ let
   '';
 in
 {
-  options.mysql = {
-    enable = mkEnableOption "Add mysql process and expose utilities.";
+  imports = [
+    (lib.mkRenamedOptionModule [ "mysql" "enable" ] [ "services" "mysql" "enable" ])
+  ];
+
+  options.services.mysql = {
+    enable = mkEnableOption "mysql process and expose utilities";
 
     package = mkOption {
       type = types.package;
       description = "Which package of mysql to use";
       default = pkgs.mysql80;
-      defaultText = "pkgs.mysql80";
+      defaultText = lib.literalExpression "pkgs.mysql80";
     };
 
     settings = mkOption {
@@ -117,10 +123,12 @@ in
         List of database names and their initial schemas that should be used to create databases on the first startup
         of MySQL. The schema attribute is optional: If not specified, an empty database is created.
       '';
-      example = [
-        { name = "foodatabase"; schema = literalExpression "./foodatabase.sql"; }
-        { name = "bardatabase"; }
-      ];
+      example = literalExpression ''
+        [
+          { name = "foodatabase"; schema = ./foodatabase.sql; }
+          { name = "bardatabase"; }
+        ]
+      '';
     };
 
     ensureUsers = lib.mkOption {

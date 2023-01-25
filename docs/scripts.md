@@ -11,7 +11,7 @@ A simple example defining `silly-example` script:
   packages = [ pkgs.curl pkgs.jq ]; # (1)!
 
   scripts.silly-example.exec = ''
-    curl "https://httpbin.org/get?=$1" | jq '.args'
+    curl "https://httpbin.org/get?$1" | jq '.args'
   '';
 }
 ```
@@ -40,9 +40,20 @@ Sometimes we don't want to expose the tools to the shell but still make sure the
 
 {
   scripts.silly-example.exec = ''
-    ${pkgs.curl}/bin/curl "https://httpbin.org/get?=$1" | ${pkgs.jq}/bin/jq '.args'
+    ${pkgs.curl}/bin/curl "https://httpbin.org/get?$1" | ${pkgs.jq}/bin/jq '.args'
   '';
 }
 ```
 
-When a package is interpolated in a string, you're referring to it's `$PREFIX` where it was installed.
+When a package is interpolated in a string, you're referring to the path where it is located.
+
+```shell-session
+$ devenv shell
+Building shell ...
+Entering shell ...
+
+(devenv) $ silly-example foo=1
+{
+  "foo": "1"
+}
+```

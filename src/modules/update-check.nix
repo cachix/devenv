@@ -14,6 +14,13 @@ let
 in
 {
   options.devenv = {
+    flakesIntegration = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Tells if devenv is being imported by a flake.nix file
+      '';
+    };
     warnOnNewVersion = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -23,12 +30,11 @@ in
     };
     cliVersion = lib.mkOption {
       type = lib.types.str;
-      default = "0.3";
       internal = true;
     };
     latestVersion = lib.mkOption {
       type = lib.types.str;
-      default = lib.removeSuffix "\n" (builtins.readFile ./latest-version);
+      default = lib.fileContents ./latest-version;
       description = ''
         The latest version of devenv.
       '';

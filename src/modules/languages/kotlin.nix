@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.kotlin = {
-    enable = lib.mkEnableOption "Enable tools for Kotlin development.";
+    enable = lib.mkEnableOption "tools for Kotlin development";
   };
 
   config = lib.mkIf cfg.enable {
@@ -13,9 +13,5 @@ in
       kotlin
       gradle
     ];
-
-    enterShell = ''
-      kotlin -version
-    '';
   };
 }

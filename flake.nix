@@ -28,10 +28,14 @@
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
       mkPackage = pkgs: import ./src/devenv.nix { inherit pkgs nix; };
+      mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions = pkgs:
         let
           eval = pkgs.lib.evalModules {
-            modules = [ ./src/modules/top-level.nix ];
+            modules = [
+              ./src/modules/top-level.nix
+              { devenv.warnOnNewVersion = false; }
+            ];
             specialArgs = { inherit pre-commit-hooks pkgs; };
           };
           options = pkgs.nixosOptionsDoc {
@@ -42,23 +46,33 @@
     in
     {
       packages = forAllSystems (system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
-        {
+        let pkgs = nixpkgs.legacyPackages.${system};
+        in {
           devenv = mkPackage pkgs;
           devenv-docs-options = mkDocOptions pkgs;
-        }
-      );
+        });
 
       modules = ./src/modules;
 
       defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
 
-      templates.simple = {
-        path = ./templates/simple;
-        description = "A direnv supported Nix flake with devenv integration.";
-      };
+      templates =
+        let
+          simple = {
+            path = ./templates/simple;
+            description = "A direnv supported Nix flake with devenv integration.";
+            welcomeText = ''
+              # `.devenv` should be added to `.gitignore`
+              ```sh
+                echo .devenv >> .gitignore
+              ```
+            '';
+          };
+        in
+        {
+          inherit simple;
+          default = simple;
+        };
 
       lib = {
         mkConfig = { pkgs, inputs, modules }:
@@ -71,11 +85,25 @@
               };
               modules = [
                 (self.modules + /top-level.nix)
+                ({ config, ... }: {
+                  packages = [
+                    (mkDevShellPackage config pkgs)
+                  ];
+                  devenv.warnOnNewVersion = false;
+                  devenv.flakesIntegration = true;
+                })
               ] ++ modules;
             };
           in
           project.config;
-        mkShell = args: (self.lib.mkConfig args).shell;
+        mkShell = args:
+          let
+            config = self.lib.mkConfig args;
+          in
+          config.shell // {
+            ci = config.ciDerivation;
+            inherit config;
+          };
       };
     };
 }

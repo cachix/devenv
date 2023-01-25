@@ -40,3 +40,8 @@ Points to `$DEVENV_ROOT/.devenv`.
 ### $DEVENV_STATE
 
 Points to `$DEVENV_DOTFILE/state`.
+
+### $DEVENV_PROFILE
+
+Points to the Nix store path that has final profile of packages/scripts provided by devenv.
+Useful for teaching other programs about `/bin`, `/etc`, `/var` folders.
