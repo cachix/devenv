@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.ocaml = {
-    enable = lib.mkEnableOption "Enable tools for OCaml development.";
+    enable = lib.mkEnableOption "tools for OCaml development";
   };
 
   config = lib.mkIf cfg.enable {

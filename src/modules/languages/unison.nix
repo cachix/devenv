@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.unison = {
-    enable = lib.mkEnableOption "Enable tools for Unison development.";
+    enable = lib.mkEnableOption "tools for Unison development";
 
     package = lib.mkOption {
       type = lib.types.package;

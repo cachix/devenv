@@ -26,8 +26,8 @@
             name = builtins.head paths;
             input = inputs.''${name} or (throw "Unknown input ''${name}");
             subpath = "/''${lib.concatStringsSep "/" (builtins.tail paths)}";
-            devenvpath = "''${input}/" + subpath + "/devenv.nix";
-            in if (!devenv.inputs.''${name}.flake or true) && builtins.pathExists devenvpath
+            devenvpath = "''${input}" + subpath + "/devenv.nix";
+            in if builtins.pathExists devenvpath
                then devenvpath
                else throw (devenvpath + " file does not exist for input ''${name}.");
         project = pkgs.lib.evalModules {

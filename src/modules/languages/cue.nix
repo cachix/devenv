@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.cue = {
-    enable = lib.mkEnableOption "Enable tools for Cue development.";
+    enable = lib.mkEnableOption "tools for Cue development";
 
     package = lib.mkOption {
       type = lib.types.package;
