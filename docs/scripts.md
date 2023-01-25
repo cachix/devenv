@@ -1,6 +1,6 @@
-Most projects out there have a bunch of shell scripts laying around.
+Most projects out there have a bunch of shell scripts lying around.
 
-Questions arise where to define them and how to provide the tooling to make sure scripts work for all developers.
+Questions arise as to where to define scripts and how to provide the tooling to make sure they work for all developers.
 
 A simple example defining `silly-example` script:
 
@@ -18,7 +18,7 @@ A simple example defining `silly-example` script:
 
 1. See [Packages](packages.md) for an explanation.
 
-Since scripts are exposed when we enter the environment, we can rely that ``packages`` executables are available.
+Since scripts are exposed when we enter the environment, we can rely on ``packages`` executables being available.
 
 ```shell-session
 $ devenv shell
