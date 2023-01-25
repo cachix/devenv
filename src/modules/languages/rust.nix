@@ -16,7 +16,7 @@ let
 in
 {
   options.languages.rust = {
-    enable = lib.mkEnableOption "Enable tools for Rust development.";
+    enable = lib.mkEnableOption "tools for Rust development";
 
     packages = lib.mkOption {
       type = lib.types.submodule ({
@@ -59,6 +59,10 @@ in
       pre-commit.tools.cargo = lib.mkForce cfg.packages.cargo;
       pre-commit.tools.rustfmt = lib.mkForce cfg.packages.rustfmt;
       pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
+    })
+    (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
+      env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+      env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
     })
     (lib.mkIf (cfg.version != null) (
       let

@@ -389,7 +389,8 @@ git version 2.38.1
             Define your <a href="/processes/">development processes in a declarative way</a> and start them with <code>devenv up</code>.
             </p>
             <p>
-            Pick from a number of community maintained modules like PostgreSQL, Redis, MySQL, and more are being added each day.
+            Pick from a number of community maintained modules like PostgreSQL, Redis, MySQL, 
+            RabbitMQ, WireMock, MinIO, Caddy, ElasticSearch, and <a href="/reference/options/#servicesadminerenable">more are being added</a> each day.
             </p>
           </div>
           <div class="second-column">
@@ -448,25 +449,29 @@ Starting processes ...
             <h3>Supports tooling for your favorite languages</h3>
             <p>
               A single toggle to load the compiler/tools/language server
-              for <a href="/languages">your favorite language</a>.
+              for <a href="/languages">your favorite language</a>, currently 
+              <a href="https://github.com/cachix/devenv/blob/main/examples/supported-languages/devenv.nix">supporting over 32 languages</a>.
             </p>
           </div>
           <div class="second-column">
             <div class="image-wrapper">
               <code class="language-nix"><pre>
   $ cat devenv.nix
-  { pkgs, ... }: {
-    languages.python.enable = true;
-    languages.rust.enable = true;
-    languages.go.enable = true;
-    languages.ruby.enable = true;
-    languages.elm.enable = true;
-    languages.kotlin.enable = true;
-    languages.php.enable = true;
-    languages.typescript.enable = true;
-    languages.perl.enable = true;
-    languages.javascript.enable = true;
-  }<pre></code>
+  { pkgs, ... }:
+
+  {
+    languages.rust = {
+      enable = true;
+      # https://devenv.sh/reference/options/#languagesrustversion
+      version = "nightly";
+    };
+
+    pre-commit.hooks = {
+      clippy.enable = true;
+      rustfmt.enable = true;
+    };
+  }
+            <pre></code>
             </div>
           </div>
         </div>

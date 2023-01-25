@@ -23,7 +23,7 @@ let
     PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
     set -euo pipefail
 
-    while ! ${cfg.package}/bin/mysqladmin ping ${optionalString (!isMariaDB) "-u root"} --silent; do
+    while ! ${cfg.package}/bin/mysqladmin ping ${optionalString (!isMariaDB) "-u root --password=''"} --silent; do
       sleep 1
     done
 
@@ -44,17 +44,18 @@ let
                 cat ${database.schema}/mysql-databases/*.sql
             fi
             ''}
-          ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root"} -N
+          ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
       fi
     '') cfg.initialDatabases}
 
     ${concatMapStrings (user:
       ''
-        ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '${user.password}'"};"
+        ${optionalString (user.password != null) "password='${user.password}'"}
+        ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"
           ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
             echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
           '') user.ensurePermissions)}
-        ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root"} -N
+        ) | ${cfg.package}/bin/mysql ${mysqlOptions} ${optionalString (!isMariaDB) "-u root --password=''"} -N
     '') cfg.ensureUsers}
 
     # We need to sleep until infinity otherwise all processes stop
@@ -67,7 +68,7 @@ in
   ];
 
   options.services.mysql = {
-    enable = mkEnableOption "Add mysql process and expose utilities.";
+    enable = mkEnableOption "mysql process and expose utilities";
 
     package = mkOption {
       type = types.package;

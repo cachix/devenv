@@ -42,6 +42,14 @@ let
       lib.optionalString cfg.createDatabase ''
         echo "CREATE DATABASE ''${USER:-$(id -nu)};" | postgres --single -E postgres '';
 
+  runInitialScript =
+    if cfg.initialScript != null then
+      ''
+        echo "${cfg.initialScript}" | postgres --single -E postgres
+      ''
+    else
+      "";
+
   toStr = value:
     if true == value then
       "yes"
@@ -61,6 +69,8 @@ let
     if [[ ! -d "$PGDATA" ]]; then
       initdb ${lib.concatStringsSep " " cfg.initdbArgs}
       ${setupInitialDatabases}
+
+      ${runInitialScript}
     fi
 
     # Setup config
@@ -185,6 +195,19 @@ in
           }
           { name = "bardatabase"; }
         ]
+      '';
+    };
+
+    initialScript = lib.mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        Initial SQL commands to run during database initialization. This can be multiple
+        SQL expressions separated by a semi-colon.
+      '';
+      example = lib.literalExpression ''
+        CREATE USER postgres SUPERUSER;
+        CREATE USER bar;
       '';
     };
   };

@@ -178,6 +178,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.caddy.exec = "${cfg.package}/bin/caddy run ${optionalString cfg.resume "--resume"} --config ${configJSON}";
+    processes.caddy.exec = "XDG_DATA_HOME=${cfg.dataDir}/data XDG_CONFIG_HOME=${cfg.dataDir}/config ${cfg.package}/bin/caddy run ${optionalString cfg.resume "--resume"} --config ${configJSON}";
   };
 }
