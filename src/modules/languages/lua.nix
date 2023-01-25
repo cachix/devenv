@@ -5,12 +5,12 @@ let
 in
 {
   options.languages.lua = {
-    enable = lib.mkEnableOption "Enable tools for Lua development.";
+    enable = lib.mkEnableOption "tools for Lua development";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.lua;
-      defaultText = "pkgs.lua";
+      defaultText = lib.literalExpression "pkgs.lua";
       description = "The Lua package to use.";
     };
   };
@@ -19,9 +19,5 @@ in
     packages = [
       cfg.package
     ];
-
-    enterShell = ''
-      lua -v
-    '';
   };
 }

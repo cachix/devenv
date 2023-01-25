@@ -57,5 +57,6 @@ And ``devenv shell`` activates the environment.
 - [Basics](https://devenv.sh/basics/)
 - [Roadmap](https://devenv.sh/roadmap/)
 - [Blog](https://devenv.sh/blog/)
-- [devenv.yaml reference](https://devenv.sh/reference/yaml-options/)
-- [devenv.nix reference](https://devenv.sh/reference/options/)
+- [`devenv.yaml` reference](https://devenv.sh/reference/yaml-options/)
+- [`devenv.nix` reference](https://devenv.sh/reference/options/)
+- [Contributing](https://devenv.sh/community/contributing/)

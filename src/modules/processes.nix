@@ -34,7 +34,34 @@ let
   implementation = config.process.implementation;
   implementation-options = config.process.${implementation};
   envList =
-    (lib.mapAttrsToList (name: value: "${name}=${toString value}") config.env);
+    lib.mapAttrsToList
+      (name: value: "${name}=${builtins.toJSON value}")
+      (if config.devenv.flakesIntegration then
+      # avoid infinite recursion in the scenario the `config` parameter is
+      # used in a `processes` declaration inside a devenv module.
+        builtins.removeAttrs config.env [ "DEVENV_PROFILE" ]
+      else
+        config.env);
+
+  procfileScripts = {
+    honcho = ''
+      ${pkgs.honcho}/bin/honcho start -f ${config.procfile} --env ${config.procfileEnv} & 
+    '';
+
+    overmind = ''
+      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --procfile ${config.procfile} &
+    '';
+
+    process-compose = ''
+      ${pkgs.process-compose}/bin/process-compose --config ${config.procfile} \
+         --port $PC_HTTP_PORT \
+         --tui=$PC_TUI_ENABLED &
+    '';
+
+    hivemind = ''
+      ${pkgs.hivemind}/bin/hivemind --print-timestamps ${config.procfile} &
+    '';
+  };
 in
 {
   options = {
@@ -69,6 +96,18 @@ in
           log_location = "/path/to/combined/output/logfile.log";
           log_level = "fatal";
         };
+      };
+
+      before = lib.mkOption {
+        type = types.lines;
+        description = "Bash code to execute before starting processes.";
+        default = "";
+      };
+
+      after = lib.mkOption {
+        type = types.lines;
+        description = "Bash code to execute after stopping processes.";
+        default = "";
       };
     };
 
@@ -110,27 +149,32 @@ in
     procfileEnv =
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
-    procfileScript = {
-      honcho = pkgs.writeShellScript "honcho-up" ''
-        echo "Starting processes ..." 1>&2
-        echo "" 1>&2
-        ${pkgs.honcho}/bin/honcho start -f ${config.procfile} --env ${config.procfileEnv}
-      '';
+    procfileScript = pkgs.writeShellScript "devenv-up" ''
+      ${config.process.before}
 
-      overmind = pkgs.writeShellScript "overmind-up" ''
-        OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --procfile ${config.procfile}
-      '';
+      ${procfileScripts.${implementation}}
 
-      process-compose = pkgs.writeShellScript "process-compose-up" ''
-        ${pkgs.process-compose}/bin/process-compose --config ${config.procfile} \
-           --port $PC_HTTP_PORT \
-           --tui=$PC_TUI_ENABLED
-      '';
+      if [[ ! -d "$DEVENV_STATE" ]]; then
+        mkdir -p "$DEVENV_STATE"
+      fi
 
-      hivemind = pkgs.writeShellScript "hivemind-up" ''
-        ${pkgs.hivemind}/bin/hivemind --print-timestamps ${config.procfile}
-      '';
-    }.${implementation};
+      stop_up() {
+        echo "Stopping processes..."
+        kill -TERM $(cat "$DEVENV_STATE/devenv.pid")
+        rm "$DEVENV_STATE/devenv.pid"
+        wait
+        ${config.process.after}
+        echo "Processes stopped."
+      }
+
+      trap stop_up SIGINT SIGTERM
+
+      echo $! > "$DEVENV_STATE/devenv.pid"
+
+      wait
+    '';
+
+    ci = [ config.procfileScript ];
 
     env =
       if implementation == "process-compose" then {

@@ -3,7 +3,7 @@
 with lib;
 
 let
-  cfg = config.mongodb;
+  cfg = config.services.mongodb;
 
   setupScript = pkgs.writeShellScriptBin "setup-mongodb" ''
     set -euo pipefail
@@ -19,14 +19,18 @@ let
   '';
 in
 {
-  options.mongodb = {
-    enable = mkEnableOption "Add MongoDB process and expose utilities.";
+  imports = [
+    (lib.mkRenamedOptionModule [ "mongodb" "enable" ] [ "services" "mongodb" "enable" ])
+  ];
+
+  options.services.mongodb = {
+    enable = mkEnableOption "MongoDB process and expose utilities";
 
     package = mkOption {
       type = types.package;
       description = "Which MongoDB package to use.";
       default = pkgs.mongodb;
-      defaultText = "pkgs.mongodb";
+      defaultText = lib.literalExpression "pkgs.mongodb";
     };
 
     additionalArgs = lib.mkOption {

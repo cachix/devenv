@@ -8,7 +8,10 @@
     pkgs.yaml2json
   ];
 
+  languages.python.enable = true;
+
   devcontainer.enable = true;
+  difftastic.enable = true;
 
   # bin/mkdocs serve --config-file mkdocs.insiders.yml
   processes.docs.exec = "bin/mkdocs serve";
@@ -33,9 +36,14 @@
     pushd examples/simple
       # this should fail since files already exist
       devenv init && exit 1
-      rm devenv.nix devenv.yaml .envrc
-      devenv init
     popd
+
+    tmp="$(mktemp -d)"
+    devenv init "$tmp"
+    pushd "$tmp"
+      devenv ci
+    popd
+    rm -rf "$tmp"
 
     # Test devenv integrated into Nix flake
     tmp="$(mktemp -d)"
@@ -52,10 +60,11 @@
   '';
   scripts.devenv-test-all-examples.exec = ''
     for dir in $(ls examples); do
-      devenv-run-example-test $dir
+      devenv-test-example $dir
     done
   '';
   scripts.devenv-test-example.exec = ''
+    set -e
     pushd examples/$1 
     devenv ci
     devenv shell ls

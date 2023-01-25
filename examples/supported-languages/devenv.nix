@@ -5,6 +5,7 @@
   languages.clojure.enable = true;
   languages.cplusplus.enable = true;
   languages.cue.enable = true;
+  languages.deno.enable = true;
   languages.dotnet.enable = true;
   languages.elixir.enable = true;
   languages.elm.enable = true;
@@ -29,7 +30,9 @@
   languages.scala.enable = true;
   languages.terraform.enable = true;
   languages.typescript.enable = true;
+  languages.unison.enable = true;
   languages.v.enable = true;
+  languages.zig.enable = true;
 
   # If you're missing a language, please contribute it by following examples of other languages <3
 }

@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.go = {
-    enable = lib.mkEnableOption "Enable tools for Go development.";
+    enable = lib.mkEnableOption "tools for Go development";
   };
 
   config = lib.mkIf cfg.enable {
@@ -13,9 +13,5 @@ in
       go
       gotools
     ];
-
-    enterShell = ''
-      go version
-    '';
   };
 }

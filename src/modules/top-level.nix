@@ -1,10 +1,26 @@
 { config, pkgs, lib, ... }:
-let types = lib.types;
+let
+  types = lib.types;
+  mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
+  # Returns a list of all the entries in a folder
+  listEntries = path:
+    map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
+
+  drvOrPackageToPaths = drvOrPackage:
+    if drvOrPackage ? outputs then
+      builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
+    else
+      [ drvOrPackage ];
+  profile = pkgs.buildEnv {
+    name = "devenv-profile";
+    paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
+    ignoreCollisions = true;
+  };
 in
 {
   options = {
     env = lib.mkOption {
-      type = types.attrs;
+      type = types.lazyAttrsOf types.anything;
       description = "Environment variables to be exposed inside the developer environment.";
       default = { };
     };
@@ -30,36 +46,33 @@ in
       type = types.listOf types.package;
       internal = true;
     };
+
+    ciDerivation = lib.mkOption {
+      type = types.package;
+      internal = true;
+    };
   };
 
   imports = [
-    ./adminer.nix
-    ./blackfire.nix
-    ./caddy.nix
-    ./postgres.nix
-    ./redis.nix
-    ./mysql.nix
-    ./mongodb.nix
-    ./rabbitmq.nix
-    ./pre-commit.nix
     ./info.nix
-    ./devcontainer.nix
-    ./elasticsearch.nix
-    ./memcached.nix
-    ./scripts.nix
     ./processes.nix
+    ./scripts.nix
     ./update-check.nix
-  ] ++ map (name: ./. + "/languages/${name}") (builtins.attrNames (builtins.readDir ./languages));
+  ]
+  ++ (listEntries ./languages)
+  ++ (listEntries ./services)
+  ++ (listEntries ./integrations)
+  ;
 
   config = {
-
     # TODO: figure out how to get relative path without impure mode
     env.DEVENV_ROOT = builtins.getEnv "PWD";
     env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
     env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
+    env.DEVENV_PROFILE = profile;
 
     enterShell = ''
-      export PS1="(devenv) $PS1"
+      export PS1="\e[0;34m(devenv)\e[0m $PS1"
       
       # note what environments are active, but make sure we don't repeat them
       if [[ ! "$DIRENV_ACTIVE" =~ (^|:)"$PWD"(:|$) ]]; then
@@ -71,14 +84,20 @@ in
         echo "You have .envrc but direnv command is not installed."
         echo "Please install direnv: https://direnv.net/docs/installation.html"
       fi
+
+      mkdir -p .devenv
+      rm -f .devenv/profile
+      ln -s ${profile} .devenv/profile
     '';
 
-    shell = pkgs.mkShell ({
-      name = "devenv";
-      packages = config.packages;
+    shell = mkNakedShell {
+      name = "devenv-shell";
+      env = config.env;
+      profile = profile;
       shellHook = config.enterShell;
-    } // config.env);
+    };
 
-    ci = [ config.shell config.procfile ];
+    ci = [ config.shell.inputDerivation ];
+    ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }

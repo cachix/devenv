@@ -20,8 +20,8 @@ in
     };
   };
 
-  caddy.enable = true;
-  caddy.virtualHosts."http://localhost:8000" = {
+  services.caddy.enable = true;
+  services.caddy.virtualHosts."http://localhost:8000" = {
     extraConfig = ''
       root * public
       php_fastcgi unix/${config.languages.php.fpm.pools.web.socket}

@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.haskell = {
-    enable = lib.mkEnableOption "Enable tools for Haskell development.";
+    enable = lib.mkEnableOption "tools for Haskell development";
   };
 
   config = lib.mkIf cfg.enable {
@@ -15,14 +15,5 @@ in
       zlib
       hpack
     ];
-
-    enterShell = ''
-      echo stack --version
-      stack --version
-
-      cabal --version
-
-      hpack --version
-    '';
   };
 }

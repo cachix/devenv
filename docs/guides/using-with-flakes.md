@@ -40,6 +40,7 @@ A minimal flake.nix that includes devenv is for example:
       pkgs = import nixpkgs {
         system = "x86_64-linux";
       };
+    in
     {
       devShell.x86_64-linux = devenv.lib.mkShell {
         inherit inputs pkgs;
