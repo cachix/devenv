@@ -229,6 +229,27 @@ true
 ```
 
 
+## languages.crystal.enable
+Whether to enable Enable tools for Crystal development..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.cue.enable
 Whether to enable tools for Cue development.
 
