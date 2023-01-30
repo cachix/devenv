@@ -63,6 +63,7 @@ in
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
       env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+      env.CFLAGS = [ "-iframework ${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
     })
     (lib.mkIf (cfg.version != null) (
       let
