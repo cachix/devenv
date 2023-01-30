@@ -96,10 +96,10 @@ let
       export PATH="$DEVENV_PROFILE/bin:$PATH"
 
       # prepend common compilation lookup paths
-      export PKG_CONFIG_PATH="$DEVENV_PROFILE/lib/pkgconfig:$PKG_CONFIG_PATH"
-      export LD_LIBRARY_PATH="$DEVENV_PROFILE/lib:$LD_LIBRARY_PATH"
-      export LIBRARY_PATH="$DEVENV_PROFILE/lib:$LIBRARY_PATH"
-      export C_INCLUDE_PATH="$DEVENV_PROFILE/include:$C_INCLUDE_PATH"
+      export PKG_CONFIG_PATH="$DEVENV_PROFILE/lib/pkgconfig:''${PKG_CONFIG_PATH-}"
+      export LD_LIBRARY_PATH="$DEVENV_PROFILE/lib:''${LD_LIBRARY_PATH-}"
+      export LIBRARY_PATH="$DEVENV_PROFILE/lib:''${LIBRARY_PATH-}"
+      export C_INCLUDE_PATH="$DEVENV_PROFILE/include:''${C_INCLUDE_PATH-}"
 
       # these provide shell completions / default config options
       export XDG_DATA_DIRS="$DEVENV_PROFILE/share:$XDG_DATA_DIRS"
