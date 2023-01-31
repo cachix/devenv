@@ -6,6 +6,7 @@
   languages.cplusplus.enable = true;
   languages.crystal.enable = true;
   languages.cue.enable = true;
+  languages.dart.enable = true;
   languages.deno.enable = true;
   languages.dotnet.enable = true;
   languages.elixir.enable = true;
