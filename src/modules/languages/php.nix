@@ -144,12 +144,6 @@ in
   options.languages.php = {
     enable = lib.mkEnableOption "tools for PHP development";
 
-    enableComposer = lib.mkOption {
-      type = lib.types.bool;
-      description = lib.mdDoc "Enable composer";
-      default = true;
-    };
-
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.php;
@@ -166,6 +160,22 @@ in
           ''';
         };
       '';
+    };
+
+    packages = lib.mkOption {
+      type = lib.types.submodule ({
+        options = {
+          composer = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = "composer";
+            defaultText = lib.literalExpression "pkgs.phpPackages.composer";
+            description = "composer package";
+          };
+        };
+      });
+      defaultText = lib.literalExpression "pkgs";
+      default = { };
+      description = "Attribute set of packages including composer";
     };
 
     fpm = {
@@ -238,7 +248,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       cfg.package
-    ] ++ lib.optional cfg.enableComposer cfg.package.packages.composer;
+    ] ++ lib.optional (cfg.packages.composer != null) cfg.package.packages."${cfg.packages.composer}";
 
     env.PHPFPMDIR = config.env.DEVENV_STATE + "/php-fpm";
 
