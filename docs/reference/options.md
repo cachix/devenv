@@ -288,6 +288,44 @@ pkgs.cue
 
 
 
+## languages.dart.enable
+Whether to enable tools for Dart development.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.dart.package
+The Dart package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+pkgs.dart
+```
+
+
+
+
 ## languages.deno.enable
 Whether to enable tools for Deno development.
 
