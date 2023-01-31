@@ -1347,6 +1347,44 @@ pkgs.R
 
 
 
+## languages.racket.enable
+Whether to enable tools for Racket development.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.racket.package
+The Racket package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+pkgs.racket-minimal
+```
+
+
+
+
 ## languages.robotframework.enable
 Whether to enable tools for Robot Framework development.
 
