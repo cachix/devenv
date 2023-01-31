@@ -12,7 +12,7 @@ let
   startScript = pkgs.writeShellScriptBin "start-mysql" ''
     set -euo pipefail
 
-    if [[ ! -d "$MYSQL_HOME" ]]; then
+    if [[ ! -d "$MYSQL_HOME" || ! -f "$MYSQL_HOME/ibdata1" ]]; then
       mkdir -p "$MYSQL_HOME"
       ${
         if isMariaDB
