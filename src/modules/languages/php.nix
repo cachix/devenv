@@ -5,7 +5,7 @@ with lib;
 let
   cfg = config.languages.php;
 
-  runtimeDir = "/tmp";
+  runtimeDir = config.env.DEVENV_STATE + "/php-fpm";
 
   toStr = value:
     if true == value then "yes"
@@ -250,7 +250,7 @@ in
       cfg.package
     ] ++ lib.optional (cfg.packages.composer != null) cfg.package.packages."${cfg.packages.composer}";
 
-    env.PHPFPMDIR = config.env.DEVENV_STATE + "/php-fpm";
+    env.PHPFPMDIR = runtimeDir;
 
     processes = mapAttrs'
       (pool: poolOpts:
