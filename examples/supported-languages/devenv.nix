@@ -27,6 +27,7 @@
   languages.purescript.enable = true;
   languages.python.enable = true;
   languages.r.enable = true;
+  languages.racket.enable = true;
   languages.robotframework.enable = true;
   languages.ruby.enable = true;
   languages.rust.enable = true;
