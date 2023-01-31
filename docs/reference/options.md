@@ -623,6 +623,44 @@ pkgs.nodejs
 
 
 
+## languages.julia.enable
+Whether to enable tools for Julia development.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.julia.package
+The Julia package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+pkgs.julia-bin
+```
+
+
+
+
 ## languages.kotlin.enable
 Whether to enable tools for Kotlin development.
 
