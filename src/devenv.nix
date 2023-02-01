@@ -10,7 +10,7 @@ pkgs.writeScriptBin "devenv" ''
   # we want subshells to fail the program
   set -e
 
-  NIX_FLAGS="--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes"
+  NIX_FLAGS="--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes --option warn-dirty false"
 
   # current hack to test if we have resolved all Nix annoyances
   export FLAKE_FILE=.devenv.flake.nix
