@@ -28,7 +28,7 @@
     # TODO: ask for the new version
     # TODO: update the version in the mkdocs.yml
     echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
-    cat mkdocs.yml | yaml2json | jq '.extra.devenv.version' > src/modules/latest-version
+    cat mkdocs.yml | yaml2json | jq -r '.extra.devenv.version' > src/modules/latest-version
   '';
   scripts.devenv-run-tests.exec = ''
     set -xe
