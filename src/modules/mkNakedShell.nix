@@ -102,8 +102,8 @@ let
       export C_INCLUDE_PATH="$DEVENV_PROFILE/include:''${C_INCLUDE_PATH-}"
 
       # these provide shell completions / default config options
-      export XDG_DATA_DIRS="$DEVENV_PROFILE/share:$XDG_DATA_DIRS"
-      export XDG_CONFIG_DIRS="$DEVENV_PROFILE/etc/xdg:$XDG_CONFIG_DIRS"
+      export XDG_DATA_DIRS="$DEVENV_PROFILE/share:''${XDG_DATA_DIRS-}"
+      export XDG_CONFIG_DIRS="$DEVENV_PROFILE/etc/xdg:''${XDG_CONFIG_DIRS-}"
 
       ${startupEnv}
 
