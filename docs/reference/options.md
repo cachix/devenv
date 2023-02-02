@@ -565,9 +565,7 @@ package
 
 
 ## languages.java.jdk.package
-The JDK package to use.
-This will also become available as <literal>JAVA_HOME</literal>.
-
+{'_type': 'mdDoc', 'text': 'The JDK package to use.\nThis will also become available as `JAVA_HOME`.\n'}
 
 *_Type_*
 ```
@@ -609,9 +607,7 @@ true
 
 
 ## languages.java.maven.package
-The maven package to use.
-The maven package by default inherits the JDK from <literal>languages.java.jdk.package</literal>.
-
+{'_type': 'mdDoc', 'text': 'The maven package to use.\nThe maven package by default inherits the JDK from `languages.java.jdk.package`.\n'}
 
 *_Type_*
 ```
@@ -1143,12 +1139,7 @@ attribute set of (string or signed integer or boolean)
 
 
 ## languages.php.package
-Allows to <link xlink:href="https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide">override the default used package</link> to adjust the settings or add more extensions. You can find the extensions using <literal>devenv search 'php extensions'</literal>
-
-<programlisting>
-
-</programlisting>
-
+{'_type': 'mdDoc', 'text': "Allows to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide) to adjust the settings or add more extensions. You can find the extensions using `devenv search 'php extensions'`\n```\n"}
 
 *_Type_*
 ```
@@ -1865,10 +1856,7 @@ submodule
 
 
 ## pre-commit.default_stages
-A configuration wide option for the stages property.
-Installs hooks to the defined stages.
-See <link xlink:href="https://pre-commit.com/#confining-hooks-to-run-at-certain-stages"></link>.
-
+{'_type': 'mdDoc', 'text': 'A configuration wide option for the stages property.\nInstalls hooks to the defined stages.\nSee [https://pre-commit.com/#confining-hooks-to-run-at-certain-stages](https://pre-commit.com/#confining-hooks-to-run-at-certain-stages).\n'}
 
 *_Type_*
 ```
@@ -1887,8 +1875,7 @@ list of string
 
 
 ## pre-commit.excludes
-Exclude files that were matched by these patterns.
-
+{'_type': 'mdDoc', 'text': 'Exclude files that were matched by these patterns.\n'}
 
 *_Type_*
 ```
@@ -1905,244 +1892,7 @@ list of string
 
 
 ## pre-commit.hooks
-The hook definitions.
-
-Pre-defined hooks can be enabled by, for example:
-
-<programlisting language="nix">
-hooks.nixpkgs-fmt.enable = true;
-</programlisting>The pre-defined hooks are:
-
-<emphasis role="strong"><literal>actionlint</literal></emphasis>
-
-Static checker for GitHub Actions workflow files.
-
-<emphasis role="strong"><literal>alejandra</literal></emphasis>
-
-The Uncompromising Nix Code Formatter.
-
-<emphasis role="strong"><literal>ansible-lint</literal></emphasis>
-
-Ansible linter.
-
-<emphasis role="strong"><literal>black</literal></emphasis>
-
-The uncompromising Python code formatter.
-
-<emphasis role="strong"><literal>brittany</literal></emphasis>
-
-Haskell source code formatter.
-
-<emphasis role="strong"><literal>cabal-fmt</literal></emphasis>
-
-Format Cabal files
-
-<emphasis role="strong"><literal>cabal2nix</literal></emphasis>
-
-Run <literal>cabal2nix</literal> on all <literal>*.cabal</literal> files to generate corresponding <literal>default.nix</literal> files.
-
-<emphasis role="strong"><literal>cargo-check</literal></emphasis>
-
-Check the cargo package for errors.
-
-<emphasis role="strong"><literal>chktex</literal></emphasis>
-
-LaTeX semantic checker
-
-<emphasis role="strong"><literal>clang-format</literal></emphasis>
-
-Format your code using <literal>clang-format</literal>.
-
-<emphasis role="strong"><literal>clippy</literal></emphasis>
-
-Lint Rust code.
-
-<emphasis role="strong"><literal>commitizen</literal></emphasis>
-
-Check whether the current commit message follows commiting rules.
-
-<emphasis role="strong"><literal>deadnix</literal></emphasis>
-
-Scan Nix files for dead code (unused variable bindings).
-
-<emphasis role="strong"><literal>dhall-format</literal></emphasis>
-
-Dhall code formatter.
-
-<emphasis role="strong"><literal>editorconfig-checker</literal></emphasis>
-
-Verify that the files are in harmony with the <literal>.editorconfig</literal>.
-
-<emphasis role="strong"><literal>elm-format</literal></emphasis>
-
-Format Elm files.
-
-<emphasis role="strong"><literal>elm-review</literal></emphasis>
-
-Analyzes Elm projects, to help find mistakes before your users find them.
-
-<emphasis role="strong"><literal>elm-test</literal></emphasis>
-
-Run unit tests and fuzz tests for Elm code.
-
-<emphasis role="strong"><literal>eslint</literal></emphasis>
-
-Find and fix problems in your JavaScript code.
-
-<emphasis role="strong"><literal>flake8</literal></emphasis>
-
-Check the style and quality of Python files.
-
-<emphasis role="strong"><literal>fourmolu</literal></emphasis>
-
-Haskell code prettifier.
-
-<emphasis role="strong"><literal>gofmt</literal></emphasis>
-
-A tool that automatically formats Go source code
-
-<emphasis role="strong"><literal>gotest</literal></emphasis>
-
-Run go tests
-
-<emphasis role="strong"><literal>govet</literal></emphasis>
-
-Checks correctness of Go programs.
-
-<emphasis role="strong"><literal>hadolint</literal></emphasis>
-
-Dockerfile linter, validate inline bash.
-
-<emphasis role="strong"><literal>hindent</literal></emphasis>
-
-Haskell code prettifier.
-
-<emphasis role="strong"><literal>hlint</literal></emphasis>
-
-HLint gives suggestions on how to improve your source code.
-
-<emphasis role="strong"><literal>hpack</literal></emphasis>
-
-<literal>hpack</literal> converts package definitions in the hpack format (<literal>package.yaml</literal>) to Cabal files.
-
-<emphasis role="strong"><literal>html-tidy</literal></emphasis>
-
-HTML linter.
-
-<emphasis role="strong"><literal>hunspell</literal></emphasis>
-
-Spell checker and morphological analyzer.
-
-<emphasis role="strong"><literal>isort</literal></emphasis>
-
-A Python utility / library to sort imports.
-
-<emphasis role="strong"><literal>latexindent</literal></emphasis>
-
-Perl script to add indentation to LaTeX files.
-
-<emphasis role="strong"><literal>luacheck</literal></emphasis>
-
-A tool for linting and static analysis of Lua code.
-
-<emphasis role="strong"><literal>markdownlint</literal></emphasis>
-
-Style checker and linter for markdown files.
-
-<emphasis role="strong"><literal>mdsh</literal></emphasis>
-
-Markdown shell pre-processor.
-
-<emphasis role="strong"><literal>nix-linter</literal></emphasis>
-
-Linter for the Nix expression language.
-
-<emphasis role="strong"><literal>nixfmt</literal></emphasis>
-
-Nix code prettifier.
-
-<emphasis role="strong"><literal>nixpkgs-fmt</literal></emphasis>
-
-Nix code prettifier.
-
-<emphasis role="strong"><literal>ormolu</literal></emphasis>
-
-Haskell code prettifier.
-
-<emphasis role="strong"><literal>php-cs-fixer</literal></emphasis>
-
-Lint PHP files.
-
-<emphasis role="strong"><literal>phpcbf</literal></emphasis>
-
-Lint PHP files.
-
-<emphasis role="strong"><literal>phpcs</literal></emphasis>
-
-Lint PHP files.
-
-<emphasis role="strong"><literal>prettier</literal></emphasis>
-
-Opinionated multi-language code formatter.
-
-<emphasis role="strong"><literal>purs-tidy</literal></emphasis>
-
-Format purescript files.
-
-<emphasis role="strong"><literal>purty</literal></emphasis>
-
-Format purescript files.
-
-<emphasis role="strong"><literal>pylint</literal></emphasis>
-
-Lint Python files.
-
-<emphasis role="strong"><literal>revive</literal></emphasis>
-
-A linter for Go source code.
-
-<emphasis role="strong"><literal>rustfmt</literal></emphasis>
-
-Format Rust code.
-
-<emphasis role="strong"><literal>shellcheck</literal></emphasis>
-
-Format shell files.
-
-<emphasis role="strong"><literal>shfmt</literal></emphasis>
-
-Format shell files.
-
-<emphasis role="strong"><literal>staticcheck</literal></emphasis>
-
-State of the art linter for the Go programming language
-
-<emphasis role="strong"><literal>statix</literal></emphasis>
-
-Lints and suggestions for the Nix programming language.
-
-<emphasis role="strong"><literal>stylish-haskell</literal></emphasis>
-
-A simple Haskell code prettifier
-
-<emphasis role="strong"><literal>stylua</literal></emphasis>
-
-An Opinionated Lua Code Formatter.
-
-<emphasis role="strong"><literal>terraform-format</literal></emphasis>
-
-Format terraform (<literal>.tf</literal>) files.
-
-<emphasis role="strong"><literal>typos</literal></emphasis>
-
-Source code spell checker
-
-<emphasis role="strong"><literal>yamllint</literal></emphasis>
-
-Yaml linter.
-
-
-
+{'_type': 'mdDoc', 'text': 'The hook definitions.\n\nPre-defined hooks can be enabled by, for example:\n\n```nix\nhooks.nixpkgs-fmt.enable = true;\n```\n\nThe pre-defined hooks are:\n\n**`actionlint`**\n\nStatic checker for GitHub Actions workflow files.\n\n\n**`alejandra`**\n\nThe Uncompromising Nix Code Formatter.\n\n\n**`ansible-lint`**\n\nAnsible linter.\n\n\n**`autoflake`**\n\nRemove unused imports and variables from Python code.\n\n\n**`bats`**\n\nRun bash unit tests.\n\n\n**`black`**\n\nThe uncompromising Python code formatter.\n\n\n**`cabal-fmt`**\n\nFormat Cabal files\n\n\n**`cabal2nix`**\n\nRun `cabal2nix` on all `*.cabal` files to generate corresponding `default.nix` files.\n\n\n**`cargo-check`**\n\nCheck the cargo package for errors.\n\n\n**`chktex`**\n\nLaTeX semantic checker\n\n\n**`clang-format`**\n\nFormat your code using `clang-format`.\n\n\n**`clippy`**\n\nLint Rust code.\n\n\n**`commitizen`**\n\nCheck whether the current commit message follows commiting rules.\n\n\n\n**`deadnix`**\n\nScan Nix files for dead code (unused variable bindings).\n\n\n**`dhall-format`**\n\nDhall code formatter.\n\n\n**`editorconfig-checker`**\n\nVerify that the files are in harmony with the `.editorconfig`.\n\n\n**`elm-format`**\n\nFormat Elm files.\n\n\n**`elm-review`**\n\nAnalyzes Elm projects, to help find mistakes before your users find them.\n\n\n**`elm-test`**\n\nRun unit tests and fuzz tests for Elm code.\n\n\n**`eslint`**\n\nFind and fix problems in your JavaScript code.\n\n\n**`flake8`**\n\nCheck the style and quality of Python files.\n\n\n**`fourmolu`**\n\nHaskell code prettifier.\n\n\n**`gofmt`**\n\nA tool that automatically formats Go source code\n\n\n**`gotest`**\n\nRun go tests\n\n\n**`govet`**\n\nChecks correctness of Go programs.\n\n\n**`hadolint`**\n\nDockerfile linter, validate inline bash.\n\n\n**`hindent`**\n\nHaskell code prettifier.\n\n\n**`hlint`**\n\nHLint gives suggestions on how to improve your source code.\n\n\n**`hpack`**\n\n`hpack` converts package definitions in the hpack format (`package.yaml`) to Cabal files.\n\n\n**`html-tidy`**\n\nHTML linter.\n\n\n**`hunspell`**\n\nSpell checker and morphological analyzer.\n\n\n**`isort`**\n\nA Python utility / library to sort imports.\n\n\n**`latexindent`**\n\nPerl script to add indentation to LaTeX files.\n\n\n**`luacheck`**\n\nA tool for linting and static analysis of Lua code.\n\n\n**`markdownlint`**\n\nStyle checker and linter for markdown files.\n\n\n**`mdsh`**\n\nMarkdown shell pre-processor.\n\n\n**`nixfmt`**\n\nNix code prettifier.\n\n\n**`nixpkgs-fmt`**\n\nNix code prettifier.\n\n\n**`ormolu`**\n\nHaskell code prettifier.\n\n\n**`php-cs-fixer`**\n\nLint PHP files.\n\n\n**`phpcbf`**\n\nLint PHP files.\n\n\n**`phpcs`**\n\nLint PHP files.\n\n\n**`prettier`**\n\nOpinionated multi-language code formatter.\n\n\n**`purs-tidy`**\n\nFormat purescript files.\n\n\n**`purty`**\n\nFormat purescript files.\n\n\n**`pylint`**\n\nLint Python files.\n\n\n**`revive`**\n\nA linter for Go source code.\n\n\n**`ruff`**\n\n An extremely fast Python linter, written in Rust.\n\n\n**`rustfmt`**\n\nFormat Rust code.\n\n\n**`shellcheck`**\n\nFormat shell files.\n\n\n**`shfmt`**\n\nFormat shell files.\n\n\n**`staticcheck`**\n\nState of the art linter for the Go programming language\n\n\n**`statix`**\n\nLints and suggestions for the Nix programming language.\n\n\n**`stylish-haskell`**\n\nA simple Haskell code prettifier\n\n\n**`stylua`**\n\nAn Opinionated Lua Code Formatter.\n\n\n**`terraform-format`**\n\nFormat terraform (`.tf`) files.\n\n\n**`typos`**\n\nSource code spell checker\n\n\n**`yamllint`**\n\nYaml linter.\n\n\n'}
 
 *_Type_*
 ```
@@ -2159,8 +1909,7 @@ attribute set of (submodule)
 
 
 ## pre-commit.hooks.&lt;name&gt;.description
-Description of the hook. used for metadata purposes only.
-
+{'_type': 'mdDoc', 'text': 'Description of the hook. used for metadata purposes only.\n'}
 
 *_Type_*
 ```
@@ -2177,7 +1926,7 @@ string
 
 
 ## pre-commit.hooks.&lt;name&gt;.enable
-Whether to enable this pre-commit hook.
+{'_type': 'mdDoc', 'text': 'Whether to enable this pre-commit hook.'}
 
 *_Type_*
 ```
@@ -2194,8 +1943,7 @@ false
 
 
 ## pre-commit.hooks.&lt;name&gt;.entry
-The entry point - the executable to run. <option>entry</option> can also contain arguments that will not be overridden, such as <literal>entry = "autopep8 -i";</literal>.
-
+{'_type': 'mdDoc', 'text': 'The entry point - the executable to run. {option}`entry` can also contain arguments that will not be overridden, such as `entry = "autopep8 -i";`.\n'}
 
 *_Type_*
 ```
@@ -2208,8 +1956,7 @@ string
 
 
 ## pre-commit.hooks.&lt;name&gt;.excludes
-Exclude files that were matched by these patterns.
-
+{'_type': 'mdDoc', 'text': 'Exclude files that were matched by these patterns.\n'}
 
 *_Type_*
 ```
@@ -2226,8 +1973,7 @@ list of string
 
 
 ## pre-commit.hooks.&lt;name&gt;.files
-The pattern of files to run on.
-
+{'_type': 'mdDoc', 'text': 'The pattern of files to run on.\n'}
 
 *_Type_*
 ```
@@ -2244,8 +1990,7 @@ string
 
 
 ## pre-commit.hooks.&lt;name&gt;.language
-The language of the hook - tells pre-commit how to install the hook.
-
+{'_type': 'mdDoc', 'text': 'The language of the hook - tells pre-commit how to install the hook.\n'}
 
 *_Type_*
 ```
@@ -2262,8 +2007,7 @@ string
 
 
 ## pre-commit.hooks.&lt;name&gt;.name
-The name of the hook - shown during hook execution.
-
+{'_type': 'mdDoc', 'text': 'The name of the hook - shown during hook execution.\n'}
 
 *_Type_*
 ```
@@ -2280,8 +2024,7 @@ internal name, same as id
 
 
 ## pre-commit.hooks.&lt;name&gt;.pass_filenames
-Whether to pass filenames as arguments to the entry point.
-
+{'_type': 'mdDoc', 'text': 'Whether to pass filenames as arguments to the entry point.\n'}
 
 *_Type_*
 ```
@@ -2298,11 +2041,7 @@ true
 
 
 ## pre-commit.hooks.&lt;name&gt;.raw
-Raw fields of a pre-commit hook. This is mostly for internal use but
-exposed in case you need to work around something.
-
-Default: taken from the other hook options.
-
+{'_type': 'mdDoc', 'text': 'Raw fields of a pre-commit hook. This is mostly for internal use but\nexposed in case you need to work around something.\n\nDefault: taken from the other hook options.\n'}
 
 *_Type_*
 ```
@@ -2315,8 +2054,7 @@ attribute set of unspecified value
 
 
 ## pre-commit.hooks.&lt;name&gt;.stages
-Confines the hook to run at a particular stage.
-
+{'_type': 'mdDoc', 'text': 'Confines the hook to run at a particular stage.\n'}
 
 *_Type_*
 ```
@@ -2333,8 +2071,7 @@ default_stages
 
 
 ## pre-commit.hooks.&lt;name&gt;.types
-List of file types to run on. See <link xlink:href="https://pre-commit.com/#plugins">Filtering files with types</link>.
-
+{'_type': 'mdDoc', 'text': 'List of file types to run on. See [Filtering files with types](https://pre-commit.com/#plugins).\n'}
 
 *_Type_*
 ```
@@ -2353,8 +2090,7 @@ list of string
 
 
 ## pre-commit.hooks.&lt;name&gt;.types_or
-List of file types to run on, where only a single type needs to match.
-
+{'_type': 'mdDoc', 'text': 'List of file types to run on, where only a single type needs to match.\n'}
 
 *_Type_*
 ```
@@ -2371,8 +2107,7 @@ list of string
 
 
 ## pre-commit.installationScript
-A bash snippet that installs nix-pre-commit-hooks in the current directory
-
+{'_type': 'mdDoc', 'text': 'A bash snippet that installs nix-pre-commit-hooks in the current directory\n'}
 
 *_Type_*
 ```
@@ -2385,8 +2120,7 @@ string
 
 
 ## pre-commit.package
-The <literal>pre-commit</literal> package to use.
-
+{'_type': 'mdDoc', 'text': 'The `pre-commit` package to use.\n'}
 
 *_Type_*
 ```
@@ -2399,13 +2133,7 @@ package
 
 
 ## pre-commit.rootSrc
-The source of the project to be checked.
-
-This is used in the derivation that performs the check.
-
-If you use the <literal>flakeModule</literal>, the default is <literal>self.outPath</literal>; the whole flake
-sources.
-
+{'_type': 'mdDoc', 'text': 'The source of the project to be checked.\n\nThis is used in the derivation that performs the check.\n\nIf you use the `flakeModule`, the default is `self.outPath`; the whole flake\nsources.\n'}
 
 *_Type_*
 ```
@@ -2418,9 +2146,7 @@ path
 
 
 ## pre-commit.run
-A derivation that tests whether the pre-commit hooks run cleanly on
-the entire project.
-
+{'_type': 'mdDoc', 'text': 'A derivation that tests whether the pre-commit hooks run cleanly on\nthe entire project.\n'}
 
 *_Type_*
 ```
@@ -2437,7 +2163,7 @@ package
 
 
 ## pre-commit.settings.alejandra.exclude
-Files or directories to exclude from formatting.
+{'_type': 'mdDoc', 'text': 'Files or directories to exclude from formatting.'}
 
 *_Type_*
 ```
@@ -2460,8 +2186,43 @@ list of string
 ```
 
 
+## pre-commit.settings.autoflake.binPath
+{'_type': 'mdDoc', 'text': 'Path to autoflake binary.'}
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"${pkgs.autoflake}/bin/autoflake"
+
+```
+
+
+
+
+## pre-commit.settings.autoflake.flags
+{'_type': 'mdDoc', 'text': 'Flags passed to autoflake.'}
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"--in-place --expand-star-imports --remove-duplicate-keys --remove-unused-variables"
+```
+
+
+
+
 ## pre-commit.settings.clippy.denyWarnings
-Fail when warnings are present
+{'_type': 'mdDoc', 'text': 'Fail when warnings are present'}
 
 *_Type_*
 ```
@@ -2478,7 +2239,7 @@ false
 
 
 ## pre-commit.settings.deadnix.edit
-Remove unused code and write to source file.
+{'_type': 'mdDoc', 'text': 'Remove unused code and write to source file.'}
 
 *_Type_*
 ```
@@ -2495,7 +2256,7 @@ false
 
 
 ## pre-commit.settings.deadnix.noLambdaArg
-Don't check lambda parameter arguments.
+{'_type': 'mdDoc', 'text': "Don't check lambda parameter arguments."}
 
 *_Type_*
 ```
@@ -2512,7 +2273,7 @@ false
 
 
 ## pre-commit.settings.deadnix.noLambdaPatternNames
-Don't check lambda pattern names (don't break nixpkgs <literal>callPackage</literal>).
+{'_type': 'mdDoc', 'text': "Don't check lambda pattern names (don't break nixpkgs `callPackage`)."}
 
 *_Type_*
 ```
@@ -2529,7 +2290,7 @@ false
 
 
 ## pre-commit.settings.deadnix.noUnderscore
-Don't check any bindings that start with a <literal>_</literal>.
+{'_type': 'mdDoc', 'text': "Don't check any bindings that start with a `_`."}
 
 *_Type_*
 ```
@@ -2546,7 +2307,7 @@ false
 
 
 ## pre-commit.settings.deadnix.quiet
-Don't print a dead code report.
+{'_type': 'mdDoc', 'text': "Don't print a dead code report."}
 
 *_Type_*
 ```
@@ -2563,7 +2324,7 @@ false
 
 
 ## pre-commit.settings.eslint.binPath
-<literal>eslint</literal> binary path. E.g. if you want to use the <literal>eslint</literal> in <literal>node_modules</literal>, use <literal>./node_modules/.bin/eslint</literal>.
+{'_type': 'mdDoc', 'text': '`eslint` binary path. E.g. if you want to use the `eslint` in `node_modules`, use `./node_modules/.bin/eslint`.'}
 
 *_Type_*
 ```
@@ -2580,7 +2341,7 @@ ${tools.eslint}/bin/eslint
 
 
 ## pre-commit.settings.eslint.extensions
-The pattern of files to run on, see <link xlink:href="https://pre-commit.com/#hooks-files"></link>.
+{'_type': 'mdDoc', 'text': 'The pattern of files to run on, see [https://pre-commit.com/#hooks-files](https://pre-commit.com/#hooks-files).'}
 
 *_Type_*
 ```
@@ -2597,7 +2358,7 @@ string
 
 
 ## pre-commit.settings.flake8.binPath
-flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
+{'_type': 'mdDoc', 'text': 'flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.'}
 
 *_Type_*
 ```
@@ -2607,7 +2368,7 @@ string
 
 *_Default_*
 ```
-"${pkgs.python39Packages.pylint}/bin/flake8"
+"${pkgs.python39Packages.flake8}/bin/flake8"
 
 ```
 
@@ -2615,7 +2376,7 @@ string
 
 
 ## pre-commit.settings.flake8.format
-Output format.
+{'_type': 'mdDoc', 'text': 'Output format.'}
 
 *_Type_*
 ```
@@ -2632,7 +2393,7 @@ string
 
 
 ## pre-commit.settings.hpack.silent
-Whether generation should be silent.
+{'_type': 'mdDoc', 'text': 'Whether generation should be silent.'}
 
 *_Type_*
 ```
@@ -2649,7 +2410,7 @@ false
 
 
 ## pre-commit.settings.markdownlint.config
-See https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.jsonc
+{'_type': 'mdDoc', 'text': 'See https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.jsonc'}
 
 *_Type_*
 ```
@@ -2665,25 +2426,8 @@ attribute set
 
 
 
-## pre-commit.settings.nix-linter.checks
-Available checks. See <literal>nix-linter --help-for [CHECK]</literal> for more details.
-
-*_Type_*
-```
-list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
-
-
-
-
 ## pre-commit.settings.nixfmt.width
-Line width.
+{'_type': 'mdDoc', 'text': 'Line width.'}
 
 *_Type_*
 ```
@@ -2700,7 +2444,7 @@ null
 
 
 ## pre-commit.settings.ormolu.cabalDefaultExtensions
-Use <literal>default-extensions</literal> from <literal>.cabal</literal> files.
+{'_type': 'mdDoc', 'text': 'Use `default-extensions` from `.cabal` files.'}
 
 *_Type_*
 ```
@@ -2717,7 +2461,7 @@ false
 
 
 ## pre-commit.settings.ormolu.defaultExtensions
-Haskell language extensions to enable.
+{'_type': 'mdDoc', 'text': 'Haskell language extensions to enable.'}
 
 *_Type_*
 ```
@@ -2734,7 +2478,7 @@ list of string
 
 
 ## pre-commit.settings.php-cs-fixer.binPath
-PHP-CS-Fixer binary path.
+{'_type': 'mdDoc', 'text': 'PHP-CS-Fixer binary path.'}
 
 *_Type_*
 ```
@@ -2752,7 +2496,7 @@ string
 
 
 ## pre-commit.settings.phpcbf.binPath
-PHP_CodeSniffer binary path.
+{'_type': 'mdDoc', 'text': 'PHP_CodeSniffer binary path.'}
 
 *_Type_*
 ```
@@ -2770,7 +2514,7 @@ string
 
 
 ## pre-commit.settings.phpcs.binPath
-PHP_CodeSniffer binary path.
+{'_type': 'mdDoc', 'text': 'PHP_CodeSniffer binary path.'}
 
 *_Type_*
 ```
@@ -2788,7 +2532,7 @@ string
 
 
 ## pre-commit.settings.prettier.binPath
-<literal>prettier</literal> binary path. E.g. if you want to use the <literal>prettier</literal> in <literal>node_modules</literal>, use <literal>./node_modules/.bin/prettier</literal>.
+{'_type': 'mdDoc', 'text': '`prettier` binary path. E.g. if you want to use the `prettier` in `node_modules`, use `./node_modules/.bin/prettier`.'}
 
 *_Type_*
 ```
@@ -2806,7 +2550,7 @@ path
 
 
 ## pre-commit.settings.prettier.output
-Output format.
+{'_type': 'mdDoc', 'text': 'Output format.'}
 
 *_Type_*
 ```
@@ -2823,7 +2567,7 @@ null or one of "check", "list-different"
 
 
 ## pre-commit.settings.prettier.write
-Whether to edit files inplace.
+{'_type': 'mdDoc', 'text': 'Whether to edit files inplace.'}
 
 *_Type_*
 ```
@@ -2840,7 +2584,7 @@ true
 
 
 ## pre-commit.settings.pylint.binPath
-Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
+{'_type': 'mdDoc', 'text': 'Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.'}
 
 *_Type_*
 ```
@@ -2858,7 +2602,7 @@ string
 
 
 ## pre-commit.settings.pylint.reports
-Whether to display a full report.
+{'_type': 'mdDoc', 'text': 'Whether to display a full report.'}
 
 *_Type_*
 ```
@@ -2875,7 +2619,7 @@ false
 
 
 ## pre-commit.settings.pylint.score
-Whether to activate the evaluation score.
+{'_type': 'mdDoc', 'text': 'Whether to activate the evaluation score.'}
 
 *_Type_*
 ```
@@ -2892,7 +2636,7 @@ true
 
 
 ## pre-commit.settings.revive.configPath
-Path to the configuration TOML file.
+{'_type': 'mdDoc', 'text': 'Path to the configuration TOML file.'}
 
 *_Type_*
 ```
@@ -2909,7 +2653,7 @@ string
 
 
 ## pre-commit.settings.rust.cargoManifestPath
-Path to Cargo.toml
+{'_type': 'mdDoc', 'text': 'Path to Cargo.toml'}
 
 *_Type_*
 ```
@@ -2926,7 +2670,7 @@ null
 
 
 ## pre-commit.settings.statix.format
-Error Output format.
+{'_type': 'mdDoc', 'text': 'Error Output format.'}
 
 *_Type_*
 ```
@@ -2943,7 +2687,7 @@ one of "stderr", "errfmt", "json"
 
 
 ## pre-commit.settings.statix.ignore
-Globs of file patterns to skip.
+{'_type': 'mdDoc', 'text': 'Globs of file patterns to skip.'}
 
 *_Type_*
 ```
@@ -2967,7 +2711,7 @@ list of string
 
 
 ## pre-commit.settings.typos.diff
-Wheter to print a diff of what would change.
+{'_type': 'mdDoc', 'text': 'Wheter to print a diff of what would change.'}
 
 *_Type_*
 ```
@@ -2984,7 +2728,7 @@ false
 
 
 ## pre-commit.settings.typos.format
-Output format.
+{'_type': 'mdDoc', 'text': 'Output format.'}
 
 *_Type_*
 ```
@@ -3001,7 +2745,7 @@ one of "silent", "brief", "long", "json"
 
 
 ## pre-commit.settings.typos.write
-Whether to write fixes out.
+{'_type': 'mdDoc', 'text': 'Whether to write fixes out.'}
 
 *_Type_*
 ```
@@ -3017,8 +2761,25 @@ false
 
 
 
+## pre-commit.settings.yamllint.configPath
+path to the configuration YAML file
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
 ## pre-commit.settings.yamllint.relaxed
-Use the relaxed configuration
+{'_type': 'mdDoc', 'text': 'Use the relaxed configuration'}
 
 *_Type_*
 ```
@@ -3035,12 +2796,7 @@ false
 
 
 ## pre-commit.src
-Root of the project. By default this will be filtered with the <literal>gitignoreSource</literal>
-function later, unless <literal>rootSrc</literal> is specified.
-
-If you use the <literal>flakeModule</literal>, the default is <literal>self.outPath</literal>; the whole flake
-sources.
-
+{'_type': 'mdDoc', 'text': 'Root of the project. By default this will be filtered with the `gitignoreSource`\nfunction later, unless `rootSrc` is specified.\n\nIf you use the `flakeModule`, the default is `self.outPath`; the whole flake\nsources.\n'}
 
 *_Type_*
 ```
@@ -3053,10 +2809,7 @@ path
 
 
 ## pre-commit.tools
-Tool set from which <literal>nix-pre-commit-hooks</literal> will pick binaries.
-
-<literal>nix-pre-commit-hooks</literal> comes with its own set of packages for this purpose.
-
+{'_type': 'mdDoc', 'text': 'Tool set from which `nix-pre-commit-hooks` will pick binaries.\n\n`nix-pre-commit-hooks` comes with its own set of packages for this purpose.\n'}
 
 *_Type_*
 ```
@@ -3309,9 +3062,7 @@ pkgs.adminer
 
 
 ## services.blackfire.client-id
-Sets the client id used to authenticate with Blackfire
-You can find your personal client-id at https://blackfire.io/my/settings/credentials
-
+{'_type': 'mdDoc', 'text': 'Sets the client id used to authenticate with Blackfire\nYou can find your personal client-id at https://blackfire.io/my/settings/credentials\n'}
 
 *_Type_*
 ```
@@ -3328,9 +3079,7 @@ string
 
 
 ## services.blackfire.client-token
-Sets the client token used to authenticate with Blackfire
-You can find your personal client-token at https://blackfire.io/my/settings/credentials
-
+{'_type': 'mdDoc', 'text': 'Sets the client token used to authenticate with Blackfire\nYou can find your personal client-token at https://blackfire.io/my/settings/credentials\n'}
 
 *_Type_*
 ```
@@ -3347,19 +3096,7 @@ string
 
 
 ## services.blackfire.enable
-Whether to enable Blackfire profiler agent
-
-For PHP you need to install and configure the Blackfire PHP extension.
-
-<programlisting language="nix">
-languages.php.package = pkgs.php.buildEnv {
-  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
-  extraConfig = ''
-    memory_limit = 256M
-    blackfire.agent_socket = "tcp://127.0.0.1:8307";
-  '';
-};
-</programlisting>.
+{'_type': 'mdDoc', 'text': 'Whether to enable Blackfire profiler agent\n\nFor PHP you need to install and configure the Blackfire PHP extension.\n\n```nix\nlanguages.php.package = pkgs.php.buildEnv {\n  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];\n  extraConfig = \'\'\n    memory_limit = 256M\n    blackfire.agent_socket = "tcp://127.0.0.1:8307";\n  \'\';\n};\n```\n.'}
 
 *_Type_*
 ```
@@ -3397,9 +3134,7 @@ pkgs.blackfire
 
 
 ## services.blackfire.server-id
-Sets the server id used to authenticate with Blackfire
-You can find your personal server-id at https://blackfire.io/my/settings/credentials
-
+{'_type': 'mdDoc', 'text': 'Sets the server id used to authenticate with Blackfire\nYou can find your personal server-id at https://blackfire.io/my/settings/credentials\n'}
 
 *_Type_*
 ```
@@ -3416,9 +3151,7 @@ string
 
 
 ## services.blackfire.server-token
-Sets the server token used to authenticate with Blackfire
-You can find your personal server-token at https://blackfire.io/my/settings/credentials
-
+{'_type': 'mdDoc', 'text': 'Sets the server token used to authenticate with Blackfire\nYou can find your personal server-token at https://blackfire.io/my/settings/credentials\n'}
 
 *_Type_*
 ```
@@ -3435,8 +3168,7 @@ string
 
 
 ## services.blackfire.socket
-Sets the server socket path
-
+{'_type': 'mdDoc', 'text': 'Sets the server socket path\n'}
 
 *_Type_*
 ```
@@ -4044,9 +3776,7 @@ string
 
 
 ## services.memcached.bind
-The IP interface to bind to.
-<literal>null</literal> means "all interfaces".
-
+{'_type': 'mdDoc', 'text': 'The IP interface to bind to.\n`null` means "all interfaces".\n'}
 
 *_Type_*
 ```
@@ -4148,10 +3878,7 @@ list of strings concatenated with "\n"
 
 
 ## services.minio.accessKey
-Access key of 5 to 20 characters in length that clients use to access the server.
-This overrides the access key that is generated by minio on first startup and stored inside the
-<literal>configDir</literal> directory.
-
+{'_type': 'mdDoc', 'text': 'Access key of 5 to 20 characters in length that clients use to access the server.\nThis overrides the access key that is generated by minio on first startup and stored inside the\n`configDir` directory.\n'}
 
 *_Type_*
 ```
@@ -4168,7 +3895,7 @@ string
 
 
 ## services.minio.browser
-Enable or disable access to web UI.
+{'_type': 'mdDoc', 'text': 'Enable or disable access to web UI.'}
 
 *_Type_*
 ```
@@ -4185,8 +3912,7 @@ true
 
 
 ## services.minio.buckets
-List of buckets to ensure exist on startup.
-
+{'_type': 'mdDoc', 'text': 'List of buckets to ensure exist on startup.\n'}
 
 *_Type_*
 ```
@@ -4203,7 +3929,7 @@ list of string
 
 
 ## services.minio.consoleAddress
-IP address and port of the web UI (console).
+{'_type': 'mdDoc', 'text': 'IP address and port of the web UI (console).'}
 
 *_Type_*
 ```
@@ -4220,7 +3946,7 @@ string
 
 
 ## services.minio.enable
-Whether to enable Minio Object Storage.
+{'_type': 'mdDoc', 'text': 'Whether to enable Minio Object Storage.'}
 
 *_Type_*
 ```
@@ -4241,7 +3967,7 @@ true
 
 
 ## services.minio.listenAddress
-IP address and port of the server.
+{'_type': 'mdDoc', 'text': 'IP address and port of the server.'}
 
 *_Type_*
 ```
@@ -4258,7 +3984,7 @@ string
 
 
 ## services.minio.package
-Minio package to use.
+{'_type': 'mdDoc', 'text': 'Minio package to use.'}
 
 *_Type_*
 ```
@@ -4275,8 +4001,7 @@ pkgs.minio
 
 
 ## services.minio.region
-The physical location of the server. By default it is set to us-east-1, which is same as AWS S3's and Minio's default region.
-
+{'_type': 'mdDoc', 'text': "The physical location of the server. By default it is set to us-east-1, which is same as AWS S3's and Minio's default region.\n"}
 
 *_Type_*
 ```
@@ -4293,10 +4018,7 @@ string
 
 
 ## services.minio.secretKey
-Specify the Secret key of 8 to 40 characters in length that clients use to access the server.
-This overrides the secret key that is generated by minio on first startup and stored inside the
-<literal>configDir</literal> directory.
-
+{'_type': 'mdDoc', 'text': 'Specify the Secret key of 8 to 40 characters in length that clients use to access the server.\nThis overrides the secret key that is generated by minio on first startup and stored inside the\n`configDir` directory.\n'}
 
 *_Type_*
 ```
@@ -4400,13 +4122,7 @@ true
 
 
 ## services.mysql.ensureUsers
-Ensures that the specified users exist and have at least the ensured permissions.
-The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
-same name only, and that without the need for a password.
-This option will never delete existing users or remove permissions, especially not when the value of this
-option is changed. This means that users created and permissions assigned once through this option or
-otherwise have to be removed manually.
-
+{'_type': 'mdDoc', 'text': 'Ensures that the specified users exist and have at least the ensured permissions.\nThe MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the\nsame name only, and that without the need for a password.\nThis option will never delete existing users or remove permissions, especially not when the value of this\noption is changed. This means that users created and permissions assigned once through this option or\notherwise have to be removed manually.\n'}
 
 *_Type_*
 ```
@@ -4435,16 +4151,7 @@ list of (submodule)
 
 
 ## services.mysql.ensureUsers.*.ensurePermissions
-Permissions to ensure for the user, specified as attribute set.
-The attribute names specify the database and tables to grant the permissions for,
-separated by a dot. You may use wildcards here.
-The attribute values specfiy the permissions to grant.
-You may specify one or multiple comma-separated SQL privileges here.
-For more information on how to specify the target
-and on which privileges exist, see the
-<link xlink:href="https://mariadb.com/kb/en/library/grant/">GRANT syntax</link>.
-The attributes are used as <literal>GRANT ${attrName} ON ${attrValue}</literal>.
-
+{'_type': 'mdDoc', 'text': 'Permissions to ensure for the user, specified as attribute set.\nThe attribute names specify the database and tables to grant the permissions for,\nseparated by a dot. You may use wildcards here.\nThe attribute values specfiy the permissions to grant.\nYou may specify one or multiple comma-separated SQL privileges here.\nFor more information on how to specify the target\nand on which privileges exist, see the\n[GRANT syntax](https://mariadb.com/kb/en/library/grant/).\nThe attributes are used as `GRANT ${attrName} ON ${attrValue}`.\n'}
 
 *_Type_*
 ```
@@ -4469,8 +4176,7 @@ attribute set of string
 
 
 ## services.mysql.ensureUsers.*.name
-Name of the user to ensure.
-
+{'_type': 'mdDoc', 'text': 'Name of the user to ensure.\n'}
 
 *_Type_*
 ```
@@ -4483,8 +4189,7 @@ string
 
 
 ## services.mysql.ensureUsers.*.password
-Password of the user to ensure.
-
+{'_type': 'mdDoc', 'text': 'Password of the user to ensure.\n'}
 
 *_Type_*
 ```
@@ -4831,14 +4536,7 @@ The TCP port to accept connections.
 
 
 ## services.postgres.settings
-PostgreSQL configuration. Refer to
-<link xlink:href="https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE"></link>
-for an overview of <literal>postgresql.conf</literal>.
-::: {.note}
-String values will automatically be enclosed in single quotes. Single quotes will be
-escaped with two single quotes as described by the upstream documentation linked above.
-:::
-
+{'_type': 'mdDoc', 'text': 'PostgreSQL configuration. Refer to\n<https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE>\nfor an overview of `postgresql.conf`.\n::: {.note}\nString values will automatically be enclosed in single quotes. Single quotes will be\nescaped with two single quotes as described by the upstream documentation linked above.\n:::\n'}
 
 *_Type_*
 ```
@@ -5080,9 +4778,7 @@ Port on which RabbitMQ will listen for AMQP connections.
 
 
 ## services.redis.bind
-The IP interface to bind to.
-<literal>null</literal> means "all interfaces".
-
+{'_type': 'mdDoc', 'text': 'The IP interface to bind to.\n`null` means "all interfaces".\n'}
 
 *_Type_*
 ```
@@ -5265,8 +4961,7 @@ JSON value
 
 
 ## services.wiremock.package
-Which package of wiremock to use.
-
+{'_type': 'mdDoc', 'text': 'Which package of wiremock to use.\n'}
 
 *_Type_*
 ```
