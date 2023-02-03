@@ -31,6 +31,7 @@
       mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions = pkgs:
         let
+          inherit (pkgs.lib.attrsets) attrByPath;
           eval = pkgs.lib.evalModules {
             modules = [
               ./src/modules/top-level.nix
@@ -40,6 +41,14 @@
           };
           options = pkgs.nixosOptionsDoc {
             options = builtins.removeAttrs eval.options [ "_module" ];
+
+            # Unpack mdDoc until the new upstream markdown renderer is ready
+            transformOptions = opt: (
+              if (attrByPath [ "description" "_type" ] "" opt == "mdDoc") then
+                opt // { description = opt.description.text; }
+              else
+                opt
+            );
           };
         in
         options.optionsCommonMark;
