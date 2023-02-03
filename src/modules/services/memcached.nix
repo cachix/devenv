@@ -22,7 +22,7 @@ in
     bind = lib.mkOption {
       type = types.nullOr types.str;
       default = "127.0.0.1";
-      description = lib.mdDoc ''
+      description = ''
         The IP interface to bind to.
         `null` means "all interfaces".
       '';

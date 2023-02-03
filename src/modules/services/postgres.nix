@@ -143,14 +143,13 @@ in
     settings = lib.mkOption {
       type = with types; attrsOf (oneOf [ bool float int str ]);
       default = { };
-      description = lib.mdDoc ''
+      description = ''
         PostgreSQL configuration. Refer to
         <https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE>
         for an overview of `postgresql.conf`.
-        ::: {.note}
+
         String values will automatically be enclosed in single quotes. Single quotes will be
         escaped with two single quotes as described by the upstream documentation linked above.
-        :::
       '';
       example = lib.literalExpression ''
         {

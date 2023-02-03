@@ -97,7 +97,7 @@ in
       type = types.lines;
       description = ''
         Verbatim Caddyfile to use.
-        Caddy v2 supports multiple config formats via adapters (see <option>services.caddy.adapter</option>).
+        Caddy v2 supports multiple config formats via adapters (see [`services.caddy.adapter`](#servicescaddyconfig)).
       '';
     };
 
@@ -125,7 +125,7 @@ in
       type = types.str;
       description = ''
         Name of the config adapter to use.
-        See https://caddyserver.com/docs/config-adapters for the full list.
+        See <https://caddyserver.com/docs/config-adapters> for the full list.
       '';
     };
 
@@ -133,7 +133,7 @@ in
       default = false;
       type = types.bool;
       description = ''
-        Use saved config, if any (and prefer over configuration passed with <option>caddy.config</option>).
+        Use saved config, if any (and prefer over configuration passed with [`caddy.config`](#caddyconfig)).
       '';
     };
 
@@ -163,7 +163,7 @@ in
         would create a .caddy directory. With 17.09 the contents of the
         .caddy directory are in the specified data directory instead.
         Caddy v2 replaced CADDYPATH with XDG directories.
-        See https://caddyserver.com/docs/conventions#file-locations.
+        See <https://caddyserver.com/docs/conventions#file-locations>.
       '';
     };
 
