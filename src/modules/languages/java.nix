@@ -2,7 +2,7 @@
 
 let
   cfg = config.languages.java;
-  inherit (lib) types mkEnableOption mkOption mkDefault mkIf mdDoc optional literalExpression;
+  inherit (lib) types mkEnableOption mkOption mkDefault mkIf optional literalExpression;
 in
 {
   options.languages.java = {
@@ -12,7 +12,7 @@ in
       example = literalExpression "pkgs.jdk8";
       default = pkgs.jdk;
       defaultText = literalExpression "pkgs.jdk";
-      description = mdDoc ''
+      description = ''
         The JDK package to use.
         This will also become available as `JAVA_HOME`.
       '';
@@ -22,7 +22,7 @@ in
       package = mkOption {
         type = types.package;
         defaultText = "pkgs.maven.override { jdk = cfg.jdk.package; }";
-        description = mdDoc ''
+        description = ''
           The maven package to use.
           The maven package by default inherits the JDK from `languages.java.jdk.package`.
         '';

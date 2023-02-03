@@ -16,7 +16,7 @@ in
   ];
 
   options.services.blackfire = {
-    enable = lib.mkEnableOption (lib.mdDoc ''
+    enable = lib.mkEnableOption ''
       Blackfire profiler agent
 
       For PHP you need to install and configure the Blackfire PHP extension.
@@ -30,11 +30,11 @@ in
         ''';
       };
       ```
-    '');
+    '';
 
     client-id = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
+      description = ''
         Sets the client id used to authenticate with Blackfire
         You can find your personal client-id at https://blackfire.io/my/settings/credentials
       '';
@@ -43,7 +43,7 @@ in
 
     client-token = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
+      description = ''
         Sets the client token used to authenticate with Blackfire
         You can find your personal client-token at https://blackfire.io/my/settings/credentials
       '';
@@ -52,7 +52,7 @@ in
 
     server-id = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
+      description = ''
         Sets the server id used to authenticate with Blackfire
         You can find your personal server-id at https://blackfire.io/my/settings/credentials
       '';
@@ -61,7 +61,7 @@ in
 
     server-token = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
+      description = ''
         Sets the server token used to authenticate with Blackfire
         You can find your personal server-token at https://blackfire.io/my/settings/credentials
       '';
@@ -71,7 +71,7 @@ in
     socket = lib.mkOption {
       type = lib.types.str;
       default = "tcp://127.0.0.1:8307";
-      description = lib.mdDoc ''
+      description = ''
         Sets the server socket path
       '';
     };
