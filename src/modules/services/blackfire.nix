@@ -35,8 +35,8 @@ in
     client-id = lib.mkOption {
       type = lib.types.str;
       description = ''
-        Sets the client id used to authenticate with Blackfire
-        You can find your personal client-id at https://blackfire.io/my/settings/credentials
+        Sets the client id used to authenticate with Blackfire.
+        You can find your personal client-id at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };
@@ -44,8 +44,8 @@ in
     client-token = lib.mkOption {
       type = lib.types.str;
       description = ''
-        Sets the client token used to authenticate with Blackfire
-        You can find your personal client-token at https://blackfire.io/my/settings/credentials
+        Sets the client token used to authenticate with Blackfire.
+        You can find your personal client-token at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };
@@ -53,8 +53,8 @@ in
     server-id = lib.mkOption {
       type = lib.types.str;
       description = ''
-        Sets the server id used to authenticate with Blackfire
-        You can find your personal server-id at https://blackfire.io/my/settings/credentials
+        Sets the server id used to authenticate with Blackfire.
+        You can find your personal server-id at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };
@@ -62,8 +62,8 @@ in
     server-token = lib.mkOption {
       type = lib.types.str;
       description = ''
-        Sets the server token used to authenticate with Blackfire
-        You can find your personal server-token at https://blackfire.io/my/settings/credentials
+        Sets the server token used to authenticate with Blackfire.
+        You can find your personal server-token at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };

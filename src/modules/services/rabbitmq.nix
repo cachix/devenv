@@ -93,8 +93,8 @@ in
         `config` option. Configuration from `config`
         will be merged into these options by RabbitMQ at runtime to
         form the final configuration.
-        See https://www.rabbitmq.com/configure.html#config-items
-        For the distinct formats, see https://www.rabbitmq.com/configure.html#config-file-formats
+        See <https://www.rabbitmq.com/configure.html#config-items>
+        For the distinct formats, see <https://www.rabbitmq.com/configure.html#config-file-formats>
       '';
     };
 

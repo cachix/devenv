@@ -48,7 +48,7 @@ in
       type = mappingsFormat.type;
       description = ''
         The mappings to mock.
-        See the JSON examples on https://wiremock.org/docs/stubbing/ for more information.
+        See the JSON examples on <https://wiremock.org/docs/stubbing/> for more information.
       '';
       default = [ ];
       example = [
