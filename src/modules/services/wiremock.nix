@@ -19,7 +19,7 @@ in
       type = types.package;
       default = pkgs.wiremock;
       defaultText = lib.literalExpression "pkgs.wiremock";
-      description = mdDoc ''
+      description = ''
         Which package of wiremock to use.
       '';
     };
