@@ -46,8 +46,8 @@ in
         IP address on which RabbitMQ will listen for AMQP
         connections.  Set to the empty string to listen on all
         interfaces.  Note that RabbitMQ creates a user named
-        <literal>guest</literal> with password
-        <literal>guest</literal> by default, so you should delete
+        `guest` with password
+        `guest` by default, so you should delete
         this user if you intend to allow external access.
         Together with 'port' setting it's mostly an alias for
         configItems."listeners.tcp.1" and it's left for backwards
@@ -86,11 +86,11 @@ in
       description = ''
         Configuration options in RabbitMQ's new config file format,
         which is a simple key-value format that can not express nested
-        data structures. This is known as the <literal>rabbitmq.conf</literal> file,
+        data structures. This is known as the `rabbitmq.conf` file,
         although outside NixOS that filename may have Erlang syntax, particularly
         prior to RabbitMQ 3.7.0.
         If you do need to express nested data structures, you can use
-        <literal>config</literal> option. Configuration from <literal>config</literal>
+        `config` option. Configuration from `config`
         will be merged into these options by RabbitMQ at runtime to
         form the final configuration.
         See https://www.rabbitmq.com/configure.html#config-items
