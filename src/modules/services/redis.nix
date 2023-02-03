@@ -58,7 +58,7 @@ in
     extraConfig = mkOption {
       type = types.lines;
       default = "";
-      description = "Additional text to be appended to <filename>redis.conf</filename>.";
+      description = "Additional text to be appended to `redis.conf`.";
     };
   };
 
