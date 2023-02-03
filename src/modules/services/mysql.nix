@@ -141,7 +141,7 @@ in
         options = {
           name = lib.mkOption {
             type = types.str;
-            description = lib.mdDoc ''
+            description = ''
               Name of the user to ensure.
             '';
           };
@@ -149,7 +149,7 @@ in
           password = lib.mkOption {
             type = types.nullOr types.str;
             default = null;
-            description = lib.mdDoc ''
+            description = ''
               Password of the user to ensure.
             '';
           };
@@ -157,7 +157,7 @@ in
           ensurePermissions = lib.mkOption {
             type = types.attrsOf types.str;
             default = { };
-            description = lib.mdDoc ''
+            description = ''
               Permissions to ensure for the user, specified as attribute set.
               The attribute names specify the database and tables to grant the permissions for,
               separated by a dot. You may use wildcards here.
@@ -178,7 +178,7 @@ in
         };
       });
       default = [ ];
-      description = lib.mdDoc ''
+      description = ''
         Ensures that the specified users exist and have at least the ensured permissions.
         The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
         same name only, and that without the need for a password.

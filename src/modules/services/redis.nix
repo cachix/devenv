@@ -39,7 +39,7 @@ in
     bind = mkOption {
       type = types.nullOr types.str;
       default = "127.0.0.1";
-      description = mdDoc ''
+      description = ''
         The IP interface to bind to.
         `null` means "all interfaces".
       '';
@@ -58,7 +58,7 @@ in
     extraConfig = mkOption {
       type = types.lines;
       default = "";
-      description = "Additional text to be appended to <filename>redis.conf</filename>.";
+      description = "Additional text to be appended to `redis.conf`.";
     };
   };
 

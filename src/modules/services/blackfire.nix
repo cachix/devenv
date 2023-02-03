@@ -16,7 +16,7 @@ in
   ];
 
   options.services.blackfire = {
-    enable = lib.mkEnableOption (lib.mdDoc ''
+    enable = lib.mkEnableOption ''
       Blackfire profiler agent
 
       For PHP you need to install and configure the Blackfire PHP extension.
@@ -30,40 +30,40 @@ in
         ''';
       };
       ```
-    '');
+    '';
 
     client-id = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
-        Sets the client id used to authenticate with Blackfire
-        You can find your personal client-id at https://blackfire.io/my/settings/credentials
+      description = ''
+        Sets the client id used to authenticate with Blackfire.
+        You can find your personal client-id at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };
 
     client-token = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
-        Sets the client token used to authenticate with Blackfire
-        You can find your personal client-token at https://blackfire.io/my/settings/credentials
+      description = ''
+        Sets the client token used to authenticate with Blackfire.
+        You can find your personal client-token at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };
 
     server-id = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
-        Sets the server id used to authenticate with Blackfire
-        You can find your personal server-id at https://blackfire.io/my/settings/credentials
+      description = ''
+        Sets the server id used to authenticate with Blackfire.
+        You can find your personal server-id at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };
 
     server-token = lib.mkOption {
       type = lib.types.str;
-      description = lib.mdDoc ''
-        Sets the server token used to authenticate with Blackfire
-        You can find your personal server-token at https://blackfire.io/my/settings/credentials
+      description = ''
+        Sets the server token used to authenticate with Blackfire.
+        You can find your personal server-token at <https://blackfire.io/my/settings/credentials>.
       '';
       default = "";
     };
@@ -71,7 +71,7 @@ in
     socket = lib.mkOption {
       type = lib.types.str;
       default = "tcp://127.0.0.1:8307";
-      description = lib.mdDoc ''
+      description = ''
         Sets the server socket path
       '';
     };

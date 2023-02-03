@@ -19,7 +19,7 @@ in
       type = types.package;
       default = pkgs.wiremock;
       defaultText = lib.literalExpression "pkgs.wiremock";
-      description = mdDoc ''
+      description = ''
         Which package of wiremock to use.
       '';
     };
@@ -48,7 +48,7 @@ in
       type = mappingsFormat.type;
       description = ''
         The mappings to mock.
-        See the JSON examples on https://wiremock.org/docs/stubbing/ for more information.
+        See the JSON examples on <https://wiremock.org/docs/stubbing/> for more information.
       '';
       default = [ ];
       example = [
