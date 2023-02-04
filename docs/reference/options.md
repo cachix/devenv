@@ -5439,7 +5439,7 @@ true
 
 
 ## starship.config.path
-The starship configuration file to use.
+The Starship configuration file to use.
 
 *_Type_*
 ```
