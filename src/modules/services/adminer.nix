@@ -27,6 +27,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.adminer.exec = "${config.languages.php.package}/bin/php ${lib.optionalString config.mysql.enable "-dmysqli.default_socket=${config.env.MYSQL_UNIX_PORT}"} -S ${cfg.listen} -t ${cfg.package} ${cfg.package}/adminer.php";
+    processes.adminer.exec = "${config.languages.php.package}/bin/php ${lib.optionalString config.services.mysql.enable "-dmysqli.default_socket=${config.env.MYSQL_UNIX_PORT}"} -S ${cfg.listen} -t ${cfg.package} ${cfg.package}/adminer.php";
   };
 }
