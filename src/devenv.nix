@@ -4,7 +4,7 @@ let
   lib = pkgs.lib;
   version = lib.fileContents ./modules/latest-version;
 in
-pkgs.writeScriptBin "devenv-${version}" ''
+pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
 
   # we want subshells to fail the program
