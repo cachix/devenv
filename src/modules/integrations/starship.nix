@@ -17,7 +17,7 @@
       type = lib.types.path;
       default = config.env.DEVENV_ROOT + "/starship.toml";
       defaultText = lib.literalExpression "\${config.env.DEVENV_ROOT}/starship.toml";
-      description = "The starship configuration file to use.";
+      description = "The Starship configuration file to use.";
     };
   };
 
@@ -26,16 +26,13 @@
       config.starship.package
     ];
 
-    enterShell =
-      let
-        starshipConfExport =
-          if config.starship.config.enable
-          then ''export STARSHIP_CONFIG=${config.starship.config.path}''
-          else '''';
-      in
-      starshipConfExport + ''
-        # Identify user's terminal to call the appropiate 'starship init' command
-        eval "$(starship init $(echo $0))"
-      '';
+    enterShell = ''
+      ${lib.optionalString config.starship.config.enable
+        "export STARSHIP_CONFIG=${config.starship.config.path}"
+      }
+
+      # Identify the user's terminal to call the appropiate 'starship init' command
+      eval "$(starship init $(echo $0))"
+    '';
   };
 }
