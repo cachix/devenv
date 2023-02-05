@@ -3,5 +3,3 @@ inputs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
   nur:
     url: github:nix-community/NUR
-  devenv:
-    url: path:../../src/modules

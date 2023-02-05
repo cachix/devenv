@@ -63,6 +63,16 @@ jobs:
     - run: |
         nix profile remove '.*'
         nix profile install .
+    - run: |
+        cd examples/${{ matrix.example }}/
+        mv devenv.yaml devenv.yaml.orig
+        awk '
+          { print }
+          /^inputs:$/ {
+            print "  devenv:";
+            print "    url: path:../../src/modules";
+          }
+        ' devenv.yaml.orig > devenv.yaml
     - run: devenv shell devenv-test-example ${{ matrix.example }}
   direnv:
     name: direnv (${{ join(matrix.os) }})
