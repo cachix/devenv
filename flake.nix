@@ -6,7 +6,7 @@
     extra-substituters = "https://devenv.cachix.org";
   };
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs.nixpkgs.url = "github:pennae/nixpkgs/options-format-converters";
   inputs.pre-commit-hooks = {
     url = "github:cachix/pre-commit-hooks.nix";
     inputs = {
