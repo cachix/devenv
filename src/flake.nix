@@ -42,8 +42,20 @@
           ];
         };
         config = project.config;
+
         options = pkgs.nixosOptionsDoc {
           options = builtins.removeAttrs project.options [ "_module" ];
+          # Unpack Nix types, e.g. literalExpression, mDoc.
+          transformOptions =
+            let isDocType = v: builtins.elem v [ "literalDocBook" "literalExpression" "literalMD" "mdDoc" ];
+            in lib.attrsets.mapAttrs (_: v:
+              if v ? _type && isDocType v._type then
+                v.text
+              else if v ? _type && v._type == "derivation" then
+                v.name
+              else
+                v
+            );
         };
       in {
         packages."${pkgs.system}" = {
