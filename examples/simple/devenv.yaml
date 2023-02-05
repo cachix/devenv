@@ -1,4 +1,3 @@
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
-# can't point to the local modules here as it's used as a template
