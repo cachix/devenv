@@ -4,7 +4,7 @@ let
   cfg = config.languages.raku;
 in
 {
-  options.languages.perl = {
+  options.languages.raku = {
     enable = lib.mkEnableOption "Enable tools for Raku development.";
   };
 
