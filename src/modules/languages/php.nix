@@ -293,7 +293,9 @@ in
 
   config =
     let
-      customPhpPackage = (if ((builtins.hasAttr "php${version}" pkgs) && (builtins.tryEval (toString pkgs."php${version}")).success) then pkgs."php${version}" else phps.packages.${pkgs.system}."php${version}");
+      phpsPackage = phps.packages.${pkgs.system}."php${version}" or (throw "PHP version ${cfg.version} is not available");
+      nixpkgsPackageExists = (builtins.tryEval (toString pkgs."php${version}")).success;
+      customPhpPackage = if ((builtins.hasAttr "php${version}" pkgs) && nixpkgsPackageExists) then pkgs."php${version}" else phpsPackage;
     in
     lib.mkIf cfg.enable {
       languages.php.package = lib.mkIf (cfg.version != "") (lib.mkForce (configurePackage customPhpPackage));
