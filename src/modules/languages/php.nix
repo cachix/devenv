@@ -1,9 +1,30 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, lib, inputs, ... }:
 
 with lib;
 
 let
+  inherit (lib.attrsets) attrValues genAttrs;
+
   cfg = config.languages.php;
+
+  setup = ''
+    inputs:
+      phps:
+        url: github:fossar/nix-phps
+        inputs:
+          nixpkgs:
+            follows: nixpkgs
+  '';
+
+  phps = inputs.phps or (throw "To use languages.php.version, you need to add the following to your devenv.yaml:\n\n${setup}");
+
+  configurePackage = package:
+    package.buildEnv {
+      extensions = { all, enabled }: with all; enabled ++ attrValues (getAttrs cfg.extensions package.extensions);
+      extraConfig = cfg.ini;
+    };
+
+  version = builtins.replaceStrings [ "." ] [ "" ] cfg.version;
 
   runtimeDir = config.env.DEVENV_STATE + "/php-fpm";
 
@@ -146,9 +167,15 @@ in
   options.languages.php = {
     enable = lib.mkEnableOption "tools for PHP development";
 
+    version = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "The PHP version to use.";
+    };
+
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.php;
+      default = configurePackage pkgs.php;
       defaultText = literalExpression "pkgs.php";
       description = ''
         Allows to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide)
@@ -179,6 +206,22 @@ in
       defaultText = lib.literalExpression "pkgs";
       default = { };
       description = "Attribute set of packages including composer";
+    };
+
+    ini = lib.mkOption {
+      type = lib.types.nullOr lib.types.lines;
+      default = "";
+      description = ''
+        PHP.ini directives. Refer to the "List of php.ini directives" of PHP's
+      '';
+    };
+
+    extensions = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        PHP extensions to enable.
+      '';
     };
 
     fpm = {
@@ -248,19 +291,25 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      cfg.package
-    ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
+  config =
+    let
+      customPhpPackage = (if ((builtins.hasAttr "php${version}" pkgs) && (builtins.tryEval (toString pkgs."php${version}")).success) then pkgs."php${version}" else phps.packages.${pkgs.system}."php${version}");
+    in
+    lib.mkIf cfg.enable {
+      languages.php.package = lib.mkIf (cfg.version != "") (lib.mkForce (configurePackage customPhpPackage));
 
-    env.PHPFPMDIR = runtimeDir;
+      packages = with pkgs; [
+        cfg.package
+      ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
 
-    processes = mapAttrs'
-      (pool: poolOpts:
-        nameValuePair "phpfpm-${pool}" {
-          exec = "${startScript pool poolOpts}/bin/start-phpfpm";
-        }
-      )
-      cfg.fpm.pools;
-  };
+      env.PHPFPMDIR = runtimeDir;
+
+      processes = mapAttrs'
+        (pool: poolOpts:
+          nameValuePair "phpfpm-${pool}" {
+            exec = "${startScript pool poolOpts}/bin/start-phpfpm";
+          }
+        )
+        cfg.fpm.pools;
+    };
 }
