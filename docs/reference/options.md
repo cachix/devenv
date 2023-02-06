@@ -1135,7 +1135,7 @@ string
 
 *_Example_*
 ```
-"/tmp/<name>.sock"
+"/.devenv/state/php-fpm/<name>.sock"
 ```
 
 
@@ -1193,6 +1193,40 @@ pkgs.php.buildEnv {
 };
 
 ```
+
+
+## languages.php.packages
+Attribute set of packages including composer
+
+*_Type_*
+```
+submodule
+```
+
+
+*_Default_*
+```
+pkgs
+```
+
+
+
+
+## languages.php.packages.composer
+composer package
+
+*_Type_*
+```
+null or package
+```
+
+
+*_Default_*
+```
+pkgs.phpPackages.composer
+```
+
+
 
 
 ## languages.purescript.enable
@@ -1694,6 +1728,45 @@ package
 *_Default_*
 ```
 "pkgs.scala_3"
+```
+
+
+
+
+## languages.swift.enable
+Whether to enable tools for Swift development.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.swift.package
+The Swift package to use.
+
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+"pkgs.swift"
 ```
 
 
