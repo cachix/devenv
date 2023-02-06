@@ -28,6 +28,7 @@
   languages.python.enable = true;
   languages.r.enable = true;
   languages.racket.enable = true;
+  languages.raku.enable = true;
   languages.robotframework.enable = true;
   languages.ruby.enable = true;
   languages.rust.enable = true;
