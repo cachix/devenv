@@ -901,6 +901,24 @@ true
 ```
 
 
+## languages.php.extensions
+PHP extensions to enable.
+
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+[ ]
+```
+
+
+
+
 ## languages.php.fpm.extraConfig
 Extra configuration that should be put in the global section of
 the PHP-FPM configuration file. Do not specify the options
@@ -1165,6 +1183,24 @@ attribute set of (string or signed integer or boolean)
 
 
 
+## languages.php.ini
+PHP.ini directives. Refer to the "List of php.ini directives" of PHP's
+
+
+*_Type_*
+```
+null or strings concatenated with "\n"
+```
+
+
+*_Default_*
+```
+""
+```
+
+
+
+
 ## languages.php.package
 Allows to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide)
 to adjust the settings or add more extensions. You can find the
@@ -1224,6 +1260,23 @@ null or package
 *_Default_*
 ```
 pkgs.phpPackages.composer
+```
+
+
+
+
+## languages.php.version
+The PHP version to use.
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+""
 ```
 
 
