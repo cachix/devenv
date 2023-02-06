@@ -465,6 +465,27 @@ pkgs.erlang
 
 
 
+## languages.gawk.enable
+Whether to enable tools for GNU Awk development.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.go.enable
 Whether to enable tools for Go development.
 
