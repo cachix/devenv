@@ -5,7 +5,7 @@ with lib;
 let
   cfg = config.languages.php;
 
-  runtimeDir = "/tmp";
+  runtimeDir = config.env.DEVENV_STATE + "/php-fpm";
 
   toStr = value:
     if true == value then "yes"
@@ -165,6 +165,22 @@ in
       '';
     };
 
+    packages = lib.mkOption {
+      type = lib.types.submodule ({
+        options = {
+          composer = lib.mkOption {
+            type = lib.types.nullOr lib.types.package;
+            default = cfg.package.packages.composer;
+            defaultText = lib.literalExpression "pkgs.phpPackages.composer";
+            description = "composer package";
+          };
+        };
+      });
+      defaultText = lib.literalExpression "pkgs";
+      default = { };
+      description = "Attribute set of packages including composer";
+    };
+
     fpm = {
       settings = mkOption {
         type = with types; attrsOf (oneOf [ str int bool ]);
@@ -235,10 +251,9 @@ in
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       cfg.package
-      cfg.package.packages.composer
-    ];
+    ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
 
-    env.PHPFPMDIR = config.env.DEVENV_STATE + "/php-fpm";
+    env.PHPFPMDIR = runtimeDir;
 
     processes = mapAttrs'
       (pool: poolOpts:
