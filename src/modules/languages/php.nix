@@ -166,8 +166,8 @@ in
       type = lib.types.submodule ({
         options = {
           composer = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = "composer";
+            type = lib.types.nullOr lib.types.package;
+            default = cfg.package.packages.composer;
             defaultText = lib.literalExpression "pkgs.phpPackages.composer";
             description = "composer package";
           };
@@ -248,7 +248,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       cfg.package
-    ] ++ lib.optional (cfg.packages.composer != null) cfg.package.packages."${cfg.packages.composer}";
+    ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
 
     env.PHPFPMDIR = runtimeDir;
 
