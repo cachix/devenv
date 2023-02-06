@@ -49,13 +49,13 @@ c) Install ``devenv``
 === "Newcomers"
 
     ```
-    nix-env -if https://github.com/cachix/devenv/tarball/v{{ devenv.version }}
+    nix-env -if https://github.com/cachix/devenv/tarball/latest
     ```
 
 === "Advanced (flake profiles)"
 
     ```
-    nix profile install github:cachix/devenv/v{{ devenv.version }}
+    nix profile install github:cachix/devenv/latest
     ```
 
 === "Advanced (declaratively without flakes)"
@@ -70,7 +70,7 @@ c) Install ``devenv``
 
     ```nix title="flake.nix"
      {
-        inputs.devenv.url = "github:cachix/devenv/v{{ devenv.version }}";
+        inputs.devenv.url = "github:cachix/devenv/latest";
 
         outputs = { devenv, ... }: {
             packages.x86_64-linux = [devenv.packages.x86_64-linux.devenv];
