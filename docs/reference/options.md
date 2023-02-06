@@ -1385,6 +1385,27 @@ pkgs.racket-minimal
 
 
 
+## languages.raku.enable
+Whether to enable Enable tools for Raku development..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
 ## languages.robotframework.enable
 Whether to enable tools for Robot Framework development.
 
