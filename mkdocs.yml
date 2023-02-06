@@ -85,6 +85,7 @@ extra:
 markdown_extensions:
   - tables
   - admonition
+  - pymdownx.escapeall
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
