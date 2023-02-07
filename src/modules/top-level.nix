@@ -72,7 +72,7 @@ in
     env.DEVENV_PROFILE = profile;
 
     enterShell = ''
-      export PS1="\e[0;34m(devenv)\e[0m ''${PS1-}"
+      export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
 
       # set path to locales on non-NixOS Linux hosts
       ${lib.optionalString pkgs.stdenv.isLinux ''
