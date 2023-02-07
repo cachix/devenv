@@ -29,6 +29,9 @@ $ devenv shell
 Building shell ...
 Entering shell ...
 
+hello 
+jq-1.6
+
 (devenv) $ echo $GREET
 hello
 ```
