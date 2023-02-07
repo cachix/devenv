@@ -29,11 +29,8 @@ $ devenv shell
 Building shell ...
 Entering shell ...
 
+(devenv) $ echo $GREET
 hello
-jq-1.6
-
-(devenv) $ echo $UNICORNS
-yes
 ```
 
 
