@@ -32,8 +32,8 @@ Entering shell ...
 hello
 jq-1.6
 
-(devenv) $ echo $UNICORNS
-yes
+(devenv) $ echo $GREET
+hello
 ```
 
 
