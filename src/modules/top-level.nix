@@ -74,6 +74,13 @@ in
     enterShell = ''
       export PS1="\e[0;34m(devenv)\e[0m ''${PS1-}"
 
+      # set path to locales on non-NixOS Linux hosts
+      ${lib.optionalString pkgs.stdenv.isLinux ''
+        if [ -z "$LOCALE_ARCHIVE" ]; then
+          export LOCALE_ARCHIVE=${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
+        fi
+      ''}
+
       # note what environments are active, but make sure we don't repeat them
       if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
         export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
