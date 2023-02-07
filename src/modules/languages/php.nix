@@ -300,6 +300,20 @@ in
     lib.mkIf cfg.enable {
       languages.php.package = lib.mkIf (cfg.version != "") (lib.mkForce (configurePackage customPhpPackage));
 
+      languages.php.extensions = lib.optionals config.services.rabbitmq.enable [ "amqp" ]
+        ++ lib.optionals config.services.redis.enable [ "redis" ]
+        ++ lib.optionals config.services.blackfire.enable [ "blackfire" ];
+
+      languages.php.ini = ''
+        ${lib.optionalString config.services.mysql.enable ''
+        pdo_mysql.default_socket = ''${MYSQL_UNIX_PORT}
+        mysqli.default_socket = ''${MYSQL_UNIX_PORT}
+        ''}
+        ${lib.optionalString config.services.blackfire.enable ''
+        blackfire.agent_socket = "${config.services.blackfire.socket}";
+        ''}
+      '';
+
       packages = with pkgs; [
         cfg.package
       ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
