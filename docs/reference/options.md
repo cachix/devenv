@@ -859,6 +859,23 @@ true
 ```
 
 
+## languages.ocaml.packages
+The package set of OCaml to use
+
+*_Type_*
+```
+attribute set
+```
+
+
+*_Default_*
+```
+pkgs.ocaml-ng.ocamlPackages_4_12
+```
+
+
+
+
 ## languages.perl.enable
 Whether to enable tools for Perl development.
 
