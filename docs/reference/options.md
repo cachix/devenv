@@ -1515,7 +1515,7 @@ pkgs.racket-minimal
 
 
 ## languages.raku.enable
-Whether to enable Enable tools for Raku development..
+Whether to enable tools for Raku development.
 
 *_Type_*
 ```
