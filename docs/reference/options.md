@@ -3616,17 +3616,7 @@ string
 ## services.blackfire.enable
 Whether to enable Blackfire profiler agent
 
-For PHP you need to install and configure the Blackfire PHP extension.
-
-```nix
-languages.php.package = pkgs.php.buildEnv {
-  extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
-  extraConfig = ''
-    memory_limit = 256M
-    blackfire.agent_socket = "tcp://127.0.0.1:8307";
-  '';
-};
-```
+It automatically installs Blackfire PHP extension.
 .
 
 *_Type_*
