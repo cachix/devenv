@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.forth = {
-    enable = lib.mkEnableOption "Enable tools for Forth development.";
+    enable = lib.mkEnableOption "tools for Forth development";
 
     package = lib.mkOption {
       type = lib.types.package;
