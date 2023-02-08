@@ -55,7 +55,6 @@
     popd
     rm -rf "$tmp"
 
-    # TODO: test direnv integration
     # TODO: test DIRENV_ACTIVE
   '';
   scripts.devenv-test-all-examples.exec = ''
