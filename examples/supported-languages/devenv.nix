@@ -36,6 +36,7 @@
   languages.scala.enable = true;
   languages.swift.enable = true;
   languages.terraform.enable = true;
+  languages.texlive.enable = true;
   languages.typescript.enable = true;
   languages.unison.enable = true;
   languages.v.enable = true;
