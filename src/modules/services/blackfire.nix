@@ -19,17 +19,7 @@ in
     enable = lib.mkEnableOption ''
       Blackfire profiler agent
 
-      For PHP you need to install and configure the Blackfire PHP extension.
-
-      ```nix
-      languages.php.package = pkgs.php.buildEnv {
-        extensions = { all, enabled }: with all; enabled ++ [ (blackfire// { extensionName = "blackfire"; }) ];
-        extraConfig = '''
-          memory_limit = 256M
-          blackfire.agent_socket = "${cfg.socket}";
-        ''';
-      };
-      ```
+      It automatically installs Blackfire PHP extension.
     '';
 
     client-id = lib.mkOption {
