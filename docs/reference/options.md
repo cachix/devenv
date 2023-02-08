@@ -1863,6 +1863,63 @@ pkgs.terraform
 
 
 
+## languages.texlive.base
+TeX Live package set to use
+
+*_Type_*
+```
+unspecified value
+```
+
+
+*_Default_*
+```
+pkgs.texlive
+```
+
+
+
+
+## languages.texlive.enable
+Whether to enable TeX Live.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.texlive.packages
+Packages available to TeX Live
+
+*_Type_*
+```
+non-empty (list of Concatenated string)
+```
+
+
+*_Default_*
+```
+[
+  "collection-basic"
+]
+```
+
+
+
+
 ## languages.typescript.enable
 Whether to enable tools for TypeScript development.
 
