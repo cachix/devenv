@@ -20,7 +20,10 @@ pkgs.writeScriptBin "devenv" ''
 
   function assemble {
     if [[ ! -f devenv.nix ]]; then
-      echo "devenv.nix does not exist. Maybe you want to run first $ devenv init"
+      echo "File devenv.nix does not exist. To get started, run:"
+      echo
+      echo "  $ devenv init"
+      exit 1
     fi
 
     export DEVENV_DIR="$(pwd)/.devenv"
