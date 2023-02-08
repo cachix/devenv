@@ -1,22 +1,20 @@
 { pkgs, config, ... }:
 
-let
-  phpPackage = pkgs.php.buildEnv {
-    extraConfig = ''
+{
+  languages.php = {
+    enable = true;
+    version = "8.1";
+    ini = ''
       memory_limit = 256M
     '';
-  };
-in
-{
-  languages.php.enable = true;
-  languages.php.package = phpPackage;
-  languages.php.fpm.pools.web = {
-    settings = {
-      "pm" = "dynamic";
-      "pm.max_children" = 5;
-      "pm.start_servers" = 2;
-      "pm.min_spare_servers" = 1;
-      "pm.max_spare_servers" = 5;
+    fpm.pools.web = {
+      settings = {
+        "pm" = "dynamic";
+        "pm.max_children" = 5;
+        "pm.start_servers" = 2;
+        "pm.min_spare_servers" = 1;
+        "pm.max_spare_servers" = 5;
+      };
     };
   };
 
