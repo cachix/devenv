@@ -5,7 +5,7 @@ let
 in
 {
   options.languages.raku = {
-    enable = lib.mkEnableOption "Enable tools for Raku development.";
+    enable = lib.mkEnableOption "tools for Raku development";
   };
 
   config = lib.mkIf cfg.enable {
