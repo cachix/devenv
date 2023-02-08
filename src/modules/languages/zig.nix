@@ -9,7 +9,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "Which package of Zig to use";
+      description = "Which package of Zig to use.";
       default = pkgs.zig;
       defaultText = lib.literalExpression "pkgs.zig";
     };

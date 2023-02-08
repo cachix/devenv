@@ -71,7 +71,7 @@ let
         type = types.lines;
         default = "";
         description = ''
-          These lines go into the vhost verbatim
+          These lines go into the vhost verbatim.
         '';
       };
     };
@@ -116,7 +116,7 @@ in
           };
         };
       '';
-      description = "Declarative vhost config";
+      description = "Declarative vhost config.";
     };
 
     adapter = mkOption {
@@ -145,14 +145,14 @@ in
         Certificate authority ACME server. The default (Let's Encrypt
         production server) should be fine for most people. Set it to null if
         you don't want to include any authority (or if you want to write a more
-        fine-graned configuration manually)
+        fine-graned configuration manually).
       '';
     };
 
     email = mkOption {
       default = "";
       type = types.str;
-      description = "Email address (for Let's Encrypt certificate)";
+      description = "Email address (for Let's Encrypt certificate).";
     };
 
     dataDir = mkOption {

@@ -93,12 +93,12 @@ in
 
   options.services.postgres = {
     enable = lib.mkEnableOption ''
-      Add postgreSQL process script.
+      Add PostgreSQL process.
     '';
 
     package = lib.mkOption {
       type = types.package;
-      description = "Which version of postgres to use";
+      description = "Which version of PostgreSQL to use";
       default = pkgs.postgresql;
       defaultText = lib.literalExpression "pkgs.postgresql";
       example = lib.literalExpression ''

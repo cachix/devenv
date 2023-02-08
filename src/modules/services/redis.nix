@@ -27,11 +27,11 @@ in
   ];
 
   options.services.redis = {
-    enable = mkEnableOption "redis process and expose utilities";
+    enable = mkEnableOption "Redis process and expose utilities";
 
     package = mkOption {
       type = types.package;
-      description = "Which package of redis to use";
+      description = "Which package of Redis to use";
       default = pkgs.redis;
       defaultText = lib.literalExpression "pkgs.redis";
     };
@@ -51,7 +51,7 @@ in
       default = 6379;
       description = ''
         The TCP port to accept connections.
-        If port 0 is specified Redis will not listen on a TCP socket.
+        If port 0 is specified Redis, will not listen on a TCP socket.
       '';
     };
 

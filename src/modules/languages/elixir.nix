@@ -9,7 +9,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "Which package of Elixir to use";
+      description = "Which package of Elixir to use.";
       default = pkgs.elixir;
       defaultText = lib.literalExpression "pkgs.elixir";
     };

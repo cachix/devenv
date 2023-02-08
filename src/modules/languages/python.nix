@@ -22,7 +22,7 @@ in
         type = lib.types.package;
         default = cfg.package.pkgs.poetry;
         defaultText = lib.literalExpression "config.languages.python.package.pkgs.poetry";
-        description = "The poetry package to use.";
+        description = "The Poetry package to use.";
       };
     };
   };

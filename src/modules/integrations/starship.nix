@@ -2,7 +2,7 @@
 
 {
   options.starship = {
-    enable = lib.mkEnableOption "the Starship command prompt";
+    enable = lib.mkEnableOption "the Starship.rs command prompt";
 
     package = lib.mkOption {
       type = lib.types.package;

@@ -5,13 +5,13 @@ let
 in
 {
   options.languages.v = {
-    enable = lib.mkEnableOption "tools for v development";
+    enable = lib.mkEnableOption "tools for V development";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.vlang;
       defaultText = lib.literalExpression "pkgs.vlang";
-      description = "The v package to use.";
+      description = "The V package to use.";
     };
   };
 

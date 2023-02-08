@@ -5,13 +5,13 @@ let
 in
 {
   options.languages.terraform = {
-    enable = lib.mkEnableOption "tools for terraform development";
+    enable = lib.mkEnableOption "tools for Terraform development";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.terraform;
       defaultText = lib.literalExpression "pkgs.terraform";
-      description = "The terraform package to use.";
+      description = "The Terraform package to use.";
     };
   };
 
