@@ -1,11 +1,13 @@
 
-| Key                        | Value                                                                         |
-| -------------------------- | ----------------------------------------------------------------------------- |
-| inputs                     | Defaults to `inputs.nixpkgs.url: github:NixOS/nixpkgs/nixpkgs-unstable`.      |
-| inputs.&lt;name&gt;        | Identifier name used when passing the input in your ``devenv.nix`` function.  |
-| inputs.&lt;name&gt;.url    | URI specification of the input, see below for possible values.                |
-| inputs.&lt;name&gt;.flake  | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
-| imports                    | A list of relative paths or references to inputs to import ``devenv.nix``.    |
+| Key                           | Value                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| allowUnfree                   | Allow unfree packages. Defaults to `false`.                                   |
+| inputs                        | Defaults to `inputs.nixpkgs.url: github:NixOS/nixpkgs/nixpkgs-unstable`.      |
+| inputs.&lt;name&gt;           | Identifier name used when passing the input in your ``devenv.nix`` function.  |
+| inputs.&lt;name&gt;.url       | URI specification of the input, see below for possible values.                |
+| inputs.&lt;name&gt;.flake     | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
+| imports                       | A list of relative paths or references to inputs to import ``devenv.nix``.    |
+| overlays                      | Names of inputs with a list of overlays to include.                           |
 
 ## inputs.&lt;name&gt;.url
 
@@ -35,4 +37,7 @@ imports:
   - ./backend
   - myproject
   - myproject/relative/path
+overlays:
+  myproject:
+    - default
 ```
