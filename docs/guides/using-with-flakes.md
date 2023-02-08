@@ -1,32 +1,46 @@
-`devenv` can be used without the `devenv` CLI by integrating into [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/), if you're more familiar with the Nix language/ecosystem.
+`devenv` can be integrated with [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/) if you're more familiar with the Nix language and ecosystem.
 
-Some usecases for using devenv configuration inside flakes is for projects that want to define other Nix flake features, apart from the development shell.
-These include a Nix package for the project, NixOS and home-manager modules related to the project.
-Usually you want to use the same lock file for the development shell as well as the Nix package and others, so that everything is based on the same nixpkgs.
+You can define your own packages, NixOS and home-manager modules, but still benefit from devenv's development features.
+The development shell will share the same inputs and lock file as all the other outputs of your flake, ensuring that your entire project is using the same `nixpkgs` revision.
 
-A Nix flake includes the inputs from `devenv.yaml` as well as the devenv configuration that you'd usually find in `devenv.nix`. `flake.lock` is the lock file for Nix flakes, the equivalent to `devenv.lock`.
+With flakes, you also no longer need dedicated configuration files for devenv:
+
+* the inputs from `devenv.yaml` are replaced by the flake's inputs
+* `devenv.nix` becomes a shell module in `flake.nix`
+* the `devenv.lock` is replaced by the `flake.lock`
 
 ## Getting started
 
-To quickly set a project up with Nix flakes, use of `nix flake init`, like:
+Set up a new project with Nix flakes using our template:
 
 ```console
 $ nix flake init --template github:cachix/devenv
 ```
 
-This will create a `flake.nix` with devenv configuration, as well as a `.envrc` direnv configuration.
+This template will create:
 
-Open the devenv shell using:
+* a `flake.nix` containing a basic devenv configuration
+* an `.envrc` to optionally set up automatic shell activation with direnv.
+
+Open the devenv shell with:
 
 ```console
-$ nix develop
+$ nix develop --impure
 ```
 
-This will create a lock file and open up a new shell that adheres to the devenv configuration stated in `flake.nix`.
+This will create a `flake.lock` lock file and open up a new shell based on the devenv configuration stated in `flake.nix`.
 
-## flake.nix
+!!! note "Why do I need `--impure`?"
+    When working with flakes, pure mode prevents devenv from accessing and modifying its state data.
+    Certain features, like running processes with `devenv up`, won't work in pure mode.
 
-A minimal flake.nix that includes devenv is for example:
+## Modifying your `flake.nix`
+
+Here's a minimal `flake.nix` that includes:
+
+* a single `devShell` for the `x86_64-linux` system created with `devenv.lib.mkShell`.
+* a shell module containing the devenv configuration  — what you'd usually write in `devenv.nix`.
+  See [the reference documentation](/reference/options/) for the possible options to use here.
 
 ```nix
 {
@@ -46,12 +60,14 @@ A minimal flake.nix that includes devenv is for example:
         inherit inputs pkgs;
         modules = [
           {
-            # This is where devenv configuration can be stated
+            # This is your devenv configuration
             packages = [ pkgs.hello ];
 
             enterShell = ''
               hello
             '';
+
+            processes.exec.run = hello;
           }
         ];
       };
@@ -59,24 +75,28 @@ A minimal flake.nix that includes devenv is for example:
 }
 ```
 
-Here a single shell is defined. It is defined _only_ for a `x86_64-linux` system. The shell includes a single devenv configuration module.
-Inside the module is where you put the devenv configuration, the one you usually will find in `devenv.nix`. See https://devenv.sh/reference/options/ for the possible options to use here.
+Once inside the shell, you can launch [process and services with `devenv up`](/processes).
 
-## direnv
+```console
+$ devenv up
+17:34:37 system | run.1 started (pid=1046939)
+17:34:37 run.1  | Hello, world!
+17:34:37 system | run.1 stopped (rc=0)
+```
 
-To make use of `direnv` in your Nix flake project, you'll need [nix-direnv](https://github.com/nix-community/nix-direnv).
+## Automatic shell switching with direnv
 
-To configure `direnv` in your project make sure you have a file called `.envrc` that includes the following line:
+Install [nix-direnv](https://github.com/nix-community/nix-direnv) for direnv to work with flakes.
 
-```text
+Add the following line to your `.envrc`:
+
+```console
 nix flake --impure
 ```
 
-In normal `nix flake` projects, `--impure` is not needed. When using `devenv` in your flake, you _do_ need this option.
-
 ## Multiple shells
 
-Defining multiple development shells using flakes can be useful depending on your projects structure. We will handle 2 use-cases here.
+Defining multiple development shells using flakes can be useful depending on your project's structure. We will handle 2 use-cases here.
 
 ### Single project with multiple shells
 
