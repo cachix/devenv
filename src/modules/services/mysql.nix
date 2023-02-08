@@ -73,11 +73,11 @@ in
   ];
 
   options.services.mysql = {
-    enable = mkEnableOption "mysql process and expose utilities";
+    enable = mkEnableOption "MySQL process and expose utilities";
 
     package = mkOption {
       type = types.package;
-      description = "Which package of mysql to use";
+      description = "Which package of MySQL to use";
       default = pkgs.mysql80;
       defaultText = lib.literalExpression "pkgs.mysql80";
     };
@@ -86,7 +86,7 @@ in
       type = format.type;
       default = { };
       description = ''
-        MySQL configuration
+        MySQL configuration.
       '';
       example = literalExpression ''
         {

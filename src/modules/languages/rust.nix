@@ -37,13 +37,13 @@ in
       });
       defaultText = lib.literalExpression "pkgs";
       default = { };
-      description = "Attribute set of packages including rustc and cargo";
+      description = "Attribute set of packages including rustc and Cargo.";
     };
 
     version = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Set to stable, beta or latest.";
+      description = "Set to stable, beta, or latest.";
     };
   };
 

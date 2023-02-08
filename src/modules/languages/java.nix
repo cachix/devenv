@@ -23,8 +23,8 @@ in
         type = types.package;
         defaultText = "pkgs.maven.override { jdk = cfg.jdk.package; }";
         description = ''
-          The maven package to use.
-          The maven package by default inherits the JDK from `languages.java.jdk.package`.
+          The Maven package to use.
+          The Maven package by default inherits the JDK from `languages.java.jdk.package`.
         '';
       };
     };
@@ -34,8 +34,8 @@ in
         type = types.package;
         defaultText = literalExpression "pkgs.gradle.override { jdk = cfg.jdk.package; }";
         description = ''
-          The gradle package to use.
-          The gradle package by default inherits the JDK from `languages.java.jdk.package`.
+          The Gradle package to use.
+          The Gradle package by default inherits the JDK from `languages.java.jdk.package`.
         '';
       };
     };

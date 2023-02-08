@@ -5,13 +5,13 @@ let
 in
 {
   options.languages.nim = {
-    enable = lib.mkEnableOption "tools for nim development";
+    enable = lib.mkEnableOption "tools for Nim development";
 
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.nim;
       defaultText = lib.literalExpression "pkgs.nim";
-      description = "The nim package to use.";
+      description = "The Nim package to use.";
     };
   };
 

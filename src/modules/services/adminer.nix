@@ -10,18 +10,18 @@ in
   ];
 
   options.services.adminer = {
-    enable = lib.mkEnableOption "adminer process";
+    enable = lib.mkEnableOption "Adminer process";
 
     package = lib.mkOption {
       type = types.package;
-      description = "Which package of adminer to use";
+      description = "Which package of Adminer to use.";
       default = pkgs.adminer;
       defaultText = lib.literalExpression "pkgs.adminer";
     };
 
     listen = lib.mkOption {
       type = types.str;
-      description = "Listen address for adminer.";
+      description = "Listen address for the Adminer.";
       default = "127.0.0.1:8080";
     };
   };

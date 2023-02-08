@@ -6,7 +6,7 @@ let
     options = {
       exec = lib.mkOption {
         type = types.str;
-        description = "Bash code to execute when the script is ran.";
+        description = "Bash code to execute when the script is run.";
       };
     };
   });

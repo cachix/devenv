@@ -14,13 +14,13 @@ let
 in
 {
   options.services.wiremock = {
-    enable = mkEnableOption "wiremock";
+    enable = mkEnableOption "WireMock";
     package = mkOption {
       type = types.package;
       default = pkgs.wiremock;
       defaultText = lib.literalExpression "pkgs.wiremock";
       description = ''
-        Which package of wiremock to use.
+        Which package of WireMock to use.
       '';
     };
     port = mkOption {
@@ -34,14 +34,14 @@ in
       type = types.bool;
       default = false;
       description = ''
-        Whether to disable print banner logo
+        Whether to disable print banner logo.
       '';
     };
     verbose = mkOption {
       type = types.bool;
       default = false;
       description = ''
-        Whether to log verbosely to stdout
+        Whether to log verbosely to stdout.
       '';
     };
     mappings = mkOption {
