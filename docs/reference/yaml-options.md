@@ -26,6 +26,7 @@
 ## An extensive example
 
 ```yaml
+allowUnfree: true
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
