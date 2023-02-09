@@ -1,27 +1,25 @@
 { lib, config, ... }:
 
+let
+  renderSection = section: lib.concatStringsSep "\n" (builtins.map (entry: "- ${entry}") section);
+in
 {
   options = {
     info = lib.mkOption {
       type = lib.types.lines;
       internal = true;
     };
+
+    infoSections = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+      default = { };
+      description =
+        "Information about the environment";
+    };
   };
 
-  # TODO: show scripts path
-  # TODO: make this pluggable so any option can be shown
 
-  config.info = ''
-    # env
-    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value: "- ${name}: ${toString value}") config.env)}
-
-    # packages
-    ${lib.concatStringsSep "\n" (builtins.map (package: "- ${package.name}") (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages))}
-
-    # scripts
-    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: script: "- ${name}") config.scripts)}
-
-    # processes
-    ${lib.concatStringsSep "\n" (lib.mapAttrsToList (name: process: "- ${name}: ${process.exec}") config.processes)}
-  '';
+  config = {
+    info = lib.concatStringsSep "\n\n" (lib.mapAttrsToList (name: section: if (section != [ ]) then "# ${name}\n${renderSection section}" else "") config.infoSections);
+  };
 }
