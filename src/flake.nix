@@ -18,7 +18,7 @@
           map (overlay: let 
               input = inputs.''${inputName} or (throw "No such input `''${inputName}` while trying to configure overlays.");
             in input.overlays.''${overlay} or (throw "Input `''${inputName}` has no overlay called `''${overlay}`. Supported overlays: ''${nixpkgs.lib.concatStringsSep ", " (builtins.attrNames input.overlays)}")) overlays;
-        overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.overlays or []));
+        overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.overlays or {}));
         pkgs = import nixpkgs {
           system = "${pkgs.system}";
           allowUnfree = devenv.allowUnfree or false; 
