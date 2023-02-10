@@ -55,7 +55,7 @@ c) Install ``devenv``
 === "Advanced (flake profiles)"
 
     ```
-    nix profile install github:cachix/devenv/latest
+    nix profile install --accept-flake-config github:cachix/devenv/latest 
     ```
 
 === "Advanced (declaratively without flakes)"
