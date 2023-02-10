@@ -176,6 +176,8 @@ in
 
     ci = [ config.procfileScript ];
 
+    infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes;
+
     env =
       if implementation == "process-compose" then {
         PC_HTTP_PORT = implementation-options.port;
