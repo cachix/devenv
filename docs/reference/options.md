@@ -166,6 +166,23 @@ string
 
 
 
+## infoSections
+Information about the environment
+
+*_Type_*
+```
+attribute set of list of string
+```
+
+
+*_Default_*
+```
+{ }
+```
+
+
+
+
 ## languages.c.enable
 Whether to enable tools for C development.
 
