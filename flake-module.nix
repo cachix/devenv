@@ -6,9 +6,7 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
         inherit inputs pkgs;
         modules = [{
           config = {
-            packages = [
-              devenvFlake.packages.${system}.devenv
-            ];
+            # Add flake-parts-specific config here if necessary
           };
         }];
       }).type;
