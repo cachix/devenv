@@ -28,5 +28,9 @@ in
 
     env.GOROOT = cfg.package + "/share/go/";
     env.GOPATH = config.env.DEVENV_STATE + "/go";
+
+    enterShell = ''
+      export PATH=$GOPATH:$PATH
+    '';
   };
 }
