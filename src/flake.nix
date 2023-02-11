@@ -73,6 +73,7 @@
           inherit (config) info procfileScript procfileEnv procfile;
           ci = config.ciDerivation;
         };
+        devenv.containers = config.containers;
         devShell."${pkgs.system}" = config.shell;
       };
   }

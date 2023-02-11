@@ -35,6 +35,7 @@ nav:
       - Scripts: scripts.md
       - Languages: languages.md
       - Processes: processes.md
+      - Containers: containers.md
       - Pre-Commit Hooks: pre-commit-hooks.md
       - Common Patterns: common-patterns.md
     - Writing devenv.yaml:
@@ -43,12 +44,13 @@ nav:
     - Overview:
       - Automatic Shell Activation: automatic-shell-activation.md
       - Garbage Collection: garbage-collection.md
+    - Guides: 
+      - Using With Flakes: guides/using-with-flakes.md
     - Integrations:
       - GitHub Actions: integrations/github-actions.md
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
       - Difftastic: integrations/difftastic.md
-    - Guides: 
-      - Using With Flakes: guides/using-with-flakes.md
+
     - Examples: examples.md
     - Roadmap: roadmap.md
     - Reference:
