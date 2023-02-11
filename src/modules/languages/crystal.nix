@@ -13,10 +13,5 @@ in
       pkgs.crystal
       pkgs.shards
     ];
-
-    enterShell = ''
-      crystal --version
-      shards --version
-    '';
   };
 }
