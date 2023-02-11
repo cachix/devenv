@@ -20,5 +20,7 @@ in
       cfg.package
       gotools
     ];
+
+    env.GOROOT = cfg.package + "/share/go/";
   };
 }
