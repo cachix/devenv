@@ -63,6 +63,8 @@
           inherit (config) info procfileScript procfileEnv procfile;
           ci = config.ciDerivation;
         };
+        lib.defaultBuilds = toString config.build.default;
+        lib.builds = config.build.derivations;
         devShell."${pkgs.system}" = config.shell;
       };
   }

@@ -9,19 +9,20 @@
   ];
 
   languages.python.enable = true;
+  languages.python.venv.enable = true;
 
   devcontainer.enable = true;
   difftastic.enable = true;
 
   # bin/mkdocs serve --config-file mkdocs.insiders.yml
-  processes.docs.exec = "bin/mkdocs serve";
+  processes.docs.exec = "mkdocs serve";
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   enterShell = ''
     echo "To Install:"
     echo
-    echo "virtualenv ."
-    echo "bin/pip install -r requirements.txt"
+    echo "  $ pip install -r requirements.txt"
+    echo
   '';
 
   scripts.devenv-bump-version.exec = ''

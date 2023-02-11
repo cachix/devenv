@@ -42,6 +42,7 @@ nav:
       - Composing Using Imports: composing-using-imports.md
     - Overview:
       - Automatic Shell Activation: automatic-shell-activation.md
+      - Building Containers: building-containers.md
       - Garbage Collection: garbage-collection.md
     - Integrations:
       - GitHub Actions: integrations/github-actions.md
