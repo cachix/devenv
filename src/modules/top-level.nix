@@ -43,6 +43,12 @@ in
       default = { };
     };
 
+    name = lib.mkOption {
+      type = types.nullOr types.str;
+      description = "Name of the project.";
+      default = null;
+    };
+
     enterShell = lib.mkOption {
       type = types.lines;
       description = "Bash code to execute when entering the shell.";
@@ -88,6 +94,7 @@ in
     ./processes.nix
     ./scripts.nix
     ./update-check.nix
+    ./containers.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
