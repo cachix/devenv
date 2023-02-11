@@ -19,6 +19,11 @@ in
     packages = with pkgs; [
       cfg.package
       gotools
+      gotests
+      gomodifytags
+      impl
+      delve
+      gopls
     ];
 
     env.GOROOT = cfg.package + "/share/go/";
