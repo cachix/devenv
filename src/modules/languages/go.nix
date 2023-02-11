@@ -6,11 +6,18 @@ in
 {
   options.languages.go = {
     enable = lib.mkEnableOption "tools for Go development";
+
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.go;
+      defaultText = lib.literalExpression "pkgs.go";
+      description = "The Go package to use.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      go
+      cfg.package
       gotools
     ];
   };
