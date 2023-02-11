@@ -34,6 +34,7 @@ pkgs.writeScriptBin "devenv" ''
     else
       [[ -f "$DEVENV_DIR/devenv.json" ]] && rm "$DEVENV_DIR/devenv.json"
       [[ -f "$DEVENV_DIR/flake.json" ]] && rm "$DEVENV_DIR/flake.json"
+      [[ -f "$DEVENV_DIR/imports.txt" ]] && rm "$DEVENV_DIR/imports.txt"
     fi
     cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
     chmod +w "$FLAKE_FILE"
