@@ -4,7 +4,10 @@ let
   cfg = config.services.cassandra;
   types = lib.types;
   baseDir = config.env.DEVENV_STATE + "/cassandra";
-  JVM_OPTS = builtins.getEnv "JVM_OPTS";
+  JVM_OPTS = cfg.jvmOpts +
+    (if lib.versionAtLeast cfg.package.version "4"
+    then " -Xlog:gc=warning,heap*=warning,age*=warning,safepoint=warning,promotion*=warning"
+    else "");
   cassandraConfig = lib.flip lib.recursiveUpdate cfg.extraConfig (
     {
       listen_address = cfg.listenAddress;
@@ -33,9 +36,7 @@ let
       mkdir -p "${baseDir}"
     fi
 
-    echo ${cassandraConfigFile}
-
-    exec ${cfg.package}/bin/cassandra -Dcassandra.config=file:///${cassandraConfigFile} -f
+    JVM_OPTS="${JVM_OPTS}" exec ${cfg.package}/bin/cassandra -Dcassandra.config=file:///${cassandraConfigFile} -f
   '';
 in
 {
@@ -55,7 +56,7 @@ in
       description = "Which version of Cassandra to use";
       default = pkgs.cassandra;
       defaultText = lib.literalExpression "pkgs.cassandra";
-      example = lib.literalExpression "pkgs.cassandra_3_0;";
+      example = lib.literalExpression "pkgs.cassandra_4;";
     };
 
     listenAddress = lib.mkOption {
@@ -88,15 +89,16 @@ in
         Extra options to be merged into `cassandra.yaml` as nix attribute set.
       '';
     };
+
+    jvmOpts = lib.mkOption {
+      type = types.str;
+      default = "";
+      description = "Options to pass to the JVM through the JVM_OPTS environment variable";
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [ cfg.package startScript ];
-
-    env.JVM_OPTS = (builtins.getEnv "JVM_OPTS") +
-      (if lib.versionAtLeast cfg.package.version "4"
-      then " -Xlog:gc=warning,heap*=warning,age*=warning,safepoint=warning,promotion*=warning"
-      else "");
 
     processes.cassandra.exec = "${startScript}/bin/start-cassandra";
   };
