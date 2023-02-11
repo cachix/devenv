@@ -524,6 +524,23 @@ true
 ```
 
 
+## languages.go.package
+The Go package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+pkgs.go
+```
+
+
+
+
 ## languages.haskell.enable
 Whether to enable tools for Haskell development.
 
