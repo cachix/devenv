@@ -101,6 +101,45 @@ pkgs.writeScriptBin "devenv" ''
         $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
       fi
       ;;
+    container)
+      assemble
+      help=$(cat << 'EOF'
+Usage: container [options] CONTAINER-NAME
+
+Options:
+  --registry         Registry to copy the container to.
+  --copy             Copy the container to the registry.
+  --copy-args=<args> Arguments passed to `skopeo copy`.
+  --docker-run       Execute `docker run`.
+EOF
+      )
+
+      eval "$(${pkgs.docopts}/bin/docopts -A subcommand -h "$help" : "$@")"
+
+      export DEVENV_CONTAINER=1
+      container="''${subcommand[CONTAINER-NAME]}"
+
+      # build container
+      spec=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --impure --print-out-paths --no-link ".#devenv.containers.\"$container\".derivation")
+      echo $spec
+    
+      # copy container
+      if [[ ''${subcommand[--copy]} != false || ''${subcommand[--docker-run]} != false ]]; then
+        copyScript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".copyScript")
+
+        if [[ ''${subcommand[--docker-run]} == true ]]; then
+          registry=docker-daemon:
+        else
+          registry="''${subcommand[--registry]}"
+        fi
+        $copyScript $spec $registry ''${subcommand[--copy-args]}
+      fi
+
+      # docker run
+      if [[ ''${subcommand[--docker-run]} != false ]]; then
+        $($CUSTOM_NIX/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun")
+      fi
+      ;;
     search)
       name=$1
       shift
@@ -214,7 +253,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "Note: If you'd like this command to run much faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
 
       $CUSTOM_NIX/bin/nix $NIX_FLAGS store delete --recursive $candidates
-  
+
       # after GC delete links again
       for link in $(${pkgs.findutils}/bin/find $GC_ROOT -type l); do
         if [ ! -f $link ]; then
@@ -231,17 +270,18 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Commands:"
       echo
-      echo "init:           Scaffold devenv.yaml, devenv.nix, and .envrc inside the current directory."
-      echo "init TARGET:    Scaffold devenv.yaml, devenv.nix, and .envrc inside TARGET directory."
-      echo "search NAME:    Search packages matching NAME in nixpkgs input."
-      echo "shell:          Activate the developer environment."
-      echo "shell CMD ARGS: Run CMD with ARGS in the developer environment. Useful when scripting."
-      echo "info:           Print information about the current developer environment."
-      echo "update:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
-      echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
-      echo "gc:             Removes old devenv generations. See http://devenv.sh/garbage-collection"
-      echo "ci:             builds your developer environment and make sure all checks pass."
-      echo "version:        Display devenv version"
+      echo "init:                     Scaffold devenv.yaml, devenv.nix, and .envrc inside the current directory."
+      echo "init TARGET:              Scaffold devenv.yaml, devenv.nix, and .envrc inside TARGET directory."
+      echo "search NAME:              Search packages matching NAME in nixpkgs input."
+      echo "shell:                    Activate the developer environment."
+      echo "shell CMD [args]:         Run CMD with ARGS in the developer environment. Useful when scripting."
+      echo "container [options] NAME  Generate a container for NAME. See `devenv container --help` and http://devenv.sh/generating-containers"
+      echo "info:                     Print information about the current developer environment."
+      echo "update:                   Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
+      echo "up:                       Starts processes in foreground. See http://devenv.sh/processes"
+      echo "gc:                       Removes old devenv generations. See http://devenv.sh/garbage-collection"
+      echo "ci:                       Builds your developer environment and make sure all checks pass."
+      echo "version:                  Display devenv version"
       echo
       exit 1
   esac

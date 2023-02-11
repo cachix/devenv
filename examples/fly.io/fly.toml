@@ -1,0 +1,16 @@
+app = "simple-python-app"
+
+[build]
+image = "registry.fly.io/simple-python-app:latest"
+
+[[services]]
+internal_port = 5000
+protocol = "tcp"
+
+[[services.ports]]
+handlers = ["tls", "http"]
+port = "443"
+
+[mounts]
+source="devenv_state"
+destination="/.devenv/state"
