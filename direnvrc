@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# adopted from https://github.com/nix-community/nix-direnv/blob/master/direnvrc
+# adapted from https://github.com/nix-community/nix-direnv/blob/master/direnvrc
 
 REQUIRED_DIRENV_VERSION="2.21.3"
 
