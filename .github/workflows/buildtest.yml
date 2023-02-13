@@ -12,7 +12,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+        os: [[self-hosted, linux], [macos-latest], [self-hosted, macOS]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
