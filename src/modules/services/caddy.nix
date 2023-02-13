@@ -14,7 +14,8 @@ let
     ([ cfg.config ] ++ (mapAttrsToList vhostToConfig cfg.virtualHosts)));
 
   formattedConfig = pkgs.runCommand "formattedCaddyFile" { } ''
-    ${cfg.package}/bin/caddy fmt ${configFile} > $out
+    cp --no-preserve=mode,ownership ${configFile} $out
+    ${cfg.package}/bin/caddy fmt --overwrite $out
   '';
 
   tlsConfig = {
