@@ -20,7 +20,7 @@ in
       enable = lib.mkEnableOption "poetry";
       package = lib.mkOption {
         type = lib.types.package;
-        default = cfg.package.pkgs.poetry;
+        default = cfg.package.pkgs.poetry-core;
         defaultText = lib.literalExpression "config.languages.python.package.pkgs.poetry";
         description = "The Poetry package to use.";
       };
@@ -31,7 +31,7 @@ in
     languages.python.venv.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
     packages = [
-      cfg.package
+      pkgs.poetry
     ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
 
     env.PYTHONPATH = "${config.env.DEVENV_PROFILE}/${cfg.package.sitePackages}";
