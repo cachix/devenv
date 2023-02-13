@@ -1645,6 +1645,58 @@ pkgs.ruby_3_1
 
 
 
+## languages.ruby.version
+The Ruby version to use.
+This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
+
+
+*_Type_*
+```
+null or string
+```
+
+
+*_Default_*
+```
+null
+```
+
+
+*_Example_*
+```
+"3.2.1"
+```
+
+
+## languages.ruby.versionFile
+The .ruby-version file path to extract the Ruby version from.
+This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
+When the `.ruby-version` file exists in the same directory as the devenv configuration, you can use:
+
+```nix
+languages.ruby.versionFile = ./.ruby-version;
+```
+
+
+*_Type_*
+```
+null or path
+```
+
+
+*_Default_*
+```
+null
+```
+
+
+*_Example_*
+```
+./ruby-version
+
+```
+
+
 ## languages.rust.enable
 Whether to enable tools for Rust development.
 
