@@ -13,6 +13,10 @@ let
   '';
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "hosts" ] [ "hostctl" "hosts" ])
+  ];
+
   options.hostctl = {
     hostsProfileName = lib.mkOption {
       type = lib.types.str;
