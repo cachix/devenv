@@ -6,3 +6,6 @@ result
 /include
 /lib
 pyvenv.cfg
+
+# we want to catch nixpkgs-unstable regressions early
+/examples/**/devenv.lock
