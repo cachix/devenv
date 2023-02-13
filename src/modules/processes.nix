@@ -49,7 +49,7 @@ let
     '';
 
     overmind = ''
-      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --procfile ${config.procfile} &
+      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --root ${config.env.DEVENV_ROOT} --procfile ${config.procfile} &
     '';
 
     process-compose = ''
