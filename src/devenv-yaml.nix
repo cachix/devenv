@@ -29,7 +29,7 @@ pkgs.writers.writePython3Bin "devenv-yaml" { libraries = with pkgs.python3Packag
       sys.exit(1)
 
   inputs = {}
-  for input, attrs in devenv['inputs'].items():
+  for input, attrs in devenv.get('inputs', {}).items():
       inputs[input] = {k: attrs[k] for k in ('url', 'inputs', 'flake')
                        if k in attrs}
 
