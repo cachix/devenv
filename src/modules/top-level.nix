@@ -76,7 +76,7 @@ in
 
       # set path to locales on non-NixOS Linux hosts
       ${lib.optionalString pkgs.stdenv.isLinux ''
-        if [ -z "$LOCALE_ARCHIVE" ]; then
+        if [ -z "''${LOCALE_ARCHIVE-}" ]; then
           export LOCALE_ARCHIVE=${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
         fi
       ''}
