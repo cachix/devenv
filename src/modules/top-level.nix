@@ -16,6 +16,17 @@ let
     paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
     ignoreCollisions = true;
   };
+
+  failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+
+  performAssertions =
+    if failedAssertions != [ ]
+    then
+      throw ''
+        Failed assertions:
+        ${lib.concatStringsSep "\n" (builtins.map (x: "- ${x}") failedAssertions)}
+      ''
+    else lib.id;
 in
 {
   options = {
@@ -50,6 +61,18 @@ in
     ciDerivation = lib.mkOption {
       type = types.package;
       internal = true;
+    };
+
+    assertions = lib.mkOption {
+      type = types.listOf types.unspecified;
+      internal = true;
+      default = [ ];
+      example = [{ assertion = false; message = "you can't enable this for that reason"; }];
+      description = ''
+        This option allows modules to express conditions that must
+        hold for the evaluation of the configuration to succeed,
+        along with associated error messages for the user.
+      '';
     };
   };
 
@@ -97,12 +120,14 @@ in
       ln -s ${profile} .devenv/profile
     '';
 
-    shell = mkNakedShell {
-      name = "devenv-shell";
-      env = config.env;
-      profile = profile;
-      shellHook = config.enterShell;
-    };
+    shell = performAssertions (
+      mkNakedShell {
+        name = "devenv-shell";
+        env = config.env;
+        profile = profile;
+        shellHook = config.enterShell;
+      }
+    );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
