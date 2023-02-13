@@ -90,6 +90,14 @@ jobs:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
+        mv ./examples/simple/devenv.yaml ./examples/simple/devenv.yaml.orig
+        awk '
+          { print }
+          /^inputs:$/ {
+            print "  devenv:";
+            print "    url: path:../../src/modules";
+          }
+        ' ./examples/simple/devenv.yaml.orig > ./examples/simple/devenv.yaml
         nix profile remove '.*'
         nix profile install . 'nixpkgs#direnv'
         mkdir -p ~/.config/direnv/
