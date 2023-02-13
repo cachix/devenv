@@ -25,8 +25,8 @@ jobs:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
-        nix profile remove '.*'
-        nix profile install .
+        nix profile remove '.*' 
+        nix profile install --accept-flake-config . 
     - name: Run tests
       run: |
         devenv ci
@@ -62,7 +62,7 @@ jobs:
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
         nix profile remove '.*'
-        nix profile install .
+        nix profile install --accept-flake-config . "nixpkgs#gawk"
     - run: |
         cd examples/${{ matrix.example }}/
         mv devenv.yaml devenv.yaml.orig
