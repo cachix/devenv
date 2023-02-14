@@ -1,7 +1,7 @@
 { pkgs, lib, config, ... }:
 
 let
-  entries = lib.mapAttrsToList (hostname: ip: { inherit hostname ip; }) config.hostctl.hosts;
+  entries = lib.mapAttrsToList (hostname: ip: { inherit hostname ip; }) config.hosts;
   entriesByIp = builtins.groupBy ({ ip, ... }: ip) entries;
   hostnamesByIp = builtins.mapAttrs (hostname: entries: builtins.map ({ hostname, ... }: hostname) entries) entriesByIp;
   lines = lib.mapAttrsToList (ip: hostnames: "${ip} ${lib.concatStringsSep " " hostnames}") hostnamesByIp;
@@ -13,11 +13,7 @@ let
   '';
 in
 {
-  imports = [
-    (lib.mkRenamedOptionModule [ "hosts" ] [ "hostctl" "hosts" ])
-  ];
-
-  options.hostctl = {
+  options = {
     hostsProfileName = lib.mkOption {
       type = lib.types.str;
       default = "devenv-${builtins.hashString "sha256" config.env.DEVENV_ROOT}";
@@ -37,7 +33,7 @@ in
   config = lib.mkIf (hostContent != "") {
     process.before = ''
       if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
-        sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostctl.hostsProfileName} --from ${file}
+        sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
         mkdir -p "$DEVENV_STATE"
         echo "${hostHash}" > "$DEVENV_STATE/hostctl"
       fi
@@ -45,7 +41,7 @@ in
 
     process.after = ''
       rm -f "$DEVENV_STATE/hostctl"
-      sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostctl.hostsProfileName}
+      sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName}
     '';
   };
 }
