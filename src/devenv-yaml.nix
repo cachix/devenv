@@ -33,14 +33,14 @@ pkgs.writers.writePython3Bin "devenv-yaml" { libraries = with pkgs.python3Packag
       inputs[input] = {k: attrs[k] for k in ('url', 'inputs', 'flake')
                        if k in attrs}
 
-  devenv_state = sys.argv[1]
+  devenv_dir = sys.argv[1]
 
-  with open(os.path.join(devenv_state, "flake.json"), 'w') as f:
+  with open(os.path.join(devenv_dir, "flake.json"), 'w') as f:
       f.write(json.dumps(inputs))
 
-  with open(os.path.join(devenv_state, "devenv.json"), 'w') as f:
+  with open(os.path.join(devenv_dir, "devenv.json"), 'w') as f:
       f.write(json.dumps(devenv))
 
-  with open(os.path.join(devenv_state, "imports.txt"), 'w') as f:
+  with open(os.path.join(devenv_dir, "imports.txt"), 'w') as f:
       f.write(" ".join(devenv.get('imports', [])))
 ''
