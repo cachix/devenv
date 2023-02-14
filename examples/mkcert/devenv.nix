@@ -2,7 +2,7 @@
 
 {
   certificates = [
-    "*.2example.com"
+    "example.com"
   ];
 
   hosts = {
