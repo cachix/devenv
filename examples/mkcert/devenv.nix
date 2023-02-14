@@ -1,11 +1,11 @@
 { pkgs, config, ... }:
 
 {
-  mkcert.domains = [
-    "example.com"
+  certificates = [
+    "*.2example.com"
   ];
 
-  hostctl.hosts = {
+  hosts = {
     "example.com" = "127.0.0.1";
   };
 

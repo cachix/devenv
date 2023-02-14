@@ -1,12 +1,12 @@
 { pkgs, lib, config, ... }:
 
 let
-  domainList = lib.concatStringsSep " " config.mkcert.domains;
+  domainList = lib.concatStringsSep " " config.certificates;
   hash = builtins.hashString "sha256" domainList;
 in
 {
-  options.mkcert = {
-    domains = lib.mkOption {
+  options = {
+    certificates = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
       description = "List of domains to generate certificates for.";
@@ -28,8 +28,11 @@ in
       if [[ ! -f "$DEVENV_STATE/mkcert/hash" || "$(cat "$DEVENV_STATE/mkcert/hash")" != "${hash}" ]]; then
         echo "${hash}" > "${config.env.DEVENV_STATE}/mkcert/hash"
 
-        cd ${config.env.DEVENV_STATE}/mkcert
-        PATH="${pkgs.nss}/bin/certutil:$PATH" ${pkgs.mkcert}/bin/mkcert ${domainList}
+        pushd ${config.env.DEVENV_STATE}/mkcert > /dev/null
+
+        PATH="${pkgs.nss}/bin/certutil:$PATH" ${pkgs.mkcert}/bin/mkcert ${domainList} 2> /dev/null
+
+        popd > /dev/null
       fi
     '';
 
