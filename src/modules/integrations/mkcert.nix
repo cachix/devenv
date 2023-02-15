@@ -12,7 +12,7 @@ in
       description = "List of domains to generate certificates for.";
       example = [
         "example.com"
-        "127.0.0.1"
+        "*.example.com"
       ];
     };
   };
