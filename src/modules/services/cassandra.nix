@@ -4,12 +4,14 @@ let
   cfg = config.services.cassandra;
   types = lib.types;
   baseDir = config.env.DEVENV_STATE + "/cassandra";
-  JVM_OPTS = cfg.jvmOpts +
-    (if lib.versionAtLeast cfg.package.version "4"
-    then " -Xlog:gc=warning,heap*=warning,age*=warning,safepoint=warning,promotion*=warning"
-    else "");
+  JVM_OPTS =
+    cfg.jvmOpts
+    ++ lib.optionals (lib.versionAtLeast cfg.package.version "4") [
+      "-Xlog:gc=warning,heap*=warning,age*=warning,safepoint=warning,promotion*=warning"
+    ];
   cassandraConfig = lib.flip lib.recursiveUpdate cfg.extraConfig (
     {
+      start_native_transport = cfg.allowClients;
       listen_address = cfg.listenAddress;
       commitlog_sync = "batch";
       commitlog_sync_batch_window_in_ms = 2;
@@ -36,7 +38,7 @@ let
       mkdir -p "${baseDir}"
     fi
 
-    JVM_OPTS="${JVM_OPTS}" exec ${cfg.package}/bin/cassandra -Dcassandra.config=file:///${cassandraConfigFile} -f
+    JVM_OPTS="${lib.concatStringsSep " " JVM_OPTS}" exec ${cfg.package}/bin/cassandra -Dcassandra.config=file:///${cassandraConfigFile} -f
   '';
 in
 {
@@ -78,6 +80,14 @@ in
       description = "The name of the cluster";
     };
 
+    allowClients = lib.mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Enables or disables the native transport server (CQL binary protocol)
+      '';
+    };
+
     extraConfig = lib.mkOption {
       type = types.attrs;
       default = { };
@@ -91,8 +101,8 @@ in
     };
 
     jvmOpts = lib.mkOption {
-      type = types.str;
-      default = "";
+      type = types.listOf types.str;
+      default = [ ];
       description = "Options to pass to the JVM through the JVM_OPTS environment variable";
     };
   };
