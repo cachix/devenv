@@ -201,16 +201,15 @@ pkgs.writeScriptBin "devenv" ''
       echo
       candidates=$(${pkgs.findutils}/bin/find $GC_ROOT -type l)
 
-      before=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $candidates -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
-      paths=$($CUSTOM_NIX/bin/nix-store -qR $candidates)
+      before=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $candidates -r -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
 
-      echo "Found $(echo $paths | wc -w) store paths of sum size $(( $before / 1024 / 1024 )) MB."
+      echo "Found $(echo $candidates | wc -l) environments of sum size $(( $before / 1024 / 1024 )) MB."
       echo
       echo "Garbage collecting ..."
       echo
       echo "Note: If you'd like this command to run much faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
 
-      echo $paths  | tr ' ' '\n' | ${pkgs.parallel}/bin/parallel -j8 $CUSTOM_NIX/bin/nix $NIX_FLAGS store delete >/dev/null 2>/dev/null
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS store delete --recursive $candidates
   
       # after GC delete links again
       for link in $(${pkgs.findutils}/bin/find $GC_ROOT -type l); do
@@ -219,9 +218,7 @@ pkgs.writeScriptBin "devenv" ''
         fi
       done
 
-      after=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $(${pkgs.findutils}/bin/find $GC_ROOT -type l) -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
-      echo
-      echo "Done. Saved $((($before - $after) / 1024 / 1024 )) MB in $SECONDS seconds."
+      echo "Done in $SECONDS seconds."
       ;;
     *)
       echo "https://devenv.sh (version ${version}): Fast, Declarative, Reproducible, and Composable Developer Environments"
