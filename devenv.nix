@@ -2,7 +2,7 @@
 
 {
   packages = [
-    (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
+    #(import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
     pkgs.python3Packages.virtualenv
     pkgs.python3Packages.cairocffi
     pkgs.yaml2json
