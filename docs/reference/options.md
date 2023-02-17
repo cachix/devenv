@@ -2323,6 +2323,11 @@ Scan Nix files for dead code (unused variable bindings).
 Dhall code formatter.
 
 
+**`dune-opam-sync`**
+
+Check that Dune-generated OPAM files are in sync.
+
+
 **`editorconfig-checker`**
 
 Verify that the files are in harmony with the `.editorconfig`.
@@ -2438,6 +2443,16 @@ Nix code prettifier.
 Nix code prettifier.
 
 
+**`ocp-indent`**
+
+A tool to indent OCaml code.
+
+
+**`opam-lint`**
+
+OCaml package manager configuration checker.
+
+
 **`ormolu`**
 
 Haskell code prettifier.
@@ -2521,6 +2536,11 @@ A simple Haskell code prettifier
 **`stylua`**
 
 An Opinionated Lua Code Formatter.
+
+
+**`taplo`**
+
+Format TOML files with taplo fmt
 
 
 **`terraform-format`**
