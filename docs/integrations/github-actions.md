@@ -15,7 +15,7 @@ jobs:
     runs-on: {{ '${{ matrix.os }}' }}
     steps:
     - uses: actions/checkout@v3
-    - uses: cachix/install-nix-action@v18
+    - uses: cachix/install-nix-action@v19
     - uses: cachix/cachix-action@v12
       with:
         name: devenv
