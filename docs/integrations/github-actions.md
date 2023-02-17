@@ -7,6 +7,9 @@ on:
   pull_request:
   push:
 
+env:
+  NIX_CONFIG: "access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}"
+  
 jobs:
   tests:
     strategy:
