@@ -56,8 +56,8 @@ in
     package = lib.mkOption {
       type = types.package;
       description = "Which version of Cassandra to use";
-      default = pkgs.cassandra;
-      defaultText = lib.literalExpression "pkgs.cassandra";
+      default = pkgs.cassandra_4;
+      defaultText = lib.literalExpression "pkgs.cassandra_4";
       example = lib.literalExpression "pkgs.cassandra_4;";
     };
 
