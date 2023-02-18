@@ -31,7 +31,7 @@
                then devenvpath
                else throw (devenvpath + " file does not exist for input ''${name}.");
         project = pkgs.lib.evalModules {
-          specialArgs = inputs // { inherit inputs pkgs; };
+          specialArgs = { inherit inputs pkgs; };
           modules = [
             (inputs.devenv.modules + /top-level.nix)
             { devenv.cliVersion = "${version}"; }

@@ -23,7 +23,7 @@
     inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }:
+  outputs = { self, nixpkgs, pre-commit-hooks, nix, ... } @ inputs:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
@@ -37,7 +37,7 @@
               ./src/modules/top-level.nix
               { devenv.warnOnNewVersion = false; }
             ];
-            specialArgs = { inherit pre-commit-hooks pkgs; };
+            specialArgs = { inherit inputs pkgs; };
           };
           options = pkgs.nixosOptionsDoc {
             options = builtins.removeAttrs eval.options [ "_module" ];
@@ -86,12 +86,8 @@
       lib = {
         mkConfig = { pkgs, inputs, modules }:
           let
-            moduleInputs = { inherit pre-commit-hooks; } // inputs;
             project = inputs.nixpkgs.lib.evalModules {
-              specialArgs = moduleInputs // {
-                inherit pkgs;
-                inputs = moduleInputs;
-              };
+              specialArgs = { inherit pkgs inputs; };
               modules = [
                 (self.modules + /top-level.nix)
                 ({ config, ... }: {

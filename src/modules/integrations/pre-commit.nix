@@ -1,5 +1,14 @@
-{ pkgs, self, lib, pre-commit-hooks, config, ... }:
+{ pkgs, self, lib, inputs, config, ... }:
+let
 
+  pre-commit-hooks = inputs.pre-commit-hooks
+    or (throw ''
+    To use integrations.pre-commit, you need to add the following to your flake inputs:
+
+      inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+  '');
+
+in
 {
   options.pre-commit = lib.mkOption {
     type = lib.types.submoduleWith {
