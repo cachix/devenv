@@ -20,11 +20,18 @@ let
   failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
 
   performAssertions =
+    let
+      formatAssertionMessage = message:
+        let
+          lines = lib.splitString "\n" message;
+        in
+        "- ${lib.concatStringsSep "\n  " lines}";
+    in
     if failedAssertions != [ ]
     then
       throw ''
         Failed assertions:
-        ${lib.concatStringsSep "\n" (builtins.map (x: "- ${x}") failedAssertions)}
+        ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
     else lib.id;
 in
