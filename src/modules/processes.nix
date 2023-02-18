@@ -54,8 +54,8 @@ let
 
     process-compose = ''
       ${pkgs.process-compose}/bin/process-compose --config ${config.procfile} \
-         --port $PC_HTTP_PORT \
-         --tui=$PC_TUI_ENABLED &
+         --port ''${PC_HTTP_PORT:-${toString config.process.process-compose.port}} \
+         --tui=''${PC_TUI_ENABLED:-${toString config.process.process-compose.tui}} &
     '';
 
     hivemind = ''
