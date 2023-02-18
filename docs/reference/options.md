@@ -4141,6 +4141,164 @@ list of string
 ```
 
 
+## services.cassandra.allowClients
+Enables or disables the native transport server (CQL binary protocol)
+
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
+## services.cassandra.clusterName
+The name of the cluster
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"Test Cluster"
+```
+
+
+
+
+## services.cassandra.enable
+Whether to enable Add Cassandra process script..
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.cassandra.extraConfig
+Extra options to be merged into `cassandra.yaml` as nix attribute set.
+
+
+*_Type_*
+```
+attribute set
+```
+
+
+*_Default_*
+```
+{ }
+```
+
+
+*_Example_*
+```
+{
+  commitlog_sync_batch_window_in_ms = 3;
+}
+```
+
+
+## services.cassandra.jvmOpts
+Options to pass to the JVM through the JVM_OPTS environment variable
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+[ ]
+```
+
+
+
+
+## services.cassandra.listenAddress
+Listen address
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"127.0.0.1"
+```
+
+
+*_Example_*
+```
+"127.0.0.1"
+```
+
+
+## services.cassandra.package
+Which version of Cassandra to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+pkgs.cassandra_4
+```
+
+
+*_Example_*
+```
+pkgs.cassandra_4;
+```
+
+
+## services.cassandra.seedAddresses
+The addresses of hosts designated as contact points of the cluster
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+[
+  "127.0.0.1"
+]
+```
+
+
+
+
 ## services.elasticsearch.cluster_name
 Elasticsearch name that identifies your cluster for auto-discovery.
 
