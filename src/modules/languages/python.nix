@@ -31,7 +31,7 @@ in
     languages.python.venv.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
     packages = [
-      pkgs.poetry
+      cfg.package
     ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
 
     env.PYTHONPATH = "${config.env.DEVENV_PROFILE}/${cfg.package.sitePackages}";
