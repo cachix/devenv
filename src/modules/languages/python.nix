@@ -43,12 +43,11 @@ let
 
       if [ "$ACTUAL_POETRY_CHECKSUM" != "$EXPECTED_POETRY_CHECKSUM" ]
       then
-        poetry install --no-interaction --quiet
+        ${cfg.poetry.package}/bin/poetry install --no-interaction --quiet
         echo "$ACTUAL_POETRY_CHECKSUM" > "$POETRY_CHECKSUM_FILE"
       fi
     fi
   '';
-
 in
 {
   options.languages.python = {
@@ -67,8 +66,14 @@ in
       enable = lib.mkEnableOption "poetry";
       package = lib.mkOption {
         type = lib.types.package;
-        default = cfg.package.pkgs.poetry-core;
-        defaultText = lib.literalExpression "config.languages.python.package.pkgs.poetry";
+        default = pkgs.poetry.override {
+          python3 = cfg.package;
+        };
+        defaultText = lib.literalExpression ''
+          pkgs.poetry.override {
+            python3 = config.languages.python.package;
+          }
+        '';
         description = "The Poetry package to use.";
       };
     };
