@@ -11,7 +11,11 @@ in
       type = lib.types.package;
       default = pkgs.gforth;
       defaultText = lib.literalExpression "pkgs.gforth";
-      description = "The Forth package to use, defaults to GNU projects forth implementation.";
+      description =
+	''
+	  The Forth package to use, defaults to GNU projects forth implementation.
+	  Other Forth implementations available in nixpkgs: pkgs._4th and pkgs.pforth.
+	'';
     };
   };
 
