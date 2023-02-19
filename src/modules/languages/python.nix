@@ -2,6 +2,43 @@
 
 let
   cfg = config.languages.python;
+
+  initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
+    if [ ! -d ${config.env.DEVENV_STATE}/venv ]
+    then
+      python -m venv ${config.env.DEVENV_STATE}/venv
+    fi
+    source ${config.env.DEVENV_STATE}/venv/bin/activate
+  '';
+
+  initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
+    if [ ! -f pyproject.toml ]
+    then
+      echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
+    elif [ ! -f poetry.lock ]
+    then
+      echo "No poetry.lock found. Run 'poetry install' to create one from pyproject.toml." >&2
+    else
+      # Avoid running "poetry install" for every shell.
+      # Only run it when the "poetry.lock" file has changed.
+      # We do this by storing a hash of "poetry.lock" in venv.
+      ACTUAL_POETRY_CHECKSUM="$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock)"
+      POETRY_CHECKSUM_FILE="${config.env.DEVENV_STATE}/poetry.lock.checksum"
+      if [ -f "$POETRY_CHECKSUM_FILE" ]
+      then
+        read -r EXPECTED_POETRY_CHECKSUM < "$POETRY_CHECKSUM_FILE"
+      else
+        EXPECTED_POETRY_CHECKSUM=""
+      fi
+
+      if [ "$ACTUAL_POETRY_CHECKSUM" != "$EXPECTED_POETRY_CHECKSUM" ]
+      then
+        poetry install --no-interaction --quiet
+        echo "$ACTUAL_POETRY_CHECKSUM" > "$POETRY_CHECKSUM_FILE"
+      fi
+    fi
+  '';
+
 in
 {
   options.languages.python = {
@@ -38,37 +75,9 @@ in
 
     enterShell = lib.concatStringsSep "\n" (
       (lib.optional cfg.venv.enable ''
-        if [ ! -d ${config.env.DEVENV_STATE}/venv ]
-        then
-          python -m venv ${config.env.DEVENV_STATE}/venv
-        fi
-        source ${config.env.DEVENV_STATE}/venv/bin/activate
+        source ${initVenvScript}
       '') ++ (lib.optional cfg.poetry.enable ''
-        if [ ! -f pyproject.toml ]
-        then
-          echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
-        elif [ ! -f poetry.lock ]
-        then
-          echo "No poetry.lock found. Run 'poetry install' to create one from pyproject.toml." >&2
-        else
-          # Avoid running "poetry install" for every shell.
-          # Only run it when the "poetry.lock" file has changed.
-          # We do this by storing a hash of "poetry.lock" in venv.
-          ACTUAL_POETRY_CHECKSUM="$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock)"
-          POETRY_CHECKSUM_FILE="${config.env.DEVENV_STATE}/poetry.lock.checksum"
-          if [ -f "$POETRY_CHECKSUM_FILE" ]
-          then
-            read -r EXPECTED_POETRY_CHECKSUM < "$POETRY_CHECKSUM_FILE"
-          else
-            EXPECTED_POETRY_CHECKSUM=""
-          fi
-
-          if [ "$ACTUAL_POETRY_CHECKSUM" != "$EXPECTED_POETRY_CHECKSUM" ]
-          then
-            poetry install --no-interaction --quiet
-            echo "$ACTUAL_POETRY_CHECKSUM" > "$POETRY_CHECKSUM_FILE"
-          fi
-        fi
+        source ${initPoetryScript}
       '')
     );
   };
