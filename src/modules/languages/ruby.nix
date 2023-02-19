@@ -51,6 +51,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.version == null || cfg.versionFile == null;
+        message = ''
+          `languages.ruby.version` and `languages.ruby.versionFile` are both set.
+          Only one of the two may be set. Remove one of the two options.
+        '';
+      }
+    ];
+
     # enable C tooling by default so native extensions can be built
     languages.c.enable = lib.mkDefault true;
 
