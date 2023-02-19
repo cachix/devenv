@@ -4,9 +4,19 @@ let
   cfg = config.languages.python;
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
-    if [ ! -d ${config.env.DEVENV_STATE}/venv ]
+    if [ ! -L ${config.env.DEVENV_STATE}/venv/devenv-profile ] \
+    || [ "$(${pkgs.coreutils}/bin/readlink ${config.env.DEVENV_STATE}/venv/devenv-profile)" != "$DEVENV_PROFILE" ]
     then
+      if [ -d ${config.env.DEVENV_STATE}/venv ]
+      then
+        echo "Rebuilding Python venv..."
+        ${pkgs.coreutils}/bin/rm -rf ${config.env.DEVENV_STATE}/venv
+      fi
+      ${lib.optionalString cfg.poetry.enable ''
+        [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
+      ''}
       python -m venv ${config.env.DEVENV_STATE}/venv
+      ln -sf $DEVENV_PROFILE ${config.env.DEVENV_STATE}/venv/devenv-profile
     fi
     source ${config.env.DEVENV_STATE}/venv/bin/activate
   '';
