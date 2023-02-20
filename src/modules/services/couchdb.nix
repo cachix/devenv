@@ -42,16 +42,8 @@ let
   '';
 in
 {
-  imports = [
-    (lib.mkRenamedOptionModule [ "couchdb" "enable" ] [
-      "services"
-      "couchdb"
-      "enable"
-    ])
-  ];
-
   options.services.couchdb = {
-    enable = lib.mkEnableOption "Add CouchDB process script.";
+    enable = lib.mkEnableOption "CouchDB process";
 
     package = lib.mkOption {
       type = types.package;
