@@ -1445,7 +1445,10 @@ package
 
 *_Default_*
 ```
-config.languages.python.package.pkgs.poetry
+pkgs.poetry.override {
+  python3 = config.languages.python.package;
+}
+
 ```
 
 
