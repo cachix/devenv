@@ -82,7 +82,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [ cfg.package startScript ];
+    packages = [ cfg.package ];
     env.ERL_FLAGS = "-couch_ini ${configFile}";
     processes.couchdb.exec = "${startScript}/bin/start-couchdb";
   };
