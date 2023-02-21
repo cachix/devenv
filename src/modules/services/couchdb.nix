@@ -38,32 +38,69 @@ in
     };
 
     settings = lib.mkOption {
-      # type = settingsFormat.type;
       type = lib.types.submodule {
         freeformType = settingsFormat.type;
         options.couchdb.database_dir = lib.mkOption {
           type = lib.types.path;
           default = baseDir;
           description = ''
-
+            Specifies location of CouchDB database files (*.couch named). This
+            location should be writable and readable for the user the CouchDB
+            service runs as (couchdb by default).
           '';
         };
         options.couchdb.single_node = lib.mkOption {
           type = lib.types.bool;
           default = true;
           description = ''
-
+            When this configuration setting is set to true, automatically create
+            the system databases on startup. Must be set false for a clustered
+            CouchDB installation.
           '';
         };
         options.couchdb.viewIndexDir = lib.mkOption {
           type = lib.types.path;
           default = baseDir;
+          description = ''
+            Specifies location of CouchDB view index files. This location should
+            be writable and readable for the user that runs the CouchDB service
+            (couchdb by default).
+          '';
         };
         options.couchdb.uriFile = lib.mkOption {
           type = lib.types.path;
           default = "${baseDir}/couchdb.uri";
           description = ''
+            This file contains the full URI that can be used to access this
+            instance of CouchDB. It is used to help discover the port CouchDB is
+            running on (if it was set to 0 (e.g. automatically assigned any free
+            one). This file should be writable and readable for the user that
+            runs the CouchDB service (couchdb by default).
+          '';
+        };
 
+
+        options.chttpd.bindAddress = lib.mkOption {
+          type = lib.types.str;
+          default = "127.0.0.1";
+          description = lib.mdDoc ''
+            Defines the IP address by which CouchDB will be accessible.
+          '';
+        };
+
+        options.chttpd.port = lib.mkOption {
+          type = lib.types.port;
+          default = 5984;
+          description = lib.mdDoc ''
+            Defined the port number to listen.
+          '';
+        };
+
+        options.chttpd.logFile = lib.mkOption {
+          type = lib.types.path;
+          default = "${baseDir}/couchdb.log";
+          description = lib.mdDoc ''
+            Specifies the location of file for logging output.
           '';
         };
       };
