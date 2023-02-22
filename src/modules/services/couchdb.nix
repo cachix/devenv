@@ -79,7 +79,6 @@ in
           '';
         };
 
-
         options.chttpd.bindAddress = lib.mkOption {
           type = lib.types.str;
           default = "127.0.0.1";
@@ -104,33 +103,34 @@ in
           '';
         };
       };
+      description = ''
+        CouchDB configuration.
+        to know more about all settings, look at:
+        <link
+          xlink:href="https://docs.couchdb.org/en/stable/config/couchdb.html"
+        />
+      '';
+
+      example = lib.literalExpression ''
+        {
+          couchdb = {
+            database_dir = baseDir;
+            single_node = true;
+            viewIndexDir = baseDir;
+            uriFile = "${baseDir}/couchdb.uri";
+          };
+          admins = {
+            "admin_username" = "pass";
+          };
+          chttpd = {
+            bindAddress = "127.0.0.1";
+            port = 5984;
+            logFile = "${baseDir}/couchdb.log";
+          };
+        }
+      '';
+      default = { };
     };
-    description = ''
-      CouchDB configuration.
-      to know more about all settings, look at:
-      <link
-        xlink:href="https://docs.couchdb.org/en/stable/config/couchdb.html"
-      />
-    '';
-    default = { };
-    example = lib.literalExpression ''
-      {
-        couchdb = {
-          database_dir = baseDir;
-          single_node = true;
-          viewIndexDir = baseDir;
-          uriFile = "${baseDir}/couchdb.uri";
-        };
-        admins = {
-          "admin_username" = "pass";
-        };
-        chttpd = {
-          bindAddress = "127.0.0.1";
-          port = 5984;
-          logFile = "${baseDir}/couchdb.log";
-        };
-      }
-    '';
   };
   config = lib.mkIf cfg.enable {
     packages = [ cfg.package ];
