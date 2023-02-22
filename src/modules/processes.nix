@@ -33,9 +33,10 @@ let
 
   implementation = config.process.implementation;
   implementation-options = config.process.${implementation};
+  envValSerializer = if implementation == "process-compose" then toString else builtins.toJSON;
   envList =
     lib.mapAttrsToList
-      (name: value: "${name}=${builtins.toJSON value}")
+      (name: value: "${name}=${envValSerializer value}")
       (if config.devenv.flakesIntegration then
       # avoid infinite recursion in the scenario the `config` parameter is
       # used in a `processes` declaration inside a devenv module.
