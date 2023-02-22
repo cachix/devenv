@@ -42,6 +42,8 @@
           options = pkgs.nixosOptionsDoc {
             options = builtins.removeAttrs eval.options [ "_module" ];
 
+            warningsAreErrors = false;
+
             # Unpack mdDoc until the new upstream markdown renderer is ready
             transformOptions = opt: (
               if (attrByPath [ "description" "_type" ] "" opt == "mdDoc") then
