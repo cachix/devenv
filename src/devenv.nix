@@ -122,7 +122,7 @@ pkgs.writeScriptBin "devenv" ''
 
       paths=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --impure --no-link --print-out-paths "''${builds[@]}")
  
-      if [ $exec -eq 1 ]; then
+      if [[ $exec -eq 1 ]]; then
         $paths "$@"
       else
         echo "$paths"
