@@ -1,5 +1,5 @@
 To get started using [Codespaces](https://github.com/features/codespaces),
-you flip a toogle:
+you flip a toggle:
 
 
 ```nix title="devenv.nix"
