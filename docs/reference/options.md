@@ -4302,6 +4302,222 @@ list of string
 
 
 
+## services.couchdb.enable
+Whether to enable CouchDB process.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## services.couchdb.package
+Which version of CouchDB to use
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+pkgs.couchdb3
+```
+
+
+
+
+## services.couchdb.settings
+CouchDB configuration.
+to know more about all settings, look at:
+<link
+  xlink:href="https://docs.couchdb.org/en/stable/config/couchdb.html"
+/>
+
+
+*_Type_*
+```
+attribute set of attribute set of (INI atom (null, bool, int, float or string))
+```
+
+
+*_Default_*
+```
+{ }
+```
+
+
+*_Example_*
+```
+{
+  couchdb = {
+    database_dir = baseDir;
+    single_node = true;
+    viewIndexDir = baseDir;
+    uriFile = "/.devenv/state/couchdb/couchdb.uri";
+  };
+  admins = {
+    "admin_username" = "pass";
+  };
+  chttpd = {
+    bindAddress = "127.0.0.1";
+    port = 5984;
+    logFile = "/.devenv/state/couchdb/couchdb.log";
+  };
+}
+
+```
+
+
+## services.couchdb.settings.chttpd.bindAddress
+Defines the IP address by which CouchDB will be accessible.
+
+
+*_Type_*
+```
+string
+```
+
+
+*_Default_*
+```
+"127.0.0.1"
+```
+
+
+
+
+## services.couchdb.settings.chttpd.logFile
+Specifies the location of file for logging output.
+
+
+*_Type_*
+```
+path
+```
+
+
+*_Default_*
+```
+"/.devenv/state/couchdb/couchdb.log"
+```
+
+
+
+
+## services.couchdb.settings.chttpd.port
+Defined the port number to listen.
+
+
+*_Type_*
+```
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+```
+
+
+*_Default_*
+```
+5984
+```
+
+
+
+
+## services.couchdb.settings.couchdb.database_dir
+Specifies location of CouchDB database files (*.couch named). This
+location should be writable and readable for the user the CouchDB
+service runs as (couchdb by default).
+
+
+*_Type_*
+```
+path
+```
+
+
+*_Default_*
+```
+"/.devenv/state/couchdb"
+```
+
+
+
+
+## services.couchdb.settings.couchdb.single_node
+When this configuration setting is set to true, automatically create
+the system databases on startup. Must be set false for a clustered
+CouchDB installation.
+
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+true
+```
+
+
+
+
+## services.couchdb.settings.couchdb.uriFile
+This file contains the full URI that can be used to access this
+instance of CouchDB. It is used to help discover the port CouchDB is
+running on (if it was set to 0 (e.g. automatically assigned any free
+one). This file should be writable and readable for the user that
+runs the CouchDB service (couchdb by default).
+
+
+*_Type_*
+```
+path
+```
+
+
+*_Default_*
+```
+"/.devenv/state/couchdb/couchdb.uri"
+```
+
+
+
+
+## services.couchdb.settings.couchdb.viewIndexDir
+Specifies location of CouchDB view index files. This location should
+be writable and readable for the user that runs the CouchDB service
+(couchdb by default).
+
+
+*_Type_*
+```
+path
+```
+
+
+*_Default_*
+```
+"/.devenv/state/couchdb"
+```
+
+
+
+
 ## services.elasticsearch.cluster_name
 Elasticsearch name that identifies your cluster for auto-discovery.
 
