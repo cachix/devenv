@@ -1,0 +1,4 @@
+{ ... }:
+{
+  services.couchdb.enable = true;
+}
