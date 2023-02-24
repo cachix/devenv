@@ -183,6 +183,44 @@ attribute set of list of string
 
 
 
+## languages.ansible.enable
+Whether to enable tools for Ansible development.
+
+*_Type_*
+```
+boolean
+```
+
+
+*_Default_*
+```
+false
+```
+
+
+*_Example_*
+```
+true
+```
+
+
+## languages.ansible.package
+The Ansible package to use.
+
+*_Type_*
+```
+package
+```
+
+
+*_Default_*
+```
+pkgs.ansible
+```
+
+
+
+
 ## languages.c.enable
 Whether to enable tools for C development.
 
