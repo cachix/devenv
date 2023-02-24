@@ -1,6 +1,7 @@
 { pkgs, ... }: {
 
   # Enable all languages tooling!
+  languages.ansible.enable = true;
   languages.c.enable = true;
   languages.clojure.enable = true;
   languages.cplusplus.enable = true;
