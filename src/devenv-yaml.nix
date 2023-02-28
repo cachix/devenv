@@ -42,5 +42,5 @@ pkgs.writers.writePython3Bin "devenv-yaml" { libraries = with pkgs.python3Packag
       f.write(json.dumps(devenv))
 
   with open(os.path.join(devenv_dir, "imports.txt"), 'w') as f:
-      f.write(" ".join(devenv.get('imports', [])))
+      f.write("\n".join(devenv.get('imports', [])))
 ''
