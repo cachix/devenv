@@ -83,10 +83,13 @@ pkgs.writeScriptBin "devenv" ''
         $procfilescript
       fi
       ;;
+    assemble)
+      assemble
+      ;;
     print-dev-env)
       shell
       echo "$env"
-    ;;
+      ;;
     shell)
       shell
       if [ $# -eq 0 ]; then
