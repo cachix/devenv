@@ -29,11 +29,12 @@ pkgs.writeScriptBin "devenv" ''
     export DEVENV_DIR="$(pwd)/.devenv"
     export DEVENV_GC="$DEVENV_DIR/gc"
     mkdir -p "$DEVENV_GC"
-    # TODO: validate devenv.yaml using jsonschema
     if [[ -f devenv.yaml ]]; then
-      cat devenv.yaml | ${pkgs.yaml2json}/bin/yaml2json > "$DEVENV_DIR/devenv.json"
+      ${import ./devenv-yaml.nix { inherit pkgs; }}/bin/devenv-yaml "$DEVENV_DIR"
     else
       [[ -f "$DEVENV_DIR/devenv.json" ]] && rm "$DEVENV_DIR/devenv.json"
+      [[ -f "$DEVENV_DIR/flake.json" ]] && rm "$DEVENV_DIR/flake.json"
+      [[ -f "$DEVENV_DIR/imports.txt" ]] && rm "$DEVENV_DIR/imports.txt"
     fi
     cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
     chmod +w "$FLAKE_FILE"
