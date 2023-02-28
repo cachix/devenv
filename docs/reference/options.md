@@ -1,5 +1,29 @@
 # devenv.nix options
 
+## certificates
+List of domains to generate certificates for.
+
+*_Type_*
+```
+list of string
+```
+
+
+*_Default_*
+```
+[ ]
+```
+
+
+*_Example_*
+```
+[
+  "example.com"
+  "*.example.com"
+]
+```
+
+
 ## devcontainer.enable
 Whether to enable generation .devcontainer.json for devenv integration.
 
