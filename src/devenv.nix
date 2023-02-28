@@ -275,7 +275,11 @@ pkgs.writeScriptBin "devenv" ''
         echo "search NAME:              Search packages matching NAME in nixpkgs input."
         echo "shell:                    Activate the developer environment."
         echo "shell CMD [args]:         Run CMD with ARGS in the developer environment. Useful when scripting."
+<<<<<<< HEAD
         echo "container [options] NAME  Generate a container for NAME. See "devenv container --help" and http://devenv.sh/containers"
+=======
+        echo "container [options] NAME  Generate a container for NAME. See `devenv container --help` and http://devenv.sh/containers"
+>>>>>>> 89d49ac (v0.6 release post)
         echo "info:                     Print information about the current developer environment."
         echo "update:                   Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
         echo "up:                       Starts processes in foreground. See http://devenv.sh/processes"
