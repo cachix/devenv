@@ -20,7 +20,7 @@ jobs:
       with:
         name: devenv
     - name: Install devenv.sh
-      run: nix profile install github:cachix/devenv/v0.5
+      run: nix profile install github:cachix/devenv/v0.5.1
       shell: sh
     - run: devenv ci
     - run: devenv shell echo ok
