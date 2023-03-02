@@ -229,7 +229,7 @@ in
 
       process-compose = {
         # SIGINT (= 2) for faster shutdown: https://www.postgresql.org/docs/current/server-shutdown.html
-        shutdown.signal = lib.mkDefault 2;
+        shutdown.signal = 2;
 
         readiness_probe = {
           exec.command = "${cfg.package}/bin/pg_isready -h $PGDATA -d template1";
@@ -241,7 +241,7 @@ in
         };
 
         # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
-        availability.restart = lib.mkDefault "on_failure";
+        availability.restart = "on_failure";
       };
     };
   };
