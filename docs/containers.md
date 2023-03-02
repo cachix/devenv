@@ -28,7 +28,7 @@ Given a simple environment using Python:
 }
 ```
 
-Generate a container specification that enters the envirinoment:
+Generate a container specification that enters the environment:
 
 ```shell-session
 $ devenv container shell
