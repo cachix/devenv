@@ -12,7 +12,7 @@ After about two months of active development, I'm happy to announce [devenv 0.6]
 This release comes with the most notable improvements based on the feedback from existing users:
 
 - Adding the ability to [generate containers](#generating-containers).
-- [Faster activation](#faster-activation) of the developer environment.
+- [Instant shell activation](#instant-shell-activation) of the developer environment.
 - [Hosts and ceritifcates](#hosts-and-certificates) provisioning.
 - [New devenv.yaml options](#allowunfree-and-overlays): `allowUnfree` and `overlays`.
 
@@ -53,7 +53,7 @@ You can read more in the new [Containers](/containers/) section of the documenta
 - [How to copy the containers to a registry](/containers/#copying-container-to-a-registry)
 - [How to conditionalize environment based on native/container target](/containers/#changing-environment-based-on-the-build-type)
 
-## Faster activation
+## Instant shell activation
 
 Especially **monorepo** developer environments can sometimes be even **a few gigabytes** of size, taking **a few seconds** for the environment to be activated.
 
