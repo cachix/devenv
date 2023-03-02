@@ -1,21 +1,40 @@
 # devenv.nix options
 
+## packages
+
+A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level.nix)
+
+
+
 ## certificates
+
 List of domains to generate certificates for.
 
-*_Type_*
-```
+*Type:*
 list of string
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   "example.com"
@@ -23,1078 +42,1493 @@ list of string
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/mkcert\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/mkcert.nix)
 
-## devcontainer.enable
+
+
+## container\.isBuilding
+
+Set to true when the environment is building a container.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers
+
+Container specifications that can be built, copied and ran using `devenv container`.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.copyToRoot
+
+Add a path to the container. Defaults to the whole git repo.
+
+
+
+*Type:*
+null or path
+
+
+
+*Default:*
+` "self" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.defaultCopyArgs
+
+Default arguments to pass to `skopeo copy`.
+You can override them by passing arguments to the script.
+
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.entrypoint
+
+Entrypoint of the container.
+
+
+
+*Type:*
+list of anything
+
+
+
+*Default:*
+` [ entrypoint ] `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.isBuilding
+
+Set to true when the environment is building this container.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.name
+
+Name of the container.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` "dummy-‹name›" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.registry
+
+Registry to push the container to.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` "docker://" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.startupCommand
+
+Command to run in the container.
+
+
+
+*Type:*
+null or string or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## containers\.\<name>\.version
+
+Version/tag of the container.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` "latest" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/containers.nix)
+
+
+
+## devcontainer\.enable
+
 Whether to enable generation .devcontainer.json for devenv integration.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/devcontainer\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/devcontainer.nix)
 
 
-## devenv.flakesIntegration
+
+## devenv\.flakesIntegration
+
 Tells if devenv is being imported by a flake.nix file
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## devenv.latestVersion
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/update-check\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/update-check.nix)
+
+
+
+## devenv\.latestVersion
+
 The latest version of devenv.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"0.5.1"
-```
 
 
 
+*Default:*
+` "0.5.1" `
 
-## devenv.warnOnNewVersion
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/update-check\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/update-check.nix)
+
+
+
+## devenv\.warnOnNewVersion
+
 Whether to warn when a new version of devenv is available.
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## difftastic.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/update-check\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/update-check.nix)
+
+
+
+## difftastic\.enable
+
 Integrate difftastic into git: https://difftastic.wilfred.me.uk/.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
 
+*Default:*
+` false `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/difftastic\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/difftastic.nix)
 
 
 
 ## enterShell
+
 Bash code to execute when entering the shell.
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+strings concatenated with “\\n”
 
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level.nix)
 
 
 
 ## env
+
 Environment variables to be exposed inside the developer environment.
 
-*_Type_*
-```
+
+
+*Type:*
 lazy attribute set of anything
-```
 
 
-*_Default_*
-```
-{ }
-```
 
+*Default:*
+` { } `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level.nix)
 
 
 
 ## hosts
+
 List of hosts entries.
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of string
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   "example.com" = "127.0.0.1";
 }
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/hostctl\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/hostctl.nix)
+
+
 
 ## hostsProfileName
+
 Profile name to use.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
-```
-"devenv-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-```
 
+*Default:*
+` "devenv-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/hostctl\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/hostctl.nix)
 
 
 
 ## infoSections
+
 Information about the environment
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of list of string
-```
-
-
-*_Default_*
-```
-{ }
-```
 
 
 
+*Default:*
+` { } `
 
-## languages.ansible.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/info\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/info.nix)
+
+
+
+## languages\.ansible\.enable
+
 Whether to enable tools for Ansible development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ansible\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ansible.nix)
 
 
-## languages.ansible.package
+
+## languages\.ansible\.package
+
 The Ansible package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.ansible
-```
 
 
 
+*Default:*
+` pkgs.ansible `
 
-## languages.c.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ansible\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ansible.nix)
+
+
+
+## languages\.c\.enable
+
 Whether to enable tools for C development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/c\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/c.nix)
 
 
-## languages.clojure.enable
+
+## languages\.clojure\.enable
+
 Whether to enable tools for Clojure development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/clojure\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/clojure.nix)
 
 
-## languages.cplusplus.enable
+
+## languages\.cplusplus\.enable
+
 Whether to enable tools for C++ development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/cplusplus\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/cplusplus.nix)
 
 
-## languages.crystal.enable
+
+## languages\.crystal\.enable
+
 Whether to enable Enable tools for Crystal development..
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/crystal\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/crystal.nix)
 
 
-## languages.cue.enable
+
+## languages\.cue\.enable
+
 Whether to enable tools for Cue development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/cue\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/cue.nix)
 
 
-## languages.cue.package
+
+## languages\.cue\.package
+
 The CUE package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.cue
-```
 
 
 
+*Default:*
+` pkgs.cue `
 
-## languages.dart.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/cue\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/cue.nix)
+
+
+
+## languages\.dart\.enable
+
 Whether to enable tools for Dart development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/dart\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/dart.nix)
 
 
-## languages.dart.package
+
+## languages\.dart\.package
+
 The Dart package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.dart
-```
 
 
 
+*Default:*
+` pkgs.dart `
 
-## languages.deno.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/dart\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/dart.nix)
+
+
+
+## languages\.deno\.enable
+
 Whether to enable tools for Deno development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/deno\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/deno.nix)
 
 
-## languages.dotnet.enable
+
+## languages\.dotnet\.enable
+
 Whether to enable tools for .NET development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/dotnet\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/dotnet.nix)
 
 
-## languages.elixir.enable
+
+## languages\.elixir\.enable
+
 Whether to enable tools for Elixir development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/elixir\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/elixir.nix)
 
 
-## languages.elixir.package
+
+## languages\.elixir\.package
+
 Which package of Elixir to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.elixir
-```
 
 
 
+*Default:*
+` pkgs.elixir `
 
-## languages.elm.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/elixir\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/elixir.nix)
+
+
+
+## languages\.elm\.enable
+
 Whether to enable tools for Elm development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/elm\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/elm.nix)
 
 
-## languages.erlang.enable
+
+## languages\.erlang\.enable
+
 Whether to enable tools for Erlang development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/erlang\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/erlang.nix)
 
 
-## languages.erlang.package
+
+## languages\.erlang\.package
+
 Which package of Erlang to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.erlang
-```
 
 
 
+*Default:*
+` pkgs.erlang `
 
-## languages.gawk.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/erlang\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/erlang.nix)
+
+
+
+## languages\.gawk\.enable
+
 Whether to enable tools for GNU Awk development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/gawk\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/gawk.nix)
 
 
-## languages.go.enable
+
+## languages\.go\.enable
+
 Whether to enable tools for Go development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/go\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/go.nix)
 
 
-## languages.go.package
+
+## languages\.go\.package
+
 The Go package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.go
-```
 
 
 
+*Default:*
+` pkgs.go `
 
-## languages.haskell.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/go\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/go.nix)
+
+
+
+## languages\.haskell\.enable
+
 Whether to enable tools for Haskell development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/haskell\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/haskell.nix)
 
 
-## languages.java.enable
+
+## languages\.java\.enable
+
 Whether to enable tools for Java development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java.nix)
 
 
-## languages.java.gradle.enable
+
+## languages\.java\.gradle\.enable
+
 Whether to enable gradle.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java.nix)
 
 
-## languages.java.gradle.package
+
+## languages\.java\.gradle\.package
+
 The Gradle package to use.
 The Gradle package by default inherits the JDK from `languages.java.jdk.package`.
 
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java.nix)
 
 
 
+## languages\.java\.jdk\.package
 
-
-
-## languages.java.jdk.package
 The JDK package to use.
 This will also become available as `JAVA_HOME`.
 
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
 
 
-*_Default_*
-```
-pkgs.jdk
-```
+
+*Default:*
+` pkgs.jdk `
 
 
-*_Example_*
-```
-pkgs.jdk8
-```
+
+*Example:*
+` pkgs.jdk8 `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java.nix)
 
 
-## languages.java.maven.enable
+
+## languages\.java\.maven\.enable
+
 Whether to enable maven.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java.nix)
 
 
-## languages.java.maven.package
+
+## languages\.java\.maven\.package
+
 The Maven package to use.
 The Maven package by default inherits the JDK from `languages.java.jdk.package`.
 
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/java.nix)
 
 
 
+## languages\.javascript\.enable
 
-
-
-## languages.javascript.enable
 Whether to enable tools for JavaScript development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/javascript\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/javascript.nix)
 
 
-## languages.javascript.package
+
+## languages\.javascript\.package
+
 The Node package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.nodejs
-```
 
 
 
+*Default:*
+` pkgs.nodejs `
 
-## languages.julia.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/javascript\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/javascript.nix)
+
+
+
+## languages\.julia\.enable
+
 Whether to enable tools for Julia development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/julia\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/julia.nix)
 
 
-## languages.julia.package
+
+## languages\.julia\.package
+
 The Julia package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.julia-bin
-```
 
 
 
+*Default:*
+` pkgs.julia-bin `
 
-## languages.kotlin.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/julia\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/julia.nix)
+
+
+
+## languages\.kotlin\.enable
+
 Whether to enable tools for Kotlin development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/kotlin\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/kotlin.nix)
 
 
-## languages.lua.enable
+
+## languages\.lua\.enable
+
 Whether to enable tools for Lua development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/lua\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/lua.nix)
 
 
-## languages.lua.package
+
+## languages\.lua\.package
+
 The Lua package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.lua
-```
 
 
 
+*Default:*
+` pkgs.lua `
 
-## languages.nim.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/lua\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/lua.nix)
+
+
+
+## languages\.nim\.enable
+
 Whether to enable tools for Nim development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/nim\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/nim.nix)
 
 
-## languages.nim.package
+
+## languages\.nim\.package
+
 The Nim package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.nim
-```
 
 
 
+*Default:*
+` pkgs.nim `
 
-## languages.nix.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/nim\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/nim.nix)
+
+
+
+## languages\.nix\.enable
+
 Whether to enable tools for Nix development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/nix\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/nix.nix)
 
 
-## languages.ocaml.enable
+
+## languages\.ocaml\.enable
+
 Whether to enable tools for OCaml development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ocaml\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ocaml.nix)
 
 
-## languages.ocaml.packages
+
+## languages\.ocaml\.packages
+
 The package set of OCaml to use
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set
-```
-
-
-*_Default_*
-```
-pkgs.ocaml-ng.ocamlPackages_4_12
-```
 
 
 
+*Default:*
+` pkgs.ocaml-ng.ocamlPackages_4_12 `
 
-## languages.perl.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ocaml\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ocaml.nix)
+
+
+
+## languages\.perl\.enable
+
 Whether to enable tools for Perl development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/perl\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/perl.nix)
 
 
-## languages.php.enable
+
+## languages\.php\.enable
+
 Whether to enable tools for PHP development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.php\.package
+
+Allows you to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide)
+to adjust the settings or add more extensions. You can find the
+extensions using `devenv search 'php extensions'`
+
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.php `
+
+
+
+*Example:*
+
+```
+pkgs.php.buildEnv {
+  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];
+  extraConfig = ''
+    memory_limit=1G
+  '';
+};
+
 ```
 
-
-*_Default_*
-```
-false
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
 
-*_Example_*
-```
-true
-```
+
+## languages\.php\.packages
+
+Attribute set of packages including composer
 
 
-## languages.php.extensions
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` pkgs `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.php\.packages\.composer
+
+composer package
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` pkgs.phpPackages.composer `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.php\.extensions
+
 PHP extensions to enable.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## languages.php.fpm.extraConfig
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.php\.fpm\.extraConfig
+
 Extra configuration that should be put in the global section of
 the PHP-FPM configuration file. Do not specify the options
 `error_log` or `daemonize` here, since they are generated by
 NixOS.
 
 
-*_Type_*
-```
-null or strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-null
-```
+*Type:*
+null or strings concatenated with “\\n”
 
 
 
+*Default:*
+` null `
 
-## languages.php.fpm.phpOptions
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.php\.fpm\.phpOptions
+
 Options appended to the PHP configuration file `php.ini`.
 
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+strings concatenated with “\\n”
 
 
-*_Example_*
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
 ```
 ''
   date.timezone = "CET"
 ''
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
-## languages.php.fpm.pools
+
+
+## languages\.php\.fpm\.pools
+
 PHP-FPM pools. If no pools are defined, the PHP-FPM
 service is disabled.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of (submodule)
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   mypool = {
@@ -1113,66 +1547,77 @@ attribute set of (submodule)
 }
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
-## languages.php.fpm.pools.&lt;name&gt;.extraConfig
+
+
+## languages\.php\.fpm\.pools\.\<name>\.extraConfig
+
 Extra lines that go into the pool configuration.
 See the documentation on `php-fpm.conf` for
 details on configuration directives.
 
 
-*_Type_*
-```
-null or strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-null
-```
+*Type:*
+null or strings concatenated with “\\n”
 
 
 
+*Default:*
+` null `
 
-## languages.php.fpm.pools.&lt;name&gt;.listen
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.php\.fpm\.pools\.\<name>\.listen
+
 The address on which to accept FastCGI requests.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
-```
-""
-```
+
+*Default:*
+` "" `
 
 
-*_Example_*
-```
-"/path/to/unix/socket"
-```
+
+*Example:*
+` "/path/to/unix/socket" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
 
-## languages.php.fpm.pools.&lt;name&gt;.phpEnv
+
+## languages\.php\.fpm\.pools\.\<name>\.phpEnv
+
 Environment variables used for this PHP-FPM pool.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of string
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   HOSTNAME = "$HOSTNAME";
@@ -1183,40 +1628,48 @@ attribute set of string
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
-## languages.php.fpm.pools.&lt;name&gt;.phpOptions
+
+
+## languages\.php\.fpm\.pools\.\<name>\.phpOptions
+
 Options appended to the PHP configuration file `php.ini` used for this PHP-FPM pool.
 
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
+
+
+*Type:*
+strings concatenated with “\\n”
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
 
 
+## languages\.php\.fpm\.pools\.\<name>\.phpPackage
 
-
-
-## languages.php.fpm.pools.&lt;name&gt;.phpPackage
 The PHP package to use for running this PHP-FPM pool.
 
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-phpfpm.phpPackage
-```
 
 
 
+*Default:*
+` phpfpm.phpPackage `
 
-## languages.php.fpm.pools.&lt;name&gt;.settings
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.php\.fpm\.pools\.\<name>\.settings
+
 PHP-FPM pool directives. Refer to the "List of pool directives" section of
 <https://www.php.net/manual/en/install.fpm.configuration.php">
 the manual for details. Note that settings names must be
@@ -1224,19 +1677,20 @@ enclosed in quotes (e.g. `"pm.max_children"` instead of
 `pm.max_children`).
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of (string or signed integer or boolean)
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   "pm" = "dynamic";
@@ -1249,28 +1703,35 @@ attribute set of (string or signed integer or boolean)
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
-## languages.php.fpm.pools.&lt;name&gt;.socket
+
+
+## languages\.php\.fpm\.pools\.\<name>\.socket
+
 Path to the Unix socket file on which to accept FastCGI requests.
 
 This option is read-only and managed by NixOS.
 
 
-*_Type_*
-```
-string
-```
+
+
+*Type:*
+string *(read only)*
 
 
 
+*Example:*
+` "/.devenv/state/php-fpm/<name>.sock" `
 
-*_Example_*
-```
-"/.devenv/state/php-fpm/<name>.sock"
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
 
-## languages.php.fpm.settings
+
+## languages\.php\.fpm\.settings
+
 PHP-FPM global directives. 
 
 Refer to the "List of global php-fpm.conf directives" section of
@@ -1284,228 +1745,188 @@ You need not specify the options `error_log` or `daemonize` here, since
 they are already set.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of (string or signed integer or boolean)
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 {
   error_log = "/.devenv/state/php-fpm/php-fpm.log";
 }
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
 
 
-## languages.php.ini
+## languages\.php\.ini
+
 PHP.ini directives. Refer to the "List of php.ini directives" of PHP's
 
 
-*_Type_*
-```
-null or strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+null or strings concatenated with “\\n”
 
 
 
+*Default:*
+` "" `
 
-## languages.php.package
-Allows you to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide)
-to adjust the settings or add more extensions. You can find the
-extensions using `devenv search 'php extensions'`
-
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.php
-```
-
-
-*_Example_*
-```
-pkgs.php.buildEnv {
-  extensions = { all, enabled }: with all; enabled ++ [ xdebug ];
-  extraConfig = ''
-    memory_limit=1G
-  '';
-};
-
-```
-
-
-## languages.php.packages
-Attribute set of packages including composer
-
-*_Type_*
-```
-submodule
-```
-
-
-*_Default_*
-```
-pkgs
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
 
 
 
+## languages\.php\.version
 
-## languages.php.packages.composer
-composer package
-
-*_Type_*
-```
-null or package
-```
-
-
-*_Default_*
-```
-pkgs.phpPackages.composer
-```
-
-
-
-
-## languages.php.version
 The PHP version to use.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## languages.purescript.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/php.nix)
+
+
+
+## languages\.purescript\.enable
+
 Whether to enable tools for PureScript development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/purescript\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/purescript.nix)
 
 
-## languages.purescript.package
+
+## languages\.purescript\.package
+
 The PureScript package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.purescript
-```
 
 
 
+*Default:*
+` pkgs.purescript `
 
-## languages.python.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/purescript\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/purescript.nix)
+
+
+
+## languages\.python\.enable
+
 Whether to enable tools for Python development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python.nix)
 
 
-## languages.python.package
+
+## languages\.python\.package
+
 The Python package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.python3
-```
 
 
 
+*Default:*
+` pkgs.python3 `
 
-## languages.python.poetry.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python.nix)
+
+
+
+## languages\.python\.poetry\.enable
+
 Whether to enable poetry.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python.nix)
 
 
-## languages.python.poetry.package
+
+## languages\.python\.poetry\.package
+
 The Poetry package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 pkgs.poetry.override {
   python3 = config.languages.python.package;
@@ -1513,227 +1934,259 @@ pkgs.poetry.override {
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python.nix)
 
 
 
-## languages.python.venv.enable
+## languages\.python\.venv\.enable
+
 Whether to enable Python virtual environment.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/python.nix)
 
 
-## languages.r.enable
+
+## languages\.r\.enable
+
 Whether to enable tools for R development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/r\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/r.nix)
 
 
-## languages.r.package
+
+## languages\.r\.package
+
 The R package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.R
-```
 
 
 
+*Default:*
+` pkgs.R `
 
-## languages.racket.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/r\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/r.nix)
+
+
+
+## languages\.racket\.enable
+
 Whether to enable tools for Racket development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/racket\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/racket.nix)
 
 
-## languages.racket.package
+
+## languages\.racket\.package
+
 The Racket package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.racket-minimal
-```
 
 
 
+*Default:*
+` pkgs.racket-minimal `
 
-## languages.raku.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/racket\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/racket.nix)
+
+
+
+## languages\.raku\.enable
+
 Whether to enable tools for Raku development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/raku\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/raku.nix)
 
 
-## languages.robotframework.enable
+
+## languages\.robotframework\.enable
+
 Whether to enable tools for Robot Framework development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/robotframework\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/robotframework.nix)
 
 
-## languages.robotframework.python
+
+## languages\.robotframework\.python
+
 The Python package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.python3
-```
 
 
 
+*Default:*
+` pkgs.python3 `
 
-## languages.ruby.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/robotframework\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/robotframework.nix)
+
+
+
+## languages\.ruby\.enable
+
 Whether to enable tools for Ruby development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby.nix)
 
 
-## languages.ruby.package
+
+## languages\.ruby\.package
+
 The Ruby package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.ruby_3_1
-```
 
 
 
+*Default:*
+` pkgs.ruby_3_1 `
 
-## languages.ruby.version
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby.nix)
+
+
+
+## languages\.ruby\.version
+
 The Ruby version to use.
 This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
 
 
-*_Default_*
-```
-null
-```
+
+*Default:*
+` null `
 
 
-*_Example_*
-```
-"3.2.1"
-```
+
+*Example:*
+` "3.2.1" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby.nix)
 
 
-## languages.ruby.versionFile
+
+## languages\.ruby\.versionFile
+
 The .ruby-version file path to extract the Ruby version from.
 This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
 When the `.ruby-version` file exists in the same directory as the devenv configuration, you can use:
@@ -1743,565 +2196,657 @@ languages.ruby.versionFile = ./.ruby-version;
 ```
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or path
-```
 
 
-*_Default_*
-```
-null
-```
+
+*Default:*
+` null `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 ./ruby-version
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/ruby.nix)
 
-## languages.rust.enable
+
+
+## languages\.rust\.enable
+
 Whether to enable tools for Rust development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
 
 
-## languages.rust.packages
+
+## languages\.rust\.packages
+
 Attribute set of packages including rustc and Cargo.
 
-*_Type_*
-```
+
+
+*Type:*
 submodule
-```
-
-
-*_Default_*
-```
-pkgs
-```
 
 
 
+*Default:*
+` pkgs `
 
-## languages.rust.packages.cargo
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.rust\.packages\.cargo
+
 cargo package
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.cargo
-```
 
 
 
+*Default:*
+` pkgs.cargo `
 
-## languages.rust.packages.clippy
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.rust\.packages\.clippy
+
 clippy package
 
-*_Type_*
-```
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.clippy
-```
 
 
 
+*Default:*
+` pkgs.clippy `
 
-## languages.rust.packages.rust-analyzer
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.rust\.packages\.rust-analyzer
+
 rust-analyzer package
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.rust-analyzer
-```
 
 
 
+*Default:*
+` pkgs.rust-analyzer `
 
-## languages.rust.packages.rust-src
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.rust\.packages\.rust-src
+
 rust-src package
 
-*_Type_*
-```
+
+
+*Type:*
 package or string
-```
-
-
-*_Default_*
-```
-pkgs.rustPlatform.rustLibSrc
-```
 
 
 
+*Default:*
+` pkgs.rustPlatform.rustLibSrc `
 
-## languages.rust.packages.rustc
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.rust\.packages\.rustc
+
 rustc package
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.rustc
-```
 
 
 
+*Default:*
+` pkgs.rustc `
 
-## languages.rust.packages.rustfmt
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.rust\.packages\.rustfmt
+
 rustfmt package
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.rustfmt
-```
 
 
 
+*Default:*
+` pkgs.rustfmt `
 
-## languages.rust.version
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.rust\.version
+
 Set to stable, beta, or latest.
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
-
-
-*_Default_*
-```
-null
-```
 
 
 
+*Default:*
+` null `
 
-## languages.scala.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/rust.nix)
+
+
+
+## languages\.scala\.enable
+
 Whether to enable tools for Scala development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/scala\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/scala.nix)
 
 
-## languages.scala.package
+
+## languages\.scala\.package
+
 The Scala package to use.
 
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-"pkgs.scala_3"
-```
 
 
 
+*Default:*
+` "pkgs.scala_3" `
 
-## languages.swift.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/scala\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/scala.nix)
+
+
+
+## languages\.swift\.enable
+
 Whether to enable tools for Swift development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/swift\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/swift.nix)
 
 
-## languages.swift.package
+
+## languages\.swift\.package
+
 The Swift package to use.
 
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-"pkgs.swift"
-```
 
 
 
+*Default:*
+` "pkgs.swift" `
 
-## languages.terraform.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/swift\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/swift.nix)
+
+
+
+## languages\.terraform\.enable
+
 Whether to enable tools for Terraform development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/terraform\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/terraform.nix)
 
 
-## languages.terraform.package
+
+## languages\.terraform\.package
+
 The Terraform package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.terraform
-```
 
 
 
+*Default:*
+` pkgs.terraform `
 
-## languages.texlive.base
-TeX Live package set to use
-
-*_Type_*
-```
-unspecified value
-```
-
-
-*_Default_*
-```
-pkgs.texlive
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/terraform\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/terraform.nix)
 
 
 
+## languages\.texlive\.enable
 
-## languages.texlive.enable
 Whether to enable TeX Live.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/texlive\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/texlive.nix)
 
 
-## languages.texlive.packages
+
+## languages\.texlive\.packages
+
 Packages available to TeX Live
 
-*_Type_*
-```
+
+
+*Type:*
 non-empty (list of Concatenated string)
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 [
   "collection-basic"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/texlive\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/texlive.nix)
 
 
 
-## languages.typescript.enable
+## languages\.texlive\.base
+
+TeX Live package set to use
+
+
+
+*Type:*
+unspecified value
+
+
+
+*Default:*
+` pkgs.texlive `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/texlive\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/texlive.nix)
+
+
+
+## languages\.typescript\.enable
+
 Whether to enable tools for TypeScript development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/typescript\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/typescript.nix)
 
 
-## languages.unison.enable
+
+## languages\.unison\.enable
+
 Whether to enable tools for Unison development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/unison\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/unison.nix)
 
 
-## languages.unison.package
+
+## languages\.unison\.package
+
 Which package of Unison to use
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.unison-ucm
-```
 
 
 
+*Default:*
+` pkgs.unison-ucm `
 
-## languages.v.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/unison\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/unison.nix)
+
+
+
+## languages\.v\.enable
+
 Whether to enable tools for V development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/v\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/v.nix)
 
 
-## languages.v.package
+
+## languages\.v\.package
+
 The V package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.vlang
-```
 
 
 
+*Default:*
+` pkgs.vlang `
 
-## languages.zig.enable
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/v\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/v.nix)
+
+
+
+## languages\.zig\.enable
+
 Whether to enable tools for Zig development.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/zig\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/zig.nix)
 
 
-## languages.zig.package
+
+## languages\.zig\.package
+
 Which package of Zig to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.zig
-```
 
 
 
+*Default:*
+` pkgs.zig `
 
-## packages
-A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.
-
-*_Type_*
-```
-list of package
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/zig\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/languages/zig.nix)
 
 
-*_Default_*
-```
-[ ]
-```
 
+## name
+
+Name of the project.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/top-level.nix)
 
 
 
 ## pre-commit
+
 Integration of https://github.com/cachix/pre-commit-hooks.nix
 
-*_Type_*
-```
+
+
+*Type:*
 submodule
-```
-
-
-*_Default_*
-```
-{ }
-```
 
 
 
+*Default:*
+` { } `
 
-## pre-commit.default_stages
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/pre-commit\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/pre-commit.nix)
+
+
+
+## pre-commit\.package
+
+The `pre-commit` package to use.
+
+
+
+
+*Type:*
+package
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.default_stages
+
 A configuration wide option for the stages property.
 Installs hooks to the defined stages.
 See [https://pre-commit.com/#confining-hooks-to-run-at-certain-stages](https://pre-commit.com/#confining-hooks-to-run-at-certain-stages).
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 [
   "commit"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
-## pre-commit.excludes
+## pre-commit\.excludes
+
 Exclude files that were matched by these patterns.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## pre-commit.hooks
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks
+
 The hook definitions.
 
 Pre-defined hooks can be enabled by, for example:
@@ -2623,263 +3168,309 @@ Source code spell checker
 Yaml linter.
 
 
+**`zprint`**
+
+Beautifully format Clojure and Clojurescript source code and s-expressions.
 
 
-*_Type_*
-```
+
+
+
+
+*Type:*
 attribute set of (submodule)
-```
-
-
-*_Default_*
-```
-{ }
-```
 
 
 
+*Default:*
+` { } `
 
-## pre-commit.hooks.&lt;name&gt;.description
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.enable
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.description
+
 Description of the hook. used for metadata purposes only.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## pre-commit.hooks.&lt;name&gt;.enable
-Whether to enable this pre-commit hook.
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-false
-```
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
+## pre-commit\.hooks\.\<name>\.entry
 
-## pre-commit.hooks.&lt;name&gt;.entry
 The entry point - the executable to run. {option}`entry` can also contain arguments that will not be overridden, such as `entry = "autopep8 -i";`.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
+## pre-commit\.hooks\.\<name>\.excludes
 
-
-
-## pre-commit.hooks.&lt;name&gt;.excludes
 Exclude files that were matched by these patterns.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## pre-commit.hooks.&lt;name&gt;.files
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.fail_fast
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+
+*Type:*
+boolean
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.files
+
 The pattern of files to run on.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## pre-commit.hooks.&lt;name&gt;.language
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.language
+
 The language of the hook - tells pre-commit how to install the hook.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"system"
-```
 
 
 
+*Default:*
+` "system" `
 
-## pre-commit.hooks.&lt;name&gt;.name
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.name
+
 The name of the hook - shown during hook execution.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
+*Default:* internal name, same as id
 
-*_Default_*
-```
-internal name, same as id
-```
-
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
-## pre-commit.hooks.&lt;name&gt;.pass_filenames
+## pre-commit\.hooks\.\<name>\.pass_filenames
+
 Whether to pass filenames as arguments to the entry point.
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## pre-commit.hooks.&lt;name&gt;.raw
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.raw
+
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
 
 Default: taken from the other hook options.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of unspecified value
-```
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.require_serial
+
+if true this hook will execute using a single process instead of in parallel.
 
 
 
 
+*Type:*
+boolean
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
-## pre-commit.hooks.&lt;name&gt;.stages
+
+## pre-commit\.hooks\.\<name>\.stages
+
 Confines the hook to run at a particular stage.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-default_stages
-```
 
 
 
+*Default:*
+` default_stages `
 
-## pre-commit.hooks.&lt;name&gt;.types
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.hooks\.\<name>\.types
+
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/#plugins).
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 [
   "file"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
-## pre-commit.hooks.&lt;name&gt;.types_or
+## pre-commit\.hooks\.\<name>\.types_or
+
 List of file types to run on, where only a single type needs to match.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## pre-commit.installationScript
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.installationScript
+
 A bash snippet that installs nix-pre-commit-hooks in the current directory
 
 
-*_Type_*
-```
-string
-```
+
+
+*Type:*
+string *(read only)*
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
+## pre-commit\.rootSrc
 
-
-
-## pre-commit.package
-The `pre-commit` package to use.
-
-
-*_Type_*
-```
-package
-```
-
-
-
-
-
-
-## pre-commit.rootSrc
 The source of the project to be checked.
 
 This is used in the derivation that performs the check.
@@ -2888,51 +3479,55 @@ If you use the `flakeModule`, the default is `self.outPath`; the whole flake
 sources.
 
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
+## pre-commit\.run
 
-
-
-## pre-commit.run
 A derivation that tests whether the pre-commit hooks run cleanly on
 the entire project.
 
 
-*_Type_*
-```
-package
-```
 
 
-*_Default_*
-```
-"<derivation>"
-```
+*Type:*
+package *(read only)*
 
 
 
+*Default:*
+` "<derivation>" `
 
-## pre-commit.settings.alejandra.exclude
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+
+
+
+## pre-commit\.settings\.alejandra\.exclude
+
 Files or directories to exclude from formatting.
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   "flake.nix"
@@ -2940,523 +3535,627 @@ list of string
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
-## pre-commit.settings.autoflake.binPath
+
+
+## pre-commit\.settings\.autoflake\.binPath
+
 Path to autoflake binary.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 "${pkgs.autoflake}/bin/autoflake"
 
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
 
 
-## pre-commit.settings.autoflake.flags
+## pre-commit\.settings\.autoflake\.flags
+
 Flags passed to autoflake.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"--in-place --expand-star-imports --remove-duplicate-keys --remove-unused-variables"
-```
 
 
 
+*Default:*
+` "--in-place --expand-star-imports --remove-duplicate-keys --remove-unused-variables" `
 
-## pre-commit.settings.clippy.denyWarnings
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.clippy\.denyWarnings
+
 Fail when warnings are present
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.deadnix.edit
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.clippy\.offline
+
+Run clippy offline
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.deadnix\.edit
+
 Remove unused code and write to source file.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.deadnix.noLambdaArg
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.deadnix\.noLambdaArg
+
 Don't check lambda parameter arguments.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.deadnix.noLambdaPatternNames
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.deadnix\.noLambdaPatternNames
+
 Don't check lambda pattern names (don't break nixpkgs `callPackage`).
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.deadnix.noUnderscore
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.deadnix\.noUnderscore
+
 Don't check any bindings that start with a `_`.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.deadnix.quiet
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.deadnix\.quiet
+
 Don't print a dead code report.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.eslint.binPath
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.eslint\.binPath
+
 `eslint` binary path. E.g. if you want to use the `eslint` in `node_modules`, use `./node_modules/.bin/eslint`.
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
-
-
-*_Default_*
-```
-${tools.eslint}/bin/eslint
-```
 
 
 
+*Default:*
+` ${tools.eslint}/bin/eslint `
 
-## pre-commit.settings.eslint.extensions
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.eslint\.extensions
+
 The pattern of files to run on, see [https://pre-commit.com/#hooks-files](https://pre-commit.com/#hooks-files).
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"\\.js$"
-```
 
 
 
+*Default:*
+` "\\.js$" `
 
-## pre-commit.settings.flake8.binPath
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.flake8\.binPath
+
 flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 "${pkgs.python39Packages.flake8}/bin/flake8"
 
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
 
 
-## pre-commit.settings.flake8.format
+## pre-commit\.settings\.flake8\.format
+
 Output format.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"default"
-```
 
 
 
+*Default:*
+` "default" `
 
-## pre-commit.settings.hpack.silent
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.hpack\.silent
+
 Whether generation should be silent.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.markdownlint.config
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.markdownlint\.config
+
 See https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.jsonc
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set
-```
-
-
-*_Default_*
-```
-{ }
-```
 
 
 
+*Default:*
+` { } `
 
-## pre-commit.settings.nixfmt.width
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.nixfmt\.width
+
 Line width.
 
-*_Type_*
-```
+
+
+*Type:*
 null or signed integer
-```
-
-
-*_Default_*
-```
-null
-```
 
 
 
+*Default:*
+` null `
 
-## pre-commit.settings.ormolu.cabalDefaultExtensions
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.ormolu\.cabalDefaultExtensions
+
 Use `default-extensions` from `.cabal` files.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.ormolu.defaultExtensions
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.ormolu\.defaultExtensions
+
 Haskell language extensions to enable.
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## pre-commit.settings.php-cs-fixer.binPath
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.php-cs-fixer\.binPath
+
 PHP-CS-Fixer binary path.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 "${pkgs.php81Packages.php-cs-fixer}/bin/php-cs-fixer"
 
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
 
 
-## pre-commit.settings.phpcbf.binPath
+## pre-commit\.settings\.phpcbf\.binPath
+
 PHP_CodeSniffer binary path.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 "${pkgs.php80Packages.phpcbf}/bin/phpcbf"
 
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
 
 
-## pre-commit.settings.phpcs.binPath
+## pre-commit\.settings\.phpcs\.binPath
+
 PHP_CodeSniffer binary path.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 "${pkgs.php80Packages.phpcs}/bin/phpcs"
 
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
 
 
-## pre-commit.settings.prettier.binPath
+## pre-commit\.settings\.prettier\.binPath
+
 `prettier` binary path. E.g. if you want to use the `prettier` in `node_modules`, use `./node_modules/.bin/prettier`.
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 "${tools.prettier}/bin/prettier"
 
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
 
 
-## pre-commit.settings.prettier.output
+## pre-commit\.settings\.prettier\.output
+
 Output format.
 
-*_Type_*
-```
-null or one of "check", "list-different"
-```
 
 
-*_Default_*
-```
-"list-different"
-```
+*Type:*
+null or one of “check”, “list-different”
 
 
 
+*Default:*
+` "list-different" `
 
-## pre-commit.settings.prettier.write
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.prettier\.write
+
 Whether to edit files inplace.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## pre-commit.settings.pylint.binPath
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.pylint\.binPath
+
 Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 "${pkgs.python39Packages.pylint}/bin/pylint"
 
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
 
 
-## pre-commit.settings.pylint.reports
+## pre-commit\.settings\.pylint\.reports
+
 Whether to display a full report.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.pylint.score
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.pylint\.score
+
 Whether to activate the evaluation score.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## pre-commit.settings.revive.configPath
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.revive\.configPath
+
 Path to the configuration TOML file.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## pre-commit.settings.rust.cargoManifestPath
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.rust\.cargoManifestPath
+
 Path to Cargo.toml
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
-
-
-*_Default_*
-```
-null
-```
 
 
 
+*Default:*
+` null `
 
-## pre-commit.settings.statix.format
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.statix\.format
+
 Error Output format.
 
-*_Type_*
-```
-one of "stderr", "errfmt", "json"
-```
 
 
-*_Default_*
-```
-"errfmt"
-```
+*Type:*
+one of “stderr”, “errfmt”, “json”
 
 
 
+*Default:*
+` "errfmt" `
 
-## pre-commit.settings.statix.ignore
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.statix\.ignore
+
 Globs of file patterns to skip.
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   "flake.nix"
@@ -3464,93 +4163,108 @@ list of string
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
 
-## pre-commit.settings.typos.diff
+
+
+## pre-commit\.settings\.typos\.diff
+
 Wheter to print a diff of what would change.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.typos.format
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.typos\.format
+
 Output format.
 
-*_Type_*
-```
-one of "silent", "brief", "long", "json"
-```
 
 
-*_Default_*
-```
-"long"
-```
+*Type:*
+one of “silent”, “brief”, “long”, “json”
 
 
 
+*Default:*
+` "long" `
 
-## pre-commit.settings.typos.write
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.typos\.write
+
 Whether to write fixes out.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.settings.yamllint.configPath
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.yamllint\.configPath
+
 path to the configuration YAML file
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## pre-commit.settings.yamllint.relaxed
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.yamllint\.relaxed
+
 Use the relaxed configuration
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## pre-commit.src
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+
+
+
+## pre-commit\.src
+
 Root of the project. By default this will be filtered with the `gitignoreSource`
 function later, unless `rootSrc` is specified.
 
@@ -3558,98 +4272,109 @@ If you use the `flakeModule`, the default is `self.outPath`; the whole flake
 sources.
 
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
+## pre-commit\.tools
 
-
-
-## pre-commit.tools
 Tool set from which `nix-pre-commit-hooks` will pick binaries.
 
 `nix-pre-commit-hooks` comes with its own set of packages for this purpose.
 
 
-*_Type_*
-```
+
+
+*Type:*
 lazy attribute set of package
-```
+
+*Declared by:*
+ - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
 
 
 
+## process\.after
 
-
-
-## process.after
 Bash code to execute after stopping processes.
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+strings concatenated with “\\n”
 
 
 
+*Default:*
+` "" `
 
-## process.before
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes.nix)
+
+
+
+## process\.before
+
 Bash code to execute before starting processes.
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+strings concatenated with “\\n”
 
 
 
+*Default:*
+` "" `
 
-## process.implementation
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes.nix)
+
+
+
+## process\.implementation
+
 The implementation used when performing ``devenv up``.
 
-*_Type_*
-```
-one of "honcho", "overmind", "process-compose", "hivemind"
-```
 
 
-*_Default_*
-```
-"honcho"
-```
+*Type:*
+one of “honcho”, “overmind”, “process-compose”, “hivemind”
 
 
-*_Example_*
-```
-"overmind"
-```
+
+*Default:*
+` "honcho" `
 
 
-## process.process-compose
+
+*Example:*
+` "overmind" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes.nix)
+
+
+
+## process\.process-compose
+
 Top-level process-compose.yaml options when that implementation is used.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 {
   port = 9999;
@@ -3659,7 +4384,9 @@ attribute set
 ```
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   log_level = "fatal";
@@ -3668,38 +4395,46 @@ attribute set
 }
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes.nix)
+
+
 
 ## processes
+
 Processes can be started with ``devenv up`` and run in foreground mode.
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of (submodule)
-```
-
-
-*_Default_*
-```
-{ }
-```
 
 
 
+*Default:*
+` { } `
 
-## processes.&lt;name&gt;.exec
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes.nix)
+
+
+
+## processes\.\<name>\.exec
+
 Bash code to run the process.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes.nix)
 
 
 
+## processes\.\<name>\.process-compose
 
-
-
-## processes.&lt;name&gt;.process-compose
 process-compose.yaml specific process attributes.
 
 Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml`
@@ -3707,19 +4442,20 @@ Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.
 Only used when using ``process.implementation = "process-compose";``
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   availability = {
@@ -3738,293 +4474,374 @@ attribute set
 }
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/processes.nix)
+
+
 
 ## scripts
+
 A set of scripts available when the environment is active.
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of (submodule)
-```
-
-
-*_Default_*
-```
-{ }
-```
 
 
 
+*Default:*
+` { } `
 
-## scripts.&lt;name&gt;.exec
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/scripts\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/scripts.nix)
+
+
+
+## scripts\.\<name>\.exec
+
 Bash code to execute when the script is run.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/scripts\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/scripts.nix)
 
 
 
+## services\.adminer\.enable
 
-
-
-## services.adminer.enable
 Whether to enable Adminer process.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## services.adminer.listen
-Listen address for the Adminer.
-
-*_Type_*
-```
-string
-```
-
-
-*_Default_*
-```
-"127.0.0.1:8080"
-```
 
 
 
+*Default:*
+` false `
 
-## services.adminer.package
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/adminer\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/adminer.nix)
+
+
+
+## services\.adminer\.package
+
 Which package of Adminer to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.adminer
-```
 
 
 
+*Default:*
+` pkgs.adminer `
 
-## services.blackfire.client-id
-Sets the client id used to authenticate with Blackfire.
-You can find your personal client-id at <https://blackfire.io/my/settings/credentials>.
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/adminer\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/adminer.nix)
 
 
-*_Type_*
-```
+
+## services\.adminer\.listen
+
+Listen address for the Adminer.
+
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "127.0.0.1:8080" `
 
-## services.blackfire.client-token
-Sets the client token used to authenticate with Blackfire.
-You can find your personal client-token at <https://blackfire.io/my/settings/credentials>.
-
-
-*_Type_*
-```
-string
-```
-
-
-*_Default_*
-```
-""
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/adminer\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/adminer.nix)
 
 
 
+## services\.blackfire\.enable
 
-## services.blackfire.enable
 Whether to enable Blackfire profiler agent
 
 It automatically installs Blackfire PHP extension.
 .
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire.nix)
 
 
-## services.blackfire.package
+
+## services\.blackfire\.package
+
 Which package of blackfire to use
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.blackfire
-```
 
 
 
+*Default:*
+` pkgs.blackfire `
 
-## services.blackfire.server-id
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire.nix)
+
+
+
+## services\.blackfire\.client-id
+
+Sets the client id used to authenticate with Blackfire.
+You can find your personal client-id at <https://blackfire.io/my/settings/credentials>.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire.nix)
+
+
+
+## services\.blackfire\.client-token
+
+Sets the client token used to authenticate with Blackfire.
+You can find your personal client-token at <https://blackfire.io/my/settings/credentials>.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire.nix)
+
+
+
+## services\.blackfire\.server-id
+
 Sets the server id used to authenticate with Blackfire.
 You can find your personal server-id at <https://blackfire.io/my/settings/credentials>.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## services.blackfire.server-token
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire.nix)
+
+
+
+## services\.blackfire\.server-token
+
 Sets the server token used to authenticate with Blackfire.
 You can find your personal server-token at <https://blackfire.io/my/settings/credentials>.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## services.blackfire.socket
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire.nix)
+
+
+
+## services\.blackfire\.socket
+
 Sets the server socket path
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"tcp://127.0.0.1:8307"
-```
 
 
 
+*Default:*
+` "tcp://127.0.0.1:8307" `
 
-## services.caddy.adapter
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/blackfire.nix)
+
+
+
+## services\.caddy\.enable
+
+Whether to enable Caddy web server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
+
+
+
+## services\.caddy\.package
+
+Caddy package to use.
+
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.caddy `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
+
+
+
+## services\.caddy\.adapter
+
 Name of the config adapter to use.
 See <https://caddyserver.com/docs/config-adapters> for the full list.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
-```
-"caddyfile"
-```
+
+*Default:*
+` "caddyfile" `
 
 
-*_Example_*
-```
-"nginx"
-```
+
+*Example:*
+` "nginx" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
 
 
-## services.caddy.ca
+
+## services\.caddy\.ca
+
 Certificate authority ACME server. The default (Let's Encrypt
 production server) should be fine for most people. Set it to null if
 you don't want to include any authority (or if you want to write a more
 fine-graned configuration manually).
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
 
 
-*_Default_*
-```
-"https://acme-v02.api.letsencrypt.org/directory"
-```
+
+*Default:*
+` "https://acme-v02.api.letsencrypt.org/directory" `
 
 
-*_Example_*
-```
-"https://acme-staging-v02.api.letsencrypt.org/directory"
-```
+
+*Example:*
+` "https://acme-staging-v02.api.letsencrypt.org/directory" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
 
 
-## services.caddy.config
+
+## services\.caddy\.config
+
 Verbatim Caddyfile to use.
 Caddy v2 supports multiple config formats via adapters (see [`services.caddy.adapter`](#servicescaddyconfig)).
 
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+strings concatenated with “\\n”
 
 
-*_Example_*
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
 ```
 ''
   example.com {
@@ -4035,8 +4852,13 @@ strings concatenated with "\n"
 ''
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
 
-## services.caddy.dataDir
+
+
+## services\.caddy\.dataDir
+
 The data directory, for storing certificates. Before 17.09, this
 would create a .caddy directory. With 17.09 the contents of the
 .caddy directory are in the specified data directory instead.
@@ -4044,110 +4866,78 @@ Caddy v2 replaced CADDYPATH with XDG directories.
 See <https://caddyserver.com/docs/conventions#file-locations>.
 
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
-
-
-*_Default_*
-```
-"/.devenv/state/caddy"
-```
 
 
 
+*Default:*
+` "/.devenv/state/caddy" `
 
-## services.caddy.email
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
+
+
+
+## services\.caddy\.email
+
 Email address (for Let's Encrypt certificate).
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## services.caddy.enable
-Whether to enable Caddy web server.
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## services.caddy.package
-Caddy package to use.
-
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.caddy
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
 
 
 
+## services\.caddy\.resume
 
-## services.caddy.resume
 Use saved config, if any (and prefer over configuration passed with [`caddy.config`](#caddyconfig)).
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## services.caddy.virtualHosts
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
+
+
+
+## services\.caddy\.virtualHosts
+
 Declarative vhost config.
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of (submodule)
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   "hydra.example.com" = {
@@ -4162,42 +4952,50 @@ attribute set of (submodule)
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
 
-## services.caddy.virtualHosts.&lt;name&gt;.extraConfig
+
+
+## services\.caddy\.virtualHosts\.\<name>\.extraConfig
+
 These lines go into the vhost verbatim.
 
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+strings concatenated with “\\n”
 
 
 
+*Default:*
+` "" `
 
-## services.caddy.virtualHosts.&lt;name&gt;.serverAliases
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
+
+
+
+## services\.caddy\.virtualHosts\.\<name>\.serverAliases
+
 Additional names of virtual hosts served by this virtual host configuration.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   "www.example.org"
@@ -4205,204 +5003,240 @@ list of string
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/caddy.nix)
 
-## services.cassandra.allowClients
+
+
+## services\.cassandra\.enable
+
+Whether to enable Add Cassandra process script..
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
+
+
+
+## services\.cassandra\.package
+
+Which version of Cassandra to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cassandra_4 `
+
+
+
+*Example:*
+` pkgs.cassandra_4; `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
+
+
+
+## services\.cassandra\.allowClients
+
 Enables or disables the native transport server (CQL binary protocol)
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## services.cassandra.clusterName
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
+
+
+
+## services\.cassandra\.clusterName
+
 The name of the cluster
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"Test Cluster"
-```
 
 
 
+*Default:*
+` "Test Cluster" `
 
-## services.cassandra.enable
-Whether to enable Add Cassandra process script..
-
-*_Type_*
-```
-boolean
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
 
 
-*_Default_*
-```
-false
-```
 
+## services\.cassandra\.extraConfig
 
-*_Example_*
-```
-true
-```
-
-
-## services.cassandra.extraConfig
 Extra options to be merged into `cassandra.yaml` as nix attribute set.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   commitlog_sync_batch_window_in_ms = 3;
 }
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
 
-## services.cassandra.jvmOpts
+
+
+## services\.cassandra\.jvmOpts
+
 Options to pass to the JVM through the JVM_OPTS environment variable
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## services.cassandra.listenAddress
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
+
+
+
+## services\.cassandra\.listenAddress
+
 Listen address
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
-```
-"127.0.0.1"
-```
+
+*Default:*
+` "127.0.0.1" `
 
 
-*_Example_*
-```
-"127.0.0.1"
-```
+
+*Example:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
 
 
-## services.cassandra.package
-Which version of Cassandra to use
 
-*_Type_*
-```
-package
-```
+## services\.cassandra\.seedAddresses
 
-
-*_Default_*
-```
-pkgs.cassandra_4
-```
-
-
-*_Example_*
-```
-pkgs.cassandra_4;
-```
-
-
-## services.cassandra.seedAddresses
 The addresses of hosts designated as contact points of the cluster
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 [
   "127.0.0.1"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/cassandra.nix)
 
 
 
-## services.couchdb.enable
+## services\.couchdb\.enable
+
 Whether to enable CouchDB process.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
 
 
-## services.couchdb.package
+
+## services\.couchdb\.package
+
 Which version of CouchDB to use
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
-
-
-*_Default_*
-```
-pkgs.couchdb3
-```
 
 
 
+*Default:*
+` pkgs.couchdb3 `
 
-## services.couchdb.settings
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
+
+
+
+## services\.couchdb\.settings
+
 CouchDB configuration.
 to know more about all settings, look at:
 <link
@@ -4410,19 +5244,20 @@ to know more about all settings, look at:
 />
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of attribute set of (INI atom (null, bool, int, float or string))
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   couchdb = {
@@ -4443,102 +5278,117 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
 
-## services.couchdb.settings.chttpd.bindAddress
+
+
+## services\.couchdb\.settings\.chttpd\.bindAddress
+
 Defines the IP address by which CouchDB will be accessible.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"127.0.0.1"
-```
 
 
 
+*Default:*
+` "127.0.0.1" `
 
-## services.couchdb.settings.chttpd.logFile
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
+
+
+
+## services\.couchdb\.settings\.chttpd\.logFile
+
 Specifies the location of file for logging output.
 
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
-
-
-*_Default_*
-```
-"/.devenv/state/couchdb/couchdb.log"
-```
 
 
 
+*Default:*
+` "/.devenv/state/couchdb/couchdb.log" `
 
-## services.couchdb.settings.chttpd.port
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
+
+
+
+## services\.couchdb\.settings\.chttpd\.port
+
 Defined the port number to listen.
 
 
-*_Type_*
-```
+
+
+*Type:*
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
-```
-
-
-*_Default_*
-```
-5984
-```
 
 
 
+*Default:*
+` 5984 `
 
-## services.couchdb.settings.couchdb.database_dir
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
+
+
+
+## services\.couchdb\.settings\.couchdb\.database_dir
+
 Specifies location of CouchDB database files (*.couch named). This
 location should be writable and readable for the user the CouchDB
 service runs as (couchdb by default).
 
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
-
-
-*_Default_*
-```
-"/.devenv/state/couchdb"
-```
 
 
 
+*Default:*
+` "/.devenv/state/couchdb" `
 
-## services.couchdb.settings.couchdb.single_node
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
+
+
+
+## services\.couchdb\.settings\.couchdb\.single_node
+
 When this configuration setting is set to true, automatically create
 the system databases on startup. Must be set false for a clustered
 CouchDB installation.
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## services.couchdb.settings.couchdb.uriFile
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
+
+
+
+## services\.couchdb\.settings\.couchdb\.uriFile
+
 This file contains the full URI that can be used to access this
 instance of CouchDB. It is used to help discover the port CouchDB is
 running on (if it was set to 0 (e.g. automatically assigned any free
@@ -4546,107 +5396,137 @@ one). This file should be writable and readable for the user that
 runs the CouchDB service (couchdb by default).
 
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
-
-
-*_Default_*
-```
-"/.devenv/state/couchdb/couchdb.uri"
-```
 
 
 
+*Default:*
+` "/.devenv/state/couchdb/couchdb.uri" `
 
-## services.couchdb.settings.couchdb.viewIndexDir
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
+
+
+
+## services\.couchdb\.settings\.couchdb\.viewIndexDir
+
 Specifies location of CouchDB view index files. This location should
 be writable and readable for the user that runs the CouchDB service
 (couchdb by default).
 
 
-*_Type_*
-```
+
+
+*Type:*
 path
-```
-
-
-*_Default_*
-```
-"/.devenv/state/couchdb"
-```
 
 
 
+*Default:*
+` "/.devenv/state/couchdb" `
 
-## services.elasticsearch.cluster_name
-Elasticsearch name that identifies your cluster for auto-discovery.
-
-*_Type_*
-```
-string
-```
-
-
-*_Default_*
-```
-"elasticsearch"
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/couchdb.nix)
 
 
 
+## services\.elasticsearch\.enable
 
-## services.elasticsearch.enable
 Whether to enable elasticsearch.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## services.elasticsearch.extraCmdLineOptions
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.elasticsearch\.package
+
+Elasticsearch package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elasticsearch7 `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.elasticsearch\.cluster_name
+
+Elasticsearch name that identifies your cluster for auto-discovery.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "elasticsearch" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.elasticsearch\.extraCmdLineOptions
+
 Extra command line options for the elasticsearch launcher.
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## services.elasticsearch.extraConf
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.elasticsearch\.extraConf
+
 Extra configuration for elasticsearch.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
-```
-""
-```
+
+*Default:*
+` "" `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 ''
   node.name: "elasticsearch"
@@ -4655,57 +5535,72 @@ string
 ''
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
 
-## services.elasticsearch.extraJavaOptions
+
+
+## services\.elasticsearch\.extraJavaOptions
+
 Extra command line options for Java.
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   "-Djava.net.preferIPv4Stack=true"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
 
-## services.elasticsearch.listenAddress
+
+
+## services\.elasticsearch\.listenAddress
+
 Elasticsearch listen address.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"127.0.0.1"
-```
 
 
 
+*Default:*
+` "127.0.0.1" `
 
-## services.elasticsearch.logging
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.elasticsearch\.logging
+
 Elasticsearch logging configuration.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
+
+*Default:*
+
 ```
 ''
   logger.action.name = org.elasticsearch.action
@@ -4719,491 +5614,583 @@ string
 ''
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
 
 
 
-## services.elasticsearch.package
-Elasticsearch package to use.
+## services\.elasticsearch\.plugins
 
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.elasticsearch7
-```
-
-
-
-
-## services.elasticsearch.plugins
 Extra elasticsearch plugins
 
-*_Type_*
-```
+
+
+*Type:*
 list of package
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
-```
-[ pkgs.elasticsearchPlugins.discovery-ec2 ]
-```
+
+*Example:*
+` [ pkgs.elasticsearchPlugins.discovery-ec2 ] `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
 
 
-## services.elasticsearch.port
+
+## services\.elasticsearch\.port
+
 Elasticsearch port to listen for HTTP traffic.
 
-*_Type_*
-```
+
+
+*Type:*
 signed integer
-```
-
-
-*_Default_*
-```
-9200
-```
 
 
 
+*Default:*
+` 9200 `
 
-## services.elasticsearch.single_node
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.elasticsearch\.single_node
+
 Start a single-node cluster
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## services.elasticsearch.tcp_port
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.elasticsearch\.tcp_port
+
 Elasticsearch port for the node to node communication.
 
-*_Type_*
-```
+
+
+*Type:*
 signed integer
-```
-
-
-*_Default_*
-```
-9300
-```
 
 
 
+*Default:*
+` 9300 `
 
-## services.mailhog.additionalArgs
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/elasticsearch.nix)
+
+
+
+## services\.mailhog\.enable
+
+Whether to enable mailhog process.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog.nix)
+
+
+
+## services\.mailhog\.package
+
+Which package of mailhog to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.mailhog `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog.nix)
+
+
+
+## services\.mailhog\.additionalArgs
+
 Additional arguments passed to `mailhog`.
 
 
-*_Type_*
-```
-list of strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-[ ]
-```
+*Type:*
+list of strings concatenated with “\\n”
 
 
-*_Example_*
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
 ```
 [
   "-invite-jim"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog.nix)
 
-## services.mailhog.apiListenAddress
+
+
+## services\.mailhog\.apiListenAddress
+
 Listen address for API.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"127.0.0.1:8025"
-```
 
 
 
+*Default:*
+` "127.0.0.1:8025" `
 
-## services.mailhog.enable
-Whether to enable mailhog process.
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## services.mailhog.package
-Which package of mailhog to use
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.mailhog
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog.nix)
 
 
 
+## services\.mailhog\.smtpListenAddress
 
-## services.mailhog.smtpListenAddress
 Listen address for SMTP.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"127.0.0.1:1025"
-```
 
 
 
+*Default:*
+` "127.0.0.1:1025" `
 
-## services.mailhog.uiListenAddress
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog.nix)
+
+
+
+## services\.mailhog\.uiListenAddress
+
 Listen address for UI.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"127.0.0.1:8025"
-```
 
 
 
+*Default:*
+` "127.0.0.1:8025" `
 
-## services.memcached.bind
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mailhog.nix)
+
+
+
+## services\.memcached\.enable
+
+Whether to enable memcached process.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached.nix)
+
+
+
+## services\.memcached\.package
+
+Which package of memcached to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.memcached `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached.nix)
+
+
+
+## services\.memcached\.bind
+
 The IP interface to bind to.
 `null` means "all interfaces".
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
-
-
-*_Default_*
-```
-"127.0.0.1"
-```
-
-
-*_Example_*
-```
-"127.0.0.1"
-```
-
-
-## services.memcached.enable
-Whether to enable memcached process.
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## services.memcached.package
-Which package of memcached to use
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.memcached
-```
 
 
 
+*Default:*
+` "127.0.0.1" `
 
-## services.memcached.port
+
+
+*Example:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached.nix)
+
+
+
+## services\.memcached\.port
+
 The TCP port to accept connections.
 If port 0 is specified Redis will not listen on a TCP socket.
 
 
-*_Type_*
-```
+
+
+*Type:*
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
-```
-
-
-*_Default_*
-```
-11211
-```
 
 
 
+*Default:*
+` 11211 `
 
-## services.memcached.startArgs
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached.nix)
+
+
+
+## services\.memcached\.startArgs
+
 Additional arguments passed to `memcached` during startup.
 
 
-*_Type_*
-```
-list of strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-[ ]
-```
+*Type:*
+list of strings concatenated with “\\n”
 
 
-*_Example_*
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
 ```
 [
   "--memory-limit=100M"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/memcached.nix)
 
-## services.minio.accessKey
+
+
+## services\.minio\.enable
+
+Whether to enable MinIO Object Storage.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
+
+
+
+## services\.minio\.package
+
+MinIO package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.minio `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
+
+
+
+## services\.minio\.accessKey
+
 Access key of 5 to 20 characters in length that clients use to access the server.
 This overrides the access key that is generated by MinIO on first startup and stored inside the
 `configDir` directory.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## services.minio.browser
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
+
+
+
+## services\.minio\.browser
+
 Enable or disable access to web UI.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-true
-```
 
 
 
+*Default:*
+` true `
 
-## services.minio.buckets
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
+
+
+
+## services\.minio\.buckets
+
 List of buckets to ensure exist on startup.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## services.minio.consoleAddress
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
+
+
+
+## services\.minio\.consoleAddress
+
 IP address and port of the web UI (console).
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"127.0.0.1:9001"
-```
 
 
 
+*Default:*
+` "127.0.0.1:9001" `
 
-## services.minio.enable
-Whether to enable MinIO Object Storage.
-
-*_Type_*
-```
-boolean
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
 
 
-*_Default_*
-```
-false
-```
 
+## services\.minio\.listenAddress
 
-*_Example_*
-```
-true
-```
-
-
-## services.minio.listenAddress
 IP address and port of the server.
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"127.0.0.1:9000"
-```
 
 
 
+*Default:*
+` "127.0.0.1:9000" `
 
-## services.minio.package
-MinIO package to use.
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.minio
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
 
 
 
+## services\.minio\.region
 
-## services.minio.region
 The physical location of the server. By default it is set to us-east-1, which is same as AWS S3's and MinIO's default region.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-"us-east-1"
-```
 
 
 
+*Default:*
+` "us-east-1" `
 
-## services.minio.secretKey
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
+
+
+
+## services\.minio\.secretKey
+
 Specify the Secret key of 8 to 40 characters in length that clients use to access the server.
 This overrides the secret key that is generated by MinIO on first startup and stored inside the
 `configDir` directory.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## services.mongodb.additionalArgs
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/minio.nix)
+
+
+
+## services\.mongodb\.enable
+
+Whether to enable MongoDB process and expose utilities.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mongodb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mongodb.nix)
+
+
+
+## services\.mongodb\.package
+
+Which MongoDB package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.mongodb `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mongodb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mongodb.nix)
+
+
+
+## services\.mongodb\.additionalArgs
+
 Additional arguments passed to `mongod`.
 
 
-*_Type_*
-```
-list of strings concatenated with "\n"
-```
 
 
-*_Default_*
+*Type:*
+list of strings concatenated with “\\n”
+
+
+
+*Default:*
+
 ```
 [
   "--noauth"
@@ -5211,7 +6198,9 @@ list of strings concatenated with "\n"
 ```
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   "--port"
@@ -5220,67 +6209,56 @@ list of strings concatenated with "\n"
 ]
 ```
 
-
-## services.mongodb.enable
-Whether to enable MongoDB process and expose utilities.
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## services.mongodb.package
-Which MongoDB package to use.
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.mongodb
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mongodb\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mongodb.nix)
 
 
 
+## services\.mysql\.enable
 
-## services.mysql.enable
 Whether to enable MySQL process and expose utilities.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
 
-## services.mysql.ensureUsers
+
+## services\.mysql\.package
+
+Which package of MySQL to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.mysql80 `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
+
+
+
+## services\.mysql\.ensureUsers
+
 Ensures that the specified users exist and have at least the ensured permissions.
 The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
 same name only, and that without the need for a password.
@@ -5289,19 +6267,20 @@ option is changed. This means that users created and permissions assigned once t
 otherwise have to be removed manually.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of (submodule)
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   {
@@ -5314,8 +6293,13 @@ list of (submodule)
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
-## services.mysql.ensureUsers.*.ensurePermissions
+
+
+## services\.mysql\.ensureUsers\.\*\.ensurePermissions
+
 Permissions to ensure for the user, specified as attribute set.
 The attribute names specify the database and tables to grant the permissions for,
 separated by a dot. You may use wildcards here.
@@ -5327,19 +6311,20 @@ and on which privileges exist, see the
 The attributes are used as `GRANT ${attrName} ON ${attrValue}`.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of string
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   "database.*" = "ALL PRIVILEGES";
@@ -5348,57 +6333,66 @@ attribute set of string
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
-## services.mysql.ensureUsers.*.name
+
+
+## services\.mysql\.ensureUsers\.\*\.name
+
 Name of the user to ensure.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
 
 
+## services\.mysql\.ensureUsers\.\*\.password
 
-
-
-## services.mysql.ensureUsers.*.password
 Password of the user to ensure.
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
-
-
-*_Default_*
-```
-null
-```
 
 
 
+*Default:*
+` null `
 
-## services.mysql.initialDatabases
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
+
+
+
+## services\.mysql\.initialDatabases
+
 List of database names and their initial schemas that should be used to create databases on the first startup
 of MySQL. The schema attribute is optional: If not specified, an empty database is created.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of (submodule)
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   { name = "foodatabase"; schema = ./foodatabase.sql; }
@@ -5407,74 +6401,66 @@ list of (submodule)
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
-## services.mysql.initialDatabases.*.name
+
+
+## services\.mysql\.initialDatabases\.\*\.name
+
 The name of the database to create.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
 
 
+## services\.mysql\.initialDatabases\.\*\.schema
 
-
-
-## services.mysql.initialDatabases.*.schema
 The initial schema of the database; if null (the default),
 an empty database is created.
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or path
-```
-
-
-*_Default_*
-```
-null
-```
 
 
 
+*Default:*
+` null `
 
-## services.mysql.package
-Which package of MySQL to use
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.mysql80
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
 
 
+## services\.mysql\.settings
 
-## services.mysql.settings
 MySQL configuration.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   mysqld = {
@@ -5491,59 +6477,100 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string) o
 
 ```
 
-
-## services.postgres.createDatabase
-Create a database named like current user on startup. Only applies when initialDatabases is an empty list.
-
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-true
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/mysql.nix)
 
 
 
+## services\.postgres\.enable
 
-## services.postgres.enable
 Whether to enable Add PostgreSQL process.
 .
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
+
+
+
+## services\.postgres\.package
+
+Which version of PostgreSQL to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.postgresql `
+
+
+
+*Example:*
+
+```
+# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list
+pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
+
 ```
 
-
-*_Default_*
-```
-false
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
 
 
-*_Example_*
-```
-true
-```
+
+## services\.postgres\.createDatabase
+
+Create a database named like current user on startup. Only applies when initialDatabases is an empty list.
 
 
-## services.postgres.initdbArgs
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
+
+
+
+## services\.postgres\.initdbArgs
+
 Additional arguments passed to `initdb` during data dir
 initialisation.
 
 
-*_Type_*
-```
-list of strings concatenated with "\n"
-```
 
 
-*_Default_*
+*Type:*
+list of strings concatenated with “\\n”
+
+
+
+*Default:*
+
 ```
 [
   "--locale=C"
@@ -5552,7 +6579,9 @@ list of strings concatenated with "\n"
 ```
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   "--data-checksums"
@@ -5560,25 +6589,31 @@ list of strings concatenated with "\n"
 ]
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
 
-## services.postgres.initialDatabases
+
+
+## services\.postgres\.initialDatabases
+
 List of database names and their initial schemas that should be used to create databases on the first startup
 of Postgres. The schema attribute is optional: If not specified, an empty database is created.
 
 
-*_Type_*
-```
+
+
+*Type:*
 list of (submodule)
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   {
@@ -5590,128 +6625,124 @@ list of (submodule)
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
 
-## services.postgres.initialDatabases.*.name
+
+
+## services\.postgres\.initialDatabases\.\*\.name
+
 The name of the database to create.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
 
 
 
+## services\.postgres\.initialDatabases\.\*\.schema
 
-
-
-## services.postgres.initialDatabases.*.schema
 The initial schema of the database; if null (the default),
 an empty database is created.
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or path
-```
-
-
-*_Default_*
-```
-null
-```
 
 
 
+*Default:*
+` null `
 
-## services.postgres.initialScript
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
+
+
+
+## services\.postgres\.initialScript
+
 Initial SQL commands to run during database initialization. This can be multiple
 SQL expressions separated by a semi-colon.
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
 
 
-*_Default_*
-```
-null
-```
+
+*Default:*
+` null `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 CREATE USER postgres SUPERUSER;
 CREATE USER bar;
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
 
-## services.postgres.listen_addresses
+
+
+## services\.postgres\.listen_addresses
+
 Listen address
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
-```
-""
-```
+
+*Default:*
+` "" `
 
 
-*_Example_*
-```
-"127.0.0.1"
-```
+
+*Example:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
 
 
-## services.postgres.package
-Which version of PostgreSQL to use
 
-*_Type_*
-```
-package
-```
+## services\.postgres\.port
 
-
-*_Default_*
-```
-pkgs.postgresql
-```
-
-
-*_Example_*
-```
-# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list
-pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
-
-```
-
-
-## services.postgres.port
 The TCP port to accept connections.
 
 
-*_Type_*
-```
+
+
+*Type:*
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
-```
-
-
-*_Default_*
-```
-5432
-```
 
 
 
+*Default:*
+` 5432 `
 
-## services.postgres.settings
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
+
+
+
+## services\.postgres\.settings
+
 PostgreSQL configuration. Refer to
 <https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE>
 for an overview of `postgresql.conf`.
@@ -5720,19 +6751,20 @@ String values will automatically be enclosed in single quotes. Single quotes wil
 escaped with two single quotes as described by the upstream documentation linked above.
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of (boolean or floating point number or signed integer or string)
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   log_connections = true;
@@ -5744,8 +6776,54 @@ attribute set of (boolean or floating point number or signed integer or string)
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/postgres.nix)
 
-## services.rabbitmq.configItems
+
+
+## services\.rabbitmq\.enable
+
+Whether to enable the RabbitMQ server, an Advanced Message
+Queuing Protocol (AMQP) broker.
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
+
+
+
+## services\.rabbitmq\.package
+
+Which rabbitmq package to use.
+
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rabbitmq-server `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
+
+
+
+## services\.rabbitmq\.configItems
+
 Configuration options in RabbitMQ's new config file format,
 which is a simple key-value format that can not express nested
 data structures. This is known as the `rabbitmq.conf` file,
@@ -5759,19 +6837,20 @@ See <https://www.rabbitmq.com/configure.html#config-items>
 For the distinct formats, see <https://www.rabbitmq.com/configure.html#config-file-formats>
 
 
-*_Type_*
-```
+
+
+*Type:*
 attribute set of string
-```
 
 
-*_Default_*
-```
-{ }
-```
+
+*Default:*
+` { } `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 {
   "auth_backends.1.authn" = "rabbit_auth_backend_ldap";
@@ -5780,47 +6859,35 @@ attribute set of string
 
 ```
 
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
 
-## services.rabbitmq.cookie
+
+
+## services\.rabbitmq\.cookie
+
 Erlang cookie is a string of arbitrary length which must
 be the same for several nodes to be allowed to communicate.
 Leave empty to generate automatically.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
-
-
-*_Default_*
-```
-""
-```
 
 
 
+*Default:*
+` "" `
 
-## services.rabbitmq.enable
-Whether to enable the RabbitMQ server, an Advanced Message
-Queuing Protocol (AMQP) broker.
-
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-false
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
 
 
 
+## services\.rabbitmq\.listenAddress
 
-## services.rabbitmq.listenAddress
 IP address on which RabbitMQ will listen for AMQP
 connections.  Set to the empty string to listen on all
 interfaces.  Note that RabbitMQ creates a user named
@@ -5832,287 +6899,321 @@ configItems."listeners.tcp.1" and it's left for backwards
 compatibility with previous version of this module.
 
 
-*_Type_*
-```
+
+
+*Type:*
 string
-```
 
 
-*_Default_*
-```
-"127.0.0.1"
-```
+
+*Default:*
+` "127.0.0.1" `
 
 
-*_Example_*
-```
-""
-```
+
+*Example:*
+` "" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
 
 
-## services.rabbitmq.managementPlugin.enable
+
+## services\.rabbitmq\.managementPlugin\.enable
+
 Whether to enable the management plugin.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
 
 
-## services.rabbitmq.managementPlugin.port
+
+## services\.rabbitmq\.managementPlugin\.port
+
 On which port to run the management plugin
 
 
-*_Type_*
-```
+
+
+*Type:*
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
-```
-
-
-*_Default_*
-```
-15672
-```
 
 
 
+*Default:*
+` 15672 `
 
-## services.rabbitmq.package
-Which rabbitmq package to use.
-
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.rabbitmq-server
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
 
 
 
+## services\.rabbitmq\.pluginDirs
 
-## services.rabbitmq.pluginDirs
 The list of directories containing external plugins
 
-*_Type_*
-```
+
+
+*Type:*
 list of path
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## services.rabbitmq.plugins
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
+
+
+
+## services\.rabbitmq\.plugins
+
 The names of plugins to enable
 
-*_Type_*
-```
+
+
+*Type:*
 list of string
-```
-
-
-*_Default_*
-```
-[ ]
-```
 
 
 
+*Default:*
+` [ ] `
 
-## services.rabbitmq.port
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
+
+
+
+## services\.rabbitmq\.port
+
 Port on which RabbitMQ will listen for AMQP connections.
 
 
-*_Type_*
-```
+
+
+*Type:*
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
-```
-
-
-*_Default_*
-```
-5672
-```
 
 
 
+*Default:*
+` 5672 `
 
-## services.redis.bind
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/rabbitmq.nix)
+
+
+
+## services\.redis\.enable
+
+Whether to enable Redis process and expose utilities.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis.nix)
+
+
+
+## services\.redis\.package
+
+Which package of Redis to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.redis `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis.nix)
+
+
+
+## services\.redis\.bind
+
 The IP interface to bind to.
 `null` means "all interfaces".
 
 
-*_Type_*
-```
+
+
+*Type:*
 null or string
-```
 
 
-*_Default_*
-```
-"127.0.0.1"
-```
+
+*Default:*
+` "127.0.0.1" `
 
 
-*_Example_*
-```
-"127.0.0.1"
-```
+
+*Example:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis.nix)
 
 
-## services.redis.enable
-Whether to enable Redis process and expose utilities.
 
-*_Type_*
-```
-boolean
-```
+## services\.redis\.extraConfig
 
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## services.redis.extraConfig
 Additional text to be appended to `redis.conf`.
 
-*_Type_*
-```
-strings concatenated with "\n"
-```
 
 
-*_Default_*
-```
-""
-```
+*Type:*
+strings concatenated with “\\n”
 
 
 
+*Default:*
+` "" `
 
-## services.redis.package
-Which package of Redis to use
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.redis
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis.nix)
 
 
 
+## services\.redis\.port
 
-## services.redis.port
 The TCP port to accept connections.
 If port 0 is specified Redis, will not listen on a TCP socket.
 
 
-*_Type_*
-```
+
+
+*Type:*
 16 bit unsigned integer; between 0 and 65535 (both inclusive)
-```
-
-
-*_Default_*
-```
-6379
-```
 
 
 
+*Default:*
+` 6379 `
 
-## services.wiremock.disableBanner
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/redis.nix)
+
+
+
+## services\.wiremock\.enable
+
+Whether to enable WireMock.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock.nix)
+
+
+
+## services\.wiremock\.package
+
+Which package of WireMock to use.
+
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.wiremock `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock.nix)
+
+
+
+## services\.wiremock\.disableBanner
+
 Whether to disable print banner logo.
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## services.wiremock.enable
-Whether to enable WireMock.
-
-*_Type_*
-```
-boolean
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock.nix)
 
 
-*_Default_*
-```
-false
-```
 
+## services\.wiremock\.mappings
 
-*_Example_*
-```
-true
-```
-
-
-## services.wiremock.mappings
 The mappings to mock.
 See the JSON examples on <https://wiremock.org/docs/stubbing/> for more information.
 
 
-*_Type_*
-```
+
+
+*Type:*
 JSON value
-```
 
 
-*_Default_*
-```
-[ ]
-```
+
+*Default:*
+` [ ] `
 
 
-*_Example_*
+
+*Example:*
+
 ```
 [
   {
@@ -6143,134 +7244,133 @@ JSON value
 ]
 ```
 
-
-## services.wiremock.package
-Which package of WireMock to use.
-
-
-*_Type_*
-```
-package
-```
-
-
-*_Default_*
-```
-pkgs.wiremock
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock.nix)
 
 
 
+## services\.wiremock\.port
 
-## services.wiremock.port
 The port number for the HTTP server to listen on.
 
 
-*_Type_*
-```
+
+
+*Type:*
 signed integer
-```
-
-
-*_Default_*
-```
-8080
-```
 
 
 
+*Default:*
+` 8080 `
 
-## services.wiremock.verbose
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock.nix)
+
+
+
+## services\.wiremock\.verbose
+
 Whether to log verbosely to stdout.
 
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
-
-
-*_Default_*
-```
-false
-```
 
 
 
+*Default:*
+` false `
 
-## starship.config.enable
-Whether to enable Starship config override.
-
-*_Type_*
-```
-boolean
-```
-
-
-*_Default_*
-```
-false
-```
-
-
-*_Example_*
-```
-true
-```
-
-
-## starship.config.path
-The Starship configuration file to use.
-
-*_Type_*
-```
-path
-```
-
-
-*_Default_*
-```
-${config.env.DEVENV_ROOT}/starship.toml
-```
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/services/wiremock.nix)
 
 
 
+## starship\.enable
 
-## starship.enable
 Whether to enable the Starship.rs command prompt.
 
-*_Type_*
-```
+
+
+*Type:*
 boolean
-```
 
 
-*_Default_*
-```
-false
-```
+
+*Default:*
+` false `
 
 
-*_Example_*
-```
-true
-```
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship.nix)
 
 
-## starship.package
+
+## starship\.package
+
 The Starship package to use.
 
-*_Type_*
-```
+
+
+*Type:*
 package
-```
 
 
-*_Default_*
-```
-pkgs.starship
-```
+
+*Default:*
+` pkgs.starship `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship.nix)
 
 
+
+## starship\.config\.enable
+
+Whether to enable Starship config override.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship.nix)
+
+
+
+## starship\.config\.path
+
+The Starship configuration file to use.
+
+
+
+*Type:*
+path
+
+
+
+*Default:*
+` ${config.env.DEVENV_ROOT}/starship.toml `
+
+*Declared by:*
+ - [/nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship\.nix](file:///nix/store/l6k9m6ykkiikvmwbrib54hwl75yf4phm-source/src/modules/integrations/starship.nix)
 
 
