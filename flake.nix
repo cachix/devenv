@@ -31,7 +31,7 @@
       mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions = pkgs:
         let
-          inherit (pkgs.lib.attrsets) attrByPath;
+          inherit (pkgs) lib;
           eval = pkgs.lib.evalModules {
             modules = [
               ./src/modules/top-level.nix
@@ -39,17 +39,25 @@
             ];
             specialArgs = { inherit pre-commit-hooks pkgs inputs; };
           };
+          sources = [
+            { name = "${self}"; url = "https://github.com/cachix/devenv/blob/main"; }
+            { name = "${pre-commit-hooks}"; url = "https://github.com/cachix/pre-commit-hooks.nix/blob/master"; }
+          ];
+          rewriteSource = decl:
+            let
+              prefix = lib.strings.concatStringsSep "/" (lib.lists.take 4 (lib.strings.splitString "/" decl));
+              source = lib.lists.findFirst (src: src.name == prefix) { } sources;
+              path = lib.strings.removePrefix prefix decl;
+              url = "${source.url}${path}";
+            in
+            { name = url; url = url; };
           options = pkgs.nixosOptionsDoc {
             options = builtins.removeAttrs eval.options [ "_module" ];
 
             warningsAreErrors = false;
 
-            # Unpack mdDoc until the new upstream markdown renderer is ready
             transformOptions = opt: (
-              if (attrByPath [ "description" "_type" ] "" opt == "mdDoc") then
-                opt // { description = opt.description.text; }
-              else
-                opt
+              opt // { declarations = map rewriteSource opt.declarations; }
             );
           };
         in
