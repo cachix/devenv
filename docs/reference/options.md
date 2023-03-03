@@ -15,7 +15,7 @@ list of package
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -43,7 +43,7 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/mkcert\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/mkcert.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/mkcert\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
 
 
 
@@ -62,7 +62,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -81,7 +81,7 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -100,7 +100,7 @@ null or path
 ` "self" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -121,7 +121,7 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -140,7 +140,7 @@ list of anything
 ` [ entrypoint ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -159,7 +159,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -178,7 +178,7 @@ null or string
 ` "dummy-‹name›" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -197,7 +197,7 @@ null or string
 ` "docker://" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -216,7 +216,7 @@ null or string or package
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -235,7 +235,7 @@ null or string
 ` "latest" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/containers.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -259,7 +259,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/devcontainer\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/devcontainer.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
 
 
 
@@ -279,7 +279,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/update-check\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/update-check.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
 
 
 
@@ -299,7 +299,7 @@ string
 ` "0.6" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/update-check\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/update-check.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
 
 
 
@@ -319,7 +319,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/update-check\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/update-check.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
 
 
 
@@ -338,7 +338,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/difftastic\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/difftastic.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/difftastic\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/difftastic.nix)
 
 
 
@@ -357,7 +357,7 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -376,7 +376,7 @@ lazy attribute set of anything
 ` { } `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -405,7 +405,7 @@ attribute set of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/hostctl\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/hostctl.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/hostctl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
 
 
 
@@ -424,7 +424,7 @@ string
 ` "devenv-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/hostctl\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/hostctl.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/hostctl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
 
 
 
@@ -443,7 +443,7 @@ attribute set of list of string
 ` { } `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/info\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/info.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/info\.nix](https://github.com/cachix/devenv/blob/main/src/modules/info.nix)
 
 
 
@@ -467,7 +467,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ansible\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ansible.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
 
 
 
@@ -486,7 +486,7 @@ package
 ` pkgs.ansible `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ansible\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ansible.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
 
 
 
@@ -510,7 +510,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/c\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/c.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/c\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
 
 
 
@@ -534,7 +534,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/clojure\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/clojure.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/clojure\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
 
 
 
@@ -558,7 +558,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/cplusplus\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/cplusplus.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cplusplus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
 
 
 
@@ -582,7 +582,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/crystal\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/crystal.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
 
 
 
@@ -606,7 +606,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/cue\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/cue.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
 
 
 
@@ -625,7 +625,7 @@ package
 ` pkgs.cue `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/cue\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/cue.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
 
 
 
@@ -649,7 +649,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/dart\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/dart.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
 
 
 
@@ -668,7 +668,7 @@ package
 ` pkgs.dart `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/dart\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/dart.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
 
 
 
@@ -692,7 +692,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/deno\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/deno.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/deno\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)
 
 
 
@@ -716,7 +716,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/dotnet\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/dotnet.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dotnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
 
 
 
@@ -740,7 +740,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/elixir\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/elixir.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
 
 
 
@@ -759,7 +759,7 @@ package
 ` pkgs.elixir `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/elixir\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/elixir.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
 
 
 
@@ -783,7 +783,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/elm\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/elm.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
 
 
 
@@ -807,7 +807,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/erlang\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/erlang.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
 
 
 
@@ -826,7 +826,7 @@ package
 ` pkgs.erlang `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/erlang\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/erlang.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
 
 
 
@@ -850,7 +850,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/gawk\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/gawk.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/gawk\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gawk.nix)
 
 
 
@@ -874,7 +874,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/go\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/go.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
 
 
 
@@ -893,7 +893,7 @@ package
 ` pkgs.go `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/go\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/go.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
 
 
 
@@ -917,7 +917,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/haskell\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/haskell.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
 
 
 
@@ -941,7 +941,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
@@ -965,7 +965,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
@@ -981,7 +981,7 @@ The Gradle package by default inherits the JDK from `languages.java.jdk.package`
 package
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
@@ -1007,7 +1007,7 @@ package
 ` pkgs.jdk8 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
@@ -1031,7 +1031,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
@@ -1047,7 +1047,7 @@ The Maven package by default inherits the JDK from `languages.java.jdk.package`.
 package
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/java.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
@@ -1071,7 +1071,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/javascript\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/javascript.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -1090,7 +1090,7 @@ package
 ` pkgs.nodejs `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/javascript\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/javascript.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -1114,7 +1114,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/julia\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/julia.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
 
 
 
@@ -1133,7 +1133,7 @@ package
 ` pkgs.julia-bin `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/julia\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/julia.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
 
 
 
@@ -1157,7 +1157,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/kotlin\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/kotlin.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
 
 
 
@@ -1181,7 +1181,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/lua\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/lua.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
 
 
 
@@ -1200,7 +1200,7 @@ package
 ` pkgs.lua `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/lua\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/lua.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
 
 
 
@@ -1224,7 +1224,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/nim\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/nim.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
 
 
 
@@ -1243,7 +1243,7 @@ package
 ` pkgs.nim `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/nim\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/nim.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
 
 
 
@@ -1267,7 +1267,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/nix\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/nix.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nix\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
 
 
 
@@ -1291,7 +1291,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ocaml\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ocaml.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
 
 
 
@@ -1310,7 +1310,7 @@ attribute set
 ` pkgs.ocaml-ng.ocamlPackages_4_12 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ocaml\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ocaml.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
 
 
 
@@ -1334,7 +1334,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/perl\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/perl.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/perl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
 
 
 
@@ -1358,7 +1358,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1394,7 +1394,7 @@ pkgs.php.buildEnv {
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1413,7 +1413,7 @@ submodule
 ` pkgs `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1432,7 +1432,7 @@ null or package
 ` pkgs.phpPackages.composer `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1452,7 +1452,7 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1475,7 +1475,7 @@ null or strings concatenated with “\\n”
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1505,7 +1505,7 @@ strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1548,7 +1548,7 @@ attribute set of (submodule)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1570,7 +1570,7 @@ null or strings concatenated with “\\n”
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1595,7 +1595,7 @@ string
 ` "/path/to/unix/socket" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1629,7 +1629,7 @@ attribute set of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1644,7 +1644,7 @@ Options appended to the PHP configuration file `php.ini` used for this PHP-FPM p
 strings concatenated with “\\n”
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1664,7 +1664,7 @@ package
 ` phpfpm.phpPackage `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1704,7 +1704,7 @@ attribute set of (string or signed integer or boolean)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1726,7 +1726,7 @@ string *(read only)*
 ` "/.devenv/state/php-fpm/<name>.sock" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1761,7 +1761,7 @@ attribute set of (string or signed integer or boolean)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1781,7 +1781,7 @@ null or strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1800,7 +1800,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/php.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -1824,7 +1824,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/purescript\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/purescript.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
 
 
 
@@ -1843,7 +1843,7 @@ package
 ` pkgs.purescript `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/purescript\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/purescript.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
 
 
 
@@ -1867,7 +1867,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -1886,7 +1886,7 @@ package
 ` pkgs.python3 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -1910,7 +1910,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -1935,7 +1935,7 @@ pkgs.poetry.override {
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -1959,7 +1959,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/python.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -1983,7 +1983,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/r\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/r.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
 
 
 
@@ -2002,7 +2002,7 @@ package
 ` pkgs.R `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/r\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/r.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
 
 
 
@@ -2026,7 +2026,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/racket\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/racket.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/racket\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
 
 
 
@@ -2045,7 +2045,7 @@ package
 ` pkgs.racket-minimal `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/racket\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/racket.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/racket\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
 
 
 
@@ -2069,7 +2069,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/raku\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/raku.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/raku\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/raku.nix)
 
 
 
@@ -2093,7 +2093,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/robotframework\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/robotframework.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
 
 
 
@@ -2112,7 +2112,7 @@ package
 ` pkgs.python3 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/robotframework\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/robotframework.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
 
 
 
@@ -2136,7 +2136,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
@@ -2155,7 +2155,7 @@ package
 ` pkgs.ruby_3_1 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
@@ -2181,7 +2181,7 @@ null or string
 ` "3.2.1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
@@ -2216,7 +2216,7 @@ null or path
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/ruby.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
@@ -2240,7 +2240,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2259,7 +2259,7 @@ submodule
 ` pkgs `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2278,7 +2278,7 @@ package
 ` pkgs.cargo `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2295,7 +2295,7 @@ package
 ` pkgs.clippy `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2314,7 +2314,7 @@ package
 ` pkgs.rust-analyzer `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2333,7 +2333,7 @@ package or string
 ` pkgs.rustPlatform.rustLibSrc `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2352,7 +2352,7 @@ package
 ` pkgs.rustc `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2371,7 +2371,7 @@ package
 ` pkgs.rustfmt `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2390,7 +2390,7 @@ null or string
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/rust.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -2414,7 +2414,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/scala\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/scala.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
 
 
 
@@ -2434,7 +2434,7 @@ package
 ` "pkgs.scala_3" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/scala\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/scala.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
 
 
 
@@ -2458,7 +2458,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/swift\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/swift.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
 
 
 
@@ -2478,7 +2478,7 @@ package
 ` "pkgs.swift" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/swift\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/swift.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
 
 
 
@@ -2502,7 +2502,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/terraform\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/terraform.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
 
 
 
@@ -2521,7 +2521,7 @@ package
 ` pkgs.terraform `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/terraform\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/terraform.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
 
 
 
@@ -2545,7 +2545,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/texlive\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/texlive.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
 
 
 
@@ -2569,7 +2569,7 @@ non-empty (list of Concatenated string)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/texlive\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/texlive.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
 
 
 
@@ -2588,7 +2588,7 @@ unspecified value
 ` pkgs.texlive `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/texlive\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/texlive.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
 
 
 
@@ -2612,7 +2612,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/typescript\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/typescript.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
 
 
 
@@ -2636,7 +2636,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/unison\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/unison.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/unison\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
 
 
 
@@ -2655,7 +2655,7 @@ package
 ` pkgs.unison-ucm `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/unison\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/unison.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/unison\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
 
 
 
@@ -2679,7 +2679,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/v\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/v.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/v\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
 
 
 
@@ -2698,7 +2698,7 @@ package
 ` pkgs.vlang `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/v\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/v.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/v\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
 
 
 
@@ -2722,7 +2722,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/zig\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/zig.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
 
 
 
@@ -2741,7 +2741,7 @@ package
 ` pkgs.zig `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/zig\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/languages/zig.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
 
 
 
@@ -2760,7 +2760,7 @@ null or string
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/top-level.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -2779,14 +2779,15 @@ submodule
 ` { } `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/pre-commit\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/pre-commit.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/pre-commit\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/pre-commit.nix)
 
 
 
 ## pre-commit\.package
 
-The `pre-commit` package to use.
 
+
+The ` pre-commit ` package to use\.
 
 
 
@@ -2794,16 +2795,17 @@ The `pre-commit` package to use.
 package
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.default_stages
 
-A configuration wide option for the stages property.
-Installs hooks to the defined stages.
-See [https://pre-commit.com/#confining-hooks-to-run-at-certain-stages](https://pre-commit.com/#confining-hooks-to-run-at-certain-stages).
 
+
+A configuration wide option for the stages property\.
+Installs hooks to the defined stages\.
+See [https://pre-commit\.com/\#confining-hooks-to-run-at-certain-stages](https://pre-commit\.com/\#confining-hooks-to-run-at-certain-stages)\.
 
 
 
@@ -2821,14 +2823,15 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.excludes
 
-Exclude files that were matched by these patterns.
 
+
+Exclude files that were matched by these patterns\.
 
 
 
@@ -2841,13 +2844,15 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks
 
-The hook definitions.
+
+
+The hook definitions\.
 
 Pre-defined hooks can be enabled by, for example:
 
@@ -2857,323 +2862,257 @@ hooks.nixpkgs-fmt.enable = true;
 
 The pre-defined hooks are:
 
-**`actionlint`**
+**` actionlint `**
 
-Static checker for GitHub Actions workflow files.
+Static checker for GitHub Actions workflow files\.
 
+**` alejandra `**
 
-**`alejandra`**
+The Uncompromising Nix Code Formatter\.
 
-The Uncompromising Nix Code Formatter.
+**` ansible-lint `**
 
+Ansible linter\.
 
-**`ansible-lint`**
+**` autoflake `**
 
-Ansible linter.
+Remove unused imports and variables from Python code\.
 
+**` bats `**
 
-**`autoflake`**
+Run bash unit tests\.
 
-Remove unused imports and variables from Python code.
+**` black `**
 
+The uncompromising Python code formatter\.
 
-**`bats`**
-
-Run bash unit tests.
-
-
-**`black`**
-
-The uncompromising Python code formatter.
-
-
-**`cabal-fmt`**
+**` cabal-fmt `**
 
 Format Cabal files
 
+**` cabal2nix `**
 
-**`cabal2nix`**
+Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` default.nix ` files\.
 
-Run `cabal2nix` on all `*.cabal` files to generate corresponding `default.nix` files.
+**` cargo-check `**
 
+Check the cargo package for errors\.
 
-**`cargo-check`**
-
-Check the cargo package for errors.
-
-
-**`chktex`**
+**` chktex `**
 
 LaTeX semantic checker
 
+**` clang-format `**
 
-**`clang-format`**
+Format your code using ` clang-format `\.
 
-Format your code using `clang-format`.
+**` clippy `**
 
+Lint Rust code\.
 
-**`clippy`**
+**` commitizen `**
 
-Lint Rust code.
+Check whether the current commit message follows commiting rules\.
 
+**` deadnix `**
 
-**`commitizen`**
+Scan Nix files for dead code (unused variable bindings)\.
 
-Check whether the current commit message follows commiting rules.
+**` dhall-format `**
 
+Dhall code formatter\.
 
+**` dune-opam-sync `**
 
-**`deadnix`**
+Check that Dune-generated OPAM files are in sync\.
 
-Scan Nix files for dead code (unused variable bindings).
+**` editorconfig-checker `**
 
+Verify that the files are in harmony with the ` .editorconfig `\.
 
-**`dhall-format`**
+**` elm-format `**
 
-Dhall code formatter.
+Format Elm files\.
 
+**` elm-review `**
 
-**`dune-opam-sync`**
+Analyzes Elm projects, to help find mistakes before your users find them\.
 
-Check that Dune-generated OPAM files are in sync.
+**` elm-test `**
 
+Run unit tests and fuzz tests for Elm code\.
 
-**`editorconfig-checker`**
+**` eslint `**
 
-Verify that the files are in harmony with the `.editorconfig`.
+Find and fix problems in your JavaScript code\.
 
+**` flake8 `**
 
-**`elm-format`**
+Check the style and quality of Python files\.
 
-Format Elm files.
+**` fourmolu `**
 
+Haskell code prettifier\.
 
-**`elm-review`**
-
-Analyzes Elm projects, to help find mistakes before your users find them.
-
-
-**`elm-test`**
-
-Run unit tests and fuzz tests for Elm code.
-
-
-**`eslint`**
-
-Find and fix problems in your JavaScript code.
-
-
-**`flake8`**
-
-Check the style and quality of Python files.
-
-
-**`fourmolu`**
-
-Haskell code prettifier.
-
-
-**`gofmt`**
+**` gofmt `**
 
 A tool that automatically formats Go source code
 
-
-**`gotest`**
+**` gotest `**
 
 Run go tests
 
+**` govet `**
 
-**`govet`**
+Checks correctness of Go programs\.
 
-Checks correctness of Go programs.
+**` hadolint `**
 
+Dockerfile linter, validate inline bash\.
 
-**`hadolint`**
+**` hindent `**
 
-Dockerfile linter, validate inline bash.
+Haskell code prettifier\.
 
+**` hlint `**
 
-**`hindent`**
+HLint gives suggestions on how to improve your source code\.
 
-Haskell code prettifier.
+**` hpack `**
 
+` hpack ` converts package definitions in the hpack format (` package.yaml `) to Cabal files\.
 
-**`hlint`**
+**` html-tidy `**
 
-HLint gives suggestions on how to improve your source code.
+HTML linter\.
 
+**` hunspell `**
 
-**`hpack`**
+Spell checker and morphological analyzer\.
 
-`hpack` converts package definitions in the hpack format (`package.yaml`) to Cabal files.
+**` isort `**
 
+A Python utility / library to sort imports\.
 
-**`html-tidy`**
+**` latexindent `**
 
-HTML linter.
+Perl script to add indentation to LaTeX files\.
 
+**` luacheck `**
 
-**`hunspell`**
+A tool for linting and static analysis of Lua code\.
 
-Spell checker and morphological analyzer.
+**` markdownlint `**
 
+Style checker and linter for markdown files\.
 
-**`isort`**
+**` mdsh `**
 
-A Python utility / library to sort imports.
+Markdown shell pre-processor\.
 
+**` nixfmt `**
 
-**`latexindent`**
+Nix code prettifier\.
 
-Perl script to add indentation to LaTeX files.
+**` nixpkgs-fmt `**
 
+Nix code prettifier\.
 
-**`luacheck`**
+**` ocp-indent `**
 
-A tool for linting and static analysis of Lua code.
+A tool to indent OCaml code\.
 
+**` opam-lint `**
 
-**`markdownlint`**
+OCaml package manager configuration checker\.
 
-Style checker and linter for markdown files.
+**` ormolu `**
 
+Haskell code prettifier\.
 
-**`mdsh`**
+**` php-cs-fixer `**
 
-Markdown shell pre-processor.
+Lint PHP files\.
 
+**` phpcbf `**
 
-**`nixfmt`**
+Lint PHP files\.
 
-Nix code prettifier.
+**` phpcs `**
 
+Lint PHP files\.
 
-**`nixpkgs-fmt`**
+**` prettier `**
 
-Nix code prettifier.
+Opinionated multi-language code formatter\.
 
+**` purs-tidy `**
 
-**`ocp-indent`**
+Format purescript files\.
 
-A tool to indent OCaml code.
+**` purty `**
 
+Format purescript files\.
 
-**`opam-lint`**
+**` pylint `**
 
-OCaml package manager configuration checker.
+Lint Python files\.
 
+**` revive `**
 
-**`ormolu`**
+A linter for Go source code\.
 
-Haskell code prettifier.
+**` ruff `**
 
+An extremely fast Python linter, written in Rust\.
 
-**`php-cs-fixer`**
+**` rustfmt `**
 
-Lint PHP files.
+Format Rust code\.
 
+**` shellcheck `**
 
-**`phpcbf`**
+Format shell files\.
 
-Lint PHP files.
+**` shfmt `**
 
+Format shell files\.
 
-**`phpcs`**
-
-Lint PHP files.
-
-
-**`prettier`**
-
-Opinionated multi-language code formatter.
-
-
-**`purs-tidy`**
-
-Format purescript files.
-
-
-**`purty`**
-
-Format purescript files.
-
-
-**`pylint`**
-
-Lint Python files.
-
-
-**`revive`**
-
-A linter for Go source code.
-
-
-**`ruff`**
-
- An extremely fast Python linter, written in Rust.
-
-
-**`rustfmt`**
-
-Format Rust code.
-
-
-**`shellcheck`**
-
-Format shell files.
-
-
-**`shfmt`**
-
-Format shell files.
-
-
-**`staticcheck`**
+**` staticcheck `**
 
 State of the art linter for the Go programming language
 
+**` statix `**
 
-**`statix`**
+Lints and suggestions for the Nix programming language\.
 
-Lints and suggestions for the Nix programming language.
-
-
-**`stylish-haskell`**
+**` stylish-haskell `**
 
 A simple Haskell code prettifier
 
+**` stylua `**
 
-**`stylua`**
+An Opinionated Lua Code Formatter\.
 
-An Opinionated Lua Code Formatter.
-
-
-**`taplo`**
+**` taplo `**
 
 Format TOML files with taplo fmt
 
+**` terraform-format `**
 
-**`terraform-format`**
+Format terraform (` .tf `) files\.
 
-Format terraform (`.tf`) files.
-
-
-**`typos`**
+**` typos `**
 
 Source code spell checker
 
+**` yamllint `**
 
-**`yamllint`**
+Yaml linter\.
 
-Yaml linter.
+**` zprint `**
 
-
-**`zprint`**
-
-Beautifully format Clojure and Clojurescript source code and s-expressions.
-
-
-
+Beautifully format Clojure and Clojurescript source code and s-expressions\.
 
 
 
@@ -3186,13 +3125,15 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.enable
 
-Whether to enable this pre-commit hook.
+
+
+Whether to enable this pre-commit hook\.
 
 
 
@@ -3205,14 +3146,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.description
 
-Description of the hook. used for metadata purposes only.
 
+
+Description of the hook\. used for metadata purposes only\.
 
 
 
@@ -3225,14 +3167,15 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.entry
 
-The entry point - the executable to run. {option}`entry` can also contain arguments that will not be overridden, such as `entry = "autopep8 -i";`.
 
+
+The entry point - the executable to run\. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `\.
 
 
 
@@ -3240,14 +3183,15 @@ The entry point - the executable to run. {option}`entry` can also contain argume
 string
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.excludes
 
-Exclude files that were matched by these patterns.
 
+
+Exclude files that were matched by these patterns\.
 
 
 
@@ -3260,14 +3204,15 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.fail_fast
 
-if true pre-commit will stop running hooks if this hook fails.
 
+
+if true pre-commit will stop running hooks if this hook fails\.
 
 
 
@@ -3275,14 +3220,15 @@ if true pre-commit will stop running hooks if this hook fails.
 boolean
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.files
 
-The pattern of files to run on.
 
+
+The pattern of files to run on\.
 
 
 
@@ -3295,14 +3241,15 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.language
 
-The language of the hook - tells pre-commit how to install the hook.
 
+
+The language of the hook - tells pre-commit how to install the hook\.
 
 
 
@@ -3315,14 +3262,15 @@ string
 ` "system" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.name
 
-The name of the hook - shown during hook execution.
 
+
+The name of the hook - shown during hook execution\.
 
 
 
@@ -3332,14 +3280,15 @@ string
 *Default:* internal name, same as id
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.pass_filenames
 
-Whether to pass filenames as arguments to the entry point.
 
+
+Whether to pass filenames as arguments to the entry point\.
 
 
 
@@ -3352,17 +3301,18 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.raw
 
-Raw fields of a pre-commit hook. This is mostly for internal use but
-exposed in case you need to work around something.
 
-Default: taken from the other hook options.
 
+Raw fields of a pre-commit hook\. This is mostly for internal use but
+exposed in case you need to work around something\.
+
+Default: taken from the other hook options\.
 
 
 
@@ -3370,14 +3320,15 @@ Default: taken from the other hook options.
 attribute set of unspecified value
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.require_serial
 
-if true this hook will execute using a single process instead of in parallel.
 
+
+if true this hook will execute using a single process instead of in parallel\.
 
 
 
@@ -3385,14 +3336,15 @@ if true this hook will execute using a single process instead of in parallel.
 boolean
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.stages
 
-Confines the hook to run at a particular stage.
 
+
+Confines the hook to run at a particular stage\.
 
 
 
@@ -3405,14 +3357,15 @@ list of string
 ` default_stages `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.types
 
-List of file types to run on. See [Filtering files with types](https://pre-commit.com/#plugins).
 
+
+List of file types to run on\. See [Filtering files with types](https://pre-commit\.com/\#plugins)\.
 
 
 
@@ -3430,14 +3383,15 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.hooks\.\<name>\.types_or
 
-List of file types to run on, where only a single type needs to match.
 
+
+List of file types to run on, where only a single type needs to match\.
 
 
 
@@ -3450,14 +3404,15 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.installationScript
 
-A bash snippet that installs nix-pre-commit-hooks in the current directory
 
+
+A bash snippet that installs nix-pre-commit-hooks in the current directory
 
 
 
@@ -3465,19 +3420,20 @@ A bash snippet that installs nix-pre-commit-hooks in the current directory
 string *(read only)*
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.rootSrc
 
-The source of the project to be checked.
 
-This is used in the derivation that performs the check.
 
-If you use the `flakeModule`, the default is `self.outPath`; the whole flake
-sources.
+The source of the project to be checked\.
 
+This is used in the derivation that performs the check\.
+
+If you use the ` flakeModule `, the default is ` self.outPath `; the whole flake
+sources\.
 
 
 
@@ -3485,15 +3441,16 @@ sources.
 path
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.run
 
-A derivation that tests whether the pre-commit hooks run cleanly on
-the entire project.
 
+
+A derivation that tests whether the pre-commit hooks run cleanly on
+the entire project\.
 
 
 
@@ -3506,13 +3463,15 @@ package *(read only)*
 ` "<derivation>" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.settings\.alejandra\.exclude
 
-Files or directories to exclude from formatting.
+
+
+Files or directories to exclude from formatting\.
 
 
 
@@ -3536,13 +3495,15 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.autoflake\.binPath
 
-Path to autoflake binary.
+
+
+Path to autoflake binary\.
 
 
 
@@ -3559,13 +3520,15 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.autoflake\.flags
 
-Flags passed to autoflake.
+
+
+Flags passed to autoflake\.
 
 
 
@@ -3578,11 +3541,13 @@ string
 ` "--in-place --expand-star-imports --remove-duplicate-keys --remove-unused-variables" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.clippy\.denyWarnings
+
+
 
 Fail when warnings are present
 
@@ -3597,11 +3562,13 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.clippy\.offline
+
+
 
 Run clippy offline
 
@@ -3616,13 +3583,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.deadnix\.edit
 
-Remove unused code and write to source file.
+
+
+Remove unused code and write to source file\.
 
 
 
@@ -3635,13 +3604,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.deadnix\.noLambdaArg
 
-Don't check lambda parameter arguments.
+
+
+Don’t check lambda parameter arguments\.
 
 
 
@@ -3654,13 +3625,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.deadnix\.noLambdaPatternNames
 
-Don't check lambda pattern names (don't break nixpkgs `callPackage`).
+
+
+Don’t check lambda pattern names (don’t break nixpkgs ` callPackage `)\.
 
 
 
@@ -3673,13 +3646,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.deadnix\.noUnderscore
 
-Don't check any bindings that start with a `_`.
+
+
+Don’t check any bindings that start with a ` _ `\.
 
 
 
@@ -3692,13 +3667,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.deadnix\.quiet
 
-Don't print a dead code report.
+
+
+Don’t print a dead code report\.
 
 
 
@@ -3711,13 +3688,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.eslint\.binPath
 
-`eslint` binary path. E.g. if you want to use the `eslint` in `node_modules`, use `./node_modules/.bin/eslint`.
+
+
+` eslint ` binary path\. E\.g\. if you want to use the ` eslint ` in ` node_modules `, use ` ./node_modules/.bin/eslint `\.
 
 
 
@@ -3730,13 +3709,15 @@ path
 ` ${tools.eslint}/bin/eslint `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.eslint\.extensions
 
-The pattern of files to run on, see [https://pre-commit.com/#hooks-files](https://pre-commit.com/#hooks-files).
+
+
+The pattern of files to run on, see [https://pre-commit\.com/\#hooks-files](https://pre-commit\.com/\#hooks-files)\.
 
 
 
@@ -3749,13 +3730,15 @@ string
 ` "\\.js$" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.flake8\.binPath
 
-flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
+
+
+flake8 binary path\. Should be used to specify flake8 binary from your Nix-managed Python environment\.
 
 
 
@@ -3772,13 +3755,15 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.flake8\.format
 
-Output format.
+
+
+Output format\.
 
 
 
@@ -3791,13 +3776,15 @@ string
 ` "default" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.hpack\.silent
 
-Whether generation should be silent.
+
+
+Whether generation should be silent\.
 
 
 
@@ -3810,13 +3797,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.markdownlint\.config
 
-See https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.jsonc
+
+
+See https://github\.com/DavidAnson/markdownlint/blob/main/schema/\.markdownlint\.jsonc
 
 
 
@@ -3829,13 +3818,15 @@ attribute set
 ` { } `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.nixfmt\.width
 
-Line width.
+
+
+Line width\.
 
 
 
@@ -3848,13 +3839,15 @@ null or signed integer
 ` null `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.ormolu\.cabalDefaultExtensions
 
-Use `default-extensions` from `.cabal` files.
+
+
+Use ` default-extensions ` from ` .cabal ` files\.
 
 
 
@@ -3867,13 +3860,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.ormolu\.defaultExtensions
 
-Haskell language extensions to enable.
+
+
+Haskell language extensions to enable\.
 
 
 
@@ -3886,13 +3881,15 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.php-cs-fixer\.binPath
 
-PHP-CS-Fixer binary path.
+
+
+PHP-CS-Fixer binary path\.
 
 
 
@@ -3909,13 +3906,15 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.phpcbf\.binPath
 
-PHP_CodeSniffer binary path.
+
+
+PHP_CodeSniffer binary path\.
 
 
 
@@ -3932,13 +3931,15 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.phpcs\.binPath
 
-PHP_CodeSniffer binary path.
+
+
+PHP_CodeSniffer binary path\.
 
 
 
@@ -3955,13 +3956,15 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.prettier\.binPath
 
-`prettier` binary path. E.g. if you want to use the `prettier` in `node_modules`, use `./node_modules/.bin/prettier`.
+
+
+` prettier ` binary path\. E\.g\. if you want to use the ` prettier ` in ` node_modules `, use ` ./node_modules/.bin/prettier `\.
 
 
 
@@ -3978,13 +3981,15 @@ path
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.prettier\.output
 
-Output format.
+
+
+Output format\.
 
 
 
@@ -3997,13 +4002,15 @@ null or one of “check”, “list-different”
 ` "list-different" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.prettier\.write
 
-Whether to edit files inplace.
+
+
+Whether to edit files inplace\.
 
 
 
@@ -4016,13 +4023,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.pylint\.binPath
 
-Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
+
+
+Pylint binary path\. Should be used to specify Pylint binary from your Nix-managed Python environment\.
 
 
 
@@ -4039,13 +4048,15 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.pylint\.reports
 
-Whether to display a full report.
+
+
+Whether to display a full report\.
 
 
 
@@ -4058,13 +4069,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.pylint\.score
 
-Whether to activate the evaluation score.
+
+
+Whether to activate the evaluation score\.
 
 
 
@@ -4077,13 +4090,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.revive\.configPath
 
-Path to the configuration TOML file.
+
+
+Path to the configuration TOML file\.
 
 
 
@@ -4096,13 +4111,15 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.rust\.cargoManifestPath
 
-Path to Cargo.toml
+
+
+Path to Cargo\.toml
 
 
 
@@ -4115,13 +4132,15 @@ null or string
 ` null `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.statix\.format
 
-Error Output format.
+
+
+Error Output format\.
 
 
 
@@ -4134,13 +4153,15 @@ one of “stderr”, “errfmt”, “json”
 ` "errfmt" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.statix\.ignore
 
-Globs of file patterns to skip.
+
+
+Globs of file patterns to skip\.
 
 
 
@@ -4164,13 +4185,15 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.typos\.diff
 
-Wheter to print a diff of what would change.
+
+
+Wheter to print a diff of what would change\.
 
 
 
@@ -4183,13 +4206,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.typos\.format
 
-Output format.
+
+
+Output format\.
 
 
 
@@ -4202,13 +4227,15 @@ one of “silent”, “brief”, “long”, “json”
 ` "long" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.typos\.write
 
-Whether to write fixes out.
+
+
+Whether to write fixes out\.
 
 
 
@@ -4221,7 +4248,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
@@ -4240,11 +4267,13 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.settings\.yamllint\.relaxed
+
+
 
 Use the relaxed configuration
 
@@ -4259,18 +4288,19 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/hooks.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
 ## pre-commit\.src
 
-Root of the project. By default this will be filtered with the `gitignoreSource`
-function later, unless `rootSrc` is specified.
 
-If you use the `flakeModule`, the default is `self.outPath`; the whole flake
-sources.
 
+Root of the project\. By default this will be filtered with the ` gitignoreSource `
+function later, unless ` rootSrc ` is specified\.
+
+If you use the ` flakeModule `, the default is ` self.outPath `; the whole flake
+sources\.
 
 
 
@@ -4278,16 +4308,17 @@ sources.
 path
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
 ## pre-commit\.tools
 
-Tool set from which `nix-pre-commit-hooks` will pick binaries.
 
-`nix-pre-commit-hooks` comes with its own set of packages for this purpose.
 
+Tool set from which ` nix-pre-commit-hooks ` will pick binaries\.
+
+` nix-pre-commit-hooks ` comes with its own set of packages for this purpose\.
 
 
 
@@ -4295,7 +4326,7 @@ Tool set from which `nix-pre-commit-hooks` will pick binaries.
 lazy attribute set of package
 
 *Declared by:*
- - [/nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit\.nix](file:///nix/store/0nqwazzicdq6xxrj48cnfbgd1mfpc1gj-source/modules/pre-commit.nix)
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
@@ -4314,7 +4345,7 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4333,7 +4364,7 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4357,7 +4388,7 @@ one of “honcho”, “overmind”, “process-compose”, “hivemind”
 ` "overmind" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4396,7 +4427,7 @@ attribute set
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4415,7 +4446,7 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4429,7 +4460,7 @@ Bash code to run the process.
 string
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4475,7 +4506,7 @@ attribute set
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/processes.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4494,7 +4525,7 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/scripts\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/scripts.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/scripts\.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
 
 
 
@@ -4508,7 +4539,7 @@ Bash code to execute when the script is run.
 string
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/scripts\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/scripts.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/scripts\.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
 
 
 
@@ -4532,7 +4563,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/adminer\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/adminer.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
 
 
 
@@ -4551,7 +4582,7 @@ package
 ` pkgs.adminer `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/adminer\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/adminer.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
 
 
 
@@ -4570,7 +4601,7 @@ string
 ` "127.0.0.1:8080" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/adminer\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/adminer.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
 
 
 
@@ -4597,7 +4628,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -4616,7 +4647,7 @@ package
 ` pkgs.blackfire `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -4637,7 +4668,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -4658,7 +4689,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -4679,7 +4710,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -4700,7 +4731,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -4720,7 +4751,7 @@ string
 ` "tcp://127.0.0.1:8307" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/blackfire.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -4744,7 +4775,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4764,7 +4795,7 @@ package
 ` pkgs.caddy `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4790,7 +4821,7 @@ string
 ` "nginx" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4818,7 +4849,7 @@ null or string
 ` "https://acme-staging-v02.api.letsencrypt.org/directory" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4853,7 +4884,7 @@ strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4877,7 +4908,7 @@ path
 ` "/.devenv/state/caddy" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4896,7 +4927,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4916,7 +4947,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4953,7 +4984,7 @@ attribute set of (submodule)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -4973,7 +5004,7 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -5004,7 +5035,7 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/caddy.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -5028,7 +5059,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5052,7 +5083,7 @@ package
 ` pkgs.cassandra_4; `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5072,7 +5103,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5091,7 +5122,7 @@ string
 ` "Test Cluster" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5121,7 +5152,7 @@ attribute set
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5140,7 +5171,7 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5164,7 +5195,7 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5188,7 +5219,7 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/cassandra.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -5212,7 +5243,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
@@ -5231,7 +5262,7 @@ package
 ` pkgs.couchdb3 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
@@ -5279,14 +5310,15 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
 ## services\.couchdb\.settings\.chttpd\.bindAddress
 
-Defines the IP address by which CouchDB will be accessible.
 
+
+Defines the IP address by which CouchDB will be accessible\.
 
 
 
@@ -5299,14 +5331,15 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
 ## services\.couchdb\.settings\.chttpd\.logFile
 
-Specifies the location of file for logging output.
 
+
+Specifies the location of file for logging output\.
 
 
 
@@ -5319,14 +5352,15 @@ path
 ` "/.devenv/state/couchdb/couchdb.log" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
 ## services\.couchdb\.settings\.chttpd\.port
 
-Defined the port number to listen.
 
+
+Defined the port number to listen\.
 
 
 
@@ -5339,7 +5373,7 @@ Defined the port number to listen.
 ` 5984 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
@@ -5361,7 +5395,7 @@ path
 ` "/.devenv/state/couchdb" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
@@ -5383,7 +5417,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
@@ -5407,7 +5441,7 @@ path
 ` "/.devenv/state/couchdb/couchdb.uri" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
@@ -5429,7 +5463,7 @@ path
 ` "/.devenv/state/couchdb" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/couchdb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
@@ -5448,7 +5482,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5467,7 +5501,7 @@ package
 ` pkgs.elasticsearch7 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5486,7 +5520,7 @@ string
 ` "elasticsearch" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5505,7 +5539,7 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5536,7 +5570,7 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5565,7 +5599,7 @@ list of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5584,7 +5618,7 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5615,7 +5649,7 @@ string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5639,7 +5673,7 @@ list of package
 ` [ pkgs.elasticsearchPlugins.discovery-ec2 ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5658,7 +5692,7 @@ signed integer
 ` 9200 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5677,7 +5711,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5696,7 +5730,7 @@ signed integer
 ` 9300 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/elasticsearch.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -5720,7 +5754,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -5739,7 +5773,7 @@ package
 ` pkgs.mailhog `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -5769,7 +5803,7 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -5788,7 +5822,7 @@ string
 ` "127.0.0.1:8025" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -5807,7 +5841,7 @@ string
 ` "127.0.0.1:1025" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -5826,7 +5860,7 @@ string
 ` "127.0.0.1:8025" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mailhog.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -5850,7 +5884,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
@@ -5869,7 +5903,7 @@ package
 ` pkgs.memcached `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
@@ -5895,7 +5929,7 @@ null or string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
@@ -5916,7 +5950,7 @@ If port 0 is specified Redis will not listen on a TCP socket.
 ` 11211 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
@@ -5946,7 +5980,7 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/memcached.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
@@ -5970,7 +6004,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -5989,7 +6023,7 @@ package
 ` pkgs.minio `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6011,7 +6045,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6030,7 +6064,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6050,7 +6084,7 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6069,7 +6103,7 @@ string
 ` "127.0.0.1:9001" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6088,7 +6122,7 @@ string
 ` "127.0.0.1:9000" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6108,7 +6142,7 @@ string
 ` "us-east-1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6130,7 +6164,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/minio.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -6154,7 +6188,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mongodb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mongodb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
 
 
 
@@ -6173,7 +6207,7 @@ package
 ` pkgs.mongodb `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mongodb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mongodb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
 
 
 
@@ -6210,7 +6244,7 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mongodb\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mongodb.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
 
 
 
@@ -6234,7 +6268,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6253,7 +6287,7 @@ package
 ` pkgs.mysql80 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6294,7 +6328,7 @@ list of (submodule)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6334,7 +6368,7 @@ attribute set of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6349,7 +6383,7 @@ Name of the user to ensure.
 string
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6369,7 +6403,7 @@ null or string
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6402,7 +6436,7 @@ list of (submodule)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6417,7 +6451,7 @@ The name of the database to create.
 string
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6438,7 +6472,7 @@ null or path
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6478,7 +6512,7 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string) o
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/mysql.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -6503,7 +6537,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6532,7 +6566,7 @@ pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6552,7 +6586,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6590,7 +6624,7 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6626,7 +6660,7 @@ list of (submodule)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6641,7 +6675,7 @@ The name of the database to create.
 string
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6662,7 +6696,7 @@ null or path
 ` null `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6693,7 +6727,7 @@ CREATE USER bar;
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6717,7 +6751,7 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6737,7 +6771,7 @@ The TCP port to accept connections.
 ` 5432 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6777,7 +6811,7 @@ attribute set of (boolean or floating point number or signed integer or string)
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/postgres.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
@@ -6798,7 +6832,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6818,7 +6852,7 @@ package
 ` pkgs.rabbitmq-server `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6860,7 +6894,7 @@ attribute set of string
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6882,7 +6916,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6915,7 +6949,7 @@ string
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6939,7 +6973,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6959,7 +6993,7 @@ On which port to run the management plugin
 ` 15672 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6978,7 +7012,7 @@ list of path
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -6997,7 +7031,7 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -7017,7 +7051,7 @@ Port on which RabbitMQ will listen for AMQP connections.
 ` 5672 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/rabbitmq.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -7041,7 +7075,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
@@ -7060,7 +7094,7 @@ package
 ` pkgs.redis `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
@@ -7086,7 +7120,7 @@ null or string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
@@ -7105,7 +7139,7 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
@@ -7126,7 +7160,7 @@ If port 0 is specified Redis, will not listen on a TCP socket.
 ` 6379 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/redis.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
@@ -7150,7 +7184,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
@@ -7170,7 +7204,7 @@ package
 ` pkgs.wiremock `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
@@ -7190,7 +7224,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
@@ -7245,7 +7279,7 @@ JSON value
 ```
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
@@ -7265,7 +7299,7 @@ signed integer
 ` 8080 `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
@@ -7285,7 +7319,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/services/wiremock.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
@@ -7309,7 +7343,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
 
@@ -7328,7 +7362,7 @@ package
 ` pkgs.starship `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
 
@@ -7352,7 +7386,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
 
@@ -7371,6 +7405,6 @@ path
 ` ${config.env.DEVENV_ROOT}/starship.toml `
 
 *Declared by:*
- - [/nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship\.nix](file:///nix/store/8rz1ljfbd81aiixab6dap4dndllx8h5q-source/src/modules/integrations/starship.nix)
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
