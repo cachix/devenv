@@ -107,3 +107,24 @@ jobs:
         EOF
         direnv allow ./examples/simple
         direnv exec ./examples/simple true
+  fish-zsh:
+    name: zsh/fish (${{ join(matrix.os) }})
+    strategy:
+      matrix:
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v20
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+    - uses: cachix/cachix-action@v12
+      with:
+        name: devenv
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    - run: |
+        nix profile remove '.*'
+        nix profile install --accept-flake-config . 
+    - run: |
+        nix shell nixpkgs#zsh -c zsh -c "$(which devenv) version"
+        nix shell nixpkgs#fish -c fish -c "$(which devenv) version"
