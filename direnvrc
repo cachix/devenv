@@ -142,13 +142,18 @@ use_devenv() {
   if [[ ! -e "$profile_rc" || "$need_update" == "1" ]];
   then
     # We need to update our cache
-    local tmp_profile_rc
-    tmp_profile_rc=$("${DEVENV_BIN}" print-dev-env)
-    echo "$tmp_profile_rc" > "$profile_rc"
-    log_status "updated devenv shell cache"
+    local env
+    env=$("${DEVENV_BIN}" print-dev-env)
+    if [[ "$env" == *"DEVENV_ROOT"* ]]; then
+      echo "$env" > "$profile_rc"
+      log_status "updated devenv shell cache"
+      _nix_import_env "$profile_rc"
+    else
+      log_status "loading the environment failed"
+      exit 1
+    fi
   else
     log_status "using cached devenv shell"
+    _nix_import_env "$profile_rc"
   fi
-
-  _nix_import_env "$profile_rc"
 }
