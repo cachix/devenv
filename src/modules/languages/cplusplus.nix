@@ -12,6 +12,7 @@ in
     packages = with pkgs; [
       cmake
       clang
+      ccls
     ];
   };
 }

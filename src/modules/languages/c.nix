@@ -13,6 +13,7 @@ in
       stdenv
       gnumake
       clang
+      ccls
       gcc
       pkg-config
     ];
