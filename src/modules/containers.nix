@@ -85,6 +85,7 @@ let
       name = lib.mkOption {
         type = types.nullOr types.str;
         description = "Name of the container.";
+        defaultText = "top-level name or containers.mycontainer.name";
         default = "${projectName name}-${name}";
       };
 
