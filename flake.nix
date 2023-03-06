@@ -35,7 +35,7 @@
           eval = pkgs.lib.evalModules {
             modules = [
               ./src/modules/top-level.nix
-              { devenv.warnOnNewVersion = false; name = "dummy"; }
+              { devenv.warnOnNewVersion = false; }
             ];
             specialArgs = { inherit pre-commit-hooks pkgs inputs; };
           };
