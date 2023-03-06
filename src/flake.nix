@@ -22,7 +22,9 @@
         overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.inputs or {}));
         pkgs = import nixpkgs {
           system = "${pkgs.system}";
-          allowUnfree = devenv.allowUnfree or false; 
+          config = {
+            allowUnfree = devenv.allowUnfree or false; 
+          };
           inherit overlays;
         };
         lib = pkgs.lib;
