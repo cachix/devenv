@@ -175,7 +175,7 @@ null or string
 
 
 *Default:*
-` "dummy-‹name›" `
+` "top-level name or containers.mycontainer.name" `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
