@@ -31,7 +31,7 @@ jobs:
       run: |
         devenv ci
         devenv shell devenv-run-tests
-        devenv search nccu | grep "pkgs\.ncdu"
+        devenv search ncdu | grep "pkgs\.ncdu"
   generate-examples:
     runs-on: ubuntu-latest
     outputs:
