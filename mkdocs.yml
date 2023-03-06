@@ -35,7 +35,7 @@ nav:
       - Scripts: scripts.md
       - Languages: languages.md
       - Processes: processes.md
-      - Containers: containers.md
+      - Containers 🆕: containers.md
       - Pre-Commit Hooks: pre-commit-hooks.md
       - Common Patterns: common-patterns.md
     - Writing devenv.yaml:
