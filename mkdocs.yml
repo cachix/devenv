@@ -83,7 +83,7 @@ extra:
     - icon: fontawesome/brands/discord 
       link: https://discord.gg/naMgvexb6q
   devenv:
-    version: 0.6
+    version: 0.6.1
 markdown_extensions:
   - tables
   - admonition
