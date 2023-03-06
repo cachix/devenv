@@ -296,7 +296,7 @@ string
 
 
 *Default:*
-` "0.6" `
+` "0.6.1" `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
