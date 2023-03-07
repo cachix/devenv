@@ -148,6 +148,8 @@ You can also specify these options declaratively:
 }
 ```
 
+See [fly.io example](https://github.com/cachix/devenv/tree/main/examples/fly.io) how to get started.
+
 ## Changing environment based on the build type
 
 If we wanted to provide `openssl` package to native and container environments,
