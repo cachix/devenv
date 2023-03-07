@@ -143,15 +143,14 @@ use_devenv() {
   then
     # We need to update our cache
     local env
-    env=$("${DEVENV_BIN}" print-dev-env)
-    if [[ "$env" == *"DEVENV_ROOT"* ]]; then
-      echo "$env" > "$profile_rc"
-      log_status "updated devenv shell cache"
-      _nix_import_env "$profile_rc"
-    else
-      log_status "loading the environment failed"
-      exit 1
+    if ! env=$("${DEVENV_BIN}" print-dev-env); then
+      log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
+      exit 0
     fi
+
+    echo "$env" > "$profile_rc"
+    log_status "updated devenv shell cache"
+    _nix_import_env "$profile_rc"
   else
     log_status "using cached devenv shell"
     _nix_import_env "$profile_rc"
