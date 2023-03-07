@@ -112,7 +112,7 @@ use_devenv() {
     if [[ -f "$flake_dir/devenv.yaml" ]]; then
       if ! devenv assemble; then
         log_error "$(devenv version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
-        exit 1
+        exit 0
       fi
 
       if [[ -f "$flake_dir/.devenv/imports.txt" ]]; then
