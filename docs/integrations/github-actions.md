@@ -15,12 +15,12 @@ jobs:
     runs-on: {{ '${{ matrix.os }}' }}
     steps:
     - uses: actions/checkout@v3
-    - uses: cachix/install-nix-action@v19
+    - uses: cachix/install-nix-action@v20
     - uses: cachix/cachix-action@v12
       with:
         name: devenv
     - name: Install devenv.sh
-      run: nix profile install github:cachix/devenv/v0.5.1
+      run: nix profile install github:cachix/devenv/latest
       shell: sh
     - run: devenv ci
     - run: devenv shell echo ok
