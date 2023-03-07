@@ -38,8 +38,8 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Commands:"
       echo
-      echo "up:             Starts processes in foreground. See http://devenv.sh/processes"
-      echo "version:        Display devenv version"
+      echo "up              Starts processes in foreground. See http://devenv.sh/processes"
+      echo "version         Display devenv version"
       echo
       exit 1
   esac
