@@ -59,7 +59,7 @@ Here's a minimal `flake.nix` that includes:
       devShell.x86_64-linux = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [
-          {
+          ({ pkgs, ... }: {
             # This is your devenv configuration
             packages = [ pkgs.hello ];
 
@@ -67,8 +67,8 @@ Here's a minimal `flake.nix` that includes:
               hello
             '';
 
-            processes.exec.run = hello;
-          }
+            processes.run.exec = hello;
+          })
         ];
       };
     };
