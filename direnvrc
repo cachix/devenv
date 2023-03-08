@@ -12,13 +12,13 @@ _nix_direnv_preflight () {
   if [[ -z ${DEVENV_BIN:-} ]]; then
     DEVENV_BIN=$(command -v devenv)
     if [[ -z "${DEVENV_BIN}" ]]; then
-      log_status "command not found: devenv, see https://devenv.sh/getting-started/"
+      log_error "command not found: devenv, see https://devenv.sh/getting-started/"
       exit 1
     fi
   fi
 
   if ! has direnv_version || ! direnv_version "$REQUIRED_DIRENV_VERSION" 2>/dev/null; then
-    log_status "base direnv version is older than the required v$REQUIRED_DIRENV_VERSION."
+    log_error "base direnv version is older than the required v$REQUIRED_DIRENV_VERSION."
     exit 1
   fi
 
@@ -111,8 +111,8 @@ use_devenv() {
     files_to_watch+=("$flake_dir/devenv.nix" "$flake_dir/devenv.lock" "$flake_dir/devenv.yaml" "$flake_dir/devenv.local.nix")
     if [[ -f "$flake_dir/devenv.yaml" ]]; then
       if ! devenv assemble; then
-        log_status "$(devenv version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
-        exit 1
+        log_error "$(devenv version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
+        exit 0
       fi
 
       if [[ -f "$flake_dir/.devenv/imports.txt" ]]; then
@@ -143,15 +143,14 @@ use_devenv() {
   then
     # We need to update our cache
     local env
-    env=$("${DEVENV_BIN}" print-dev-env)
-    if [[ "$env" == *"DEVENV_ROOT"* ]]; then
-      echo "$env" > "$profile_rc"
-      log_status "updated devenv shell cache"
-      _nix_import_env "$profile_rc"
-    else
-      log_status "loading the environment failed"
-      exit 1
+    if ! env=$("${DEVENV_BIN}" print-dev-env); then
+      log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
+      exit 0
     fi
+
+    echo "$env" > "$profile_rc"
+    log_status "updated devenv shell cache"
+    _nix_import_env "$profile_rc"
   else
     log_status "using cached devenv shell"
     _nix_import_env "$profile_rc"
