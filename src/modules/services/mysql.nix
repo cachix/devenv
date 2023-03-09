@@ -1,30 +1,55 @@
-{ pkgs, lib, config, ... }:
-
-with lib;
-
-let
+{ pkgs
+, lib
+, config
+, ...
+}:
+with lib; let
   cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
   mysqlOptions = "--defaults-file=${configFile}";
   mysqldOptions = "${mysqlOptions} --datadir=$MYSQL_HOME --basedir=${cfg.package}";
+
+  initDatabaseCmd =
+    if isMariaDB
+    then "${cfg.package}/bin/mysql_install_db ${mysqldOptions} --auth-root-authentication-method=normal"
+    else "${cfg.package}/bin/mysqld ${mysqldOptions} --default-time-zone=SYSTEM --initialize-insecure";
+
+  importTimeZones =
+    if (cfg.importTimeZones != null)
+    then cfg.importTimeZones
+    else hasAttrByPath [ "settings" "mysqld" "default-time-zone" ] cfg;
+
+  configureTimezones = ''
+    # Start a temp database with the default-time-zone to import tz data
+    # and hide the temp database from the configureScript by setting a custom socket
+    nohup ${cfg.package}/bin/mysqld ${mysqldOptions} --socket="$MYSQL_HOME/config.sock" --skip-networking --default-time-zone=SYSTEM &
+
+    while ! MYSQL_PWD="" ${cfg.package}/bin/mysqladmin --socket="$MYSQL_HOME/config.sock" ping -u root --silent; do
+      sleep 1
+    done
+
+    ${cfg.package}/bin/mysql_tzinfo_to_sql ${pkgs.tzdata}/share/zoneinfo/ | MYSQL_PWD="" ${cfg.package}/bin/mysql --socket="$MYSQL_HOME/config.sock" -u root mysql
+
+    # Shutdown the temp database
+    MYSQL_PWD="" ${cfg.package}/bin/mysqladmin --socket="$MYSQL_HOME/config.sock" shutdown -u root
+  '';
+
   startScript = pkgs.writeShellScriptBin "start-mysql" ''
     set -euo pipefail
 
     if [[ ! -d "$MYSQL_HOME" || ! -f "$MYSQL_HOME/ibdata1" ]]; then
       mkdir -p "$MYSQL_HOME"
-      ${
-        if isMariaDB
-          then "${cfg.package}/bin/mysql_install_db ${mysqldOptions} --auth-root-authentication-method=normal"
-          else "${cfg.package}/bin/mysqld ${mysqldOptions} --initialize-insecure"
-      }
+      ${initDatabaseCmd}
+      ${optionalString importTimeZones configureTimezones}
     fi
 
     exec ${cfg.package}/bin/mysqld ${mysqldOptions}
   '';
+
   configureScript = pkgs.writeShellScriptBin "configure-mysql" ''
-    PATH="${lib.makeBinPath [ cfg.package pkgs.coreutils ]}:$PATH"
+    PATH="${lib.makeBinPath [cfg.package pkgs.coreutils]}:$PATH"
     set -euo pipefail
 
     while ! MYSQL_PWD="" ${cfg.package}/bin/mysqladmin ping -u root --silent; do
@@ -32,36 +57,38 @@ let
     done
 
     ${concatMapStrings (database: ''
-      # Create initial databases
-      if ! test -e "$MYSQL_HOME/${database.name}"; then
-        echo "Creating initial database: ${database.name}"
-        ( echo 'create database `${database.name}`;'
-          ${optionalString (database.schema != null) ''
-            echo 'use `${database.name}`;'
-            # TODO: this silently falls through if database.schema does not exist,
-            # we should catch this somehow and exit, but can't do it here because we're in a subshell.
-            if [ -f "${database.schema}" ]
-            then
-                cat ${database.schema}
-            elif [ -d "${database.schema}" ]
-            then
-                cat ${database.schema}/mysql-databases/*.sql
-            fi
-          ''}
-        ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root
-      fi
-    '') cfg.initialDatabases}
+        # Create initial databases
+        if ! test -e "$MYSQL_HOME/${database.name}"; then
+          echo "Creating initial database: ${database.name}"
+          ( echo 'create database `${database.name}`;'
+            ${optionalString (database.schema != null) ''
+          echo 'use `${database.name}`;'
+          # TODO: this silently falls through if database.schema does not exist,
+          # we should catch this somehow and exit, but can't do it here because we're in a subshell.
+          if [ -f "${database.schema}" ]
+          then
+              cat ${database.schema}
+          elif [ -d "${database.schema}" ]
+          then
+              cat ${database.schema}/mysql-databases/*.sql
+          fi
+        ''}
+          ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root
+        fi
+      '')
+      cfg.initialDatabases}
 
-    ${concatMapStrings (user:
-      ''
+    ${concatMapStrings (user: ''
         echo "Adding user: ${user.name}"
         ${optionalString (user.password != null) "password='${user.password}'"}
         ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"
           ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
             echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
-          '') user.ensurePermissions)}
+          '')
+          user.ensurePermissions)}
         ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root -N
-    '') cfg.ensureUsers}
+      '')
+      cfg.ensureUsers}
 
     # We need to sleep until infinity otherwise all processes stop
     sleep infinity
@@ -136,6 +163,14 @@ in
       '';
     };
 
+    importTimeZones = lib.mkOption {
+      type = types.nullOr types.bool;
+      default = null;
+      description = ''
+        Whether to import tzdata on the first startup of the mysql server
+      '';
+    };
+
     ensureUsers = lib.mkOption {
       type = types.listOf (types.submodule {
         options = {
@@ -204,12 +239,14 @@ in
       cfg.package
     ];
 
-    env = {
-      MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
-      MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
-    } // (optionalAttrs (hasAttrByPath [ "mysqld" "port" ] cfg.settings) {
-      MYSQL_TCP_PORT = (toString cfg.settings.mysqld.port);
-    });
+    env =
+      {
+        MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
+        MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
+      }
+      // (optionalAttrs (hasAttrByPath [ "mysqld" "port" ] cfg.settings) {
+        MYSQL_TCP_PORT = toString cfg.settings.mysqld.port;
+      });
 
     scripts.mysql.exec = ''
       exec ${cfg.package}/bin/mysql ${mysqlOptions} "$@"
