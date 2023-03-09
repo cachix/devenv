@@ -150,14 +150,14 @@ pkgs.writeScriptBin "devenv" ''
       if [ "$results" = "{}" ]; then
         echo "No packages found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | ${pkgs.util-linux}/bin/column -ts $'\t'
+        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | ${pkgs.util-linuxMinimal}/bin/column -ts $'\t'
         echo
       fi
       echo
       if [ "$results_options" = "{}" ]; then
         echo "No options found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | ${pkgs.util-linux}/bin/column -ts $'\t'
+        ${pkgs.jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | ${pkgs.util-linuxMinimal}/bin/column -ts $'\t'
       fi
       echo
       echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") packages and $(${pkgs.jq}/bin/jq 'length' <<< "$results_options") options for '$name'."
