@@ -67,7 +67,7 @@ Here's a minimal `flake.nix` that includes:
               hello
             '';
 
-            processes.run.exec = hello;
+            processes.run.exec = "hello";
           })
         ];
       };
