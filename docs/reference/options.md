@@ -6407,6 +6407,26 @@ null or string
 
 
 
+## services\.mysql\.importTimeZones
+
+Whether to import tzdata on the first startup of the mysql server
+
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
+
+
 ## services\.mysql\.initialDatabases
 
 List of database names and their initial schemas that should be used to create databases on the first startup
