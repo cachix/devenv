@@ -1,5 +1,5 @@
 site_name: devenv
-site_description: 'Fast, Declarative, Reproducible, and Composable Developer Environments'
+site_description: 'Fast, Declarative, Reproducible, and Composable Developer Environments using Nix'
 site_url: 'https://devenv.sh'
 repo_name: 'cachix/devenv'
 repo_url: 'https://github.com/cachix/devenv'
