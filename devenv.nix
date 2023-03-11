@@ -19,10 +19,7 @@
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   enterShell = ''
-    echo "To Install:"
-    echo
-    echo "  $ pip install -r requirements.txt"
-    echo
+    pip install -r requirements.txt
   '';
 
   scripts.devenv-bump-version.exec = ''
