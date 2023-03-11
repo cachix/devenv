@@ -3010,6 +3010,10 @@ Style checker and linter for markdown files\.
 
 Markdown shell pre-processor\.
 
+**` mypy `**
+
+Static type checker for Python
+
 **` nixfmt `**
 
 Nix code prettifier\.
@@ -3093,6 +3097,10 @@ A simple Haskell code prettifier
 **` stylua `**
 
 An Opinionated Lua Code Formatter\.
+
+**` tagref `**
+
+Have tagref check all references and tags\.
 
 **` taplo `**
 
@@ -3816,6 +3824,31 @@ attribute set
 
 *Default:*
 ` { } `
+
+*Declared by:*
+ - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit\.settings\.mypy\.binPath
+
+
+
+Mypy binary path\. Should be used to specify the mypy executable in an environment containing your typing stubs\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+"${pkgs.mypy}/bin/mypy"
+
+```
 
 *Declared by:*
  - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
