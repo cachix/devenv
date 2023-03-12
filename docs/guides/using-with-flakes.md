@@ -91,7 +91,7 @@ Install [nix-direnv](https://github.com/nix-community/nix-direnv) for direnv to 
 Add the following line to your `.envrc`:
 
 ```console
-nix flake --impure
+use flake . --impure
 ```
 
 ## Multiple shells
