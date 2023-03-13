@@ -263,6 +263,116 @@ boolean
 
 
 
+## devcontainer\.settings
+
+
+
+Devcontainer settings\.
+
+
+
+*Type:*
+JSON value
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+
+
+
+## devcontainer\.settings\.customizations\.vscode\.extensions
+
+
+
+List of preinstalled VSCode extensions\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "mkhl.direnv"
+]
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+
+
+
+## devcontainer\.settings\.image
+
+
+
+The name of an image in a container registry\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "ghcr.io/cachix/devenv:latest" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+
+
+
+## devcontainer\.settings\.overrideCommand
+
+
+
+Override the default command\.
+
+
+
+*Type:*
+anything
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+
+
+
+## devcontainer\.settings\.updateContentCommand
+
+
+
+Command to run after container creation\.
+
+
+
+*Type:*
+anything
+
+
+
+*Default:*
+` "devenv ci" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+
+
+
 ## devenv\.flakesIntegration
 
 Tells if devenv is being imported by a flake.nix file
@@ -2165,8 +2275,6 @@ The Ruby version to use.
 This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
 
 
-
-
 *Type:*
 null or string
 
@@ -2285,6 +2393,8 @@ package
 ## languages\.rust\.packages\.clippy
 
 clippy package
+
+
 
 *Type:*
 package
