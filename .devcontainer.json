@@ -2,7 +2,6 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "mkhl.direnv",
         "bbenoist.Nix"
       ]
     }
