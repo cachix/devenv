@@ -12,6 +12,7 @@
   languages.python.venv.enable = true;
 
   devcontainer.enable = true;
+  devcontainer.settings.customizations.vscode.extensions = [ "bbenoist.Nix" ];
   difftastic.enable = true;
 
   # bin/mkdocs serve --config-file mkdocs.insiders.yml
