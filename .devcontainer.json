@@ -1,9 +1,12 @@
 {
-  "image": "ghcr.io/cachix/devenv:latest",
-  "overrideCommand": false,
   "customizations": {
     "vscode": {
-      "extensions": ["mkhl.direnv"]
+      "extensions": [
+        "bbenoist.Nix"
+      ]
     }
-  }
+  },
+  "image": "ghcr.io/cachix/devenv:latest",
+  "overrideCommand": false,
+  "updateContentCommand": "devenv ci"
 }
