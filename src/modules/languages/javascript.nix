@@ -13,11 +13,18 @@ in
       defaultText = lib.literalExpression "pkgs.nodejs";
       description = "The Node package to use.";
     };
+
+    corepack = {
+      enable = lib.mkEnableOption "shims for package managers besides npm";
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ];
+    ] ++ lib.optional cfg.corepack.enable (pkgs.runCommand "corepack-enable" { } ''
+      mkdir -p $out/bin
+      ${cfg.package}/bin/corepack enable --install-directory $out/bin
+    '');
   };
 }
