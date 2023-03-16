@@ -830,6 +830,25 @@ boolean
 
 
 
+## languages\.dotnet\.package
+
+The .NET SDK package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dotnet-sdk `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dotnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
+
+
+
 ## languages\.elixir\.enable
 
 Whether to enable tools for Elixir development.
@@ -1025,6 +1044,46 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+## languages\.haskell\.package
+
+Haskell compiler to use.
+
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.ghc" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+## languages\.haskell\.languageServer
+
+Haskell language server to use.
+
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` "pkgs.haskell-language-server" `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -2211,8 +2270,6 @@ boolean
 
 The Python package to use.
 
-
-
 *Type:*
 package
 
@@ -2273,6 +2330,8 @@ package
 
 The Ruby version to use.
 This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
+
+
 
 
 *Type:*
