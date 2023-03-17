@@ -65,6 +65,8 @@
       nix develop --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
+      # Test that a container can be built
+      nix build .#container-processes
     popd
     rm -rf "$tmp"
 
