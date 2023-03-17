@@ -51,6 +51,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    useNakedShell = false;
+
     assertions = [
       {
         assertion = cfg.version == null || cfg.versionFile == null;

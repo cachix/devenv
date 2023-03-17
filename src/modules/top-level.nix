@@ -90,7 +90,7 @@ in
 
     # context: https://github.com/cachix/devenv/issues/497
     useNakedShell = lib.mkOption {
-      type = types.boolean;
+      type = types.bool;
       default = true;
       description = "Whether to trade off faster `devenv shell` performance + cleaner environment for skipping nixpkgs setup hooks useful for C compilation.";
     };

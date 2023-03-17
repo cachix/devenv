@@ -80,6 +80,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    useNakedShell = false;
+
     languages.python.venv.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
     packages = [

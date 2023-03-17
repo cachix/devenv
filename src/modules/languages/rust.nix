@@ -49,6 +49,8 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
+      useNakedShell = false;
+
       packages = attrValues (getAttrs tools cfg.packages) ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
       # enable compiler tooling by default to expose things like cc

@@ -9,6 +9,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    useNakedShell = false;
     packages = with pkgs; [
       cmake
       clang
