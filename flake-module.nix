@@ -10,6 +10,8 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
           };
         }];
       }).type;
+
+      shellPrefix = shellName: if shellName == "default" then "" else "${shellName}-";
     in
 
     {
@@ -36,6 +38,17 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
         default = { };
       };
       config.devShells = lib.mapAttrs (_name: devenv: devenv.shell) config.devenv.shells;
+
+      config.packages =
+        lib.concatMapAttrs
+          (shellName: devenv:
+            lib.concatMapAttrs
+              (containerName: container:
+                { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
+              )
+              devenv.containers
+          )
+          config.devenv.shells;
     });
 
   # the extra parameter before the module make this module behave like an
