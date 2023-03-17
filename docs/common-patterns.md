@@ -16,16 +16,16 @@ For example adding Elixir install scripts into `~/.mix/escripts`
 
 ## How Can I use Rosetta packages?
 
-It's possible to tell Nix to use Intel packages when we're using MacOS ARM:
+It's possible to tell Nix to use Intel packages when we're using macOS ARM:
 
 ```nix
 { pkgs, ... }:
 
 let
   rosettaPkgs = 
-    if pkgs.stdenv.isDarwin && pkgs.stdenv.stdenv.isAarch64
+    if pkgs.stdenv.isDarwin && pkgs.stdenv.isAarch64
     then pkgs.pkgsx86_64Darwin
-    else pkgs
+    else pkgs;
 in {
   packages = [
     pkgs.git
