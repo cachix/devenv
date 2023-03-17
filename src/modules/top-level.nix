@@ -87,6 +87,13 @@ in
         along with associated error messages for the user.
       '';
     };
+
+    # context: https://github.com/cachix/devenv/issues/497
+    useNakedShell = lib.mkOption {
+      type = types.boolean;
+      default = true;
+      description = "Whether to trade off faster `devenv shell` performance + cleaner environment for skipping nixpkgs setup hooks useful for C compilation.";
+    };
   };
 
   imports = [
@@ -135,18 +142,26 @@ in
     '';
 
     shell = performAssertions (
-      mkNakedShell {
-        name = "devenv-shell";
-        env = config.env;
-        profile = profile;
-        shellHook = config.enterShell;
-      }
+      (if config.useNakedShell then
+        mkNakedShell
+          {
+            name = "devenv-shell";
+            env = config.env;
+            profile = profile;
+            shellHook = config.enterShell;
+          }
+      else
+        pkgs.mkShell ({
+          name = "devenv-shell";
+          packages = [ profile ];
+          shellHook = config.enterShell;
+        } // config.env))
     );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
 
-    ci = [ config.shell.inputDerivation ];
+    ci = [ (if config.useNakedShell then config.shell.inputDerivation else config.shell) ];
     ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }
