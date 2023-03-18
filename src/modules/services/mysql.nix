@@ -58,7 +58,7 @@ with lib; let
 
     ${concatMapStrings (database: ''
         # Create initial databases
-        if ! test -e "$MYSQL_HOME/${database.name}"; then
+        if ! MYSQL_PWD="" ${cfg.package}/bin/mysqlshow -u root "${database.name}" > /dev/null 2>&1; then
           echo "Creating initial database: ${database.name}"
           ( echo 'create database `${database.name}`;'
             ${optionalString (database.schema != null) ''
@@ -73,7 +73,9 @@ with lib; let
               cat ${database.schema}/mysql-databases/*.sql
           fi
         ''}
-          ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root
+          ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root -N
+        else
+          echo "Database ${database.name} exists, skipping creation."
         fi
       '')
       cfg.initialDatabases}
@@ -83,7 +85,7 @@ with lib; let
         ${optionalString (user.password != null) "password='${user.password}'"}
         ( echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"
           ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
-            echo "GRANT ${permission} ON ${database} TO '${user.name}'@'localhost';"
+            echo 'GRANT ${permission} ON ${database} TO `${user.name}`@`localhost`;'
           '')
           user.ensurePermissions)}
         ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root -N
