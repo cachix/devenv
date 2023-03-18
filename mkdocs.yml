@@ -46,6 +46,7 @@ nav:
       - Garbage Collection: garbage-collection.md
     - Guides: 
       - Using With Flakes: guides/using-with-flakes.md
+      - Using With flake.parts: guides/using-with-flake-parts.md
     - Integrations:
       - GitHub Actions: integrations/github-actions.md
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
