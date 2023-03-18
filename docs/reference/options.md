@@ -386,7 +386,7 @@ boolean
 
 
 *Default:*
-` false `
+` true ` when devenv is invoked via the flake integration; ` false ` otherwise\.
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
