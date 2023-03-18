@@ -77,6 +77,18 @@
 
       templates =
         let
+
+          flake-parts = {
+            path = ./templates/flake-parts;
+            description = "A flake with flake-parts, direnv and devenv.";
+            welcomeText = ''
+              # `.devenv` should be added to `.gitignore`
+              ```sh
+                echo .devenv >> .gitignore
+              ```
+            '';
+          };
+
           simple = {
             path = ./templates/simple;
             description = "A direnv supported Nix flake with devenv integration.";
@@ -89,7 +101,7 @@
           };
         in
         {
-          inherit simple;
+          inherit simple flake-parts;
           terraform = {
             path = ./templates/terraform;
             description = "A Terraform Nix flake with devenv integration.";
@@ -103,8 +115,12 @@
           default = simple;
         };
 
+      flakeModule = import ./flake-module.nix self;
+
       lib = {
-        mkConfig = { pkgs, inputs, modules }:
+        mkConfig = args@{ pkgs, inputs, modules }:
+          (self.lib.mkEval args).config;
+        mkEval = { pkgs, inputs, modules }:
           let
             moduleInputs = { inherit pre-commit-hooks; } // inputs;
             project = inputs.nixpkgs.lib.evalModules {
@@ -124,7 +140,7 @@
               ] ++ modules;
             };
           in
-          project.config;
+          project;
         mkShell = args:
           let
             config = self.lib.mkConfig args;

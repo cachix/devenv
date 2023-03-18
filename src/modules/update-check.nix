@@ -17,6 +17,7 @@ in
     flakesIntegration = lib.mkOption {
       type = lib.types.bool;
       default = false;
+      defaultText = lib.literalMD ''`true` when devenv is invoked via the flake integration; `false` otherwise.'';
       description = ''
         Tells if devenv is being imported by a flake.nix file
       '';
