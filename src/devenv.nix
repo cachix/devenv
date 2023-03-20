@@ -112,17 +112,23 @@ pkgs.writeScriptBin "devenv" ''
     container)
       assemble
       help=$(${coreutils}/bin/cat << 'EOF'
-  Usage: container [options] CONTAINER-NAME
+  Usage: container [options] CONTAINER-NAME [--] [<run-args>...]
 
   Options:
-    --registry=<reg>   Registry to copy the container to.
-    --copy             Copy the container to the registry.
-    --copy-args=<args> Arguments passed to `skopeo copy`.
-    --docker-run       Execute `docker run`.
+    -r <name>, --registry <name>  Registry to copy the container to.
+    -i <name>, --image <name>     Image name:tag to replace ''${container.name}:''${container.version} with.
+    --copy                        Copy the container to the registry.
+    --copy-args=<args>            Arguments passed to `skopeo copy`.
+    --docker-run                  Execute `docker run`.
+    --podman-run                  Execute `podman run`.
   EOF
       )
 
+      # shellcheck disable=SC1090
+      source "$(command -v ${docopts}/bin/docopts.sh)"
       eval "$(${docopts}/bin/docopts -A subcommand -h "$help" : "$@")"
+      local run_args=()
+      eval "$(docopt_get_eval_array args '<run-args>' run_args)"
 
       export DEVENV_CONTAINER=1
       container="''${subcommand[CONTAINER-NAME]}"
@@ -132,20 +138,30 @@ pkgs.writeScriptBin "devenv" ''
       echo $spec
     
       # copy container
-      if [[ ''${subcommand[--copy]} != false || ''${subcommand[--docker-run]} != false ]]; then
+      if [[ ''${subcommand[--copy]} != false || ''${subcommand[--docker-run]} != false || ''${subcommand[--podman-run]} != false ]]; then
         copyScript=$(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".copyScript")
 
+        args=()
+
         if [[ ''${subcommand[--docker-run]} == true ]]; then
-          registry=docker-daemon:
+          registry=local-docker
+        elif [[ ''${subcommand[--podman-run]} == true ]]; then
+          registry=local
         else
           registry="''${subcommand[--registry]}"
         fi
-        $copyScript $spec $registry ''${subcommand[--copy-args]}
+        if [[ -n "''${subcommand[--image]}" ]]; then
+          args+=(--image "''${subcommand[--image]}")
+        fi
+
+        $copyScript "$spec" --registry "$registry" "''${args[@]}" ''${subcommand[--copy-args]}
       fi
 
       # docker run
       if [[ ''${subcommand[--docker-run]} != false ]]; then
-        $(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun")
+        $(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun") -- "''${run_args[@]}"
+      elif [[ ''${subcommand[--podman-run]} != false ]]; then
+        $(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".podmanRun") -- "''${run_args[@]}"
       fi
       ;;
     search)

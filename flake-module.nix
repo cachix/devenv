@@ -10,8 +10,6 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
           };
         }];
       }).type;
-
-      shellPrefix = shellName: if shellName == "default" then "" else "${shellName}-";
     in
 
     {
@@ -44,8 +42,55 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
           (shellName: devenv:
             lib.concatMapAttrs
               (containerName: container:
-                { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
-              )
+                let prefix = "devenv-${shellName}-container-${containerName}"; in {
+                  "${prefix}-spec" = container.derivation;
+                })
+              devenv.containers
+          )
+          config.devenv.shells;
+
+      config.apps =
+        lib.concatMapAttrs
+          (shellName: devenv:
+            lib.concatMapAttrs
+              (containerName: config:
+                let prefix = "devenv-${shellName}-container-${containerName}"; in {
+                  "${prefix}-copy-to" = {
+                    type = "app";
+                    program = pkgs.writeShellApplication {
+                      name = "${prefix}-copy-to";
+                      text = ''
+                        ${config.copyScript} ${config.derivation} "$@"
+                      '';
+                    };
+                  };
+                  "${prefix}-docker-run" = {
+                    type = "app";
+                    program = "${config.dockerRun}";
+                  };
+                  "${prefix}-docker-load" = {
+                    type = "app";
+                    program = pkgs.writeShellApplication {
+                      name = "${prefix}-docker-load";
+                      text = ''
+                        ${config.copyScript} ${config.derivation} --registry local-docker "$@"
+                      '';
+                    };
+                  };
+                  "${prefix}-podman-run" = {
+                    type = "app";
+                    program = "${config.podmanRun}";
+                  };
+                  "${prefix}-podman-load" = {
+                    type = "app";
+                    program = pkgs.writeShellApplication {
+                      name = "${prefix}-podman-load";
+                      text = ''
+                        ${config.copyScript} ${config.derivation} --registry local "$@"
+                      '';
+                    };
+                  };
+                })
               devenv.containers
           )
           config.devenv.shells;

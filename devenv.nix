@@ -72,7 +72,7 @@
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
       # Test that a container can be built
-      nix build --impure .#container-processes
+      nix build --impure .#devenv-default-container-processes-spec
     popd
     rm -rf "$tmp"
 
