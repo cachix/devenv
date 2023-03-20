@@ -7386,6 +7386,116 @@ If port 0 is specified Redis, will not listen on a TCP socket.
 
 
 
+## services\.varnish\.enable
+
+Whether to enable Varnish process and expose utilities.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
+
+
+## services\.varnish\.package
+
+Which Varnish package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.varnish `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
+
+
+## services\.varnish\.listen
+
+Which address to listen on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1:6081" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
+
+
+## services\.varnish\.memorySize
+
+How much memory to allocate to Varnish.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "64M" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
+
+
+## services\.varnish\.vcl
+
+Varnish VCL configuration.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+
+```
+''
+  vcl 4.0;
+  
+  backend default {
+    .host = "127.0.0.1";
+    .port = "80";
+  }
+''
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
+
+
 ## services\.wiremock\.enable
 
 Whether to enable WireMock.
