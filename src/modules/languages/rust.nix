@@ -68,7 +68,7 @@ in
     (lib.mkIf (cfg.version != null) (
       let
         fenix = inputs.fenix or (throw "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}");
-        rustPackages = fenix.packages.${pkgs.system}.${cfg.version} or (throw "languages.rust.version is set to ${cfg.version}, but should be one of: stable, beta or latest.");
+        rustPackages = fenix.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "languages.rust.version is set to ${cfg.version}, but should be one of: stable, beta or latest.");
       in
       {
         languages.rust.packages =

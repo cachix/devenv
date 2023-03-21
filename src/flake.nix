@@ -21,7 +21,7 @@
             inputAttrs.overlays or [];
         overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.inputs or {}));
         pkgs = import nixpkgs {
-          system = "${pkgs.system}";
+          system = "${pkgs.stdenv.system}";
           config = {
             allowUnfree = devenv.allowUnfree or false; 
           };
@@ -70,13 +70,13 @@
             );
         };
       in {
-        packages."${pkgs.system}" = {
+        packages."${pkgs.stdenv.system}" = {
           optionsJSON = options.optionsJSON;
           inherit (config) info procfileScript procfileEnv procfile;
           ci = config.ciDerivation;
         };
         devenv.containers = config.containers;
-        devShell."${pkgs.system}" = config.shell;
+        devShell."${pkgs.stdenv.system}" = config.shell;
       };
   }
 ''
