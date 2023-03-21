@@ -18,7 +18,7 @@ let
   types = lib.types;
   envContainerName = builtins.getEnv "DEVENV_CONTAINER";
   nix2containerInput = inputs.nix2container or (throw "To build the container, you need to add the following to your devenv.yaml:\n\n${setup}");
-  nix2container = nix2containerInput.packages.${pkgs.system};
+  nix2container = nix2containerInput.packages.${pkgs.stdenv.system};
   mk-shell-bin = inputs.mk-shell-bin or (throw "To build the container, you need to add the following to your devenv.yaml:\n\n${setup}");
   shell = mk-shell-bin.lib.mkShellBin { drv = config.shell; nixpkgs = pkgs; };
   # set devenv root to be at /

@@ -297,7 +297,7 @@ in
 
   config =
     let
-      phpsPackage = phps.packages.${pkgs.system}."php${version}" or (throw "PHP version ${cfg.version} is not available");
+      phpsPackage = phps.packages.${pkgs.stdenv.system}."php${version}" or (throw "PHP version ${cfg.version} is not available");
       nixpkgsPackageExists = (builtins.tryEval (toString pkgs."php${version}")).success;
       customPhpPackage = if ((builtins.hasAttr "php${version}" pkgs) && nixpkgsPackageExists) then pkgs."php${version}" else phpsPackage;
     in

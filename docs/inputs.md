@@ -29,7 +29,7 @@ You can access the stable packages via the `inputs` field:
 { inputs, pkgs, ... }:
 
 let
-  pkgs-stable = import inputs.nixpkgs-stable { system = pkgs.system; };
+  pkgs-stable = import inputs.nixpkgs-stable { system = pkgs.stdenv.system; };
 in {
   packages = [ pkgs-stable.git ];
 

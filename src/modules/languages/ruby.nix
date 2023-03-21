@@ -67,12 +67,12 @@ in
     languages.ruby.package =
       let
         packageFromVersion = lib.mkIf (cfg.version != null) (
-          nixpkgs-ruby.packages.${pkgs.system}."ruby-${cfg.version}"
+          nixpkgs-ruby.packages.${pkgs.stdenv.system}."ruby-${cfg.version}"
         );
         packageFromVersionFile = lib.mkIf (cfg.versionFile != null) (
           nixpkgs-ruby.lib.packageFromRubyVersionFile {
             file = cfg.versionFile;
-            system = pkgs.system;
+            system = pkgs.stdenv.system;
           }
         );
       in
@@ -94,7 +94,7 @@ in
       let libdir = cfg.package.version.libDir;
       in
       ''
-        export RUBYLIB="$DEVENV_PROFILE/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}/${pkgs.system}:$RUBYLIB"
+        export RUBYLIB="$DEVENV_PROFILE/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}/${pkgs.stdenv.system}:$RUBYLIB"
         export GEM_PATH="$GEM_HOME/gems:$GEM_PATH"
         export PATH="$GEM_HOME/bin:$PATH"
       '';
