@@ -41,7 +41,7 @@ in
     env.GOPATH = config.env.DEVENV_STATE + "/go";
 
     enterShell = ''
-      export PATH=$GOPATH:$PATH
+      export PATH=$GOPATH/bin:$PATH
     '';
   };
 }
