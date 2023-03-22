@@ -64,6 +64,10 @@ jobs:
     - run: |
         nix profile remove '.*'
         nix profile install --accept-flake-config . "nixpkgs#gawk"
+    - name: Disable package aliases 
+      run: |
+        mkdir -p ~/.config/nixpkgs
+        echo '{ allowAliases = false; }' > ~/.config/nixpkgs/config.nix
     - run: |
         cd examples/${{ matrix.example }}/
         mv devenv.yaml devenv.yaml.orig
