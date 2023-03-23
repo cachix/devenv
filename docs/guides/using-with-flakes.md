@@ -51,9 +51,7 @@ Here's a minimal `flake.nix` that includes:
 
   outputs = { self, nixpkgs, devenv, ... } @ inputs:
     let
-      pkgs = import nixpkgs {
-        system = "x86_64-linux";
-      };
+      pkgs = nixpkgs.legacyPackages."x86_64-linux";
     in
     {
       devShell.x86_64-linux = devenv.lib.mkShell {
@@ -113,9 +111,7 @@ In this case you want to define a `flake.nix` file that contains multiple `devSh
 
   outputs = { self, nixpkgs, devenv, ... } @ inputs:
     let
-      pkgs = import nixpkgs {
-        system = "x86_64-linux";
-      };
+      pkgs = nixpkgs.legacyPackages."x86_64-linux";
     in
     {
       devShell.x86_64-linux.projectA = devenv.lib.mkShell {
