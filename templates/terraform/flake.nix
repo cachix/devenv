@@ -8,7 +8,7 @@
   outputs = { self, devenv, flake-utils, nixpkgs }@inputs:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        pkgs = nixpkgs.legacyPackages.${system};
       in
       {
         devShells.default = devenv.lib.mkShell {
