@@ -1,7 +1,6 @@
 { config, pkgs, lib, ... }:
 let
   types = lib.types;
-  mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
@@ -65,6 +64,42 @@ in
       type = types.listOf types.package;
       description = "A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.";
       default = [ ];
+    };
+
+    unsetEnvVars = lib.mkOption {
+      type = types.listOf types.str;
+      description = "Remove these list of env vars from being exported to keep the shell/direnv more lean.";
+      # manually determined with knowledge from https://nixos.wiki/wiki/C
+      default = [
+        "HOST_PATH"
+        "NIX_BUILD_CORES"
+        "__structuredAttrs"
+        "buildInputs"
+        "buildPhase"
+        "builder"
+        "depsBuildBuild"
+        "depsBuildBuildPropagated"
+        "depsBuildTarget"
+        "depsBuildTargetPropagated"
+        "depsHostHost"
+        "depsHostHostPropagated"
+        "depsTargetTarget"
+        "depsTargetTargetPropagated"
+        "doCheck"
+        "doInstallCheck"
+        "nativeBuildInputs"
+        "out"
+        "outputs"
+        "patches"
+        "phases"
+        "preferLocalBuild"
+        "propagatedBuildInputs"
+        "propagatedNativeBuildInputs"
+        "shell"
+        "shellHook"
+        "stdenv"
+        "strictDeps"
+      ];
     };
 
     shell = lib.mkOption {
@@ -191,22 +226,22 @@ in
       mkdir -p .devenv
       rm -f .devenv/profile
       ln -s ${profile} .devenv/profile
+      unset ${lib.concatStringsSep " " config.unsetEnvVars}
     '';
 
     shell = performAssertions (
-      mkNakedShell {
+      pkgs.mkShell ({
         name = "devenv-shell";
-        env = config.env;
-        profile = profile;
+        packages = [ profile ];
         shellHook = config.enterShell;
         debug = config.devenv.debug;
-      }
+      } // config.env)
     );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
 
-    ci = [ config.shell.inputDerivation ];
+    ci = [ config.shell ];
     ciDerivation = pkgs.runCommand "ci" { } "echo ${toString config.ci} > $out";
   };
 }
