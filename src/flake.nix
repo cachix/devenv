@@ -74,6 +74,7 @@
           optionsJSON = options.optionsJSON;
           inherit (config) info procfileScript procfileEnv procfile;
           ci = config.ciDerivation;
+          devenv = config.profile;
         };
         devenv.containers = config.containers;
         devShell."${pkgs.stdenv.system}" = config.shell;

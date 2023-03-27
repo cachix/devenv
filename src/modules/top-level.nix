@@ -1,21 +1,14 @@
 { config, pkgs, lib, ... }:
 let
   types = lib.types;
-  mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
+
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
-  drvOrPackageToPaths = drvOrPackage:
-    if drvOrPackage ? outputs then
-      builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
-    else
-      [ drvOrPackage ];
-  profile = pkgs.buildEnv {
-    name = "devenv-profile";
-    paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
-    ignoreCollisions = true;
-  };
+  mkNakedShell = pkgs.callPackage ./mkNakedShell.nix { };
+
+  mkDevenv = pkgs.callPackage ./mkDevenv.nix { };
 
   failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
 
@@ -59,6 +52,11 @@ in
       type = types.listOf types.package;
       description = "A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.";
       default = [ ];
+    };
+
+    profile = lib.mkOption {
+      type = types.package;
+      internal = true;
     };
 
     shell = lib.mkOption {
@@ -106,7 +104,6 @@ in
     env.DEVENV_ROOT = builtins.getEnv "PWD";
     env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
     env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
-    env.DEVENV_PROFILE = profile;
 
     enterShell = ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
@@ -131,22 +128,28 @@ in
 
       mkdir -p .devenv
       rm -f .devenv/profile
-      ln -s ${profile} .devenv/profile
+      ln -s ${config.profile} .devenv/profile
     '';
 
+    # Build the devenv from all the configs
+    profile = mkDevenv {
+      env = config.env;
+      packages = config.packages;
+      shellHook = config.enterShell;
+    };
+
+    # Keep the shell as a fallback, to be deprecated
     shell = performAssertions (
       mkNakedShell {
         name = "devenv-shell";
-        env = config.env;
-        profile = profile;
-        shellHook = config.enterShell;
+        profile = config.profile;
       }
     );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
 
-    ci = [ config.shell.inputDerivation ];
+    ci = [ config.profile ];
     ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
   };
 }
