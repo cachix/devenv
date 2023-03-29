@@ -1,3 +1,5 @@
+# GitHub Actions
+
 If you'd like to run `devenv` as a workflow create `.github/workflows/test.yml`:
 
 ```yaml
