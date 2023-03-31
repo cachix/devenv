@@ -67,13 +67,13 @@
       packages = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
+          default = self.packages.${system}.devenv;
+
           devenv = mkPackage pkgs;
           devenv-docs-options = mkDocOptions pkgs;
         });
 
       modules = ./src/modules;
-
-      defaultPackage = forAllSystems (system: self.packages.${system}.devenv);
 
       templates =
         let
