@@ -112,7 +112,7 @@ in
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
 
       # set path to locales on non-NixOS Linux hosts
-      ${lib.optionalString pkgs.stdenv.isLinux ''
+      ${lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
         if [ -z "''${LOCALE_ARCHIVE-}" ]; then
           export LOCALE_ARCHIVE=${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
         fi
