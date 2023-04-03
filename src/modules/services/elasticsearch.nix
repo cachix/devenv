@@ -38,9 +38,6 @@ let
     export ES_HOME="$ELASTICSEARCH_DATA"
     export ES_JAVA_OPTS="${toString cfg.extraJavaOptions}"
     export ES_PATH_CONF="$ELASTICSEARCH_DATA/config"
-    export OPENSEARCH_HOME="$ELASTICSEARCH_DATA"
-    export OPENSEARCH_JAVA_OPTS="${toString cfg.extraJavaOptions}"
-    export OPENSEARCH_PATH_CONF="$ELASTICSEARCH_DATA/config"
     mkdir -m 0700 -p "$ELASTICSEARCH_DATA"
     # Install plugins
     rm -f "$ELASTICSEARCH_DATA/plugins"
@@ -52,13 +49,8 @@ let
 
     # Create config dir
     mkdir -m 0700 -p "$ELASTICSEARCH_DATA/config"
-    if [[ -e "${cfg.package}/bin/opensearch" ]]; then
-        rm -f "$ELASTICSEARCH_DATA/config/opensearch.yml"
-        cp ${elasticsearchYml} "$ELASTICSEARCH_DATA/config/opensearch.yml"
-    else
-        rm -f "$ELASTICSEARCH_DATA/config/elasticsearch.yml"
-        cp ${elasticsearchYml} "$ELASTICSEARCH_DATA/config/elasticsearch.yml"
-    fi
+    rm -f "$ELASTICSEARCH_DATA/config/elasticsearch.yml"
+    cp ${elasticsearchYml} "$ELASTICSEARCH_DATA/config/elasticsearch.yml"
     rm -f "$ELASTICSEARCH_DATA/logging.yml"
     rm -f "$ELASTICSEARCH_DATA/config/${loggingConfigFilename}"
     cp ${loggingConfigFile} "$ELASTICSEARCH_DATA/config/${loggingConfigFilename}"
@@ -72,11 +64,7 @@ let
     mkdir -m 0700 -p "$ELASTICSEARCH_DATA/logs"
 
     # Start it
-    if [[ -e "${cfg.package}/bin/opensearch" ]]; then
-        exec ${cfg.package}/bin/opensearch ${toString cfg.extraCmdLineOptions}
-    else
-        exec ${cfg.package}/bin/elasticsearch ${toString cfg.extraCmdLineOptions}
-    fi
+    exec ${cfg.package}/bin/elasticsearch ${toString cfg.extraCmdLineOptions}
   '';
 
 in
@@ -180,6 +168,15 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = getName cfg.package != getName pkgs.opensearch;
+        message = ''
+          To use OpenSearch, you have to use the OpenSearch options. (services.opensearch.enable = true;)
+        '';
+      }
+    ];
+
     env.ELASTICSEARCH_DATA = config.env.DEVENV_STATE + "/elasticsearch";
 
     processes.elasticsearch.exec = "${startScript}";
