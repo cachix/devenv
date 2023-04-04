@@ -21,6 +21,8 @@ jobs:
     - run: nix profile install .
     - name: Generate doc options
       run: devenv shell devenv-generate-doc-options
+    # https://github.com/NixOS/nixpkgs/issues/224661
+    - run: sed -i 's/\\\././g' docs/reference/options.md
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
