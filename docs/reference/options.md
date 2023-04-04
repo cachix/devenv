@@ -6738,6 +6738,260 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string) o
 
 
 
+## services\.opensearch\.enable
+
+
+
+Whether to enable OpenSearch\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.package
+
+
+
+The OpenSearch package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.opensearch `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.extraCmdLineOptions
+
+Extra command line options for the OpenSearch launcher.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.extraJavaOptions
+
+Extra command line options for Java.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "-Djava.net.preferIPv4Stack=true"
+]
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.logging
+
+
+
+OpenSearch logging configuration\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+''
+  logger.action.name = org.opensearch.action
+  logger.action.level = info
+  appender.console.type = Console
+  appender.console.name = console
+  appender.console.layout.type = PatternLayout
+  appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+  rootLogger.level = info
+  rootLogger.appenderRef.console.ref = console
+''
+```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.settings
+
+
+
+OpenSearch configuration\.
+
+
+
+*Type:*
+YAML value
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.settings\."cluster\.name"
+
+
+
+The name of the cluster\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "opensearch" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.settings\."discovery\.type"
+
+
+
+The type of discovery to use\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "single-node" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.settings\."http\.port"
+
+
+
+The port to listen on for HTTP traffic\.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 9200 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.settings\."network\.host"
+
+
+
+Which port this service should listen on\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services\.opensearch\.settings\."transport\.port"
+
+
+
+The port to listen on for transport traffic\.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 9300 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
 ## services\.postgres\.enable
 
 Whether to enable Add PostgreSQL process.
