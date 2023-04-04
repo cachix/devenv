@@ -47,7 +47,7 @@ list of string
 
 
 
-## container\.isBuilding
+## container.isBuilding
 
 Set to true when the environment is building a container.
 
