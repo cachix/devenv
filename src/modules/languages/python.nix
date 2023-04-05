@@ -43,8 +43,12 @@ let
 
       if [ "$ACTUAL_POETRY_CHECKSUM" != "$EXPECTED_POETRY_CHECKSUM" ]
       then
-        ${cfg.poetry.package}/bin/poetry install --no-interaction --quiet
-        echo "$ACTUAL_POETRY_CHECKSUM" > "$POETRY_CHECKSUM_FILE"
+        if ${cfg.poetry.package}/bin/poetry install --no-interaction --quiet
+        then
+          echo "$ACTUAL_POETRY_CHECKSUM" > "$POETRY_CHECKSUM_FILE"
+        else
+          echo "Poetry install failed. Run 'poetry install' manually."
+        fi
       fi
     fi
   '';
