@@ -104,14 +104,8 @@ in
 
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.poetry.override {
-          python3 = cfg.package;
-        };
-        defaultText = lib.literalExpression ''
-          pkgs.poetry.override {
-            python3 = config.languages.python.package;
-          }
-        '';
+        default = pkgs.poetry;
+        defaultText = lib.literalExpression "pkgs.poetry";
         description = "The Poetry package to use.";
       };
     };
