@@ -3,29 +3,31 @@
 let
   cfg = config.languages.python;
 
+  venvPath = "${config.env.DEVENV_ROOT}/.venv";
+
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
-    if [ ! -L ${config.env.DEVENV_ROOT}/.venv/devenv-profile ] \
-    || [ "$(${pkgs.coreutils}/bin/readlink ${config.env.DEVENV_ROOT}/.venv/devenv-profile)" != "${config.env.DEVENV_PROFILE}" ]
+    if [ ! -L ${venvPath}/devenv-profile ] \
+    || [ "$(${pkgs.coreutils}/bin/readlink ${venvPath}/devenv-profile)" != "${config.env.DEVENV_PROFILE}" ]
     then
-      if [ -d ${config.env.DEVENV_ROOT}/.venv ]
+      if [ -d ${venvPath} ]
       then
         echo "Rebuilding Python venv..."
-        ${pkgs.coreutils}/bin/rm -rf ${config.env.DEVENV_ROOT}/.venv
+        ${pkgs.coreutils}/bin/rm -rf ${venvPath}
       fi
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      python -m venv ${config.env.DEVENV_ROOT}/.venv
-      ln -sf ${config.env.DEVENV_PROFILE} ${config.env.DEVENV_ROOT}/.venv/devenv-profile
+      python -m venv ${venvPath}
+      ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
     fi
-    source ${config.env.DEVENV_ROOT}/.venv/bin/activate
+    source ${venvPath}/bin/activate
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     function _devenv-init-poetry-venv()
     {
-      if [ ! -d ${config.env.DEVENV_ROOT}/.venv ] \
-        || [ ! "$(readlink ${config.env.DEVENV_ROOT}/.venv/bin/python)" -ef "${cfg.package.interpreter}" ]
+      if [ ! -d ${venvPath} ] \
+        || [ ! "$(readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
       then
         poetry env use --no-interaction ${cfg.package.interpreter}
       fi
@@ -37,7 +39,7 @@ let
       # Only run it when the "poetry.lock" file or python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
       local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock)"
-      local POETRY_CHECKSUM_FILE="${config.env.DEVENV_ROOT}/.venv/poetry.lock.checksum"
+      local POETRY_CHECKSUM_FILE="${venvPath}/poetry.lock.checksum"
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
         read -r EXPECTED_POETRY_CHECKSUM < "$POETRY_CHECKSUM_FILE"
