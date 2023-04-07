@@ -3,7 +3,7 @@
 let
   cfg = config.languages.python;
 
-  venvPath = "${config.env.DEVENV_ROOT}/.venv";
+  venvPath = "${config.env.DEVENV_STATE}/venv";
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
     if [ ! -L ${venvPath}/devenv-profile ] \
@@ -26,6 +26,11 @@ let
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     function _devenv-init-poetry-venv()
     {
+      if [ ! -L ${config.env.DEVENV_ROOT}/.venv ]
+      then
+        ln -sf ${venvPath} ${config.env.DEVENV_ROOT}/.venv
+      fi
+
       if [ ! -d ${venvPath} ] \
         || [ ! "$(readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
       then
