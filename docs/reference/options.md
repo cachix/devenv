@@ -2095,13 +2095,69 @@ package
 
 
 *Default:*
+` pkgs.poetry `
 
-```
-pkgs.poetry.override {
-  python3 = config.languages.python.package;
-}
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
-```
+
+
+## languages.python.poetry.install.enable
+
+Whether to enable poetry install during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.installRootPackage
+
+Whether the root package (your project) should be installed. See `--no-root`
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.quiet
+
+Whether `poetry install` should avoid outputting messages during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
@@ -2203,8 +2259,6 @@ boolean
 
 The Racket package to use.
 
-
-
 *Type:*
 package
 
@@ -2269,6 +2323,8 @@ boolean
 ## languages.robotframework.python
 
 The Python package to use.
+
+
 
 *Type:*
 package
