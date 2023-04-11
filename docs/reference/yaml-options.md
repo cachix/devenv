@@ -32,14 +32,15 @@ inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
   myproject:
-    url: github:owner/repo/myproject
+    url: github:owner/myproject
     flake: false
+  myproject2:
+    url: github:owner/myproject
+    overlays:
+      - default
 imports:
   - ./frontend
   - ./backend
   - myproject
   - myproject/relative/path
-overlays:
-  myproject:
-    - default
 ```
