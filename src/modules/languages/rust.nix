@@ -64,6 +64,7 @@ in
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
       env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
       env.CFLAGS = [ "-iframework ${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+      env.DYLD_LIBRARY_PATH=[ "$(${config.env.DEVENV_PROFILE}/bin/rustc --print sysroot)/lib" ];
     })
     (lib.mkIf (cfg.version != null) (
       let
