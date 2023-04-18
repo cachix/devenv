@@ -5,20 +5,20 @@
     Creating containers is [only possible on Linux](https://github.com/cachix/devenv/issues/430) at the moment.
 
 
-`devenv container <name>` can generate an [OCI container](https://opencontainers.org/) from your development environment.
+Use `devenv container <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
 
-By default `shell` and `processes` containers are predefined and you can [craft your own](#running-artifacts)!
+By default, `shell` and `processes` containers are predefined. You can also [craft your own](#running-artifacts)!
 
 Examples of what `devenv container` can do:
 
-- `devenv container shell`: Generate a container [starting the environment](#entering-the-development-environment), equivalent of using `devenv shell`.
-- `devenv container processes`: Generate a container [starting processes](#running-processes), equivalent of using `devenv up`.
+- `devenv container shell`: Generate a container and [start the environment](#entering-the-development-environment), equivalent of using `devenv shell`.
+- `devenv container processes`: Generate a container and [start processes](#running-processes), equivalent of using `devenv up`.
 - `devenv container <name> --registry docker://ghcr.io/ --copy`: [Copy the container](#copying-container-to-a-registry) `<name>` into the **GitHub package registry**.
 - `devenv container <name> --docker-run`: Run the container `<name>` using **Docker**.
 
 ## Entering the development environment
 
-Given a simple environment using Python:
+Given a simple environment, using Python:
 
 ```nix title="devenv.nix"
 {
@@ -48,7 +48,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 ## Running processes
 
-It's common deployment strategy to run all [processes](./processes.md) as the entrypoint to the container.
+A common deployment strategy is to run each [process](./processes.md) as an entrypoint to the container.
 
 ```nix title="devenv.nix"
 {
@@ -82,8 +82,7 @@ $ devenv container processes --docker-run
 ## Running a single process
 
 
-You can specify the command to run when the container starts
-(instead of entering the default development environment):
+You can specify the command to run when the container starts (instead of entering the default development environment):
 
 ```nix title="devenv.nix"
 {
@@ -100,8 +99,7 @@ $ devenv container serve --docker-run
 
 ## Running artifacts
 
-If you're building binaries as part of the development environment,
-you can choose to only include those in the final image:
+If you're building binaries as part of the development environment, you can choose to only include those in the final image:
 
 ```nix title="devenv.nix"
 {
@@ -120,7 +118,7 @@ $ devenv container prod --docker-run
 
 
 
-## Copying container to a registry
+## Copying a container to a registry
 
 To copy a container into a registry, pass it a `--copy` operation:
 
@@ -148,12 +146,11 @@ You can also specify these options declaratively:
 }
 ```
 
-See [fly.io example](https://github.com/cachix/devenv/tree/main/examples/fly.io) how to get started.
+See this [fly.io example](https://github.com/cachix/devenv/tree/main/examples/fly.io) for how to get started.
 
-## Changing environment based on the build type
+## Changing the environment based on the build type
 
-If we wanted to provide `openssl` package to native and container environments,
-but `git` only for native environments:
+If you want to provide the `openssl` package to native and container environments, but `git` only for native environments:
 
 ```nix title="devenv.nix"
 { pkgs, config, lib, ... }:
@@ -164,4 +161,4 @@ but `git` only for native environments:
 }
 ```
 
-You can also conditionalize based on the particular container that is being built, e.g. `config.containers."processes".isBuilding`.
+You can also conditionalize based on the particular container that is being built, for example, `config.containers."processes".isBuilding`.
