@@ -1,9 +1,9 @@
 # Roadmap
 
-## Support tooling for [the 50 most used programming languages](https://www.tiobe.com/tiobe-index/)
+## Support tooling for [the 50 most-used programming languages](https://www.tiobe.com/tiobe-index/)
 
 
-- [ ] Write a guide how to add a new language.
+- [ ] Write a guide on how to add a new language.
 - [ ] Support languages (currently 23 out of 50).
 
 ## Package Sets
@@ -16,4 +16,4 @@ easy to upgrade/downgrade.
 
 ## Document and showcase how to extend devenv
 
-- [ ] Write guides how devenv is open in its design can can be extended.
+- [ ] Write guides on how devenv is open in its design and can be extended.
