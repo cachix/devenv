@@ -22,7 +22,7 @@ in
       mkdir -p "${config.env.DEVENV_STATE}/mkcert"
 
       if [[ ! -f "$DEVENV_STATE/mkcert/rootCA.pem" ]]; then
-        mkcert -install
+        ${pkgs.mkcert}/bin/mkcert -install
       fi
 
       if [[ ! -f "$DEVENV_STATE/mkcert/hash" || "$(cat "$DEVENV_STATE/mkcert/hash")" != "${hash}" ]]; then
