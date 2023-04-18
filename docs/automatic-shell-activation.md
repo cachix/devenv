@@ -30,3 +30,7 @@ Entering shell ...
 
 If you'd like to use direnv and have your prompt be aware of it,
 we recommend [installing Starship](https://starship.rs/guide/).
+
+## Managing `.direnv` directory
+
+The `.direnv` directory will be added to your `.gitignore` file when running`devenv init` by default.
