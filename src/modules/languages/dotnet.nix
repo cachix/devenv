@@ -20,7 +20,11 @@ in
       cfg.package
     ];
 
-    env.DOTNET_ROOT = "${cfg.package}";
-    env.LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${lib.makeLibraryPath [ pkgs.icu ]}";
+    env = {
+      DOTNET_ROOT = "${cfg.package}";
+      DOTNET_CLI_TELEMETRY_OPTOUT = 1;
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE = true;
+      LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${lib.makeLibraryPath [ pkgs.icu ]}";
+    };
   };
 }
