@@ -107,7 +107,7 @@ pkgs.writeScriptBin "devenv" ''
   Usage: container [options] CONTAINER-NAME
 
   Options:
-    --registry         Registry to copy the container to.
+    --registry=<reg>   Registry to copy the container to.
     --copy             Copy the container to the registry.
     --copy-args=<args> Arguments passed to `skopeo copy`.
     --docker-run       Execute `docker run`.
