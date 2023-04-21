@@ -3,6 +3,13 @@ let
   examples = ../examples;
   lib = pkgs.lib;
   version = lib.fileContents ./modules/latest-version;
+  inherit (pkgs)
+    coreutils
+    findutils
+    gnugrep
+    jq
+    docopts
+    util-linuxMinimal;
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
@@ -28,16 +35,16 @@ pkgs.writeScriptBin "devenv" ''
 
     export DEVENV_DIR="$(pwd)/.devenv"
     export DEVENV_GC="$DEVENV_DIR/gc"
-    mkdir -p "$DEVENV_GC"
+    ${coreutils}/bin/mkdir -p "$DEVENV_GC"
     if [[ -f devenv.yaml ]]; then
       ${import ./devenv-yaml.nix { inherit pkgs; }}/bin/devenv-yaml "$DEVENV_DIR"
     else
-      [[ -f "$DEVENV_DIR/devenv.json" ]] && rm "$DEVENV_DIR/devenv.json"
-      [[ -f "$DEVENV_DIR/flake.json" ]] && rm "$DEVENV_DIR/flake.json"
-      [[ -f "$DEVENV_DIR/imports.txt" ]] && rm "$DEVENV_DIR/imports.txt"
+      [[ -f "$DEVENV_DIR/devenv.json" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/devenv.json"
+      [[ -f "$DEVENV_DIR/flake.json" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/flake.json"
+      [[ -f "$DEVENV_DIR/imports.txt" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/imports.txt"
     fi
-    cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
-    chmod +w "$FLAKE_FILE"
+    ${coreutils}/bin/cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
+    ${coreutils}/bin/chmod +w "$FLAKE_FILE"
   }
 
   if [[ -z "$XDG_DATA_HOME" ]]; then
@@ -46,15 +53,15 @@ pkgs.writeScriptBin "devenv" ''
     GC_ROOT="$XDG_DATA_HOME/devenv/gc"
   fi
 
-  mkdir -p "$GC_ROOT"
-  GC_DIR="$GC_ROOT/$(${pkgs.coreutils}/bin/date +%s%3N)"
+  ${coreutils}/bin/mkdir -p "$GC_ROOT"
+  GC_DIR="$GC_ROOT/$(${coreutils}/bin/date +%s%3N)"
 
   function add_gc {
     name=$1
     storePath=$2
 
     nix-store --add-root "$DEVENV_GC/$name" -r $storePath >/dev/null
-    ln -sf $storePath "$GC_DIR-$name"
+    ${coreutils}/bin/ln -sf $storePath "$GC_DIR-$name"
   }
 
   function shell {
@@ -62,7 +69,7 @@ pkgs.writeScriptBin "devenv" ''
     echo "Building shell ..." 1>&2
     env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
     $CUSTOM_NIX/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
-    ln -sf $(${pkgs.coreutils}/bin/readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
+    ${coreutils}/bin/ln -sf $(${coreutils}/bin/readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
   }
 
   command=$1
@@ -75,7 +82,7 @@ pkgs.writeScriptBin "devenv" ''
       shell
       eval "$env"
       procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
-      if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
+      if [ "$(${coreutils}/bin/cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"  
         exit 1
       else
@@ -103,7 +110,7 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     container)
       assemble
-      help=$(cat << 'EOF'
+      help=$(${coreutils}/bin/cat << 'EOF'
   Usage: container [options] CONTAINER-NAME
 
   Options:
@@ -114,7 +121,7 @@ pkgs.writeScriptBin "devenv" ''
   EOF
       )
 
-      eval "$(${pkgs.docopts}/bin/docopts -A subcommand -h "$help" : "$@")"
+      eval "$(${docopts}/bin/docopts -A subcommand -h "$help" : "$@")"
 
       export DEVENV_CONTAINER=1
       container="''${subcommand[CONTAINER-NAME]}"
@@ -146,27 +153,27 @@ pkgs.writeScriptBin "devenv" ''
       assemble
       options=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#optionsJSON' --impure)
       results=$($CUSTOM_NIX/bin/nix $NIX_FLAGS search --json nixpkgs $name)
-      results_options=$(cat $options/share/doc/nixos/options.json | ${pkgs.jq}/bin/jq "with_entries(select(.key | contains(\"$name\")))")
+      results_options=$(${coreutils}/bin/cat $options/share/doc/nixos/options.json | ${jq}/bin/jq "with_entries(select(.key | contains(\"$name\")))")
       if [ "$results" = "{}" ]; then
         echo "No packages found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | ${pkgs.util-linuxMinimal}/bin/column -ts $'\t'
+        ${jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | ${util-linuxMinimal}/bin/column -ts $'\t'
         echo
       fi
       echo
       if [ "$results_options" = "{}" ]; then
         echo "No options found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | ${pkgs.util-linuxMinimal}/bin/column -ts $'\t'
+        ${jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | ${util-linuxMinimal}/bin/column -ts $'\t'
       fi
       echo
-      echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") packages and $(${pkgs.jq}/bin/jq 'length' <<< "$results_options") options for '$name'."
+      echo "Found $(${jq}/bin/jq 'length' <<< "$results") packages and $(${jq}/bin/jq 'length' <<< "$results_options") options for '$name'."
       ;;
     init)
       if [ "$#" -eq "1" ]
       then
         target="$1"
-        mkdir -p "$target"
+        ${coreutils}/bin/mkdir -p "$target"
         cd "$target"
       fi
 
@@ -180,24 +187,24 @@ pkgs.writeScriptBin "devenv" ''
 
       if [[ ! -f .envrc ]]; then
         echo "Creating .envrc"
-        cat ${examples}/$example/.envrc > .envrc
+        ${coreutils}/bin/cat ${examples}/$example/.envrc > .envrc
       fi
 
       if [[ ! -f devenv.nix ]]; then
         echo "Creating devenv.nix"
-        cat ${examples}/$example/devenv.nix > devenv.nix 
+        ${coreutils}/bin/cat ${examples}/$example/devenv.nix > devenv.nix
       fi
 
       if [[ ! -f devenv.yaml ]]; then
         echo "Creating devenv.yaml"
-        cat ${examples}/$example/devenv.yaml > devenv.yaml
+        ${coreutils}/bin/cat ${examples}/$example/devenv.yaml > devenv.yaml
       fi
 
       if [[ ! -f .gitignore ]]; then
-        touch .gitignore
+        ${coreutils}/bin/touch .gitignore
       fi
 
-      if ! grep -q "devenv" .gitignore; then
+      if ! ${gnugrep}/bin/grep -q "devenv" .gitignore; then
         echo "Appending defaults to .gitignore"
 
         echo "" >> .gitignore
@@ -221,7 +228,7 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     info)
       assemble
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake metadata | grep Inputs -A10000
+      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake metadata | ${gnugrep}/bin/grep Inputs -A10000
       echo
       $CUSTOM_NIX/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
       ;;
@@ -240,19 +247,19 @@ pkgs.writeScriptBin "devenv" ''
     gc)
       SECONDS=0
 
-      for link in $(${pkgs.findutils}/bin/find $GC_ROOT -type l); do
+      for link in $(${findutils}/bin/find $GC_ROOT -type l); do
         if [ ! -f $link ]; then
-          unlink $link
+          ${coreutils}/bin/unlink $link
         fi
       done
 
       echo "Counting old devenvs ..."
       echo
-      candidates=$(${pkgs.findutils}/bin/find $GC_ROOT -type l)
+      candidates=$(${findutils}/bin/find $GC_ROOT -type l)
 
-      before=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $candidates -r -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
+      before=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $candidates -r -S --json | ${jq}/bin/jq '[.[].closureSize | tonumber] | add')
 
-      echo "Found $(echo $candidates | wc -l) environments of sum size $(( $before / 1024 / 1024 )) MB."
+      echo "Found $(echo $candidates | ${coreutils}/bin/wc -l) environments of sum size $(( $before / 1024 / 1024 )) MB."
       echo
       echo "Garbage collecting ..."
       echo
@@ -261,9 +268,9 @@ pkgs.writeScriptBin "devenv" ''
       $CUSTOM_NIX/bin/nix $NIX_FLAGS store delete --recursive $candidates
 
       # after GC delete links again
-      for link in $(${pkgs.findutils}/bin/find $GC_ROOT -type l); do
+      for link in $(${findutils}/bin/find $GC_ROOT -type l); do
         if [ ! -f $link ]; then
-          unlink $link
+          ${coreutils}/bin/unlink $link
         fi
       done
 
