@@ -2102,6 +2102,30 @@ package
 
 
 
+## languages.python.poetry.activate.enable
+
+Whether to enable activate the poetry virtual environment automatically.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.poetry.install.enable
 
 Whether to enable poetry install during devenv initialisation.
@@ -2235,8 +2259,6 @@ package
 
 Whether to enable tools for Racket development.
 
-
-
 *Type:*
 boolean
 
@@ -2258,6 +2280,8 @@ boolean
 ## languages.racket.package
 
 The Racket package to use.
+
+
 
 *Type:*
 package
