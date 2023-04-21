@@ -7,3 +7,4 @@ result
 /lib
 pyvenv.cfg
 /.direnv
+/.venv

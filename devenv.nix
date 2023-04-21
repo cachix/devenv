@@ -3,13 +3,12 @@
 {
   packages = [
     (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
-    pkgs.python3Packages.virtualenv
-    pkgs.python3Packages.cairocffi
+    pkgs.cairo
     pkgs.yaml2json
   ];
 
   languages.python.enable = true;
-  languages.python.venv.enable = true;
+  languages.python.poetry.enable = true;
 
   devcontainer.enable = true;
   devcontainer.settings.customizations.vscode.extensions = [ "bbenoist.Nix" ];
@@ -18,10 +17,6 @@
   # bin/mkdocs serve --config-file mkdocs.insiders.yml
   processes.docs.exec = "mkdocs serve";
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
-
-  enterShell = ''
-    pip install -r requirements.txt
-  '';
 
   scripts.devenv-bump-version.exec = ''
     # TODO: ask for the new version
