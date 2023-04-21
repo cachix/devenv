@@ -74,7 +74,7 @@ in
 
       process-compose = {
         readiness_probe = {
-          exec.command = "${cfg.package}/bin/redis-cli ping";
+          exec.command = "${cfg.package}/bin/redis-cli -p ${toString cfg.port} ping";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
