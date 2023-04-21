@@ -23,7 +23,7 @@ pkgs.writeScriptBin "devenv" ''
   export FLAKE_FILE=.devenv.flake.nix
   export FLAKE_LOCK=devenv.lock
 
-  CUSTOM_NIX=${nix.packages.${pkgs.stdenv.system}.nix}
+  CUSTOM_NIX=${nix}
 
   function assemble {
     if [[ ! -f devenv.nix ]]; then
