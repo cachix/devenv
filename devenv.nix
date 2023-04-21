@@ -81,7 +81,12 @@
     set -e
     pushd examples/$1 
     devenv ci
-    devenv shell ls
+    if [ -f .test.sh ]
+    then
+      devenv shell ./.test.sh
+    else
+      devenv shell ls
+    fi
     popd
   '';
   scripts."devenv-generate-doc-options".exec = ''
