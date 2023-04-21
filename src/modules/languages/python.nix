@@ -71,6 +71,9 @@ let
       ${lib.optionalString cfg.poetry.install.enable ''
         _devenv-poetry-install
       ''}
+      ${lib.optionalString cfg.poetry.activate.enable ''
+        source ${venvPath}/bin/activate
+      ''}
     fi
   '';
 in
@@ -108,6 +111,7 @@ in
           description = "Whether `poetry install` should avoid outputting messages during devenv initialisation.";
         };
       };
+      activate.enable = lib.mkEnableOption "activate the poetry virtual environment automatically";
 
       package = lib.mkOption {
         type = lib.types.package;
@@ -123,6 +127,8 @@ in
     languages.python.poetry.install.arguments =
       lib.optional (!cfg.poetry.install.installRootPackage) "--no-root" ++
       lib.optional cfg.poetry.install.quiet "--quiet";
+
+    languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
     packages = [
       cfg.package
