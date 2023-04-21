@@ -10,6 +10,7 @@ let
     jq
     docopts
     util-linuxMinimal;
+  devenv-yaml = import ./devenv-yaml.nix { inherit pkgs; };
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
@@ -35,7 +36,7 @@ pkgs.writeScriptBin "devenv" ''
     export DEVENV_GC="$DEVENV_DIR/gc"
     ${coreutils}/bin/mkdir -p "$DEVENV_GC"
     if [[ -f devenv.yaml ]]; then
-      ${import ./devenv-yaml.nix { inherit pkgs; }}/bin/devenv-yaml "$DEVENV_DIR"
+      ${devenv-yaml}/bin/devenv-yaml "$DEVENV_DIR"
     else
       [[ -f "$DEVENV_DIR/devenv.json" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/devenv.json"
       [[ -f "$DEVENV_DIR/flake.json" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/flake.json"
