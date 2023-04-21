@@ -47,7 +47,7 @@ pkgs.writeScriptBin "devenv" ''
   fi
 
   mkdir -p "$GC_ROOT"
-  GC_DIR="$GC_ROOT/$(date +%s%3N)"
+  GC_DIR="$GC_ROOT/$(${pkgs.coreutils}/bin/date +%s%3N)"
 
   function add_gc {
     name=$1
