@@ -23,8 +23,6 @@ pkgs.writeScriptBin "devenv" ''
   export FLAKE_FILE=.devenv.flake.nix
   export FLAKE_LOCK=devenv.lock
 
-  CUSTOM_NIX=${nix}
-
   function assemble {
     if [[ ! -f devenv.nix ]]; then
       echo "File devenv.nix does not exist. To get started, run:"
@@ -60,15 +58,15 @@ pkgs.writeScriptBin "devenv" ''
     name=$1
     storePath=$2
 
-    nix-store --add-root "$DEVENV_GC/$name" -r $storePath >/dev/null
+    ${nix}/bin/nix-store --add-root "$DEVENV_GC/$name" -r $storePath >/dev/null
     ${coreutils}/bin/ln -sf $storePath "$GC_DIR-$name"
   }
 
   function shell {
     assemble
     echo "Building shell ..." 1>&2
-    env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
-    $CUSTOM_NIX/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
+    env=$(${nix}/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
+    ${nix}/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
     ${coreutils}/bin/ln -sf $(${coreutils}/bin/readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
   }
 
@@ -81,7 +79,7 @@ pkgs.writeScriptBin "devenv" ''
     up)
       shell
       eval "$env"
-      procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
+      procfilescript=$(${nix}/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
       if [ "$(${coreutils}/bin/cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"  
         exit 1
@@ -102,10 +100,10 @@ pkgs.writeScriptBin "devenv" ''
       if [ $# -eq 0 ]; then
         echo "Entering shell ..." 1>&2
         echo "" 1>&2
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
+        ${nix}/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
       else
         set -e
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
+        ${nix}/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
       fi
       ;;
     container)
@@ -127,12 +125,12 @@ pkgs.writeScriptBin "devenv" ''
       container="''${subcommand[CONTAINER-NAME]}"
 
       # build container
-      spec=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --impure --print-out-paths --no-link ".#devenv.containers.\"$container\".derivation")
+      spec=$(${nix}/bin/nix $NIX_FLAGS build --impure --print-out-paths --no-link ".#devenv.containers.\"$container\".derivation")
       echo $spec
     
       # copy container
       if [[ ''${subcommand[--copy]} != false || ''${subcommand[--docker-run]} != false ]]; then
-        copyScript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".copyScript")
+        copyScript=$(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".copyScript")
 
         if [[ ''${subcommand[--docker-run]} == true ]]; then
           registry=docker-daemon:
@@ -144,15 +142,15 @@ pkgs.writeScriptBin "devenv" ''
 
       # docker run
       if [[ ''${subcommand[--docker-run]} != false ]]; then
-        $($CUSTOM_NIX/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun")
+        $(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun")
       fi
       ;;
     search)
       name=$1
       shift
       assemble
-      options=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#optionsJSON' --impure)
-      results=$($CUSTOM_NIX/bin/nix $NIX_FLAGS search --json nixpkgs $name)
+      options=$(${nix}/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#optionsJSON' --impure)
+      results=$(${nix}/bin/nix $NIX_FLAGS search --json nixpkgs $name)
       results_options=$(${coreutils}/bin/cat $options/share/doc/nixos/options.json | ${jq}/bin/jq "with_entries(select(.key | contains(\"$name\")))")
       if [ "$results" = "{}" ]; then
         echo "No packages found for '$name'."
@@ -228,20 +226,20 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     info)
       assemble
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake metadata | ${gnugrep}/bin/grep Inputs -A10000
+      ${nix}/bin/nix $NIX_FLAGS flake metadata | ${gnugrep}/bin/grep Inputs -A10000
       echo
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
+      ${nix}/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
       ;;
     update)
       assemble
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake update
+      ${nix}/bin/nix $NIX_FLAGS flake update
       ;;
     version)
       echo "devenv: ${version}"
       ;;
     ci)
       assemble
-      ci=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
+      ci=$(${nix}/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
       add_gc ci $ci
       ;;
     gc)
@@ -257,7 +255,7 @@ pkgs.writeScriptBin "devenv" ''
       echo
       candidates=$(${findutils}/bin/find $GC_ROOT -type l)
 
-      before=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $candidates -r -S --json | ${jq}/bin/jq '[.[].closureSize | tonumber] | add')
+      before=$(${nix}/bin/nix $NIX_FLAGS path-info $candidates -r -S --json | ${jq}/bin/jq '[.[].closureSize | tonumber] | add')
 
       echo "Found $(echo $candidates | ${coreutils}/bin/wc -l) environments of sum size $(( $before / 1024 / 1024 )) MB."
       echo
@@ -265,7 +263,7 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Note: If you'd like this command to run much faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
 
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS store delete --recursive $candidates
+      ${nix}/bin/nix $NIX_FLAGS store delete --recursive $candidates
 
       # after GC delete links again
       for link in $(${findutils}/bin/find $GC_ROOT -type l); do
