@@ -4,6 +4,7 @@ let
   lib = pkgs.lib;
   version = lib.fileContents ./modules/latest-version;
   inherit (pkgs)
+    bash
     coreutils
     findutils
     gnugrep
@@ -13,7 +14,7 @@ let
   devenv-yaml = import ./devenv-yaml.nix { inherit pkgs; };
 in
 pkgs.writeScriptBin "devenv" ''
-  #!/usr/bin/env bash
+  #!${bash}/bin/bash
 
   # we want subshells to fail the program
   set -e
