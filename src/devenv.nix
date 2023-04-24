@@ -1,4 +1,4 @@
-{ pkgs, nix }:
+{ pkgs, ... } @ args:
 let
   examples = ../examples;
   lib = pkgs.lib;
@@ -12,6 +12,7 @@ let
     docopts
     util-linuxMinimal;
   devenv-yaml = import ./devenv-yaml.nix { inherit pkgs; };
+  nix = args.nix.packages.${pkgs.stdenv.system}.nix;
 in
 pkgs.writeScriptBin "devenv" ''
   #!${bash}/bin/bash
