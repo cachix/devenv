@@ -28,7 +28,7 @@ let
     {
       if [ ! -L ${config.env.DEVENV_ROOT}/.venv ]
       then
-        ln -sf ${venvPath} ${config.env.DEVENV_ROOT}/.venv
+        ln --symbolic --no-target-directory --force ${venvPath} ${config.env.DEVENV_ROOT}/.venv
       fi
 
       if [ ! -d ${venvPath} ] \
