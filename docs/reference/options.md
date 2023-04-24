@@ -6818,6 +6818,87 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string) o
 
 
 
+## services.nginx.enable
+
+Whether to enable nginx.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.nginx.package
+
+The nginx package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.nginx" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.nginx.eventsConfig
+
+The nginx events configuration.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.nginx.httpConfig
+
+The nginx configuration.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
 ## services.opensearch.enable
 
 
