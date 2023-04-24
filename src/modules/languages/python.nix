@@ -18,7 +18,7 @@ let
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
       ${cfg.package.interpreter} -m venv ${venvPath}
-      ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
+      ${pkgs.coreutils}/bin/ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
     fi
     source ${venvPath}/bin/activate
   '';
@@ -28,11 +28,11 @@ let
     {
       if [ ! -L ${config.env.DEVENV_ROOT}/.venv ]
       then
-        ln --symbolic --no-target-directory --force ${venvPath} ${config.env.DEVENV_ROOT}/.venv
+        ${pkgs.coreutils}/bin/ln --symbolic --no-target-directory --force ${venvPath} ${config.env.DEVENV_ROOT}/.venv
       fi
 
       if [ ! -d ${venvPath} ] \
-        || [ ! "$(readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
+        || [ ! "$(${pkgs.coreutils}/bin/readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
       then
         ${cfg.poetry.package}/bin/poetry env use --no-interaction ${cfg.package.interpreter}
       fi
