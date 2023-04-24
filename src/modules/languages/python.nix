@@ -17,7 +17,7 @@ let
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      python -m venv ${venvPath}
+      ${cfg.package.interpreter} -m venv ${venvPath}
       ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
     fi
     source ${venvPath}/bin/activate
@@ -34,7 +34,7 @@ let
       if [ ! -d ${venvPath} ] \
         || [ ! "$(readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
       then
-        poetry env use --no-interaction ${cfg.package.interpreter}
+        ${cfg.poetry.package}/bin/poetry env use --no-interaction ${cfg.package.interpreter}
       fi
     }
 
