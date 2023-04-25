@@ -6,6 +6,10 @@ let
   venvPath = "${config.env.DEVENV_STATE}/venv";
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
+    # Make sure any tools are not attempting to use the python interpreter from any
+    # existing virtual environment. For instance if devenv was started within an venv.
+    unset VIRTUAL_ENV
+
     if [ ! -L ${venvPath}/devenv-profile ] \
     || [ "$(${pkgs.coreutils}/bin/readlink ${venvPath}/devenv-profile)" != "${config.env.DEVENV_PROFILE}" ]
     then
@@ -26,6 +30,10 @@ let
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     function _devenv-init-poetry-venv()
     {
+      # Make sure any tools are not attempting to use the python interpreter from any
+      # existing virtual environment. For instance if devenv was started within an venv.
+      unset VIRTUAL_ENV
+
       if [ ! -L ${config.env.DEVENV_ROOT}/.venv ]
       then
         ${pkgs.coreutils}/bin/ln --symbolic --no-target-directory --force ${venvPath} ${config.env.DEVENV_ROOT}/.venv
