@@ -6,6 +6,10 @@ let
   venvPath = "${config.env.DEVENV_STATE}/venv";
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
+    # Make sure any tools are not attempting to use the python interpreter from any
+    # existing virtual environment. For instance if devenv was started within an venv.
+    unset VIRTUAL_ENV
+
     if [ ! -L ${venvPath}/devenv-profile ] \
     || [ "$(${pkgs.coreutils}/bin/readlink ${venvPath}/devenv-profile)" != "${config.env.DEVENV_PROFILE}" ]
     then
@@ -17,8 +21,8 @@ let
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      python -m venv ${venvPath}
-      ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
+      ${cfg.package.interpreter} -m venv ${venvPath}
+      ${pkgs.coreutils}/bin/ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
     fi
     source ${venvPath}/bin/activate
   '';
@@ -26,15 +30,19 @@ let
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     function _devenv-init-poetry-venv()
     {
+      # Make sure any tools are not attempting to use the python interpreter from any
+      # existing virtual environment. For instance if devenv was started within an venv.
+      unset VIRTUAL_ENV
+
       if [ ! -L ${config.env.DEVENV_ROOT}/.venv ]
       then
-        ln -sf ${venvPath} ${config.env.DEVENV_ROOT}/.venv
+        ${pkgs.coreutils}/bin/ln --symbolic --no-target-directory --force ${venvPath} ${config.env.DEVENV_ROOT}/.venv
       fi
 
       if [ ! -d ${venvPath} ] \
-        || [ ! "$(readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
+        || [ ! "$(${pkgs.coreutils}/bin/readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
       then
-        poetry env use --no-interaction ${cfg.package.interpreter}
+        ${cfg.poetry.package}/bin/poetry env use --no-interaction ${cfg.package.interpreter}
       fi
     }
 
