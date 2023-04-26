@@ -45,7 +45,7 @@
       nix flake init --template ''${DEVENV_ROOT}#simple
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --command echo nix-develop started succesfully |& tee ./console
+      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
     popd
@@ -57,11 +57,11 @@
       nix flake init --template ''${DEVENV_ROOT}#flake-parts
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --command echo nix-develop started succesfully |& tee ./console
+      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
       # Test that a container can be built
-      nix build .#container-processes
+      nix build --impure .#container-processes
     popd
     rm -rf "$tmp"
 
