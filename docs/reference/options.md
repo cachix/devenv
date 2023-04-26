@@ -373,6 +373,30 @@ anything
 
 
 
+## devenv.debug
+
+Whether to enable debug mode of devenv enterShell script.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/debug.nix](https://github.com/cachix/devenv/blob/main/src/modules/debug.nix)
+
+
+
 ## devenv.flakesIntegration
 
 Tells if devenv is being imported by a flake.nix file
@@ -2240,8 +2264,6 @@ boolean
 
 The R package to use.
 
-
-
 *Type:*
 package
 
@@ -2258,6 +2280,8 @@ package
 ## languages.racket.enable
 
 Whether to enable tools for Racket development.
+
+
 
 *Type:*
 boolean
