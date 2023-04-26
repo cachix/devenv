@@ -19,7 +19,7 @@ This will create a `flake.nix` with devenv configuration, as well as a `.envrc` 
 Open the devenv shell using:
 
 ```console
-$ nix develop
+$ nix develop --impure
 ```
 
 This will create a lock file and open up a new shell that adheres to the devenv configuration stated in `flake.nix`.
@@ -120,7 +120,7 @@ Here you can see that there are 2 shells defined. Each one with a devenv configu
 To enter the shell of `projectA`:
 
 ```console
-$ nix develop .#projectA
+$ nix develop --impure .#projectA
 this is project A
 (devenv) $ 
 ```
@@ -128,7 +128,7 @@ this is project A
 To enter the shell of `projectB`:
 
 ```console
-$ nix develop .#projectB
+$ nix develop --impure .#projectB
 this is project B
 (devenv) $ 
 ```
@@ -136,7 +136,7 @@ this is project B
 The last line makes `projectA` the default shell:
 
 ```console
-$ nix develop .
+$ nix develop --impure .
 this is project A
 (devenv) $ 
 ```
@@ -148,7 +148,7 @@ Whenever you have projects where you cannot (or don't want to) add a flake.nix t
 You can create a repository with a flake.nix like the one above. However, in a different project you can now refer to this flake using:
 
 ```console
-$ nix develop file:/path/to/central/flake#projectA
+$ nix develop --impure file:/path/to/central/flake#projectA
 this is project A
 (devenv) $ 
 ```

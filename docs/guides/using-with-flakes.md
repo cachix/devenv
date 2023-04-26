@@ -143,7 +143,7 @@ Here we define two shells, each with a `devenv` configuration and differently de
 To enter the shell of `project A`:
 
 ```console
-$ nix develop .#projectA
+$ nix develop --impure .#projectA
 this is project A
 (devenv) $ 
 ```
@@ -151,7 +151,7 @@ this is project A
 To enter the shell of `project B`:
 
 ```console
-$ nix develop .#projectB
+$ nix develop --impure .#projectB
 this is project B
 (devenv) $ 
 ```
@@ -163,7 +163,7 @@ If you cannot or don't want to add a `flake.nix` file to your project's reposito
 You can create a repository with a `flake.nix` file as in the example above. You can now refer to this flake in a different project:
 
 ```console
-$ nix develop file:/path/to/central/flake#projectA
+$ nix develop --impure file:/path/to/central/flake#projectA
 this is project A
 (devenv) $ 
 ```
