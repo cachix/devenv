@@ -104,7 +104,18 @@ in
 
   config = {
     # TODO: figure out how to get relative path without impure mode
-    env.DEVENV_ROOT = builtins.getEnv "PWD";
+    env.DEVENV_ROOT =
+      let
+        pwd = builtins.getEnv "PWD";
+      in
+      if pwd == "" then
+        throw ''
+          devenv was not able to determine the current directory.
+          Make sure Nix runs with the `--impure` flag.
+
+          See https://devenv.sh/guides/using-with-flakes/
+        ''
+      else pwd;
     env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
     env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
     env.DEVENV_PROFILE = profile;
