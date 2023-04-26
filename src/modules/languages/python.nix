@@ -143,7 +143,7 @@ in
     ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
 
     env = {
-      PYTHONPATH = "${config.env.DEVENV_PROFILE}/${cfg.package.sitePackages}";
+      PYTHONPATH = "$DEVENV_PROFILE/${cfg.package.sitePackages}";
     } // (lib.optionalAttrs cfg.poetry.enable {
       # Make poetry use DEVENV_ROOT/.venv
       POETRY_VIRTUALENVS_IN_PROJECT = "true";
