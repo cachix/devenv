@@ -11,6 +11,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
     runs-on: ${{ matrix.os }}
@@ -47,6 +48,7 @@ jobs:
     name: example ${{ matrix.example }} (${{ join(matrix.os) }})
     needs: [generate-examples]
     strategy:
+      fail-fast: false
       matrix:
         os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
@@ -82,6 +84,7 @@ jobs:
   direnv:
     name: direnv (${{ join(matrix.os) }})
     strategy:
+      fail-fast: false
       matrix:
         os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
     runs-on: ${{ matrix.os }}
@@ -115,6 +118,7 @@ jobs:
   fish-zsh:
     name: zsh/fish (${{ join(matrix.os) }})
     strategy:
+      fail-fast: false
       matrix:
         os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
     runs-on: ${{ matrix.os }}
