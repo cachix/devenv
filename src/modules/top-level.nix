@@ -141,6 +141,7 @@ in
         env = config.env;
         profile = profile;
         shellHook = config.enterShell;
+        debug = config.devenv.debug;
       }
     );
 
