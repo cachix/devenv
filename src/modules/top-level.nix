@@ -95,6 +95,7 @@ in
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
+    ./debug.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
