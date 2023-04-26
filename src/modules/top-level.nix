@@ -95,6 +95,7 @@ in
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
+    ./debug.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -140,6 +141,7 @@ in
         env = config.env;
         profile = profile;
         shellHook = config.enterShell;
+        debug = config.devenv.debug;
       }
     );
 
