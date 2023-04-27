@@ -6590,7 +6590,7 @@ package
 
 
 *Default:*
-` pkgs.mysql80 `
+` pkgs.mariadb `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
