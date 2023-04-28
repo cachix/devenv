@@ -26,6 +26,7 @@
   '';
   scripts.devenv-run-tests.exec = ''
     set -xe
+    set -o pipefail
 
     pushd examples/simple
       # this should fail since files already exist
@@ -48,6 +49,14 @@
       nix develop --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
+
+      # Assert that nix-develop fails in pure mode.
+      if nix develop --command echo nix-develop started in pure mode |& tee ./console
+      then
+        echo "nix-develop was able to start in pure mode. This is explicitly not supported at the moment."
+        exit 1
+      fi
+      grep -F 'devenv was not able to determine the current directory.' <./console
     popd
     rm -rf "$tmp"
 
