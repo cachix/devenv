@@ -95,7 +95,7 @@
   '';
   scripts."devenv-generate-doc-options".exec = ''
     set -e
-    options=$(nix build --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
+    options=$(nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
     echo "# devenv.nix options" > docs/reference/options.md
     echo >> docs/reference/options.md
     cat $options >> docs/reference/options.md
