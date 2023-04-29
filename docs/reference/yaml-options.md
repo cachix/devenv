@@ -13,7 +13,7 @@
 ## inputs.&lt;name&gt;.url
 
 - github:NixOS/nixpkgs/master
-- github:NixOS/nixpkgs/master?rev=238b18d7b2c8239f676358634bfb32693d3706f3
+- github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3
 - github:foo/bar?dir=subdir
 - git+ssh://git@github.com/NixOS/nix?ref=v1.2.3
 - git+https://git.somehost.tld/user/path?ref=branch&rev=fdc8ef970de2b4634e1b3dca296e1ed918459a9e
