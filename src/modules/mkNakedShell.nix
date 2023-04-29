@@ -24,7 +24,7 @@
 
 { bashInteractive
 , coreutils
-, system
+, stdenv
 , writeTextFile
 , pkgs
 , lib
@@ -60,7 +60,8 @@ let
   envToBash = name: value: "export ${name}=${lib.escapeShellArg (toString value)}";
   startupEnv = lib.concatStringsSep "\n" (lib.mapAttrsToList envToBash env);
   derivationArg = {
-    inherit name system;
+    inherit name;
+    inherit (stdenv) system;
 
     # `nix develop` actually checks and uses builder. And it must be bash.
     builder = bashPath;
