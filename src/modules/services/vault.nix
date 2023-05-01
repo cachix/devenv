@@ -28,7 +28,7 @@ let
     while [ -z "$response" ]; do
       response=$(${pkgs.curl}/bin/curl -s --max-time 5 "${config.env.VAULT_API_ADDR}/v1/sys/init" | ${pkgs.jq}/bin/jq '.initialized' || true)
       if [ -z "$response" ]; then
-        echo "Waiting for server to respond..."
+        echo "Waiting for vault server to respond..."
         sleep 1
       fi
     done
@@ -39,7 +39,7 @@ let
 
     # Initialize it if needed
     if [ "$response" == "false" ]; then
-      echo "Server is not initialized. Running the script..."
+      echo "Performing initialization"
       response=$(${pkgs.curl}/bin/curl -s --request POST --data '{"secret_shares": 1, "secret_threshold": 1}' "${config.env.VAULT_API_ADDR}/v1/sys/init")
 
       root_token=$(echo "$response" | ${pkgs.jq}/bin/jq -r '.root_token')
@@ -50,12 +50,20 @@ let
 
       echo "export VAULT_TOKEN=$VAULT_TOKEN" > "${config.env.DEVENV_STATE}/env_file"
       echo "export UNSEAL_KEY=$UNSEAL_KEY" >> "${config.env.DEVENV_STATE}/env_file"
-    else
-      echo "Server is initialized. Skipping the script execution."
     fi
 
     echo "Vault Unseal key is $UNSEAL_KEY"
     echo "Vault Root token is $VAULT_TOKEN"
+
+    # Unseal the vault
+    is_sealed=$(${pkgs.curl}/bin/curl -s "${config.env.VAULT_API_ADDR}/v1/sys/seal-status" | ${pkgs.jq}/bin/jq '.sealed' || true)
+    if [ "$is_sealed" == "true" ]; then
+      echo "Vault is sealed. Attempting to unsealing automatically..."
+      response=$(${pkgs.curl}/bin/curl -s --request POST --data "{\"key\": \"$UNSEAL_KEY\"}" "${config.env.VAULT_API_ADDR}/v1/sys/unseal")
+      if ${pkgs.jq}/bin/jq -e '.errors' <<< "$response" > /dev/null; then
+        echo "Failed to unseal the vault: $response"
+      fi
+    fi
 
     while true
     do
@@ -64,10 +72,6 @@ let
   '';
 in
 {
-  imports = [
-    (lib.mkRenamedOptionModule [ "vault" "enable" ] [ "services" "vault" "enable" ])
-  ];
-
   options.services.vault = {
     enable = lib.mkEnableOption "vault process";
 
