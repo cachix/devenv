@@ -100,7 +100,7 @@ in
 
     disableMlock = lib.mkOption {
       type = types.bool;
-      default = if pkgs.stdenv.isLinux then false else true;
+      default = true;
       description = ''
         Disables the server from executing the mlock syscall
       '';
