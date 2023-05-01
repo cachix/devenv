@@ -27,7 +27,9 @@
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
-      mkPackage = pkgs: import ./src/devenv.nix { inherit pkgs nix; };
+      mkPackage = pkgs: import ./src/devenv.nix {
+        inherit pkgs nix;
+      };
       mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions = pkgs:
         let
