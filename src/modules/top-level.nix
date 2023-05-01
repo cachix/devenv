@@ -87,6 +87,17 @@ in
         along with associated error messages for the user.
       '';
     };
+
+    relativeRoot = lib.mkOption {
+      type = types.bool;
+      default = false;
+      example = true;
+      description = ''
+        This option lets DEVENV_ROOT and other devenv environment variables be
+        relative paths, which works without --impure flag. However, some
+        services may not support relative paths.
+      '';
+    };
   };
 
   imports = [
@@ -104,7 +115,7 @@ in
 
   config = {
     # TODO: figure out how to get relative path without impure mode
-    env.DEVENV_ROOT =
+    env.DEVENV_ROOT = if config.relativeRoot then "." else
       let
         pwd = builtins.getEnv "PWD";
       in
