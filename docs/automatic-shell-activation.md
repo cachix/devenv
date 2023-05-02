@@ -15,7 +15,7 @@ Once installed, you'll see a warning in your shell the next time you enter the p
 direnv: error ~/myproject/.envrc is blocked. Run `direnv allow` to approve its content
 ```
 
-Run ``direnv allow`` to enable the environment. It'll now be automatically loaded and unloaded whenever you enter and exit the project directory.
+Run ``direnv allow`` to enable the environment. It will now be automatically loaded and unloaded whenever you enter and exit the project directory.
 
 ```shell-session
 $ cd /home/user/myproject/
@@ -31,6 +31,6 @@ Entering shell ...
 If you'd like to use direnv and have your prompt be aware of it,
 we recommend [installing Starship](https://starship.rs/guide/).
 
-## Managing `.direnv` directory
+## Managing the `.direnv` directory
 
-The `.direnv` directory will be added to your `.gitignore` file when running`devenv init` by default.
+The `.direnv` directory will be added to your `.gitignore` file by default when you run `devenv init`.
