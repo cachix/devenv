@@ -7935,6 +7935,129 @@ strings concatenated with “\\n”
 
 
 
+## services.vault.enable
+
+Whether to enable vault process.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.package
+
+Which package of Vault to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.vault-bin `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.address
+
+Specifies the address to bind to for listening
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1:8200" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.disableClustering
+
+Specifies whether clustering features such as request forwarding are enabled
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.disableMlock
+
+Disables the server from executing the mlock syscall
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.ui
+
+Enables the built-in web UI
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
 ## services.wiremock.enable
 
 Whether to enable WireMock.
