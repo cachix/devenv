@@ -1,0 +1,4 @@
+{ ... }:
+{
+  services.vault.enable = true;
+}
