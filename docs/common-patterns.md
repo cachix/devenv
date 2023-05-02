@@ -1,6 +1,6 @@
 ## Adding a directory to $PATH
 
-For example adding Elixir install scripts into `~/.mix/escripts`
+This example adds Elixir install scripts to `~/.mix/escripts`:
 
 ```nix
 { ... }:
@@ -16,7 +16,7 @@ For example adding Elixir install scripts into `~/.mix/escripts`
 
 ## How Can I use Rosetta packages?
 
-It's possible to tell Nix to use Intel packages when we're using macOS ARM:
+It's possible to tell Nix to use Intel packages when using macOS ARM:
 
 ```nix
 { pkgs, ... }:
