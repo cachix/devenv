@@ -8,11 +8,7 @@ in
     enable = lib.mkEnableOption "tools for Pascal development";
 
     lazarus = {
-      enable = lib.mkEnableOption "lazarus";
-      default = false;
-      description = ''
-        Graphical IDE for the FreePascal language.
-      '';
+      enable = lib.mkEnableOption "lazarus graphical IDE for the FreePascal language";
     };
   };
 
