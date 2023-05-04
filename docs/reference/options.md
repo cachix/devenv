@@ -1507,6 +1507,54 @@ attribute set
 
 
 
+## languages.pascal.enable
+
+Whether to enable tools for Pascal development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
+
+
+## languages.pascal.lazarus.enable
+
+Whether to enable lazarus graphical IDE for the FreePascal language.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
+
+
 ## languages.perl.enable
 
 Whether to enable tools for Perl development.
@@ -2216,8 +2264,6 @@ boolean
 
 Whether to enable Python virtual environment.
 
-
-
 *Type:*
 boolean
 
@@ -2263,6 +2309,8 @@ boolean
 ## languages.r.package
 
 The R package to use.
+
+
 
 *Type:*
 package
