@@ -63,9 +63,9 @@
     # Test devenv integrated into flake-parts Nix flake
     tmp="$(mktemp -d)"
     pushd "$tmp"
-      nix flake init --template ''${DEVENV_ROOT}#flake-parts
+      nix flake init --template ${inputs.self}#flake-parts
       nix flake update \
-        --override-input devenv ''${DEVENV_ROOT}
+        --override-input devenv ${inputs.self}
       nix develop --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
