@@ -142,23 +142,25 @@ in
       cfg.package
     ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
 
-    env = {
-      PYTHONPATH = "$DEVENV_PROFILE/${cfg.package.sitePackages}";
-    } // (lib.optionalAttrs cfg.poetry.enable {
+    env = lib.optionalAttrs cfg.poetry.enable {
       # Make poetry use DEVENV_ROOT/.venv
       POETRY_VIRTUALENVS_IN_PROJECT = "true";
       # Make poetry create the local virtualenv when it does not exist.
       POETRY_VIRTUALENVS_CREATE = "true";
       # Make poetry stop accessing any other virtualenvs in $HOME.
       POETRY_VIRTUALENVS_PATH = "/var/empty";
-    });
+    };
 
-    enterShell = lib.concatStringsSep "\n" (
-      (lib.optional cfg.venv.enable ''
-        source ${initVenvScript}
-      '') ++ (lib.optional cfg.poetry.install.enable ''
-        source ${initPoetryScript}
-      '')
+    enterShell = lib.concatStringsSep "\n" ([
+      ''
+        export PYTHONPATH="$DEVENV_PROFILE/${cfg.package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+      ''
+    ] ++
+    (lib.optional cfg.venv.enable ''
+      source ${initVenvScript}
+    '') ++ (lib.optional cfg.poetry.install.enable ''
+      source ${initPoetryScript}
+    '')
     );
   };
 }

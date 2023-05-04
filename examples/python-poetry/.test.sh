@@ -7,3 +7,4 @@ python --version
 poetry --version
 poetry run python -c 'import numpy'
 python -c 'import numpy'
+python -c 'import pjsua2'
