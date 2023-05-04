@@ -22,6 +22,11 @@
     url = "github:domenkozar/nix/relaxed-flakes";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.nix2container = {
+    url = "github:nlewo/nix2container";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+  inputs.mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
 
   outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }@inputs:
     let

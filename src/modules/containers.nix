@@ -7,19 +7,23 @@ let
     else config.name;
   setup = ''
     inputs:
-      nix2container:
-        url: github:nlewo/nix2container
-        inputs:
-          nixpkgs:
-            follows: nixpkgs
-      mk-shell-bin:
-        url: github:rrbutani/nix-mk-shell-bin
   '';
   types = lib.types;
   envContainerName = builtins.getEnv "DEVENV_CONTAINER";
-  nix2containerInput = inputs.nix2container or (throw "To build the container, you need to add the following to your devenv.yaml:\n\n${setup}");
+  findCurrentInput =
+    lib.attrsets.concatMapAttrs
+      (inputName: input:
+        (
+          if input.outPath == toString ../. then
+            input
+          else 
+            findCurrentInput input.inputs or {}
+        )
+      );
+  currentInput = findCurrentInput inputs;
+  nix2containerInput = currentInput.inputs.nix2container;
   nix2container = nix2containerInput.packages.${pkgs.stdenv.system};
-  mk-shell-bin = inputs.mk-shell-bin or (throw "To build the container, you need to add the following to your devenv.yaml:\n\n${setup}");
+  mk-shell-bin = currentInput.inputs.mk-shell-bin;
   shell = mk-shell-bin.lib.mkShellBin { drv = config.shell; nixpkgs = pkgs; };
   # set devenv root to be at /
   containerEnv = config.env // { DEVENV_ROOT = ""; };
