@@ -48,6 +48,15 @@ in
         ./ruby-version
       '';
     };
+
+    bundler = {
+      enable = lib.mkEnableOption "bundler";
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.bundler;
+        description = "The bundler package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -63,6 +72,8 @@ in
 
     # enable C tooling by default so native extensions can be built
     languages.c.enable = lib.mkDefault true;
+
+    languages.ruby.bundler.enable = lib.mkDefault true;
 
     languages.ruby.package =
       let
@@ -81,9 +92,8 @@ in
         packageFromVersionFile
       ];
 
-    packages = with pkgs; [
+    packages = lib.optional cfg.bundler.enable cfg.bundler.package ++ [
       cfg.package
-      bundler
     ];
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
