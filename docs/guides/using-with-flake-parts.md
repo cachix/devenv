@@ -74,7 +74,7 @@ To use direnv in your Nix flake project, you'll need [nix-direnv](https://github
 To configure direnv, ensure your project has a `.envrc` file that includes the following line:
 
 ```text
-nix flake --impure
+use flake . --impure
 ```
 
 In a standard Nix flake project, the `--impure` flag is not needed. However, using `devenv` in your flake _requires_ the `--impure` flag.
