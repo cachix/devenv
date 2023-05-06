@@ -1507,6 +1507,54 @@ attribute set
 
 
 
+## languages.pascal.enable
+
+Whether to enable tools for Pascal development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
+
+
+## languages.pascal.lazarus.enable
+
+Whether to enable lazarus graphical IDE for the FreePascal language.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
+
+
 ## languages.perl.enable
 
 Whether to enable tools for Perl development.
@@ -2216,8 +2264,6 @@ boolean
 
 Whether to enable Python virtual environment.
 
-
-
 *Type:*
 boolean
 
@@ -2263,6 +2309,8 @@ boolean
 ## languages.r.package
 
 The R package to use.
+
+
 
 *Type:*
 package
@@ -3171,6 +3219,10 @@ Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` default.n
 
 Check the cargo package for errors.
 
+**` checkmake `**
+
+Experimental linter/analyzer for Makefiles.
+
 **` chktex `**
 
 LaTeX semantic checker
@@ -3194,6 +3246,10 @@ Scan Nix files for dead code (unused variable bindings).
 **` dhall-format `**
 
 Dhall code formatter.
+
+**` dune-fmt `**
+
+Runs Dune’s formatters on the code tree.
 
 **` dune-opam-sync `**
 
@@ -3227,6 +3283,10 @@ Check the style and quality of Python files.
 
 Haskell code prettifier.
 
+**` fprettify `**
+
+Auto-formatter for modern Fortran code.
+
 **` gofmt `**
 
 A tool that automatically formats Go source code
@@ -3238,6 +3298,10 @@ Run go tests
 **` govet `**
 
 Checks correctness of Go programs.
+
+**` gptcommit `**
+
+Generate a commit message using GPT3.
 
 **` hadolint `**
 
@@ -3286,6 +3350,10 @@ Markdown shell pre-processor.
 **` mypy `**
 
 Static type checker for Python
+
+**` nil `**
+
+Incremental analysis assistant for writing in Nix.
 
 **` nixfmt `**
 
@@ -3382,6 +3450,18 @@ Format TOML files with taplo fmt
 **` terraform-format `**
 
 Format terraform (` .tf `) files.
+
+**` tflint `**
+
+A Pluggable Terraform Linter.
+
+**` topiary `**
+
+A universal formatter engine within the Tree-sitter ecosystem, with support for many languages.
+
+**` treefmt `**
+
+One CLI to format the code tree.
 
 **` typos `**
 
@@ -3780,6 +3860,44 @@ list of string
 
 
 
+## pre-commit.settings.ansible-lint.configPath
+
+path to the configuration YAML file
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.ansible-lint.subdir
+
+path to Ansible subdir
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.autoflake.binPath
 
 
@@ -3967,6 +4085,27 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.dune-fmt.auto-promote
+
+
+
+Whether to auto-promote the changes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
@@ -4495,6 +4634,41 @@ list of string
 
 
 
+## pre-commit.settings.treefmt.package
+
+
+
+The ` treefmt ` package to use.
+
+Should include all the formatters configured by treefmt.
+
+For example:
+
+```nix
+pkgs.writeShellApplication {
+  name = "treefmt";
+  runtimeInputs = [
+    pkgs.treefmt
+    pkgs.nixpkgs-fmt
+    pkgs.black
+  ];
+  text =
+    ''
+      exec treefmt "$@"
+    '';
+}
+```
+
+
+
+*Type:*
+package
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.typos.diff
 
 
@@ -4629,7 +4803,7 @@ Tool set from which ` nix-pre-commit-hooks ` will pick binaries.
 
 
 *Type:*
-lazy attribute set of package
+lazy attribute set of (null or package)
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
