@@ -17,7 +17,7 @@ let
           if input.outPath == toString ../. then
             input
           else 
-            findCurrentInput input.inputs or {}
+            findCurrentInput input.inputs or { }
         )
       );
   currentInput = findCurrentInput inputs;
