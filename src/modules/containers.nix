@@ -34,7 +34,7 @@ let
     
     source ${shell.envScript}
 
-    exec ${toString cfg.startupCommand}
+    exec "$@"
   '';
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
@@ -54,7 +54,8 @@ let
     ];
     config = {
       Env = lib.mapAttrsToList (name: value: "${name}=${lib.escapeShellArg (toString value)}") containerEnv;
-      Cmd = cfg.entrypoint;
+      Cmd = [ cfg.startupCommand ];
+      Entrypoint = cfg.entrypoint;
     };
   };
 
