@@ -46,21 +46,21 @@ let
 
   procfileScripts = {
     honcho = ''
-      ${pkgs.honcho}/bin/honcho start -f ${config.procfile} --env ${config.procfileEnv} & 
+      ${pkgs.honcho}/bin/honcho start -f ${config.procfile} --env ${config.procfileEnv} "$@" & 
     '';
 
     overmind = ''
-      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --root ${config.env.DEVENV_ROOT} --procfile ${config.procfile} &
+      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --root ${config.env.DEVENV_ROOT} --procfile ${config.procfile} "$@" &
     '';
 
     process-compose = ''
       ${pkgs.process-compose}/bin/process-compose --config ${config.procfile} \
          --port ''${PC_HTTP_PORT:-${toString config.process.process-compose.port}} \
-         --tui=''${PC_TUI_ENABLED:-${toString config.process.process-compose.tui}} &
+         --tui=''${PC_TUI_ENABLED:-${toString config.process.process-compose.tui}} up "$@" &
     '';
 
     hivemind = ''
-      ${pkgs.hivemind}/bin/hivemind --print-timestamps ${config.procfile} &
+      ${pkgs.hivemind}/bin/hivemind --print-timestamps "$@" ${config.procfile} &
     '';
   };
 in
