@@ -33,9 +33,10 @@ let
 
   implementation = config.process.implementation;
   implementation-options = config.process.${implementation};
+  envValSerializer = if implementation == "process-compose" then toString else builtins.toJSON;
   envList =
     lib.mapAttrsToList
-      (name: value: "${name}=${builtins.toJSON value}")
+      (name: value: "${name}=${envValSerializer value}")
       (if config.devenv.flakesIntegration then
       # avoid infinite recursion in the scenario the `config` parameter is
       # used in a `processes` declaration inside a devenv module.
@@ -49,13 +50,13 @@ let
     '';
 
     overmind = ''
-      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --procfile ${config.procfile} &
+      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --root ${config.env.DEVENV_ROOT} --procfile ${config.procfile} &
     '';
 
     process-compose = ''
       ${pkgs.process-compose}/bin/process-compose --config ${config.procfile} \
-         --port $PC_HTTP_PORT \
-         --tui=$PC_TUI_ENABLED &
+         --port ''${PC_HTTP_PORT:-${toString config.process.process-compose.port}} \
+         --tui=''${PC_TUI_ENABLED:-${toString config.process.process-compose.tui}} &
     '';
 
     hivemind = ''
@@ -175,6 +176,8 @@ in
     '';
 
     ci = [ config.procfileScript ];
+
+    infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes;
 
     env =
       if implementation == "process-compose" then {

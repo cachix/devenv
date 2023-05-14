@@ -23,6 +23,6 @@ in
       pkgs.clang
     ];
 
-    env.CC = pkgs.clang;
+    env.CC = "${pkgs.clang}/bin/clang";
   };
 }

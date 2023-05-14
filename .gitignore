@@ -6,3 +6,5 @@ result
 /include
 /lib
 pyvenv.cfg
+/.direnv
+/.venv

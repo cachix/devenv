@@ -310,8 +310,8 @@
     <div class="md-grid md-typeset">
       <div class="md-main__inner">
         <div>
-          <h1>Fast, Declarative, Reproducible, and Composable Developer Environments</h1>
-          <p>Build, share, and run your local development environments with a single command. Without containers.</p>
+          <h1>Fast, Declarative, Reproducible, and Composable Developer Environments using Nix</h1>
+          <h3>Develop <a href="/basics/">natively</a>, deploy with <a href="/containers/">containers</a>.</h3>
         </p>
           <a
             href="/getting-started/"
@@ -326,17 +326,7 @@
     </div>
   </div>
 
-  <!--div class="md-container">
-    <div class="tx-hero__image">
-      <img
-        src="{{config.site_url}}assets/images/screen.png"
-        alt=""
-        draggable="false"
-      >
-    </div>
-  </div-->
-
-  <div class="md-container secondary-section">
+<div class="md-container secondary-section">
     <div class="g">
       <!-- packages -->
       <div class="section">
@@ -533,6 +523,31 @@ $
   pre-commit installed at .git/hooks/pre-commit
   devenv.lock     | 74 ++++++
   1 file changed, 71 insertions(+), 0 deletions(-)
+              <pre></code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- containers -->
+      <div class="section follow">
+        <div class="component-wrapper">
+          <div class="first-column">
+            <h3>Deploy using containers</h3>
+            <p>
+             While developing a project locally without containers is a relief,
+             you might want to deploy it using containers.
+            </p>
+          </p>
+             Read more how to <a href="/containers/">configure and deploy containers</a>.
+            </p>
+          </div>
+          <div class="second-column">
+            <div class="image-wrapper">
+              <code class="shell-session"><pre>
+  $ devenv container processes --copy
+  Copying container /nix/store/... to docker://myproject:latest
               <pre></code>
             </div>
           </div>

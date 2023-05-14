@@ -1,3 +1,5 @@
+# Composing using imports
+
 You can compose environments either locally or by referencing [inputs](inputs.md).
 
 Imagine you're building a typical web application, with separate frontend and backend components

@@ -1,6 +1,7 @@
 { pkgs, ... }: {
 
   # Enable all languages tooling!
+  languages.ansible.enable = true;
   languages.c.enable = true;
   languages.clojure.enable = true;
   languages.cplusplus.enable = true;
@@ -23,6 +24,7 @@
   languages.nim.enable = true;
   languages.nix.enable = true;
   languages.ocaml.enable = true;
+  languages.pascal.enable = true;
   languages.perl.enable = true;
   languages.php.enable = true;
   languages.purescript.enable = true;

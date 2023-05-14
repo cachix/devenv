@@ -228,6 +228,9 @@ in
       exec = "${startScript}/bin/start-postgres";
 
       process-compose = {
+        # SIGINT (= 2) for faster shutdown: https://www.postgresql.org/docs/current/server-shutdown.html
+        shutdown.signal = 2;
+
         readiness_probe = {
           exec.command = "${cfg.package}/bin/pg_isready -h $PGDATA -d template1";
           initial_delay_seconds = 2;
@@ -236,6 +239,9 @@ in
           success_threshold = 1;
           failure_threshold = 5;
         };
+
+        # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
+        availability.restart = "on_failure";
       };
     };
   };

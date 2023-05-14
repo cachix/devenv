@@ -41,7 +41,7 @@ in
 
     process.after = ''
       rm -f "$DEVENV_STATE/hostctl"
-      sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName} 
+      sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName}
     '';
   };
 }

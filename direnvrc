@@ -1,0 +1,158 @@
+# shellcheck shell=bash
+# adapted from https://github.com/nix-community/nix-direnv/blob/master/direnvrc
+
+REQUIRED_DIRENV_VERSION="2.21.3"
+
+_nix_direnv_preflight () {
+  if [[ -z "$direnv" ]]; then
+    printf '%s\n' "\$direnv environment variable was not defined. Was this script run inside direnv?"
+    exit 1
+  fi
+
+  if [[ -z ${DEVENV_BIN:-} ]]; then
+    DEVENV_BIN=$(command -v devenv)
+    if [[ -z "${DEVENV_BIN}" ]]; then
+      log_error "command not found: devenv, see https://devenv.sh/getting-started/"
+      exit 1
+    fi
+  fi
+
+  if ! has direnv_version || ! direnv_version "$REQUIRED_DIRENV_VERSION" 2>/dev/null; then
+    log_error "base direnv version is older than the required v$REQUIRED_DIRENV_VERSION."
+    exit 1
+  fi
+
+  local layout_dir
+  layout_dir=$(direnv_layout_dir)
+
+  if [[ ! -d "$layout_dir" ]]; then
+    mkdir -p "$layout_dir"
+  fi
+}
+
+_nix_export_or_unset() {
+  local key=$1 value=$2
+  if [[ "$value" == __UNSET__ ]]; then
+    unset "$key"
+  else
+    export "$key=$value"
+  fi
+}
+
+_nix_import_env() {
+  local profile_rc=$1
+
+  local old_nix_build_top=${NIX_BUILD_TOP:-__UNSET__}
+  local old_tmp=${TMP:-__UNSET__}
+  local old_tmpdir=${TMPDIR:-__UNSET__}
+  local old_temp=${TEMP:-__UNSET__}
+  local old_tempdir=${TEMPDIR:-__UNSET__}
+  local old_xdg_data_dirs=${XDG_DATA_DIRS:-}
+  eval "$(< "$profile_rc")"
+  # `nix print-dev-env` will create a temporary directory and use it as TMPDIR
+  # We cannot rely on this directory being availble at all times,
+  # as it may be garbage collected.
+  # Instead - just remove it immediately.
+  # Use recursive & force as it may not be empty.
+  if [[ -n "${NIX_BUILD_TOP+x}" && "$NIX_BUILD_TOP" == */nix-shell.* && -d "$NIX_BUILD_TOP" ]]; then
+    rm -rf "$NIX_BUILD_TOP"
+  fi
+
+  _nix_export_or_unset NIX_BUILD_TOP "$old_nix_build_top"
+  _nix_export_or_unset TMP "$old_tmp"
+  _nix_export_or_unset TMPDIR "$old_tmpdir"
+  _nix_export_or_unset TEMP "$old_temp"
+  _nix_export_or_unset TEMPDIR "$old_tempdir"
+  local new_xdg_data_dirs=${XDG_DATA_DIRS:-}
+  export XDG_DATA_DIRS=
+  local IFS=:
+  for dir in $new_xdg_data_dirs${old_xdg_data_dirs:+:}$old_xdg_data_dirs; do
+    dir="${dir%/}" # remove trailing slashes
+    if [[ :$XDG_DATA_DIRS: = *:$dir:* ]]; then
+      continue # already present, skip
+    fi
+    XDG_DATA_DIRS="$XDG_DATA_DIRS${XDG_DATA_DIRS:+:}$dir"
+  done
+}
+
+_nix_argsum_suffix() {
+  local out checksum content
+
+  content=$(cat "$@" 2>/dev/null)
+
+  if has sha1sum; then
+    out=$(sha1sum <<< "$content")
+  elif has shasum; then
+    out=$(shasum <<< "$content")
+  else
+    log_status "not hashing your cache, please install sha1sum"
+    # degrate gracefully both tools are not present
+    return
+  fi
+  read -r checksum _ <<< "$out"
+  echo "-$checksum"
+}
+
+nix_direnv_watch_file() {
+  watch_file "$@"
+  nix_watches+=("$@")
+}
+
+use_devenv() {
+  _nix_direnv_preflight
+
+  flake_expr="${1:-.}"
+  flake_dir="${flake_expr%#*}"
+
+  local files_to_watch
+  files_to_watch=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
+
+  if [[ -d "$flake_dir" ]]; then
+    files_to_watch+=("$flake_dir/devenv.nix" "$flake_dir/devenv.lock" "$flake_dir/devenv.yaml" "$flake_dir/devenv.local.nix")
+    if [[ -f "$flake_dir/devenv.yaml" ]]; then
+      if ! devenv assemble; then
+        log_error "$(devenv version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
+        exit 0
+      fi
+
+      if [[ -f "$flake_dir/.devenv/imports.txt" ]]; then
+        for file in $(cat "$flake_dir/.devenv/imports.txt"); do
+            files_to_watch+=("$file")
+        done
+      fi
+    fi
+  fi
+
+  nix_direnv_watch_file "${files_to_watch[@]}"
+
+  local layout_dir profile_rc
+  layout_dir=$(direnv_layout_dir)
+  profile_rc="${layout_dir}/devenv-profile$(_nix_argsum_suffix "${files_to_watch[@]}").rc"
+
+  local need_update=0
+  local file=
+  for file in "${nix_watches[@]}"; do
+    if [[ "$file" -nt "$profile_rc" ]]; then
+      need_update=1
+      log_status "$file changed, reloading"
+      break
+    fi
+  done
+
+  if [[ ! -e "$profile_rc" || "$need_update" == "1" ]];
+  then
+    # We need to update our cache
+    local env
+    if ! env=$("${DEVENV_BIN}" print-dev-env); then
+      log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
+      exit 0
+    fi
+
+    echo "$env" > "$profile_rc"
+    log_status "updated devenv shell cache"
+    _nix_import_env "$profile_rc"
+  else
+    log_status "using cached devenv shell"
+    _nix_import_env "$profile_rc"
+  fi
+}

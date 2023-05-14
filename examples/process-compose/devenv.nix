@@ -9,7 +9,7 @@
 
   languages.ruby.enable = true;
 
-  packages = [ pkgs.imagemagick6 ];
+  packages = [ pkgs.imagemagick_light ];
 
   scripts.compile-rmagick.exec = "gem install --install-dir /tmp rmagick";
 

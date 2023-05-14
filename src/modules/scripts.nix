@@ -24,5 +24,8 @@ in
 
   config = {
     packages = lib.mapAttrsToList toPackage config.scripts;
+
+    # TODO: show scripts path
+    infoSections."scripts" = lib.mapAttrsToList (name: script: name) config.scripts;
   };
 }

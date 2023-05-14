@@ -24,7 +24,7 @@
 
 { bashInteractive
 , coreutils
-, system
+, stdenv
 , writeTextFile
 , pkgs
 , lib
@@ -53,13 +53,15 @@ in
 , shellHook ? ""
 , meta ? { }
 , passthru ? { }
+, debug ? false
 }:
 let
   # simpler version of https://github.com/numtide/devshell/blob/20d50fc6adf77fd8a652fc824c6e282d7737b85d/modules/env.nix#L41
   envToBash = name: value: "export ${name}=${lib.escapeShellArg (toString value)}";
   startupEnv = lib.concatStringsSep "\n" (lib.mapAttrsToList envToBash env);
   derivationArg = {
-    inherit name system;
+    inherit name;
+    inherit (stdenv) system;
 
     # `nix develop` actually checks and uses builder. And it must be bash.
     builder = bashPath;
@@ -74,6 +76,7 @@ let
     # The shellHook is loaded directly by `nix develop`. But nix-shell
     # requires that other trampoline.
     shellHook = ''
+      ${lib.optionalString debug "set -x"}
       # Remove all the unnecessary noise that is set by the build env
       unset NIX_BUILD_TOP NIX_BUILD_CORES NIX_STORE
       unset TEMP TEMPDIR TMP ${lib.optionalString (!pkgs.stdenv.isDarwin) "TMPDIR"}

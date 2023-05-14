@@ -46,6 +46,13 @@ b) Install [Cachix](https://cachix.org) (recommended, speeds up the installation
 
 c) Install ``devenv``
 
+
+!!! note
+
+    To update `devenv` re-run the installation commands below. 
+    
+    If you're getting errors that devenv already exists, run `nix profile list` and `nix profile remove <number>` beforehand.
+
 === "Newcomers"
 
     ```
@@ -55,7 +62,7 @@ c) Install ``devenv``
 === "Advanced (flake profiles)"
 
     ```
-    nix profile install github:cachix/devenv/latest
+    nix profile install --accept-flake-config github:cachix/devenv/latest 
     ```
 
 === "Advanced (declaratively without flakes)"
@@ -77,11 +84,6 @@ c) Install ``devenv``
         };
     }
     ```
-
-
-!!! note
-
-    To update `devenv` run the installation commands to reinstall.
 
 ## Initial set up
 

@@ -1,21 +1,19 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
+    systems.url = "github:nix-systems/default";
     devenv.url = "github:cachix/devenv";
   };
 
-  outputs = { self, nixpkgs, devenv, ... } @ inputs:
+  outputs = { self, nixpkgs, devenv, systems, ... } @ inputs:
     let
-      systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
-      forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
+      forEachSystem = nixpkgs.lib.genAttrs (import systems);
     in
     {
-      devShells = forAllSystems
+      devShells = forEachSystem
         (system:
           let
-            pkgs = import nixpkgs {
-              inherit system;
-            };
+            pkgs = nixpkgs.legacyPackages.${system};
           in
           {
             default = devenv.lib.mkShell {

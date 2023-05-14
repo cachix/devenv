@@ -16,6 +16,24 @@ let
     paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
     ignoreCollisions = true;
   };
+
+  failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+
+  performAssertions =
+    let
+      formatAssertionMessage = message:
+        let
+          lines = lib.splitString "\n" message;
+        in
+        "- ${lib.concatStringsSep "\n  " lines}";
+    in
+    if failedAssertions != [ ]
+    then
+      throw ''
+        Failed assertions:
+        ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
+      ''
+    else lib.id;
 in
 {
   options = {
@@ -23,6 +41,12 @@ in
       type = types.lazyAttrsOf types.anything;
       description = "Environment variables to be exposed inside the developer environment.";
       default = { };
+    };
+
+    name = lib.mkOption {
+      type = types.nullOr types.str;
+      description = "Name of the project.";
+      default = null;
     };
 
     enterShell = lib.mkOption {
@@ -51,6 +75,18 @@ in
       type = types.package;
       internal = true;
     };
+
+    assertions = lib.mkOption {
+      type = types.listOf types.unspecified;
+      internal = true;
+      default = [ ];
+      example = [{ assertion = false; message = "you can't enable this for that reason"; }];
+      description = ''
+        This option allows modules to express conditions that must
+        hold for the evaluation of the configuration to succeed,
+        along with associated error messages for the user.
+      '';
+    };
   };
 
   imports = [
@@ -58,6 +94,8 @@ in
     ./processes.nix
     ./scripts.nix
     ./update-check.nix
+    ./containers.nix
+    ./debug.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -66,7 +104,18 @@ in
 
   config = {
     # TODO: figure out how to get relative path without impure mode
-    env.DEVENV_ROOT = builtins.getEnv "PWD";
+    env.DEVENV_ROOT =
+      let
+        pwd = builtins.getEnv "PWD";
+      in
+      if pwd == "" then
+        throw ''
+          devenv was not able to determine the current directory.
+          Make sure Nix runs with the `--impure` flag.
+
+          See https://devenv.sh/guides/using-with-flakes/
+        ''
+      else pwd;
     env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
     env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
     env.DEVENV_PROFILE = profile;
@@ -75,8 +124,8 @@ in
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
 
       # set path to locales on non-NixOS Linux hosts
-      ${lib.optionalString pkgs.stdenv.isLinux ''
-        if [ -z "$LOCALE_ARCHIVE" ]; then
+      ${lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
+        if [ -z "''${LOCALE_ARCHIVE-}" ]; then
           export LOCALE_ARCHIVE=${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
         fi
       ''}
@@ -97,12 +146,18 @@ in
       ln -s ${profile} .devenv/profile
     '';
 
-    shell = mkNakedShell {
-      name = "devenv-shell";
-      env = config.env;
-      profile = profile;
-      shellHook = config.enterShell;
-    };
+    shell = performAssertions (
+      mkNakedShell {
+        name = "devenv-shell";
+        env = config.env;
+        profile = profile;
+        shellHook = config.enterShell;
+        debug = config.devenv.debug;
+      }
+    );
+
+    infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
+    infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
 
     ci = [ config.shell.inputDerivation ];
     ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
