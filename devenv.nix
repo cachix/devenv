@@ -3,13 +3,12 @@
 {
   packages = [
     (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
-    pkgs.python3Packages.virtualenv
-    pkgs.python3Packages.cairocffi
+    pkgs.cairo
     pkgs.yaml2json
   ];
 
   languages.python.enable = true;
-  languages.python.venv.enable = true;
+  languages.python.poetry.enable = true;
 
   devcontainer.enable = true;
   devcontainer.settings.customizations.vscode.extensions = [ "bbenoist.Nix" ];
@@ -19,10 +18,6 @@
   processes.docs.exec = "mkdocs serve";
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
-  enterShell = ''
-    pip install -r requirements.txt
-  '';
-
   scripts.devenv-bump-version.exec = ''
     # TODO: ask for the new version
     # TODO: update the version in the mkdocs.yml
@@ -31,6 +26,7 @@
   '';
   scripts.devenv-run-tests.exec = ''
     set -xe
+    set -o pipefail
 
     pushd examples/simple
       # this should fail since files already exist
@@ -50,9 +46,17 @@
       nix flake init --template ''${DEVENV_ROOT}#simple
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --command echo nix-develop started succesfully |& tee ./console
+      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
+
+      # Assert that nix-develop fails in pure mode.
+      if nix develop --command echo nix-develop started in pure mode |& tee ./console
+      then
+        echo "nix-develop was able to start in pure mode. This is explicitly not supported at the moment."
+        exit 1
+      fi
+      grep -F 'devenv was not able to determine the current directory.' <./console
     popd
     rm -rf "$tmp"
 
@@ -62,11 +66,11 @@
       nix flake init --template ''${DEVENV_ROOT}#flake-parts
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --command echo nix-develop started succesfully |& tee ./console
+      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
       # Test that a container can be built
-      nix build .#container-processes
+      nix build --impure .#container-processes
     popd
     rm -rf "$tmp"
 
@@ -81,12 +85,17 @@
     set -e
     pushd examples/$1 
     devenv ci
-    devenv shell ls
+    if [ -f .test.sh ]
+    then
+      devenv shell ./.test.sh
+    else
+      devenv shell ls
+    fi
     popd
   '';
   scripts."devenv-generate-doc-options".exec = ''
     set -e
-    options=$(nix build --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
+    options=$(nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
     echo "# devenv.nix options" > docs/reference/options.md
     echo >> docs/reference/options.md
     cat $options >> docs/reference/options.md

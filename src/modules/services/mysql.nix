@@ -107,8 +107,8 @@ in
     package = mkOption {
       type = types.package;
       description = "Which package of MySQL to use";
-      default = pkgs.mysql80;
-      defaultText = lib.literalExpression "pkgs.mysql80";
+      default = pkgs.mariadb;
+      defaultText = lib.literalExpression "pkgs.mariadb";
     };
 
     settings = mkOption {

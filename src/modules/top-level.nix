@@ -130,6 +130,7 @@ in
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
+    ./debug.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -138,7 +139,18 @@ in
 
   config = {
     # TODO: figure out how to get relative path without impure mode
-    env.DEVENV_ROOT = builtins.getEnv "PWD";
+    env.DEVENV_ROOT =
+      let
+        pwd = builtins.getEnv "PWD";
+      in
+      if pwd == "" then
+        throw ''
+          devenv was not able to determine the current directory.
+          Make sure Nix runs with the `--impure` flag.
+
+          See https://devenv.sh/guides/using-with-flakes/
+        ''
+      else pwd;
     env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
     env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
     env.DEVENV_PROFILE = profile;
@@ -147,7 +159,7 @@ in
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
 
       # set path to locales on non-NixOS Linux hosts
-      ${lib.optionalString pkgs.stdenv.isLinux ''
+      ${lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
         if [ -z "''${LOCALE_ARCHIVE-}" ]; then
           export LOCALE_ARCHIVE=${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
         fi
@@ -174,9 +186,11 @@ in
       pkgs.mkShell ({
         name = "devenv-shell";
         packages = [ profile ];
-        shellHook = config.enterShell;
-      } // config.env)
-    );
+        shellHook = (lib.concatLines [
+          (lib.optionalString config.devenv.debug "set -x")
+          config.enterShell
+        ]);
+      }));
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);

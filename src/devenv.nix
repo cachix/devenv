@@ -1,11 +1,21 @@
-{ pkgs, nix }:
+{ pkgs, ... } @ args:
 let
   examples = ../examples;
   lib = pkgs.lib;
   version = lib.fileContents ./modules/latest-version;
+  inherit (pkgs)
+    bash
+    coreutils
+    findutils
+    gnugrep
+    jq
+    docopts
+    util-linuxMinimal;
+  devenv-yaml = import ./devenv-yaml.nix { inherit pkgs; };
+  nix = args.nix.packages.${pkgs.stdenv.system}.nix;
 in
 pkgs.writeScriptBin "devenv" ''
-  #!/usr/bin/env bash
+  #!${bash}/bin/bash
 
   # we want subshells to fail the program
   set -e
@@ -15,8 +25,6 @@ pkgs.writeScriptBin "devenv" ''
   # current hack to test if we have resolved all Nix annoyances
   export FLAKE_FILE=.devenv.flake.nix
   export FLAKE_LOCK=devenv.lock
-
-  CUSTOM_NIX=${nix.packages.${pkgs.stdenv.system}.nix}
 
   function assemble {
     if [[ ! -f devenv.nix ]]; then
@@ -28,16 +36,16 @@ pkgs.writeScriptBin "devenv" ''
 
     export DEVENV_DIR="$(pwd)/.devenv"
     export DEVENV_GC="$DEVENV_DIR/gc"
-    mkdir -p "$DEVENV_GC"
+    ${coreutils}/bin/mkdir -p "$DEVENV_GC"
     if [[ -f devenv.yaml ]]; then
-      ${import ./devenv-yaml.nix { inherit pkgs; }}/bin/devenv-yaml "$DEVENV_DIR"
+      ${devenv-yaml}/bin/devenv-yaml "$DEVENV_DIR"
     else
-      [[ -f "$DEVENV_DIR/devenv.json" ]] && rm "$DEVENV_DIR/devenv.json"
-      [[ -f "$DEVENV_DIR/flake.json" ]] && rm "$DEVENV_DIR/flake.json"
-      [[ -f "$DEVENV_DIR/imports.txt" ]] && rm "$DEVENV_DIR/imports.txt"
+      [[ -f "$DEVENV_DIR/devenv.json" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/devenv.json"
+      [[ -f "$DEVENV_DIR/flake.json" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/flake.json"
+      [[ -f "$DEVENV_DIR/imports.txt" ]] && ${coreutils}/bin/rm "$DEVENV_DIR/imports.txt"
     fi
-    cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
-    chmod +w "$FLAKE_FILE"
+    ${coreutils}/bin/cp -f ${import ./flake.nix { inherit pkgs version; }} "$FLAKE_FILE"
+    ${coreutils}/bin/chmod +w "$FLAKE_FILE"
   }
 
   if [[ -z "$XDG_DATA_HOME" ]]; then
@@ -46,23 +54,23 @@ pkgs.writeScriptBin "devenv" ''
     GC_ROOT="$XDG_DATA_HOME/devenv/gc"
   fi
 
-  mkdir -p "$GC_ROOT"
-  GC_DIR="$GC_ROOT/$(date +%s%3N)"
+  ${coreutils}/bin/mkdir -p "$GC_ROOT"
+  GC_DIR="$GC_ROOT/$(${coreutils}/bin/date +%s%3N)"
 
   function add_gc {
     name=$1
     storePath=$2
 
-    nix-store --add-root "$DEVENV_GC/$name" -r $storePath >/dev/null
-    ln -sf $storePath "$GC_DIR-$name"
+    ${nix}/bin/nix-store --add-root "$DEVENV_GC/$name" -r $storePath >/dev/null
+    ${coreutils}/bin/ln -sf $storePath "$GC_DIR-$name"
   }
 
   function shell {
     assemble
     echo "Building shell ..." 1>&2
-    env=$($CUSTOM_NIX/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
-    $CUSTOM_NIX/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
-    ln -sf $(${pkgs.coreutils}/bin/readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
+    env=$(${nix}/bin/nix $NIX_FLAGS print-dev-env --impure --profile "$DEVENV_GC/shell")
+    ${nix}/bin/nix-env -p "$DEVENV_GC/shell" --delete-generations old 2>/dev/null
+    ${coreutils}/bin/ln -sf $(${coreutils}/bin/readlink -f "$DEVENV_GC/shell") "$GC_DIR-shell"
   }
 
   command=$1
@@ -74,8 +82,8 @@ pkgs.writeScriptBin "devenv" ''
     up)
       shell
       eval "$env"
-      procfilescript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
-      if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
+      procfilescript=$(${nix}/bin/nix $NIX_FLAGS build --no-link --print-out-paths --impure '.#procfileScript')
+      if [ "$(${coreutils}/bin/cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"  
         exit 1
       else
@@ -95,37 +103,37 @@ pkgs.writeScriptBin "devenv" ''
       if [ $# -eq 0 ]; then
         echo "Entering shell ..." 1>&2
         echo "" 1>&2
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
+        ${nix}/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell"
       else
         set -e
-        $CUSTOM_NIX/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
+        ${nix}/bin/nix $NIX_FLAGS develop "$DEVENV_GC/shell" -c "$@"
       fi
       ;;
     container)
       assemble
-      help=$(cat << 'EOF'
+      help=$(${coreutils}/bin/cat << 'EOF'
   Usage: container [options] CONTAINER-NAME
 
   Options:
-    --registry         Registry to copy the container to.
+    --registry=<reg>   Registry to copy the container to.
     --copy             Copy the container to the registry.
     --copy-args=<args> Arguments passed to `skopeo copy`.
     --docker-run       Execute `docker run`.
   EOF
       )
 
-      eval "$(${pkgs.docopts}/bin/docopts -A subcommand -h "$help" : "$@")"
+      eval "$(${docopts}/bin/docopts -A subcommand -h "$help" : "$@")"
 
       export DEVENV_CONTAINER=1
       container="''${subcommand[CONTAINER-NAME]}"
 
       # build container
-      spec=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --impure --print-out-paths --no-link ".#devenv.containers.\"$container\".derivation")
+      spec=$(${nix}/bin/nix $NIX_FLAGS build --impure --print-out-paths --no-link ".#devenv.containers.\"$container\".derivation")
       echo $spec
     
       # copy container
       if [[ ''${subcommand[--copy]} != false || ''${subcommand[--docker-run]} != false ]]; then
-        copyScript=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".copyScript")
+        copyScript=$(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".copyScript")
 
         if [[ ''${subcommand[--docker-run]} == true ]]; then
           registry=docker-daemon:
@@ -137,36 +145,36 @@ pkgs.writeScriptBin "devenv" ''
 
       # docker run
       if [[ ''${subcommand[--docker-run]} != false ]]; then
-        $($CUSTOM_NIX/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun")
+        $(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun")
       fi
       ;;
     search)
       name=$1
       shift
       assemble
-      options=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#optionsJSON' --impure)
-      results=$($CUSTOM_NIX/bin/nix $NIX_FLAGS search --json nixpkgs $name)
-      results_options=$(cat $options/share/doc/nixos/options.json | ${pkgs.jq}/bin/jq "with_entries(select(.key | contains(\"$name\")))")
+      options=$(${nix}/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#optionsJSON' --impure)
+      results=$(${nix}/bin/nix $NIX_FLAGS search --json nixpkgs $name)
+      results_options=$(${coreutils}/bin/cat $options/share/doc/nixos/options.json | ${jq}/bin/jq "with_entries(select(.key | contains(\"$name\")))")
       if [ "$results" = "{}" ]; then
         echo "No packages found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | ${pkgs.util-linuxMinimal}/bin/column -ts $'\t'
+        ${jq}/bin/jq -r '[to_entries[] | {name: ("pkgs." + (.key | split(".") | del(.[0, 1]) | join("."))) } * (.value | { version, description})] | (.[0] |keys_unsorted | @tsv) , (["----", "-------", "-----------"] | @tsv), (.[]  |map(.) |@tsv)' <<< "$results" | ${util-linuxMinimal}/bin/column -ts $'\t'
         echo
       fi
       echo
       if [ "$results_options" = "{}" ]; then
         echo "No options found for '$name'."
       else
-        ${pkgs.jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | ${pkgs.util-linuxMinimal}/bin/column -ts $'\t'
+        ${jq}/bin/jq -r '["option","type","default", "description"], ["------", "----", "-------", "-----------"],(to_entries[] | [.key, .value.type, .value.default, .value.description[0:80]]) | @tsv' <<< "$results_options" | ${util-linuxMinimal}/bin/column -ts $'\t'
       fi
       echo
-      echo "Found $(${pkgs.jq}/bin/jq 'length' <<< "$results") packages and $(${pkgs.jq}/bin/jq 'length' <<< "$results_options") options for '$name'."
+      echo "Found $(${jq}/bin/jq 'length' <<< "$results") packages and $(${jq}/bin/jq 'length' <<< "$results_options") options for '$name'."
       ;;
     init)
       if [ "$#" -eq "1" ]
       then
         target="$1"
-        mkdir -p "$target"
+        ${coreutils}/bin/mkdir -p "$target"
         cd "$target"
       fi
 
@@ -180,30 +188,36 @@ pkgs.writeScriptBin "devenv" ''
 
       if [[ ! -f .envrc ]]; then
         echo "Creating .envrc"
-        cat ${examples}/$example/.envrc > .envrc
+        ${coreutils}/bin/cat ${examples}/$example/.envrc > .envrc
       fi
 
       if [[ ! -f devenv.nix ]]; then
         echo "Creating devenv.nix"
-        cat ${examples}/$example/devenv.nix > devenv.nix 
+        ${coreutils}/bin/cat ${examples}/$example/devenv.nix > devenv.nix
       fi
 
       if [[ ! -f devenv.yaml ]]; then
         echo "Creating devenv.yaml"
-        cat ${examples}/$example/devenv.yaml > devenv.yaml
+        ${coreutils}/bin/cat ${examples}/$example/devenv.yaml > devenv.yaml
       fi
 
       if [[ ! -f .gitignore ]]; then
-        touch .gitignore
+        ${coreutils}/bin/touch .gitignore
       fi
 
-      if ! grep -q "devenv" .gitignore; then
-        echo "Appending .devenv* and devenv.local.nix to .gitignore"
+      if ! ${gnugrep}/bin/grep -q "devenv" .gitignore; then
+        echo "Appending defaults to .gitignore"
 
         echo "" >> .gitignore
         echo "# Devenv" >> .gitignore
         echo ".devenv*" >> .gitignore
         echo "devenv.local.nix" >> .gitignore
+        echo "" >> .gitignore
+        echo "# direnv" >> .gitignore
+        echo ".direnv" >> .gitignore
+        echo "" >> .gitignore
+        echo "# pre-commit" >> .gitignore
+        echo ".pre-commit-config.yaml" >> .gitignore
         echo "" >> .gitignore
       fi
       echo "Done."
@@ -215,49 +229,49 @@ pkgs.writeScriptBin "devenv" ''
       ;;
     info)
       assemble
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake metadata | grep Inputs -A10000
+      ${nix}/bin/nix $NIX_FLAGS flake metadata | ${gnugrep}/bin/grep Inputs -A10000
       echo
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
+      ${nix}/bin/nix $NIX_FLAGS eval --raw '.#info' --impure
       ;;
     update)
       assemble
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS flake update
+      ${nix}/bin/nix $NIX_FLAGS flake update
       ;;
     version)
       echo "devenv: ${version}"
       ;;
     ci)
       assemble
-      ci=$($CUSTOM_NIX/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
+      ci=$(${nix}/bin/nix $NIX_FLAGS build --no-link --print-out-paths '.#ci' --impure)
       add_gc ci $ci
       ;;
     gc)
       SECONDS=0
 
-      for link in $(${pkgs.findutils}/bin/find $GC_ROOT -type l); do
+      for link in $(${findutils}/bin/find $GC_ROOT -type l); do
         if [ ! -f $link ]; then
-          unlink $link
+          ${coreutils}/bin/unlink $link
         fi
       done
 
       echo "Counting old devenvs ..."
       echo
-      candidates=$(${pkgs.findutils}/bin/find $GC_ROOT -type l)
+      candidates=$(${findutils}/bin/find $GC_ROOT -type l)
 
-      before=$($CUSTOM_NIX/bin/nix $NIX_FLAGS path-info $candidates -r -S --json | ${pkgs.jq}/bin/jq '[.[].closureSize | tonumber] | add')
+      before=$(${nix}/bin/nix $NIX_FLAGS path-info $candidates -r -S --json | ${jq}/bin/jq '[.[].closureSize | tonumber] | add')
 
-      echo "Found $(echo $candidates | wc -l) environments of sum size $(( $before / 1024 / 1024 )) MB."
+      echo "Found $(echo $candidates | ${coreutils}/bin/wc -l) environments of sum size $(( $before / 1024 / 1024 )) MB."
       echo
       echo "Garbage collecting ..."
       echo
       echo "Note: If you'd like this command to run much faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
 
-      $CUSTOM_NIX/bin/nix $NIX_FLAGS store delete --recursive $candidates
+      ${nix}/bin/nix $NIX_FLAGS store delete --recursive $candidates
 
       # after GC delete links again
-      for link in $(${pkgs.findutils}/bin/find $GC_ROOT -type l); do
+      for link in $(${findutils}/bin/find $GC_ROOT -type l); do
         if [ ! -f $link ]; then
-          unlink $link
+          ${coreutils}/bin/unlink $link
         fi
       done
 

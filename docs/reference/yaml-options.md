@@ -13,7 +13,7 @@
 ## inputs.&lt;name&gt;.url
 
 - github:NixOS/nixpkgs/master
-- github:NixOS/nixpkgs/master?rev=238b18d7b2c8239f676358634bfb32693d3706f3
+- github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3
 - github:foo/bar?dir=subdir
 - git+ssh://git@github.com/NixOS/nix?ref=v1.2.3
 - git+https://git.somehost.tld/user/path?ref=branch&rev=fdc8ef970de2b4634e1b3dca296e1ed918459a9e
@@ -32,14 +32,15 @@ inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
   myproject:
-    url: github:owner/repo/myproject
+    url: github:owner/myproject
     flake: false
+  myproject2:
+    url: github:owner/myproject
+    overlays:
+      - default
 imports:
   - ./frontend
   - ./backend
   - myproject
   - myproject/relative/path
-overlays:
-  myproject:
-    - default
 ```

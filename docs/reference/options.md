@@ -15,7 +15,7 @@ list of package
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -43,11 +43,11 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/mkcert\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mkcert.nix)
 
 
 
-## container\.isBuilding
+## container.isBuilding
 
 Set to true when the environment is building a container.
 
@@ -62,7 +62,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
@@ -81,11 +81,11 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.copyToRoot
+## containers.\<name>.copyToRoot
 
 Add a path to the container. Defaults to the whole git repo.
 
@@ -100,11 +100,11 @@ null or path
 ` "self" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.defaultCopyArgs
+## containers.\<name>.defaultCopyArgs
 
 Default arguments to pass to `skopeo copy`.
 You can override them by passing arguments to the script.
@@ -121,11 +121,11 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.entrypoint
+## containers.\<name>.entrypoint
 
 Entrypoint of the container.
 
@@ -140,11 +140,11 @@ list of anything
 ` [ entrypoint ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.isBuilding
+## containers.\<name>.isBuilding
 
 Set to true when the environment is building this container.
 
@@ -159,11 +159,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.name
+## containers.\<name>.name
 
 Name of the container.
 
@@ -178,11 +178,11 @@ null or string
 ` "top-level name or containers.mycontainer.name" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.registry
+## containers.\<name>.registry
 
 Registry to push the container to.
 
@@ -197,11 +197,11 @@ null or string
 ` "docker://" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.startupCommand
+## containers.\<name>.startupCommand
 
 Command to run in the container.
 
@@ -216,11 +216,11 @@ null or string or package
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## containers\.\<name>\.version
+## containers.\<name>.version
 
 Version/tag of the container.
 
@@ -235,11 +235,11 @@ null or string
 ` "latest" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/containers\.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
 
 
 
-## devcontainer\.enable
+## devcontainer.enable
 
 Whether to enable generation .devcontainer.json for devenv integration.
 
@@ -259,15 +259,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
 
 
 
-## devcontainer\.settings
+## devcontainer.settings
 
 
 
-Devcontainer settings\.
+Devcontainer settings.
 
 
 
@@ -280,15 +280,15 @@ JSON value
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
 
 
 
-## devcontainer\.settings\.customizations\.vscode\.extensions
+## devcontainer.settings.customizations.vscode.extensions
 
 
 
-List of preinstalled VSCode extensions\.
+List of preinstalled VSCode extensions.
 
 
 
@@ -306,15 +306,15 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
 
 
 
-## devcontainer\.settings\.image
+## devcontainer.settings.image
 
 
 
-The name of an image in a container registry\.
+The name of an image in a container registry.
 
 
 
@@ -327,15 +327,15 @@ string
 ` "ghcr.io/cachix/devenv:latest" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
 
 
 
-## devcontainer\.settings\.overrideCommand
+## devcontainer.settings.overrideCommand
 
 
 
-Override the default command\.
+Override the default command.
 
 
 
@@ -348,15 +348,15 @@ anything
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
 
 
 
-## devcontainer\.settings\.updateContentCommand
+## devcontainer.settings.updateContentCommand
 
 
 
-Command to run after container creation\.
+Command to run after container creation.
 
 
 
@@ -369,11 +369,35 @@ anything
 ` "devenv ci" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
 
 
 
-## devenv\.flakesIntegration
+## devenv.debug
+
+Whether to enable debug mode of devenv enterShell script.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/debug.nix](https://github.com/cachix/devenv/blob/main/src/modules/debug.nix)
+
+
+
+## devenv.flakesIntegration
 
 Tells if devenv is being imported by a flake.nix file
 
@@ -386,14 +410,14 @@ boolean
 
 
 *Default:*
-` true ` when devenv is invoked via the flake integration; ` false ` otherwise\.
+` true ` when devenv is invoked via the flake integration; ` false ` otherwise.
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
 
 
 
-## devenv\.latestVersion
+## devenv.latestVersion
 
 The latest version of devenv.
 
@@ -409,11 +433,11 @@ string
 ` "0.6.2" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
 
 
 
-## devenv\.warnOnNewVersion
+## devenv.warnOnNewVersion
 
 Whether to warn when a new version of devenv is available.
 
@@ -429,11 +453,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/update-check\.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
 
 
 
-## difftastic\.enable
+## difftastic.enable
 
 Integrate difftastic into git: https://difftastic.wilfred.me.uk/.
 
@@ -448,7 +472,7 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/difftastic\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/difftastic.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/difftastic.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/difftastic.nix)
 
 
 
@@ -467,7 +491,7 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -486,7 +510,7 @@ lazy attribute set of anything
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -515,7 +539,7 @@ attribute set of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/hostctl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
 
 
 
@@ -531,10 +555,10 @@ string
 
 
 *Default:*
-` "devenv-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" `
+` "devenv-16a3de0b53062f3b6e6678a84f28e04344732e0002fcad6af20ffbeaa0491014" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/hostctl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
 
 
 
@@ -553,11 +577,11 @@ attribute set of list of string
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/info\.nix](https://github.com/cachix/devenv/blob/main/src/modules/info.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/info.nix](https://github.com/cachix/devenv/blob/main/src/modules/info.nix)
 
 
 
-## languages\.ansible\.enable
+## languages.ansible.enable
 
 Whether to enable tools for Ansible development.
 
@@ -577,11 +601,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
 
 
 
-## languages\.ansible\.package
+## languages.ansible.package
 
 The Ansible package to use.
 
@@ -596,11 +620,11 @@ package
 ` pkgs.ansible `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
 
 
 
-## languages\.c\.enable
+## languages.c.enable
 
 Whether to enable tools for C development.
 
@@ -620,11 +644,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/c\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
 
 
 
-## languages\.clojure\.enable
+## languages.clojure.enable
 
 Whether to enable tools for Clojure development.
 
@@ -644,11 +668,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/clojure\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/clojure.nix)
 
 
 
-## languages\.cplusplus\.enable
+## languages.cplusplus.enable
 
 Whether to enable tools for C++ development.
 
@@ -668,11 +692,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cplusplus\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cplusplus.nix)
 
 
 
-## languages\.crystal\.enable
+## languages.crystal.enable
 
 Whether to enable Enable tools for Crystal development..
 
@@ -692,11 +716,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
 
 
 
-## languages\.cue\.enable
+## languages.cue.enable
 
 Whether to enable tools for Cue development.
 
@@ -716,11 +740,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
 
 
 
-## languages\.cue\.package
+## languages.cue.package
 
 The CUE package to use.
 
@@ -735,11 +759,11 @@ package
 ` pkgs.cue `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
 
 
 
-## languages\.dart\.enable
+## languages.dart.enable
 
 Whether to enable tools for Dart development.
 
@@ -759,11 +783,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
 
 
 
-## languages\.dart\.package
+## languages.dart.package
 
 The Dart package to use.
 
@@ -778,11 +802,11 @@ package
 ` pkgs.dart `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
 
 
 
-## languages\.deno\.enable
+## languages.deno.enable
 
 Whether to enable tools for Deno development.
 
@@ -802,11 +826,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/deno\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)
 
 
 
-## languages\.dotnet\.enable
+## languages.dotnet.enable
 
 Whether to enable tools for .NET development.
 
@@ -826,11 +850,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dotnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
 
 
 
-## languages\.dotnet\.package
+## languages.dotnet.package
 
 The .NET SDK package to use.
 
@@ -845,11 +869,11 @@ package
 ` pkgs.dotnet-sdk `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dotnet\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dotnet.nix)
 
 
 
-## languages\.elixir\.enable
+## languages.elixir.enable
 
 Whether to enable tools for Elixir development.
 
@@ -869,11 +893,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
 
 
 
-## languages\.elixir\.package
+## languages.elixir.package
 
 Which package of Elixir to use.
 
@@ -888,11 +912,11 @@ package
 ` pkgs.elixir `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
 
 
 
-## languages\.elm\.enable
+## languages.elm.enable
 
 Whether to enable tools for Elm development.
 
@@ -912,11 +936,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elm\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elm.nix)
 
 
 
-## languages\.erlang\.enable
+## languages.erlang.enable
 
 Whether to enable tools for Erlang development.
 
@@ -936,11 +960,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
 
 
 
-## languages\.erlang\.package
+## languages.erlang.package
 
 Which package of Erlang to use.
 
@@ -955,11 +979,11 @@ package
 ` pkgs.erlang `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
 
 
 
-## languages\.gawk\.enable
+## languages.gawk.enable
 
 Whether to enable tools for GNU Awk development.
 
@@ -979,11 +1003,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/gawk\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gawk.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/gawk.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gawk.nix)
 
 
 
-## languages\.go\.enable
+## languages.go.enable
 
 Whether to enable tools for Go development.
 
@@ -1003,11 +1027,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
 
 
 
-## languages\.go\.package
+## languages.go.package
 
 The Go package to use.
 
@@ -1022,11 +1046,11 @@ package
 ` pkgs.go `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
 
 
 
-## languages\.haskell\.enable
+## languages.haskell.enable
 
 Whether to enable tools for Haskell development.
 
@@ -1046,11 +1070,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
 
 
 
-## languages\.haskell\.package
+## languages.haskell.package
 
 Haskell compiler to use.
 
@@ -1066,11 +1090,11 @@ package
 ` "pkgs.ghc" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
 
 
 
-## languages\.haskell\.languageServer
+## languages.haskell.languageServer
 
 Haskell language server to use.
 
@@ -1086,11 +1110,11 @@ null or package
 ` "pkgs.haskell-language-server" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
 
 
 
-## languages\.java\.enable
+## languages.java.enable
 
 Whether to enable tools for Java development.
 
@@ -1110,11 +1134,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
-## languages\.java\.gradle\.enable
+## languages.java.gradle.enable
 
 Whether to enable gradle.
 
@@ -1134,11 +1158,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
-## languages\.java\.gradle\.package
+## languages.java.gradle.package
 
 The Gradle package to use.
 The Gradle package by default inherits the JDK from `languages.java.jdk.package`.
@@ -1150,11 +1174,11 @@ The Gradle package by default inherits the JDK from `languages.java.jdk.package`
 package
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
-## languages\.java\.jdk\.package
+## languages.java.jdk.package
 
 The JDK package to use.
 This will also become available as `JAVA_HOME`.
@@ -1176,11 +1200,11 @@ package
 ` pkgs.jdk8 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
-## languages\.java\.maven\.enable
+## languages.java.maven.enable
 
 Whether to enable maven.
 
@@ -1200,11 +1224,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
-## languages\.java\.maven\.package
+## languages.java.maven.package
 
 The Maven package to use.
 The Maven package by default inherits the JDK from `languages.java.jdk.package`.
@@ -1216,11 +1240,11 @@ The Maven package by default inherits the JDK from `languages.java.jdk.package`.
 package
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
-## languages\.javascript\.enable
+## languages.javascript.enable
 
 Whether to enable tools for JavaScript development.
 
@@ -1240,11 +1264,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
-## languages\.javascript\.package
+## languages.javascript.package
 
 The Node package to use.
 
@@ -1259,11 +1283,11 @@ package
 ` pkgs.nodejs `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
-## languages\.julia\.enable
+## languages.julia.enable
 
 Whether to enable tools for Julia development.
 
@@ -1283,11 +1307,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
 
 
 
-## languages\.julia\.package
+## languages.julia.package
 
 The Julia package to use.
 
@@ -1302,11 +1326,11 @@ package
 ` pkgs.julia-bin `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
 
 
 
-## languages\.kotlin\.enable
+## languages.kotlin.enable
 
 Whether to enable tools for Kotlin development.
 
@@ -1326,11 +1350,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/kotlin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/kotlin.nix)
 
 
 
-## languages\.lua\.enable
+## languages.lua.enable
 
 Whether to enable tools for Lua development.
 
@@ -1350,11 +1374,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
 
 
 
-## languages\.lua\.package
+## languages.lua.package
 
 The Lua package to use.
 
@@ -1369,11 +1393,11 @@ package
 ` pkgs.lua `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
 
 
 
-## languages\.nim\.enable
+## languages.nim.enable
 
 Whether to enable tools for Nim development.
 
@@ -1393,11 +1417,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
 
 
 
-## languages\.nim\.package
+## languages.nim.package
 
 The Nim package to use.
 
@@ -1412,11 +1436,11 @@ package
 ` pkgs.nim `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
 
 
 
-## languages\.nix\.enable
+## languages.nix.enable
 
 Whether to enable tools for Nix development.
 
@@ -1436,11 +1460,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nix\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
 
 
 
-## languages\.ocaml\.enable
+## languages.ocaml.enable
 
 Whether to enable tools for OCaml development.
 
@@ -1460,11 +1484,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
 
 
 
-## languages\.ocaml\.packages
+## languages.ocaml.packages
 
 The package set of OCaml to use
 
@@ -1479,11 +1503,59 @@ attribute set
 ` pkgs.ocaml-ng.ocamlPackages_4_12 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
 
 
 
-## languages\.perl\.enable
+## languages.pascal.enable
+
+Whether to enable tools for Pascal development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
+
+
+## languages.pascal.lazarus.enable
+
+Whether to enable lazarus graphical IDE for the FreePascal language.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
+
+
+## languages.perl.enable
 
 Whether to enable tools for Perl development.
 
@@ -1503,11 +1575,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/perl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
 
 
 
-## languages\.php\.enable
+## languages.php.enable
 
 Whether to enable tools for PHP development.
 
@@ -1527,11 +1599,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.package
+## languages.php.package
 
 Allows you to [override the default used package](https://nixos.org/manual/nixpkgs/stable/#ssec-php-user-guide)
 to adjust the settings or add more extensions. You can find the
@@ -1563,11 +1635,11 @@ pkgs.php.buildEnv {
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.packages
+## languages.php.packages
 
 Attribute set of packages including composer
 
@@ -1582,11 +1654,11 @@ submodule
 ` pkgs `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.packages\.composer
+## languages.php.packages.composer
 
 composer package
 
@@ -1601,11 +1673,11 @@ null or package
 ` pkgs.phpPackages.composer `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.extensions
+## languages.php.extensions
 
 PHP extensions to enable.
 
@@ -1621,11 +1693,11 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.extraConfig
+## languages.php.fpm.extraConfig
 
 Extra configuration that should be put in the global section of
 the PHP-FPM configuration file. Do not specify the options
@@ -1644,11 +1716,11 @@ null or strings concatenated with “\\n”
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.phpOptions
+## languages.php.fpm.phpOptions
 
 Options appended to the PHP configuration file `php.ini`.
 
@@ -1674,11 +1746,11 @@ strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools
+## languages.php.fpm.pools
 
 PHP-FPM pools. If no pools are defined, the PHP-FPM
 service is disabled.
@@ -1717,11 +1789,11 @@ attribute set of (submodule)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.extraConfig
+## languages.php.fpm.pools.\<name>.extraConfig
 
 Extra lines that go into the pool configuration.
 See the documentation on `php-fpm.conf` for
@@ -1739,11 +1811,11 @@ null or strings concatenated with “\\n”
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.listen
+## languages.php.fpm.pools.\<name>.listen
 
 The address on which to accept FastCGI requests.
 
@@ -1764,11 +1836,11 @@ string
 ` "/path/to/unix/socket" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.phpEnv
+## languages.php.fpm.pools.\<name>.phpEnv
 
 Environment variables used for this PHP-FPM pool.
 
@@ -1798,11 +1870,11 @@ attribute set of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.phpOptions
+## languages.php.fpm.pools.\<name>.phpOptions
 
 Options appended to the PHP configuration file `php.ini` used for this PHP-FPM pool.
 
@@ -1813,11 +1885,11 @@ Options appended to the PHP configuration file `php.ini` used for this PHP-FPM p
 strings concatenated with “\\n”
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.phpPackage
+## languages.php.fpm.pools.\<name>.phpPackage
 
 The PHP package to use for running this PHP-FPM pool.
 
@@ -1833,11 +1905,11 @@ package
 ` phpfpm.phpPackage `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.settings
+## languages.php.fpm.pools.\<name>.settings
 
 PHP-FPM pool directives. Refer to the "List of pool directives" section of
 <https://www.php.net/manual/en/install.fpm.configuration.php">
@@ -1873,11 +1945,11 @@ attribute set of (string or signed integer or boolean)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.socket
+## languages.php.fpm.pools.\<name>.socket
 
 Path to the Unix socket file on which to accept FastCGI requests.
 
@@ -1892,14 +1964,14 @@ string *(read only)*
 
 
 *Example:*
-` "/.devenv/state/php-fpm/<name>.sock" `
+` "/home/runner/work/devenv/devenv/.devenv/state/php-fpm/<name>.sock" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.fpm\.settings
+## languages.php.fpm.settings
 
 PHP-FPM global directives. 
 
@@ -1925,16 +1997,16 @@ attribute set of (string or signed integer or boolean)
 
 ```
 {
-  error_log = "/.devenv/state/php-fpm/php-fpm.log";
+  error_log = "/home/runner/work/devenv/devenv/.devenv/state/php-fpm/php-fpm.log";
 }
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.ini
+## languages.php.ini
 
 PHP.ini directives. Refer to the "List of php.ini directives" of PHP's
 
@@ -1950,11 +2022,11 @@ null or strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.php\.version
+## languages.php.version
 
 The PHP version to use.
 
@@ -1969,11 +2041,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
-## languages\.purescript\.enable
+## languages.purescript.enable
 
 Whether to enable tools for PureScript development.
 
@@ -1993,11 +2065,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
 
 
 
-## languages\.purescript\.package
+## languages.purescript.package
 
 The PureScript package to use.
 
@@ -2012,11 +2084,11 @@ package
 ` pkgs.purescript `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
 
 
 
-## languages\.python\.enable
+## languages.python.enable
 
 Whether to enable tools for Python development.
 
@@ -2036,11 +2108,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
-## languages\.python\.package
+## languages.python.package
 
 The Python package to use.
 
@@ -2055,11 +2127,11 @@ package
 ` pkgs.python3 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
-## languages\.python\.poetry\.enable
+## languages.python.poetry.enable
 
 Whether to enable poetry.
 
@@ -2079,11 +2151,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
-## languages\.python\.poetry\.package
+## languages.python.poetry.package
 
 The Poetry package to use.
 
@@ -2095,22 +2167,16 @@ package
 
 
 *Default:*
-
-```
-pkgs.poetry.override {
-  python3 = config.languages.python.package;
-}
-
-```
+` pkgs.poetry `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
-## languages\.python\.venv\.enable
+## languages.python.poetry.activate.enable
 
-Whether to enable Python virtual environment.
+Whether to enable activate the poetry virtual environment automatically.
 
 
 
@@ -2128,11 +2194,95 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
-## languages\.r\.enable
+## languages.python.poetry.install.enable
+
+Whether to enable poetry install during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.installRootPackage
+
+Whether the root package (your project) should be installed. See `--no-root`
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.quiet
+
+Whether `poetry install` should avoid outputting messages during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.venv.enable
+
+Whether to enable Python virtual environment.
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.r.enable
 
 Whether to enable tools for R development.
 
@@ -2152,11 +2302,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
 
 
 
-## languages\.r\.package
+## languages.r.package
 
 The R package to use.
 
@@ -2171,11 +2321,11 @@ package
 ` pkgs.R `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
 
 
 
-## languages\.racket\.enable
+## languages.racket.enable
 
 Whether to enable tools for Racket development.
 
@@ -2195,11 +2345,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/racket\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
 
 
 
-## languages\.racket\.package
+## languages.racket.package
 
 The Racket package to use.
 
@@ -2214,11 +2364,11 @@ package
 ` pkgs.racket-minimal `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/racket\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
 
 
 
-## languages\.raku\.enable
+## languages.raku.enable
 
 Whether to enable tools for Raku development.
 
@@ -2238,11 +2388,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/raku\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/raku.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/raku.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/raku.nix)
 
 
 
-## languages\.robotframework\.enable
+## languages.robotframework.enable
 
 Whether to enable tools for Robot Framework development.
 
@@ -2262,13 +2412,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
 
 
 
-## languages\.robotframework\.python
+## languages.robotframework.python
 
 The Python package to use.
+
+
 
 *Type:*
 package
@@ -2279,11 +2431,11 @@ package
 ` pkgs.python3 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
 
 
 
-## languages\.ruby\.enable
+## languages.ruby.enable
 
 Whether to enable tools for Ruby development.
 
@@ -2303,11 +2455,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
-## languages\.ruby\.package
+## languages.ruby.package
 
 The Ruby package to use.
 
@@ -2322,11 +2474,11 @@ package
 ` pkgs.ruby_3_1 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
-## languages\.ruby\.version
+## languages.ruby.version
 
 The Ruby version to use.
 This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
@@ -2348,11 +2500,11 @@ null or string
 ` "3.2.1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
-## languages\.ruby\.versionFile
+## languages.ruby.versionFile
 
 The .ruby-version file path to extract the Ruby version from.
 This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
@@ -2383,11 +2535,11 @@ null or path
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
-## languages\.rust\.enable
+## languages.rust.enable
 
 Whether to enable tools for Rust development.
 
@@ -2407,11 +2559,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.packages
+## languages.rust.packages
 
 Attribute set of packages including rustc and Cargo.
 
@@ -2426,11 +2578,11 @@ submodule
 ` pkgs `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.packages\.cargo
+## languages.rust.packages.cargo
 
 cargo package
 
@@ -2445,11 +2597,11 @@ package
 ` pkgs.cargo `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.packages\.clippy
+## languages.rust.packages.clippy
 
 clippy package
 
@@ -2464,11 +2616,11 @@ package
 ` pkgs.clippy `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.packages\.rust-analyzer
+## languages.rust.packages.rust-analyzer
 
 rust-analyzer package
 
@@ -2483,11 +2635,11 @@ package
 ` pkgs.rust-analyzer `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.packages\.rust-src
+## languages.rust.packages.rust-src
 
 rust-src package
 
@@ -2502,11 +2654,11 @@ package or string
 ` pkgs.rustPlatform.rustLibSrc `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.packages\.rustc
+## languages.rust.packages.rustc
 
 rustc package
 
@@ -2521,11 +2673,11 @@ package
 ` pkgs.rustc `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.packages\.rustfmt
+## languages.rust.packages.rustfmt
 
 rustfmt package
 
@@ -2540,11 +2692,11 @@ package
 ` pkgs.rustfmt `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.rust\.version
+## languages.rust.version
 
 Set to stable, beta, or latest.
 
@@ -2559,11 +2711,11 @@ null or string
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages\.scala\.enable
+## languages.scala.enable
 
 Whether to enable tools for Scala development.
 
@@ -2583,11 +2735,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
 
 
 
-## languages\.scala\.package
+## languages.scala.package
 
 The Scala package to use.
 
@@ -2603,11 +2755,11 @@ package
 ` "pkgs.scala_3" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
 
 
 
-## languages\.swift\.enable
+## languages.swift.enable
 
 Whether to enable tools for Swift development.
 
@@ -2627,11 +2779,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
 
 
 
-## languages\.swift\.package
+## languages.swift.package
 
 The Swift package to use.
 
@@ -2647,11 +2799,11 @@ package
 ` "pkgs.swift" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
 
 
 
-## languages\.terraform\.enable
+## languages.terraform.enable
 
 Whether to enable tools for Terraform development.
 
@@ -2671,11 +2823,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
 
 
 
-## languages\.terraform\.package
+## languages.terraform.package
 
 The Terraform package to use.
 
@@ -2690,11 +2842,11 @@ package
 ` pkgs.terraform `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/terraform\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
 
 
 
-## languages\.texlive\.enable
+## languages.texlive.enable
 
 Whether to enable TeX Live.
 
@@ -2714,11 +2866,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
 
 
 
-## languages\.texlive\.packages
+## languages.texlive.packages
 
 Packages available to TeX Live
 
@@ -2738,11 +2890,11 @@ non-empty (list of Concatenated string)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
 
 
 
-## languages\.texlive\.base
+## languages.texlive.base
 
 TeX Live package set to use
 
@@ -2757,11 +2909,11 @@ unspecified value
 ` pkgs.texlive `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
 
 
 
-## languages\.typescript\.enable
+## languages.typescript.enable
 
 Whether to enable tools for TypeScript development.
 
@@ -2781,11 +2933,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/typescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typescript.nix)
 
 
 
-## languages\.unison\.enable
+## languages.unison.enable
 
 Whether to enable tools for Unison development.
 
@@ -2805,11 +2957,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/unison\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
 
 
 
-## languages\.unison\.package
+## languages.unison.package
 
 Which package of Unison to use
 
@@ -2824,11 +2976,11 @@ package
 ` pkgs.unison-ucm `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/unison\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
 
 
 
-## languages\.v\.enable
+## languages.v.enable
 
 Whether to enable tools for V development.
 
@@ -2848,11 +3000,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/v\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
 
 
 
-## languages\.v\.package
+## languages.v.package
 
 The V package to use.
 
@@ -2867,11 +3019,11 @@ package
 ` pkgs.vlang `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/v\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/v.nix)
 
 
 
-## languages\.zig\.enable
+## languages.zig.enable
 
 Whether to enable tools for Zig development.
 
@@ -2891,11 +3043,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
 
 
 
-## languages\.zig\.package
+## languages.zig.package
 
 Which package of Zig to use.
 
@@ -2910,7 +3062,7 @@ package
 ` pkgs.zig `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
 
 
 
@@ -2929,7 +3081,7 @@ null or string
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/top-level\.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
 
 
@@ -2948,15 +3100,15 @@ submodule
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/pre-commit\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/pre-commit.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/pre-commit.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/pre-commit.nix)
 
 
 
-## pre-commit\.package
+## pre-commit.package
 
 
 
-The ` pre-commit ` package to use\.
+The ` pre-commit ` package to use.
 
 
 
@@ -2964,17 +3116,17 @@ The ` pre-commit ` package to use\.
 package
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.default_stages
+## pre-commit.default_stages
 
 
 
-A configuration wide option for the stages property\.
-Installs hooks to the defined stages\.
-See [https://pre-commit\.com/\#confining-hooks-to-run-at-certain-stages](https://pre-commit\.com/\#confining-hooks-to-run-at-certain-stages)\.
+A configuration wide option for the stages property.
+Installs hooks to the defined stages.
+See [https://pre-commit.com/\#confining-hooks-to-run-at-certain-stages](https://pre-commit.com/\#confining-hooks-to-run-at-certain-stages).
 
 
 
@@ -2992,15 +3144,15 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.excludes
+## pre-commit.excludes
 
 
 
-Exclude files that were matched by these patterns\.
+Exclude files that were matched by these patterns.
 
 
 
@@ -3013,15 +3165,15 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks
+## pre-commit.hooks
 
 
 
-The hook definitions\.
+The hook definitions.
 
 Pre-defined hooks can be enabled by, for example:
 
@@ -3033,27 +3185,27 @@ The pre-defined hooks are:
 
 **` actionlint `**
 
-Static checker for GitHub Actions workflow files\.
+Static checker for GitHub Actions workflow files.
 
 **` alejandra `**
 
-The Uncompromising Nix Code Formatter\.
+The Uncompromising Nix Code Formatter.
 
 **` ansible-lint `**
 
-Ansible linter\.
+Ansible linter.
 
 **` autoflake `**
 
-Remove unused imports and variables from Python code\.
+Remove unused imports and variables from Python code.
 
 **` bats `**
 
-Run bash unit tests\.
+Run bash unit tests.
 
 **` black `**
 
-The uncompromising Python code formatter\.
+The uncompromising Python code formatter.
 
 **` cabal-fmt `**
 
@@ -3061,11 +3213,15 @@ Format Cabal files
 
 **` cabal2nix `**
 
-Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` default.nix ` files\.
+Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` default.nix ` files.
 
 **` cargo-check `**
 
-Check the cargo package for errors\.
+Check the cargo package for errors.
+
+**` checkmake `**
+
+Experimental linter/analyzer for Makefiles.
 
 **` chktex `**
 
@@ -3073,55 +3229,63 @@ LaTeX semantic checker
 
 **` clang-format `**
 
-Format your code using ` clang-format `\.
+Format your code using ` clang-format `.
 
 **` clippy `**
 
-Lint Rust code\.
+Lint Rust code.
 
 **` commitizen `**
 
-Check whether the current commit message follows commiting rules\.
+Check whether the current commit message follows commiting rules.
 
 **` deadnix `**
 
-Scan Nix files for dead code (unused variable bindings)\.
+Scan Nix files for dead code (unused variable bindings).
 
 **` dhall-format `**
 
-Dhall code formatter\.
+Dhall code formatter.
+
+**` dune-fmt `**
+
+Runs Dune’s formatters on the code tree.
 
 **` dune-opam-sync `**
 
-Check that Dune-generated OPAM files are in sync\.
+Check that Dune-generated OPAM files are in sync.
 
 **` editorconfig-checker `**
 
-Verify that the files are in harmony with the ` .editorconfig `\.
+Verify that the files are in harmony with the ` .editorconfig `.
 
 **` elm-format `**
 
-Format Elm files\.
+Format Elm files.
 
 **` elm-review `**
 
-Analyzes Elm projects, to help find mistakes before your users find them\.
+Analyzes Elm projects, to help find mistakes before your users find them.
 
 **` elm-test `**
 
-Run unit tests and fuzz tests for Elm code\.
+Run unit tests and fuzz tests for Elm code.
 
 **` eslint `**
 
-Find and fix problems in your JavaScript code\.
+Find and fix problems in your JavaScript code.
 
 **` flake8 `**
 
-Check the style and quality of Python files\.
+Check the style and quality of Python files.
 
 **` fourmolu `**
 
-Haskell code prettifier\.
+Haskell code prettifier.
+
+**` fprettify `**
+
+Auto-formatter for modern Fortran code.
 
 **` gofmt `**
 
@@ -3133,123 +3297,131 @@ Run go tests
 
 **` govet `**
 
-Checks correctness of Go programs\.
+Checks correctness of Go programs.
+
+**` gptcommit `**
+
+Generate a commit message using GPT3.
 
 **` hadolint `**
 
-Dockerfile linter, validate inline bash\.
+Dockerfile linter, validate inline bash.
 
 **` hindent `**
 
-Haskell code prettifier\.
+Haskell code prettifier.
 
 **` hlint `**
 
-HLint gives suggestions on how to improve your source code\.
+HLint gives suggestions on how to improve your source code.
 
 **` hpack `**
 
-` hpack ` converts package definitions in the hpack format (` package.yaml `) to Cabal files\.
+` hpack ` converts package definitions in the hpack format (` package.yaml `) to Cabal files.
 
 **` html-tidy `**
 
-HTML linter\.
+HTML linter.
 
 **` hunspell `**
 
-Spell checker and morphological analyzer\.
+Spell checker and morphological analyzer.
 
 **` isort `**
 
-A Python utility / library to sort imports\.
+A Python utility / library to sort imports.
 
 **` latexindent `**
 
-Perl script to add indentation to LaTeX files\.
+Perl script to add indentation to LaTeX files.
 
 **` luacheck `**
 
-A tool for linting and static analysis of Lua code\.
+A tool for linting and static analysis of Lua code.
 
 **` markdownlint `**
 
-Style checker and linter for markdown files\.
+Style checker and linter for markdown files.
 
 **` mdsh `**
 
-Markdown shell pre-processor\.
+Markdown shell pre-processor.
 
 **` mypy `**
 
 Static type checker for Python
 
+**` nil `**
+
+Incremental analysis assistant for writing in Nix.
+
 **` nixfmt `**
 
-Nix code prettifier\.
+Nix code prettifier.
 
 **` nixpkgs-fmt `**
 
-Nix code prettifier\.
+Nix code prettifier.
 
 **` ocp-indent `**
 
-A tool to indent OCaml code\.
+A tool to indent OCaml code.
 
 **` opam-lint `**
 
-OCaml package manager configuration checker\.
+OCaml package manager configuration checker.
 
 **` ormolu `**
 
-Haskell code prettifier\.
+Haskell code prettifier.
 
 **` php-cs-fixer `**
 
-Lint PHP files\.
+Lint PHP files.
 
 **` phpcbf `**
 
-Lint PHP files\.
+Lint PHP files.
 
 **` phpcs `**
 
-Lint PHP files\.
+Lint PHP files.
 
 **` prettier `**
 
-Opinionated multi-language code formatter\.
+Opinionated multi-language code formatter.
 
 **` purs-tidy `**
 
-Format purescript files\.
+Format purescript files.
 
 **` purty `**
 
-Format purescript files\.
+Format purescript files.
 
 **` pylint `**
 
-Lint Python files\.
+Lint Python files.
 
 **` revive `**
 
-A linter for Go source code\.
+A linter for Go source code.
 
 **` ruff `**
 
-An extremely fast Python linter, written in Rust\.
+An extremely fast Python linter, written in Rust.
 
 **` rustfmt `**
 
-Format Rust code\.
+Format Rust code.
 
 **` shellcheck `**
 
-Format shell files\.
+Format shell files.
 
 **` shfmt `**
 
-Format shell files\.
+Format shell files.
 
 **` staticcheck `**
 
@@ -3257,7 +3429,7 @@ State of the art linter for the Go programming language
 
 **` statix `**
 
-Lints and suggestions for the Nix programming language\.
+Lints and suggestions for the Nix programming language.
 
 **` stylish-haskell `**
 
@@ -3265,11 +3437,11 @@ A simple Haskell code prettifier
 
 **` stylua `**
 
-An Opinionated Lua Code Formatter\.
+An Opinionated Lua Code Formatter.
 
 **` tagref `**
 
-Have tagref check all references and tags\.
+Have tagref check all references and tags.
 
 **` taplo `**
 
@@ -3277,7 +3449,19 @@ Format TOML files with taplo fmt
 
 **` terraform-format `**
 
-Format terraform (` .tf `) files\.
+Format terraform (` .tf `) files.
+
+**` tflint `**
+
+A Pluggable Terraform Linter.
+
+**` topiary `**
+
+A universal formatter engine within the Tree-sitter ecosystem, with support for many languages.
+
+**` treefmt `**
+
+One CLI to format the code tree.
 
 **` typos `**
 
@@ -3285,11 +3469,11 @@ Source code spell checker
 
 **` yamllint `**
 
-Yaml linter\.
+Yaml linter.
 
 **` zprint `**
 
-Beautifully format Clojure and Clojurescript source code and s-expressions\.
+Beautifully format Clojure and Clojurescript source code and s-expressions.
 
 
 
@@ -3302,15 +3486,15 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.enable
+## pre-commit.hooks.\<name>.enable
 
 
 
-Whether to enable this pre-commit hook\.
+Whether to enable this pre-commit hook.
 
 
 
@@ -3323,15 +3507,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.description
+## pre-commit.hooks.\<name>.description
 
 
 
-Description of the hook\. used for metadata purposes only\.
+Description of the hook. used for metadata purposes only.
 
 
 
@@ -3344,15 +3528,15 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.entry
+## pre-commit.hooks.\<name>.entry
 
 
 
-The entry point - the executable to run\. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `\.
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
 
 
 
@@ -3360,15 +3544,15 @@ The entry point - the executable to run\. ` entry ` can also contain arguments t
 string
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.excludes
+## pre-commit.hooks.\<name>.excludes
 
 
 
-Exclude files that were matched by these patterns\.
+Exclude files that were matched by these patterns.
 
 
 
@@ -3381,15 +3565,15 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.fail_fast
+## pre-commit.hooks.\<name>.fail_fast
 
 
 
-if true pre-commit will stop running hooks if this hook fails\.
+if true pre-commit will stop running hooks if this hook fails.
 
 
 
@@ -3397,15 +3581,15 @@ if true pre-commit will stop running hooks if this hook fails\.
 boolean
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.files
+## pre-commit.hooks.\<name>.files
 
 
 
-The pattern of files to run on\.
+The pattern of files to run on.
 
 
 
@@ -3418,15 +3602,15 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.language
+## pre-commit.hooks.\<name>.language
 
 
 
-The language of the hook - tells pre-commit how to install the hook\.
+The language of the hook - tells pre-commit how to install the hook.
 
 
 
@@ -3439,15 +3623,15 @@ string
 ` "system" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.name
+## pre-commit.hooks.\<name>.name
 
 
 
-The name of the hook - shown during hook execution\.
+The name of the hook - shown during hook execution.
 
 
 
@@ -3457,15 +3641,15 @@ string
 *Default:* internal name, same as id
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.pass_filenames
+## pre-commit.hooks.\<name>.pass_filenames
 
 
 
-Whether to pass filenames as arguments to the entry point\.
+Whether to pass filenames as arguments to the entry point.
 
 
 
@@ -3478,18 +3662,18 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.raw
+## pre-commit.hooks.\<name>.raw
 
 
 
-Raw fields of a pre-commit hook\. This is mostly for internal use but
-exposed in case you need to work around something\.
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
 
-Default: taken from the other hook options\.
+Default: taken from the other hook options.
 
 
 
@@ -3497,15 +3681,15 @@ Default: taken from the other hook options\.
 attribute set of unspecified value
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.require_serial
+## pre-commit.hooks.\<name>.require_serial
 
 
 
-if true this hook will execute using a single process instead of in parallel\.
+if true this hook will execute using a single process instead of in parallel.
 
 
 
@@ -3513,15 +3697,15 @@ if true this hook will execute using a single process instead of in parallel\.
 boolean
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.stages
+## pre-commit.hooks.\<name>.stages
 
 
 
-Confines the hook to run at a particular stage\.
+Confines the hook to run at a particular stage.
 
 
 
@@ -3534,15 +3718,15 @@ list of string
 ` default_stages `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.types
+## pre-commit.hooks.\<name>.types
 
 
 
-List of file types to run on\. See [Filtering files with types](https://pre-commit\.com/\#plugins)\.
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#plugins).
 
 
 
@@ -3560,15 +3744,15 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.hooks\.\<name>\.types_or
+## pre-commit.hooks.\<name>.types_or
 
 
 
-List of file types to run on, where only a single type needs to match\.
+List of file types to run on, where only a single type needs to match.
 
 
 
@@ -3581,11 +3765,11 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.installationScript
+## pre-commit.installationScript
 
 
 
@@ -3597,20 +3781,20 @@ A bash snippet that installs nix-pre-commit-hooks in the current directory
 string *(read only)*
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.rootSrc
+## pre-commit.rootSrc
 
 
 
-The source of the project to be checked\.
+The source of the project to be checked.
 
-This is used in the derivation that performs the check\.
+This is used in the derivation that performs the check.
 
 If you use the ` flakeModule `, the default is ` self.outPath `; the whole flake
-sources\.
+sources.
 
 
 
@@ -3618,16 +3802,16 @@ sources\.
 path
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.run
+## pre-commit.run
 
 
 
 A derivation that tests whether the pre-commit hooks run cleanly on
-the entire project\.
+the entire project.
 
 
 
@@ -3640,15 +3824,15 @@ package *(read only)*
 ` "<derivation>" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.settings\.alejandra\.exclude
+## pre-commit.settings.alejandra.exclude
 
 
 
-Files or directories to exclude from formatting\.
+Files or directories to exclude from formatting.
 
 
 
@@ -3672,15 +3856,53 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.autoflake\.binPath
+## pre-commit.settings.ansible-lint.configPath
+
+path to the configuration YAML file
 
 
 
-Path to autoflake binary\.
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.ansible-lint.subdir
+
+path to Ansible subdir
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.autoflake.binPath
+
+
+
+Path to autoflake binary.
 
 
 
@@ -3697,15 +3919,15 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.autoflake\.flags
+## pre-commit.settings.autoflake.flags
 
 
 
-Flags passed to autoflake\.
+Flags passed to autoflake.
 
 
 
@@ -3718,11 +3940,11 @@ string
 ` "--in-place --expand-star-imports --remove-duplicate-keys --remove-unused-variables" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.clippy\.denyWarnings
+## pre-commit.settings.clippy.denyWarnings
 
 
 
@@ -3739,11 +3961,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.clippy\.offline
+## pre-commit.settings.clippy.offline
 
 
 
@@ -3760,36 +3982,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.deadnix\.edit
+## pre-commit.settings.deadnix.edit
 
 
 
-Remove unused code and write to source file\.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-*Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
-
-
-
-## pre-commit\.settings\.deadnix\.noLambdaArg
-
-
-
-Don’t check lambda parameter arguments\.
+Remove unused code and write to source file.
 
 
 
@@ -3802,36 +4003,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.deadnix\.noLambdaPatternNames
+## pre-commit.settings.deadnix.noLambdaArg
 
 
 
-Don’t check lambda pattern names (don’t break nixpkgs ` callPackage `)\.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-*Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
-
-
-
-## pre-commit\.settings\.deadnix\.noUnderscore
-
-
-
-Don’t check any bindings that start with a ` _ `\.
+Don’t check lambda parameter arguments.
 
 
 
@@ -3844,15 +4024,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.deadnix\.quiet
+## pre-commit.settings.deadnix.noLambdaPatternNames
 
 
 
-Don’t print a dead code report\.
+Don’t check lambda pattern names (don’t break nixpkgs ` callPackage `).
 
 
 
@@ -3865,15 +4045,78 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.eslint\.binPath
+## pre-commit.settings.deadnix.noUnderscore
 
 
 
-` eslint ` binary path\. E\.g\. if you want to use the ` eslint ` in ` node_modules `, use ` ./node_modules/.bin/eslint `\.
+Don’t check any bindings that start with a ` _ `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.deadnix.quiet
+
+
+
+Don’t print a dead code report.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.dune-fmt.auto-promote
+
+
+
+Whether to auto-promote the changes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.eslint.binPath
+
+
+
+` eslint ` binary path. E.g. if you want to use the ` eslint ` in ` node_modules `, use ` ./node_modules/.bin/eslint `.
 
 
 
@@ -3886,15 +4129,15 @@ path
 ` ${tools.eslint}/bin/eslint `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.eslint\.extensions
+## pre-commit.settings.eslint.extensions
 
 
 
-The pattern of files to run on, see [https://pre-commit\.com/\#hooks-files](https://pre-commit\.com/\#hooks-files)\.
+The pattern of files to run on, see [https://pre-commit.com/\#hooks-files](https://pre-commit.com/\#hooks-files).
 
 
 
@@ -3904,18 +4147,18 @@ string
 
 
 *Default:*
-` "\\.js$" `
+` "\.js$" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.flake8\.binPath
+## pre-commit.settings.flake8.binPath
 
 
 
-flake8 binary path\. Should be used to specify flake8 binary from your Nix-managed Python environment\.
+flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
 
 
 
@@ -3932,15 +4175,15 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.flake8\.format
+## pre-commit.settings.flake8.format
 
 
 
-Output format\.
+Output format.
 
 
 
@@ -3953,15 +4196,15 @@ string
 ` "default" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.hpack\.silent
+## pre-commit.settings.hpack.silent
 
 
 
-Whether generation should be silent\.
+Whether generation should be silent.
 
 
 
@@ -3974,15 +4217,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.markdownlint\.config
+## pre-commit.settings.markdownlint.config
 
 
 
-See https://github\.com/DavidAnson/markdownlint/blob/main/schema/\.markdownlint\.jsonc
+See https://github.com/DavidAnson/markdownlint/blob/main/schema/.markdownlint.jsonc
 
 
 
@@ -3995,15 +4238,15 @@ attribute set
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.mypy\.binPath
+## pre-commit.settings.mypy.binPath
 
 
 
-Mypy binary path\. Should be used to specify the mypy executable in an environment containing your typing stubs\.
+Mypy binary path. Should be used to specify the mypy executable in an environment containing your typing stubs.
 
 
 
@@ -4020,15 +4263,15 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.nixfmt\.width
+## pre-commit.settings.nixfmt.width
 
 
 
-Line width\.
+Line width.
 
 
 
@@ -4041,15 +4284,15 @@ null or signed integer
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.ormolu\.cabalDefaultExtensions
+## pre-commit.settings.ormolu.cabalDefaultExtensions
 
 
 
-Use ` default-extensions ` from ` .cabal ` files\.
+Use ` default-extensions ` from ` .cabal ` files.
 
 
 
@@ -4062,15 +4305,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.ormolu\.defaultExtensions
+## pre-commit.settings.ormolu.defaultExtensions
 
 
 
-Haskell language extensions to enable\.
+Haskell language extensions to enable.
 
 
 
@@ -4083,15 +4326,15 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.php-cs-fixer\.binPath
+## pre-commit.settings.php-cs-fixer.binPath
 
 
 
-PHP-CS-Fixer binary path\.
+PHP-CS-Fixer binary path.
 
 
 
@@ -4108,15 +4351,15 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.phpcbf\.binPath
+## pre-commit.settings.phpcbf.binPath
 
 
 
-PHP_CodeSniffer binary path\.
+PHP_CodeSniffer binary path.
 
 
 
@@ -4133,15 +4376,15 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.phpcs\.binPath
+## pre-commit.settings.phpcs.binPath
 
 
 
-PHP_CodeSniffer binary path\.
+PHP_CodeSniffer binary path.
 
 
 
@@ -4158,15 +4401,15 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.prettier\.binPath
+## pre-commit.settings.prettier.binPath
 
 
 
-` prettier ` binary path\. E\.g\. if you want to use the ` prettier ` in ` node_modules `, use ` ./node_modules/.bin/prettier `\.
+` prettier ` binary path. E.g. if you want to use the ` prettier ` in ` node_modules `, use ` ./node_modules/.bin/prettier `.
 
 
 
@@ -4183,15 +4426,15 @@ path
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.prettier\.output
+## pre-commit.settings.prettier.output
 
 
 
-Output format\.
+Output format.
 
 
 
@@ -4204,15 +4447,15 @@ null or one of “check”, “list-different”
 ` "list-different" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.prettier\.write
+## pre-commit.settings.prettier.write
 
 
 
-Whether to edit files inplace\.
+Whether to edit files inplace.
 
 
 
@@ -4225,15 +4468,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.pylint\.binPath
+## pre-commit.settings.pylint.binPath
 
 
 
-Pylint binary path\. Should be used to specify Pylint binary from your Nix-managed Python environment\.
+Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
 
 
 
@@ -4250,15 +4493,15 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.pylint\.reports
+## pre-commit.settings.pylint.reports
 
 
 
-Whether to display a full report\.
+Whether to display a full report.
 
 
 
@@ -4271,15 +4514,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.pylint\.score
+## pre-commit.settings.pylint.score
 
 
 
-Whether to activate the evaluation score\.
+Whether to activate the evaluation score.
 
 
 
@@ -4292,15 +4535,15 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.revive\.configPath
+## pre-commit.settings.revive.configPath
 
 
 
-Path to the configuration TOML file\.
+Path to the configuration TOML file.
 
 
 
@@ -4313,15 +4556,15 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.rust\.cargoManifestPath
+## pre-commit.settings.rust.cargoManifestPath
 
 
 
-Path to Cargo\.toml
+Path to Cargo.toml
 
 
 
@@ -4334,15 +4577,15 @@ null or string
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.statix\.format
+## pre-commit.settings.statix.format
 
 
 
-Error Output format\.
+Error Output format.
 
 
 
@@ -4355,15 +4598,15 @@ one of “stderr”, “errfmt”, “json”
 ` "errfmt" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.statix\.ignore
+## pre-commit.settings.statix.ignore
 
 
 
-Globs of file patterns to skip\.
+Globs of file patterns to skip.
 
 
 
@@ -4387,15 +4630,50 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.typos\.diff
+## pre-commit.settings.treefmt.package
 
 
 
-Wheter to print a diff of what would change\.
+The ` treefmt ` package to use.
+
+Should include all the formatters configured by treefmt.
+
+For example:
+
+```nix
+pkgs.writeShellApplication {
+  name = "treefmt";
+  runtimeInputs = [
+    pkgs.treefmt
+    pkgs.nixpkgs-fmt
+    pkgs.black
+  ];
+  text =
+    ''
+      exec treefmt "$@"
+    '';
+}
+```
+
+
+
+*Type:*
+package
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.typos.diff
+
+
+
+Wheter to print a diff of what would change.
 
 
 
@@ -4408,15 +4686,15 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.typos\.format
+## pre-commit.settings.typos.format
 
 
 
-Output format\.
+Output format.
 
 
 
@@ -4429,15 +4707,15 @@ one of “silent”, “brief”, “long”, “json”
 ` "long" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.typos\.write
+## pre-commit.settings.typos.write
 
 
 
-Whether to write fixes out\.
+Whether to write fixes out.
 
 
 
@@ -4450,11 +4728,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.yamllint\.configPath
+## pre-commit.settings.yamllint.configPath
 
 path to the configuration YAML file
 
@@ -4469,11 +4747,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.settings\.yamllint\.relaxed
+## pre-commit.settings.yamllint.relaxed
 
 
 
@@ -4490,19 +4768,19 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/hooks\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
-## pre-commit\.src
+## pre-commit.src
 
 
 
-Root of the project\. By default this will be filtered with the ` gitignoreSource `
-function later, unless ` rootSrc ` is specified\.
+Root of the project. By default this will be filtered with the ` gitignoreSource `
+function later, unless ` rootSrc ` is specified.
 
 If you use the ` flakeModule `, the default is ` self.outPath `; the whole flake
-sources\.
+sources.
 
 
 
@@ -4510,29 +4788,29 @@ sources\.
 path
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## pre-commit\.tools
+## pre-commit.tools
 
 
 
-Tool set from which ` nix-pre-commit-hooks ` will pick binaries\.
+Tool set from which ` nix-pre-commit-hooks ` will pick binaries.
 
-` nix-pre-commit-hooks ` comes with its own set of packages for this purpose\.
+` nix-pre-commit-hooks ` comes with its own set of packages for this purpose.
 
 
 
 *Type:*
-lazy attribute set of package
+lazy attribute set of (null or package)
 
 *Declared by:*
- - [https://github\.com/cachix/pre-commit-hooks\.nix/blob/master/modules/pre-commit\.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
-## process\.after
+## process.after
 
 Bash code to execute after stopping processes.
 
@@ -4547,11 +4825,11 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
-## process\.before
+## process.before
 
 Bash code to execute before starting processes.
 
@@ -4566,11 +4844,11 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
-## process\.implementation
+## process.implementation
 
 The implementation used when performing ``devenv up``.
 
@@ -4590,11 +4868,11 @@ one of “honcho”, “overmind”, “process-compose”, “hivemind”
 ` "overmind" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
-## process\.process-compose
+## process.process-compose
 
 Top-level process-compose.yaml options when that implementation is used.
 
@@ -4629,7 +4907,7 @@ attribute set
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4648,11 +4926,11 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
-## processes\.\<name>\.exec
+## processes.\<name>.exec
 
 Bash code to run the process.
 
@@ -4662,11 +4940,11 @@ Bash code to run the process.
 string
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
-## processes\.\<name>\.process-compose
+## processes.\<name>.process-compose
 
 process-compose.yaml specific process attributes.
 
@@ -4708,7 +4986,7 @@ attribute set
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/processes\.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
 
 
 
@@ -4727,11 +5005,11 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/scripts\.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
 
 
 
-## scripts\.\<name>\.exec
+## scripts.\<name>.exec
 
 Bash code to execute when the script is run.
 
@@ -4741,11 +5019,11 @@ Bash code to execute when the script is run.
 string
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/scripts\.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
 
 
 
-## services\.adminer\.enable
+## services.adminer.enable
 
 Whether to enable Adminer process.
 
@@ -4765,11 +5043,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
 
 
 
-## services\.adminer\.package
+## services.adminer.package
 
 Which package of Adminer to use.
 
@@ -4784,11 +5062,11 @@ package
 ` pkgs.adminer `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
 
 
 
-## services\.adminer\.listen
+## services.adminer.listen
 
 Listen address for the Adminer.
 
@@ -4803,11 +5081,11 @@ string
 ` "127.0.0.1:8080" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
 
 
 
-## services\.blackfire\.enable
+## services.blackfire.enable
 
 Whether to enable Blackfire profiler agent
 
@@ -4830,11 +5108,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
-## services\.blackfire\.package
+## services.blackfire.package
 
 Which package of blackfire to use
 
@@ -4849,11 +5127,11 @@ package
 ` pkgs.blackfire `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
-## services\.blackfire\.client-id
+## services.blackfire.client-id
 
 Sets the client id used to authenticate with Blackfire.
 You can find your personal client-id at <https://blackfire.io/my/settings/credentials>.
@@ -4870,11 +5148,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
-## services\.blackfire\.client-token
+## services.blackfire.client-token
 
 Sets the client token used to authenticate with Blackfire.
 You can find your personal client-token at <https://blackfire.io/my/settings/credentials>.
@@ -4891,11 +5169,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
-## services\.blackfire\.server-id
+## services.blackfire.server-id
 
 Sets the server id used to authenticate with Blackfire.
 You can find your personal server-id at <https://blackfire.io/my/settings/credentials>.
@@ -4912,11 +5190,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
-## services\.blackfire\.server-token
+## services.blackfire.server-token
 
 Sets the server token used to authenticate with Blackfire.
 You can find your personal server-token at <https://blackfire.io/my/settings/credentials>.
@@ -4933,11 +5211,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
-## services\.blackfire\.socket
+## services.blackfire.socket
 
 Sets the server socket path
 
@@ -4953,11 +5231,11 @@ string
 ` "tcp://127.0.0.1:8307" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
-## services\.caddy\.enable
+## services.caddy.enable
 
 Whether to enable Caddy web server.
 
@@ -4977,11 +5255,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.package
+## services.caddy.package
 
 Caddy package to use.
 
@@ -4997,11 +5275,11 @@ package
 ` pkgs.caddy `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.adapter
+## services.caddy.adapter
 
 Name of the config adapter to use.
 See <https://caddyserver.com/docs/config-adapters> for the full list.
@@ -5023,11 +5301,11 @@ string
 ` "nginx" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.ca
+## services.caddy.ca
 
 Certificate authority ACME server. The default (Let's Encrypt
 production server) should be fine for most people. Set it to null if
@@ -5051,11 +5329,11 @@ null or string
 ` "https://acme-staging-v02.api.letsencrypt.org/directory" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.config
+## services.caddy.config
 
 Verbatim Caddyfile to use.
 Caddy v2 supports multiple config formats via adapters (see [`services.caddy.adapter`](#servicescaddyconfig)).
@@ -5086,11 +5364,11 @@ strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.dataDir
+## services.caddy.dataDir
 
 The data directory, for storing certificates. Before 17.09, this
 would create a .caddy directory. With 17.09 the contents of the
@@ -5107,14 +5385,14 @@ path
 
 
 *Default:*
-` "/.devenv/state/caddy" `
+` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.email
+## services.caddy.email
 
 Email address (for Let's Encrypt certificate).
 
@@ -5129,11 +5407,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.resume
+## services.caddy.resume
 
 Use saved config, if any (and prefer over configuration passed with [`caddy.config`](#caddyconfig)).
 
@@ -5149,11 +5427,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.virtualHosts
+## services.caddy.virtualHosts
 
 Declarative vhost config.
 
@@ -5186,11 +5464,11 @@ attribute set of (submodule)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.virtualHosts\.\<name>\.extraConfig
+## services.caddy.virtualHosts.\<name>.extraConfig
 
 These lines go into the vhost verbatim.
 
@@ -5206,11 +5484,11 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.caddy\.virtualHosts\.\<name>\.serverAliases
+## services.caddy.virtualHosts.\<name>.serverAliases
 
 Additional names of virtual hosts served by this virtual host configuration.
 
@@ -5237,11 +5515,11 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
-## services\.cassandra\.enable
+## services.cassandra.enable
 
 Whether to enable Add Cassandra process script..
 
@@ -5261,11 +5539,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.cassandra\.package
+## services.cassandra.package
 
 Which version of Cassandra to use
 
@@ -5285,11 +5563,11 @@ package
 ` pkgs.cassandra_4; `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.cassandra\.allowClients
+## services.cassandra.allowClients
 
 Enables or disables the native transport server (CQL binary protocol)
 
@@ -5305,11 +5583,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.cassandra\.clusterName
+## services.cassandra.clusterName
 
 The name of the cluster
 
@@ -5324,11 +5602,11 @@ string
 ` "Test Cluster" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.cassandra\.extraConfig
+## services.cassandra.extraConfig
 
 Extra options to be merged into `cassandra.yaml` as nix attribute set.
 
@@ -5354,11 +5632,11 @@ attribute set
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.cassandra\.jvmOpts
+## services.cassandra.jvmOpts
 
 Options to pass to the JVM through the JVM_OPTS environment variable
 
@@ -5373,11 +5651,11 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.cassandra\.listenAddress
+## services.cassandra.listenAddress
 
 Listen address
 
@@ -5397,11 +5675,11 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.cassandra\.seedAddresses
+## services.cassandra.seedAddresses
 
 The addresses of hosts designated as contact points of the cluster
 
@@ -5421,11 +5699,11 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
-## services\.couchdb\.enable
+## services.couchdb.enable
 
 Whether to enable CouchDB process.
 
@@ -5445,11 +5723,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.package
+## services.couchdb.package
 
 Which version of CouchDB to use
 
@@ -5464,11 +5742,11 @@ package
 ` pkgs.couchdb3 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings
+## services.couchdb.settings
 
 CouchDB configuration.
 to know more about all settings, look at:
@@ -5497,7 +5775,7 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
     database_dir = baseDir;
     single_node = true;
     viewIndexDir = baseDir;
-    uriFile = "/.devenv/state/couchdb/couchdb.uri";
+    uriFile = "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.uri";
   };
   admins = {
     "admin_username" = "pass";
@@ -5505,22 +5783,22 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
   chttpd = {
     bindAddress = "127.0.0.1";
     port = 5984;
-    logFile = "/.devenv/state/couchdb/couchdb.log";
+    logFile = "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.log";
   };
 }
 
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings\.chttpd\.bindAddress
+## services.couchdb.settings.chttpd.bindAddress
 
 
 
-Defines the IP address by which CouchDB will be accessible\.
+Defines the IP address by which CouchDB will be accessible.
 
 
 
@@ -5533,15 +5811,15 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings\.chttpd\.logFile
+## services.couchdb.settings.chttpd.logFile
 
 
 
-Specifies the location of file for logging output\.
+Specifies the location of file for logging output.
 
 
 
@@ -5551,18 +5829,18 @@ path
 
 
 *Default:*
-` "/.devenv/state/couchdb/couchdb.log" `
+` "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.log" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings\.chttpd\.port
+## services.couchdb.settings.chttpd.port
 
 
 
-Defined the port number to listen\.
+Defined the port number to listen.
 
 
 
@@ -5575,11 +5853,11 @@ Defined the port number to listen\.
 ` 5984 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings\.couchdb\.database_dir
+## services.couchdb.settings.couchdb.database_dir
 
 Specifies location of CouchDB database files (*.couch named). This
 location should be writable and readable for the user the CouchDB
@@ -5594,14 +5872,14 @@ path
 
 
 *Default:*
-` "/.devenv/state/couchdb" `
+` "/home/runner/work/devenv/devenv/.devenv/state/couchdb" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings\.couchdb\.single_node
+## services.couchdb.settings.couchdb.single_node
 
 When this configuration setting is set to true, automatically create
 the system databases on startup. Must be set false for a clustered
@@ -5619,11 +5897,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings\.couchdb\.uriFile
+## services.couchdb.settings.couchdb.uriFile
 
 This file contains the full URI that can be used to access this
 instance of CouchDB. It is used to help discover the port CouchDB is
@@ -5640,14 +5918,14 @@ path
 
 
 *Default:*
-` "/.devenv/state/couchdb/couchdb.uri" `
+` "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.uri" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.couchdb\.settings\.couchdb\.viewIndexDir
+## services.couchdb.settings.couchdb.viewIndexDir
 
 Specifies location of CouchDB view index files. This location should
 be writable and readable for the user that runs the CouchDB service
@@ -5662,14 +5940,14 @@ path
 
 
 *Default:*
-` "/.devenv/state/couchdb" `
+` "/home/runner/work/devenv/devenv/.devenv/state/couchdb" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/couchdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
 
 
 
-## services\.elasticsearch\.enable
+## services.elasticsearch.enable
 
 Whether to enable elasticsearch.
 
@@ -5684,11 +5962,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.package
+## services.elasticsearch.package
 
 Elasticsearch package to use.
 
@@ -5703,11 +5981,11 @@ package
 ` pkgs.elasticsearch7 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.cluster_name
+## services.elasticsearch.cluster_name
 
 Elasticsearch name that identifies your cluster for auto-discovery.
 
@@ -5722,11 +6000,11 @@ string
 ` "elasticsearch" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.extraCmdLineOptions
+## services.elasticsearch.extraCmdLineOptions
 
 Extra command line options for the elasticsearch launcher.
 
@@ -5741,11 +6019,11 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.extraConf
+## services.elasticsearch.extraConf
 
 Extra configuration for elasticsearch.
 
@@ -5772,11 +6050,11 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.extraJavaOptions
+## services.elasticsearch.extraJavaOptions
 
 Extra command line options for Java.
 
@@ -5801,11 +6079,11 @@ list of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.listenAddress
+## services.elasticsearch.listenAddress
 
 Elasticsearch listen address.
 
@@ -5820,11 +6098,11 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.logging
+## services.elasticsearch.logging
 
 Elasticsearch logging configuration.
 
@@ -5851,11 +6129,11 @@ string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.plugins
+## services.elasticsearch.plugins
 
 Extra elasticsearch plugins
 
@@ -5875,11 +6153,11 @@ list of package
 ` [ pkgs.elasticsearchPlugins.discovery-ec2 ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.port
+## services.elasticsearch.port
 
 Elasticsearch port to listen for HTTP traffic.
 
@@ -5894,11 +6172,11 @@ signed integer
 ` 9200 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.single_node
+## services.elasticsearch.single_node
 
 Start a single-node cluster
 
@@ -5913,11 +6191,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.elasticsearch\.tcp_port
+## services.elasticsearch.tcp_port
 
 Elasticsearch port for the node to node communication.
 
@@ -5932,11 +6210,11 @@ signed integer
 ` 9300 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
-## services\.mailhog\.enable
+## services.mailhog.enable
 
 Whether to enable mailhog process.
 
@@ -5956,11 +6234,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
-## services\.mailhog\.package
+## services.mailhog.package
 
 Which package of mailhog to use
 
@@ -5975,11 +6253,11 @@ package
 ` pkgs.mailhog `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
-## services\.mailhog\.additionalArgs
+## services.mailhog.additionalArgs
 
 Additional arguments passed to `mailhog`.
 
@@ -6005,11 +6283,11 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
-## services\.mailhog\.apiListenAddress
+## services.mailhog.apiListenAddress
 
 Listen address for API.
 
@@ -6024,11 +6302,11 @@ string
 ` "127.0.0.1:8025" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
-## services\.mailhog\.smtpListenAddress
+## services.mailhog.smtpListenAddress
 
 Listen address for SMTP.
 
@@ -6043,11 +6321,11 @@ string
 ` "127.0.0.1:1025" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
-## services\.mailhog\.uiListenAddress
+## services.mailhog.uiListenAddress
 
 Listen address for UI.
 
@@ -6062,11 +6340,11 @@ string
 ` "127.0.0.1:8025" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
-## services\.memcached\.enable
+## services.memcached.enable
 
 Whether to enable memcached process.
 
@@ -6086,11 +6364,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
-## services\.memcached\.package
+## services.memcached.package
 
 Which package of memcached to use
 
@@ -6105,11 +6383,11 @@ package
 ` pkgs.memcached `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
-## services\.memcached\.bind
+## services.memcached.bind
 
 The IP interface to bind to.
 `null` means "all interfaces".
@@ -6131,11 +6409,11 @@ null or string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
-## services\.memcached\.port
+## services.memcached.port
 
 The TCP port to accept connections.
 If port 0 is specified Redis will not listen on a TCP socket.
@@ -6152,11 +6430,11 @@ If port 0 is specified Redis will not listen on a TCP socket.
 ` 11211 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
-## services\.memcached\.startArgs
+## services.memcached.startArgs
 
 Additional arguments passed to `memcached` during startup.
 
@@ -6182,11 +6460,11 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/memcached\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/memcached.nix)
 
 
 
-## services\.minio\.enable
+## services.minio.enable
 
 Whether to enable MinIO Object Storage.
 
@@ -6206,11 +6484,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.package
+## services.minio.package
 
 MinIO package to use.
 
@@ -6225,11 +6503,11 @@ package
 ` pkgs.minio `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.accessKey
+## services.minio.accessKey
 
 Access key of 5 to 20 characters in length that clients use to access the server.
 This overrides the access key that is generated by MinIO on first startup and stored inside the
@@ -6247,11 +6525,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.browser
+## services.minio.browser
 
 Enable or disable access to web UI.
 
@@ -6266,11 +6544,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.buckets
+## services.minio.buckets
 
 List of buckets to ensure exist on startup.
 
@@ -6286,11 +6564,11 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.consoleAddress
+## services.minio.consoleAddress
 
 IP address and port of the web UI (console).
 
@@ -6305,11 +6583,11 @@ string
 ` "127.0.0.1:9001" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.listenAddress
+## services.minio.listenAddress
 
 IP address and port of the server.
 
@@ -6324,11 +6602,11 @@ string
 ` "127.0.0.1:9000" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.region
+## services.minio.region
 
 The physical location of the server. By default it is set to us-east-1, which is same as AWS S3's and MinIO's default region.
 
@@ -6344,11 +6622,11 @@ string
 ` "us-east-1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.minio\.secretKey
+## services.minio.secretKey
 
 Specify the Secret key of 8 to 40 characters in length that clients use to access the server.
 This overrides the secret key that is generated by MinIO on first startup and stored inside the
@@ -6366,11 +6644,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
-## services\.mongodb\.enable
+## services.mongodb.enable
 
 Whether to enable MongoDB process and expose utilities.
 
@@ -6390,11 +6668,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
 
 
 
-## services\.mongodb\.package
+## services.mongodb.package
 
 Which MongoDB package to use.
 
@@ -6409,11 +6687,11 @@ package
 ` pkgs.mongodb `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
 
 
 
-## services\.mongodb\.additionalArgs
+## services.mongodb.additionalArgs
 
 Additional arguments passed to `mongod`.
 
@@ -6446,11 +6724,11 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
 
 
 
-## services\.mysql\.enable
+## services.mysql.enable
 
 Whether to enable MySQL process and expose utilities.
 
@@ -6470,11 +6748,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.package
+## services.mysql.package
 
 Which package of MySQL to use
 
@@ -6486,14 +6764,14 @@ package
 
 
 *Default:*
-` pkgs.mysql80 `
+` pkgs.mariadb `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.ensureUsers
+## services.mysql.ensureUsers
 
 Ensures that the specified users exist and have at least the ensured permissions.
 The MySQL users will be identified using Unix socket authentication. This authenticates the Unix user with the
@@ -6530,11 +6808,11 @@ list of (submodule)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.ensureUsers\.\*\.ensurePermissions
+## services.mysql.ensureUsers.\*.ensurePermissions
 
 Permissions to ensure for the user, specified as attribute set.
 The attribute names specify the database and tables to grant the permissions for,
@@ -6570,11 +6848,11 @@ attribute set of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.ensureUsers\.\*\.name
+## services.mysql.ensureUsers.\*.name
 
 Name of the user to ensure.
 
@@ -6585,11 +6863,11 @@ Name of the user to ensure.
 string
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.ensureUsers\.\*\.password
+## services.mysql.ensureUsers.\*.password
 
 Password of the user to ensure.
 
@@ -6605,11 +6883,11 @@ null or string
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.importTimeZones
+## services.mysql.importTimeZones
 
 Whether to import tzdata on the first startup of the mysql server
 
@@ -6625,11 +6903,11 @@ null or boolean
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.initialDatabases
+## services.mysql.initialDatabases
 
 List of database names and their initial schemas that should be used to create databases on the first startup
 of MySQL. The schema attribute is optional: If not specified, an empty database is created.
@@ -6658,11 +6936,11 @@ list of (submodule)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.initialDatabases\.\*\.name
+## services.mysql.initialDatabases.\*.name
 
 The name of the database to create.
 
@@ -6673,11 +6951,11 @@ The name of the database to create.
 string
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.initialDatabases\.\*\.schema
+## services.mysql.initialDatabases.\*.schema
 
 The initial schema of the database; if null (the default),
 an empty database is created.
@@ -6694,11 +6972,11 @@ null or path
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.mysql\.settings
+## services.mysql.settings
 
 MySQL configuration.
 
@@ -6734,11 +7012,346 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string) o
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
-## services\.postgres\.enable
+## services.nginx.enable
+
+Whether to enable nginx.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.nginx.package
+
+The nginx package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.nginx" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.nginx.eventsConfig
+
+The nginx events configuration.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.nginx.httpConfig
+
+The nginx configuration.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.opensearch.enable
+
+
+
+Whether to enable OpenSearch.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.package
+
+
+
+The OpenSearch package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.opensearch `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.extraCmdLineOptions
+
+Extra command line options for the OpenSearch launcher.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.extraJavaOptions
+
+Extra command line options for Java.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "-Djava.net.preferIPv4Stack=true"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.logging
+
+
+
+OpenSearch logging configuration.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+''
+  logger.action.name = org.opensearch.action
+  logger.action.level = info
+  appender.console.type = Console
+  appender.console.name = console
+  appender.console.layout.type = PatternLayout
+  appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%m%n
+  rootLogger.level = info
+  rootLogger.appenderRef.console.ref = console
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.settings
+
+
+
+OpenSearch configuration.
+
+
+
+*Type:*
+YAML value
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.settings."cluster.name"
+
+
+
+The name of the cluster.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "opensearch" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.settings."discovery.type"
+
+
+
+The type of discovery to use.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "single-node" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.settings."http.port"
+
+
+
+The port to listen on for HTTP traffic.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 9200 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.settings."network.host"
+
+
+
+Which port this service should listen on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.opensearch.settings."transport.port"
+
+
+
+The port to listen on for transport traffic.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 9300 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
+
+
+## services.postgres.enable
 
 Whether to enable Add PostgreSQL process.
 .
@@ -6759,11 +7372,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.package
+## services.postgres.package
 
 Which version of PostgreSQL to use
 
@@ -6788,11 +7401,11 @@ pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.createDatabase
+## services.postgres.createDatabase
 
 Create a database named like current user on startup. Only applies when initialDatabases is an empty list.
 
@@ -6808,11 +7421,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.initdbArgs
+## services.postgres.initdbArgs
 
 Additional arguments passed to `initdb` during data dir
 initialisation.
@@ -6846,11 +7459,11 @@ list of strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.initialDatabases
+## services.postgres.initialDatabases
 
 List of database names and their initial schemas that should be used to create databases on the first startup
 of Postgres. The schema attribute is optional: If not specified, an empty database is created.
@@ -6882,11 +7495,11 @@ list of (submodule)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.initialDatabases\.\*\.name
+## services.postgres.initialDatabases.\*.name
 
 The name of the database to create.
 
@@ -6897,11 +7510,11 @@ The name of the database to create.
 string
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.initialDatabases\.\*\.schema
+## services.postgres.initialDatabases.\*.schema
 
 The initial schema of the database; if null (the default),
 an empty database is created.
@@ -6918,11 +7531,11 @@ null or path
 ` null `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.initialScript
+## services.postgres.initialScript
 
 Initial SQL commands to run during database initialization. This can be multiple
 SQL expressions separated by a semi-colon.
@@ -6949,11 +7562,11 @@ CREATE USER bar;
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.listen_addresses
+## services.postgres.listen_addresses
 
 Listen address
 
@@ -6973,11 +7586,11 @@ string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.port
+## services.postgres.port
 
 The TCP port to accept connections.
 
@@ -6993,11 +7606,11 @@ The TCP port to accept connections.
 ` 5432 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.postgres\.settings
+## services.postgres.settings
 
 PostgreSQL configuration. Refer to
 <https://www.postgresql.org/docs/11/config-setting.html#CONFIG-SETTING-CONFIGURATION-FILE>
@@ -7033,11 +7646,11 @@ attribute set of (boolean or floating point number or signed integer or string)
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/postgres\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
 
 
 
-## services\.rabbitmq\.enable
+## services.rabbitmq.enable
 
 Whether to enable the RabbitMQ server, an Advanced Message
 Queuing Protocol (AMQP) broker.
@@ -7054,11 +7667,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.package
+## services.rabbitmq.package
 
 Which rabbitmq package to use.
 
@@ -7074,11 +7687,11 @@ package
 ` pkgs.rabbitmq-server `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.configItems
+## services.rabbitmq.configItems
 
 Configuration options in RabbitMQ's new config file format,
 which is a simple key-value format that can not express nested
@@ -7116,11 +7729,11 @@ attribute set of string
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.cookie
+## services.rabbitmq.cookie
 
 Erlang cookie is a string of arbitrary length which must
 be the same for several nodes to be allowed to communicate.
@@ -7138,11 +7751,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.listenAddress
+## services.rabbitmq.listenAddress
 
 IP address on which RabbitMQ will listen for AMQP
 connections.  Set to the empty string to listen on all
@@ -7171,11 +7784,11 @@ string
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.managementPlugin\.enable
+## services.rabbitmq.managementPlugin.enable
 
 Whether to enable the management plugin.
 
@@ -7195,11 +7808,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.managementPlugin\.port
+## services.rabbitmq.managementPlugin.port
 
 On which port to run the management plugin
 
@@ -7215,11 +7828,11 @@ On which port to run the management plugin
 ` 15672 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.pluginDirs
+## services.rabbitmq.pluginDirs
 
 The list of directories containing external plugins
 
@@ -7234,11 +7847,11 @@ list of path
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.plugins
+## services.rabbitmq.plugins
 
 The names of plugins to enable
 
@@ -7253,11 +7866,11 @@ list of string
 ` [ ] `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.rabbitmq\.port
+## services.rabbitmq.port
 
 Port on which RabbitMQ will listen for AMQP connections.
 
@@ -7273,11 +7886,11 @@ Port on which RabbitMQ will listen for AMQP connections.
 ` 5672 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
-## services\.redis\.enable
+## services.redis.enable
 
 Whether to enable Redis process and expose utilities.
 
@@ -7297,11 +7910,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
-## services\.redis\.package
+## services.redis.package
 
 Which package of Redis to use
 
@@ -7316,11 +7929,11 @@ package
 ` pkgs.redis `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
-## services\.redis\.bind
+## services.redis.bind
 
 The IP interface to bind to.
 `null` means "all interfaces".
@@ -7342,11 +7955,11 @@ null or string
 ` "127.0.0.1" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
-## services\.redis\.extraConfig
+## services.redis.extraConfig
 
 Additional text to be appended to `redis.conf`.
 
@@ -7361,11 +7974,11 @@ strings concatenated with “\\n”
 ` "" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
-## services\.redis\.port
+## services.redis.port
 
 The TCP port to accept connections.
 If port 0 is specified Redis, will not listen on a TCP socket.
@@ -7382,11 +7995,11 @@ If port 0 is specified Redis, will not listen on a TCP socket.
 ` 6379 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/redis\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
 
 
 
-## services\.varnish\.enable
+## services.varnish.enable
 
 Whether to enable Varnish process and expose utilities.
 
@@ -7406,11 +8019,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
 
 
 
-## services\.varnish\.package
+## services.varnish.package
 
 Which Varnish package to use.
 
@@ -7425,11 +8038,11 @@ package
 ` pkgs.varnish `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
 
 
 
-## services\.varnish\.listen
+## services.varnish.listen
 
 Which address to listen on.
 
@@ -7444,11 +8057,11 @@ string
 ` "127.0.0.1:6081" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
 
 
 
-## services\.varnish\.memorySize
+## services.varnish.memorySize
 
 How much memory to allocate to Varnish.
 
@@ -7463,11 +8076,11 @@ string
 ` "64M" `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
 
 
 
-## services\.varnish\.vcl
+## services.varnish.vcl
 
 Varnish VCL configuration.
 
@@ -7492,11 +8105,134 @@ strings concatenated with “\\n”
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
 
 
 
-## services\.wiremock\.enable
+## services.vault.enable
+
+Whether to enable vault process.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.package
+
+Which package of Vault to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.vault-bin `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.address
+
+Specifies the address to bind to for listening
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1:8200" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.disableClustering
+
+Specifies whether clustering features such as request forwarding are enabled
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.disableMlock
+
+Disables the server from executing the mlock syscall
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.vault.ui
+
+Enables the built-in web UI
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
+
+
+## services.wiremock.enable
 
 Whether to enable WireMock.
 
@@ -7516,11 +8252,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
-## services\.wiremock\.package
+## services.wiremock.package
 
 Which package of WireMock to use.
 
@@ -7536,11 +8272,11 @@ package
 ` pkgs.wiremock `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
-## services\.wiremock\.disableBanner
+## services.wiremock.disableBanner
 
 Whether to disable print banner logo.
 
@@ -7556,11 +8292,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
-## services\.wiremock\.mappings
+## services.wiremock.mappings
 
 The mappings to mock.
 See the JSON examples on <https://wiremock.org/docs/stubbing/> for more information.
@@ -7611,11 +8347,11 @@ JSON value
 ```
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
-## services\.wiremock\.port
+## services.wiremock.port
 
 The port number for the HTTP server to listen on.
 
@@ -7631,11 +8367,11 @@ signed integer
 ` 8080 `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
-## services\.wiremock\.verbose
+## services.wiremock.verbose
 
 Whether to log verbosely to stdout.
 
@@ -7651,11 +8387,11 @@ boolean
 ` false `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
-## starship\.enable
+## starship.enable
 
 Whether to enable the Starship.rs command prompt.
 
@@ -7675,11 +8411,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
 
-## starship\.package
+## starship.package
 
 The Starship package to use.
 
@@ -7694,11 +8430,11 @@ package
 ` pkgs.starship `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
 
-## starship\.config\.enable
+## starship.config.enable
 
 Whether to enable Starship config override.
 
@@ -7718,11 +8454,11 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
 
-## starship\.config\.path
+## starship.config.path
 
 The Starship configuration file to use.
 
@@ -7737,6 +8473,6 @@ path
 ` ${config.env.DEVENV_ROOT}/starship.toml `
 
 *Declared by:*
- - [https://github\.com/cachix/devenv/blob/main/src/modules/integrations/starship\.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
 
 
