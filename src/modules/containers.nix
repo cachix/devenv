@@ -27,7 +27,7 @@ let
     #!${pkgs.bash}/bin/bash
 
     export PATH=/bin
-    
+
     source ${shell.envScript}
 
     exec "$@"
@@ -72,7 +72,7 @@ let
     if [[ $# == 0 ]]; then
       args=(${toString cfg.defaultCopyArgs})
     else
-      args=("$@") 
+      args=("$@")
     fi
 
     echo
@@ -179,16 +179,22 @@ in
     };
   };
 
-  config = {
-    container.isBuilding = envContainerName != "";
-    containers.${envContainerName}.isBuilding = true;
+  config = lib.mkMerge [
+    {
+      container.isBuilding = envContainerName != "";
 
-    containers.shell = {
-      startupCommand = "bash";
-    };
+      containers.shell = {
+        name = "shell";
+        startupCommand = "bash";
+      };
 
-    containers.processes = {
-      startupCommand = config.procfileScript;
-    };
-  };
+      containers.processes = {
+        name = "processes";
+        startupCommand = config.procfileScript;
+      };
+    }
+    (if envContainerName == "" then { } else {
+      containers.${envContainerName}.isBuilding = true;
+    })
+  ];
 }
