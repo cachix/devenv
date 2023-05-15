@@ -12,7 +12,7 @@ in
     packages = [
       pkgs.deno
     ];
-    
+
     env.DENO_INSTALL_ROOT = config.env.DEVENV_STATE + "/deno";
     env.DENO_DIR = config.env.DENO_INSTALL_ROOT + "/cache";
 
