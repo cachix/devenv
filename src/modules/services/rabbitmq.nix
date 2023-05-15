@@ -141,6 +141,7 @@ in
     env.RABBITMQ_CONFIG_FILE = config_file;
     env.RABBITMQ_PLUGINS_DIR = concatStringsSep ":" cfg.pluginDirs;
     env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
+    env.RABBITMQ_NODENAME = "rabbit@localhost";
 
     processes.rabbitmq.exec = "${cfg.package}/bin/rabbitmq-server";
   };
