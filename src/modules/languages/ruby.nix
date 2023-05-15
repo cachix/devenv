@@ -53,7 +53,8 @@ in
       enable = lib.mkEnableOption "bundler";
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.bundler;
+        default = pkgs.bundler.override { ruby = cfg.package; };
+        defaultText = lib.literalExpression "pkgs.bundler.override { ruby = cfg.package; }";
         description = "The bundler package to use.";
       };
     };
