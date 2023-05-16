@@ -148,6 +148,24 @@ pkgs.writeScriptBin "devenv" ''
         $(${nix}/bin/nix $NIX_FLAGS build --print-out-paths --no-link --impure ".#devenv.containers.\"$container\".dockerRun")
       fi
       ;;
+    build)
+      assemble
+      help=$(${coreutils}/bin/cat << 'EOF'
+  Usage: build OPTION
+
+  Example:
+    $ devenv build languages.python.package
+    /nix/store/iw1vmh509hcbby8dbpsaanbri4zsq7dj-python3-3.10.10
+  EOF
+      )
+      eval "$(${docopts}/bin/docopts -A subcommand -h "$help" : "$@")"
+      ${nix}/bin/nix $NIX_FLAGS build \
+        --impure \
+        --print-out-paths \
+        --print-build-logs \
+        --no-link \
+        .#devenv.config."''${subcommand[OPTION]}"
+      ;;
     search)
       name=$1
       shift
@@ -290,6 +308,7 @@ pkgs.writeScriptBin "devenv" ''
       echo "shell                     Activate the developer environment."
       echo "shell CMD [args]          Run CMD with ARGS in the developer environment. Useful when scripting."
       echo "container [options] NAME  Generate a container for NAME. See devenv container --help and http://devenv.sh/containers"
+      echo "build OPTION              Build the package residing in OPTION. See devenv build --help"
       echo "info                      Print information about the current developer environment."
       echo "update                    Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs"
       echo "up                        Starts processes in foreground. See http://devenv.sh/processes"
