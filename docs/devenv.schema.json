@@ -1,0 +1,53 @@
+{
+  "$id": "https://example.com/devenv.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "devenv.yaml schema",
+  "type": "object",
+  "properties": {
+    "inputs": {
+      "type": "object",
+      "description": "The Nix flake inputs to use. By default includes nixpkgs. See https://devenv.sh/reference/yaml-options/",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The URI for the input.\nExamples:\n\n- github:NixOS/nixpkgs/nixpkgs-unstable\n- github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3\n- github:foo/bar?dir=subdir\n- git+ssh://git@github.com/NixOS/nix?ref=v1.2.3\n- git+https://git.somehost.tld/user/path?ref=branch&rev=fdc8ef970de2b4634e1b3dca296e1ed918459a9e\n- path:/path/to/repo\n\nSee https://devenv.sh/reference/yaml-options/#inputsnameurl"
+          },
+          "overlays": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Which overlay to include from the input. `default` is a common overlay name. See https://devenv.sh/reference/yaml-options/"
+            }
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "follows": {
+                  "type": "string",
+                  "description": "The top-level input from this devenv.yaml to replace this input with."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "allowUnfree": {
+      "type": "boolean",
+      "description": "Whether to allow unfree packages in nixpkgs. This defaults to false.\nThis guards users against using unfree software without knowing it.\n\nThis option is the equivalent of allowUnfree in nixpkgs. See https://nixos.org/manual/nixpkgs/stable/#opt-allowUnfree"
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Which directories (containing devenv.nix) to import. See https://devenv.sh/composing-using-imports/"
+      }
+    }
+  },
+  "additionalProperties": false
+}
