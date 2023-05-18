@@ -20,7 +20,7 @@ in
       description = lib.mdDoc ''
         Defines `AWS_PROFILE` environment variable if `enableAwsVaultWrapper`
         is set to `false`, otherwise, it becomes the name of the profile passed
-        to `aws-vault`.
+        to `aws-vault exec`.
       '';
     };
 
