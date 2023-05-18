@@ -1,0 +1,15 @@
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+
+  gleam:
+    url: github:gleam-lang/gleam/v0.28.3 # or any other release
+    flake: false
+
+  gleam-nix:
+    url: github:vic/gleam-nix
+    overlays:
+      - default
+    inputs:
+      gleam:
+        follows: gleam
