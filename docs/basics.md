@@ -39,7 +39,7 @@ hello
 
 
 
-See [Nix language tutorial](https://nix.dev/tutorials/nix-language) for a 1-2 hour deep dive 
+See [Nix language tutorial](https://nix.dev/tutorials/first-steps/nix-language) for a 1-2 hour deep dive 
 that will allow you to read any Nix file.
 
 !!! note
