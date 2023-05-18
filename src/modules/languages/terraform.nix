@@ -18,13 +18,13 @@ in
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = lib.mdDoc ''
-        Defines `AWS_PROFILE` environment variable if `enableAwsVaultWrapper`
-        is set to `false`, otherwise, it becomes the name of the profile passed
-        to `aws-vault exec`.
+        Defines `AWS_PROFILE` environment variable if `awsVaultWrapper` is
+        disabled, otherwise, it becomes the name of the profile passed to
+        `aws-vault exec`.
       '';
     };
 
-    enableAwsVaultWrapper = lib.mkOption {
+    awsVaultWrapper = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = lib.mdDoc ''
@@ -38,17 +38,26 @@ in
         Where `<profile>` is the value coming from `awsProfile`.
       '';
     };
+
+    awsVaultArgs = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = lib.mdDoc ''
+        Extra arguments passed to `aws-vault exec` when `awsVaultWrapper` is
+        enabled.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    env = lib.mkIf (cfg.awsProfile != null && !cfg.enableAwsVaultWrapper) {
+    env = lib.mkIf (cfg.awsProfile != null && !cfg.awsVaultWrapper) {
       AWS_PROFILE = cfg.awsProfile;
     };
 
     packages = with pkgs; [
-      (if cfg.enableAwsVaultWrapper then
+      (if cfg.awsVaultWrapper then
         writeScriptBin "terraform" ''
-          ${aws-vault}/bin/aws-vault exec ${cfg.awsProfile} -- \
+          ${aws-vault}/bin/aws-vault exec ${cfg.awsVaultArgs} ${cfg.awsProfile} -- \
             ${cfg.package}/bin/terraform "$@"
         ''
       else cfg.package)
