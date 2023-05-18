@@ -33,6 +33,8 @@ let
         Failed assertions:
         ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
+    else if config.warnings != [ ]
+    then lib.trivial.warn (lib.concatLines config.warnings)
     else lib.id;
 in
 {
@@ -85,6 +87,18 @@ in
         This option allows modules to express conditions that must
         hold for the evaluation of the configuration to succeed,
         along with associated error messages for the user.
+      '';
+    };
+
+    warnings = lib.mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      default = [ ];
+      example = [ "you should fix this or that" ];
+      description = ''
+        This option allows modules to express warnings about theV
+        configuration. For example, `lib.mkRenamedOptionModule` uses this to
+        display a warning message when a renamed option is used.
       '';
     };
   };
