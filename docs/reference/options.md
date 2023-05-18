@@ -1007,6 +1007,49 @@ boolean
 
 
 
+## languages.gleam.enable
+
+Whether to enable tools for Gleam development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix)
+
+
+
+## languages.gleam.package
+
+The Gleam package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gleam `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix)
+
+
+
 ## languages.go.enable
 
 Whether to enable tools for Go development.
@@ -2245,8 +2288,6 @@ boolean
 
 Whether `poetry install` should avoid outputting messages during devenv initialisation.
 
-
-
 *Type:*
 boolean
 
@@ -2263,6 +2304,8 @@ boolean
 ## languages.python.venv.enable
 
 Whether to enable Python virtual environment.
+
+
 
 *Type:*
 boolean
