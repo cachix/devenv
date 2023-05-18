@@ -14,6 +14,7 @@
   languages.elm.enable = true;
   languages.erlang.enable = true;
   languages.gawk.enable = true;
+  languages.gleam.enable = true;
   languages.go.enable = true;
   languages.haskell.enable = true;
   languages.java.enable = true;
