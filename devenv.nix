@@ -4,6 +4,7 @@
   packages = [
     (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
     pkgs.cairo
+    pkgs.xorg.libxcb
     pkgs.yaml2json
   ];
 
