@@ -46,14 +46,14 @@ in
     };
 
     packages = with pkgs; [
-      terraform-ls
-      tfsec
       (if cfg.enableAwsVaultWrapper then
         writeScriptBin "terraform" ''
           ${aws-vault}/bin/aws-vault exec ${cfg.awsProfile} -- \
             ${cfg.package}/bin/terraform "$@"
         ''
       else cfg.package)
+      terraform-ls
+      tfsec
     ];
   };
 }
