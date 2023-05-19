@@ -7,10 +7,11 @@ let
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
   drvOrPackageToPaths = drvOrPackage:
-    if drvOrPackage ? outputs then
+    (if drvOrPackage ? outputs then
       builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
     else
-      [ drvOrPackage ];
+      [ drvOrPackage ]
+    ) ++ (drvOrPackage.propagatedBuildInputs or [ ]);
   profile = pkgs.buildEnv {
     name = "devenv-profile";
     paths = lib.flatten (builtins.map drvOrPackageToPaths config.packages);
