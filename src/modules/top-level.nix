@@ -33,9 +33,7 @@ let
         Failed assertions:
         ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
-    else if config.warnings != [ ]
-    then lib.trivial.warn (lib.concatLines config.warnings)
-    else lib.id;
+    else lib.trivial.showWarnings config.warnings;
 in
 {
   options = {
