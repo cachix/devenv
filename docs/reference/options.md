@@ -2521,6 +2521,49 @@ package
 
 
 
+## languages.ruby.bundler.enable
+
+Whether to enable bundler.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
+
+
+## languages.ruby.bundler.package
+
+The bundler package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.bundler.override { ruby = cfg.package; } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
+
+
 ## languages.ruby.version
 
 The Ruby version to use.
