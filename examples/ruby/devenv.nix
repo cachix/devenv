@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 {
   languages.ruby.enable = true;
@@ -16,4 +16,12 @@
     # Automatically run bundler upon enterting the shell.
     bundle
   '';
+
+  # Add required dependencies for macOS. These packages are usually provided as
+  # part of the Xcode command line developer tools, in which case they can be
+  # removed.
+  # For more information, see the `--install` flag in `man xcode-select`.
+  packages = lib.optionals pkgs.stdenv.isDarwin [
+    pkgs.libllvm
+  ];
 }
