@@ -9,6 +9,9 @@ let
       inputs:
         nixpkgs-ruby:
           url: github:bobvanderlinden/nixpkgs-ruby
+          inputs:
+            nixpkgs:
+              follows: nixpkgs
   '');
 in
 {
