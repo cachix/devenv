@@ -7464,7 +7464,8 @@ boolean
 
 ## services.postgres.package
 
-Which version of PostgreSQL to use
+The PostgreSQL package to use. Use this to override the default with a specific version.
+
 
 
 
@@ -7481,8 +7482,7 @@ package
 *Example:*
 
 ```
-# see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list
-pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
+pkgs.postgresql_15
 
 ```
 
@@ -7505,6 +7505,81 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+
+
+
+## services.postgres.extensions
+
+Additional PostgreSQL extensions to install.
+
+The available extensions are:
+
+- age
+- cstore_fdw
+- jsonb_deep_sum
+- periods
+- pg_auto_failover
+- pg_bigm
+- pg_cron
+- pg_ed25519
+- pg_hint_plan
+- pg_hll
+- pg_ivm
+- pg_partman
+- pg_rational
+- pg_relusage
+- pg_repack
+- pg_safeupdate
+- pg_similarity
+- pg_topn
+- pgaudit
+- pgjwt
+- pgroonga
+- pgrouting
+- pgtap
+- pgvector
+- pipelinedb
+- plpgsql_check
+- plr
+- plv8
+- postgis
+- repmgr
+- rum
+- smlar
+- tds_fdw
+- temporal_tables
+- timescaledb
+- timescaledb_toolkit
+- tsearch_extras
+- wal2json
+
+
+
+
+
+*Type:*
+null or (function that evaluates to a(n) list of package)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+extensions: [
+  extensions.pg_cron
+  extensions.postgis
+  extensions.timescaledb
+];
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
