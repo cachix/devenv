@@ -3,6 +3,18 @@
 let
   cfg = config.services.postgres;
   types = lib.types;
+
+  postgresPkg =
+    if cfg.extensions != null then
+      if builtins.hasAttr "withPackages" cfg.package
+      then cfg.package.withPackages cfg.extensions
+      else
+        builtins.throw ''
+          Cannot add extensions to the PostgreSQL package.
+          `services.postgres.package` is missing the `withPackages` attribute. Did you already add extensions to the package?
+        ''
+    else cfg.package;
+
   setupInitialDatabases =
     if cfg.initialDatabases != [ ] then
       (lib.concatMapStrings
@@ -64,7 +76,7 @@ let
     (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
-    export PATH=${cfg.package}/bin:${pkgs.coreutils}/bin
+    export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
 
     if [[ ! -d "$PGDATA" ]]; then
       initdb ${lib.concatStringsSep " " cfg.initdbArgs}
@@ -79,7 +91,7 @@ let
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail
     ${setupScript}/bin/setup-postgres
-    exec ${cfg.package}/bin/postgres
+    exec ${postgresPkg}/bin/postgres
   '';
 in
 {
@@ -98,12 +110,32 @@ in
 
     package = lib.mkOption {
       type = types.package;
-      description = "Which version of PostgreSQL to use";
+      description = ''
+        The PostgreSQL package to use. Use this to override the default with a specific version.
+      '';
       default = pkgs.postgresql;
       defaultText = lib.literalExpression "pkgs.postgresql";
       example = lib.literalExpression ''
-        # see https://github.com/NixOS/nixpkgs/blob/master/pkgs/servers/sql/postgresql/packages.nix for full list
-        pkgs.postgresql_13.withPackages (p: [ p.pg_cron p.timescaledb p.pg_partman ]);
+        pkgs.postgresql_15
+      '';
+    };
+
+    extensions = lib.mkOption {
+      type = with types; nullOr (functionTo (listOf package));
+      default = null;
+      example = lib.literalExpression ''
+        extensions: [
+          extensions.pg_cron
+          extensions.postgis
+          extensions.timescaledb
+        ];
+      '';
+      description = ''
+        Additional PostgreSQL extensions to install.
+
+        The available extensions are:
+
+        ${lib.concatLines (builtins.map (x: "- " + x) (builtins.attrNames pkgs.postgresql.pkgs))}
       '';
     };
 
@@ -212,7 +244,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [ cfg.package startScript ];
+    packages = [ postgresPkg startScript ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
     env.PGHOST = config.env.PGDATA;
@@ -232,7 +264,7 @@ in
         shutdown.signal = 2;
 
         readiness_probe = {
-          exec.command = "${cfg.package}/bin/pg_isready -h $PGDATA -d template1";
+          exec.command = "${postgresPkg}/bin/pg_isready -h $PGDATA -d template1";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
