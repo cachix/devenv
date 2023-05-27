@@ -3,9 +3,8 @@ set -x
 
 # Start the services in the background and store the PID
 echo "Starting vault service..."
-(devenv up &> /dev/null) &
+devenv up&
 DEVENV_PID=$!
-sleep 5
 
 # vault status and store its exit status
 check_vault_status() {
@@ -15,13 +14,13 @@ check_vault_status() {
 }
 
 # Continuously check vault status until it returns successfully (up to a maximum of 100 times)
-for i in {1..100}; do
+for i in $(seq 1 20); do
   check_vault_status
   if [ $VAULT_EXIT_STATUS -eq 0 ]; then
     echo "Service is up..."
     break
   else
-    sleep 2
+    sleep 1
   fi
 done
 
