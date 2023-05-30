@@ -118,6 +118,11 @@ in
           default = false;
           description = "Whether `poetry install` should avoid outputting messages during devenv initialisation.";
         };
+        groups = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Which dependency-groups to install. See `--with`.";
+        };
       };
       activate.enable = lib.mkEnableOption "activate the poetry virtual environment automatically";
 
@@ -134,7 +139,8 @@ in
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
       lib.optional (!cfg.poetry.install.installRootPackage) "--no-root" ++
-      lib.optional cfg.poetry.install.quiet "--quiet";
+      lib.optional cfg.poetry.install.quiet "--quiet" ++
+      lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" "${lib.concatStringsSep "," cfg.poetry.install.groups}" ];
 
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
