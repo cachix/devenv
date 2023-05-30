@@ -6430,6 +6430,159 @@ string
 
 
 
+## services.meilisearch.enable
+
+Whether to enable Meilisearch.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
+## services.meilisearch.environment
+
+Defines the running environment of Meilisearch.
+
+
+
+*Type:*
+one of “development”, “production”
+
+
+
+*Default:*
+` "development" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
+## services.meilisearch.listenAddress
+
+Meilisearch listen address.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
+## services.meilisearch.listenPort
+
+Meilisearch port to listen on.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 7700 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
+## services.meilisearch.logLevel
+
+Defines how much detail should be present in Meilisearch's logs.
+Meilisearch currently supports four log levels, listed in order of increasing verbosity:
+- 'ERROR': only log unexpected events indicating Meilisearch is not functioning as expected
+- 'WARN:' log all unexpected events, regardless of their severity
+- 'INFO:' log all events. This is the default value
+- 'DEBUG': log all events and including detailed information on Meilisearch's internal processes.
+  Useful when diagnosing issues and debugging
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "INFO" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
+## services.meilisearch.maxIndexSize
+
+Sets the maximum size of the index.
+Value must be given in bytes or explicitly stating a base unit.
+For example, the default value can be written as 107374182400, '107.7Gb', or '107374 Mb'.
+Default is 100 GiB
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "107374182400" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
+## services.meilisearch.noAnalytics
+
+Deactivates analytics.
+Analytics allow Meilisearch to know how many users are using Meilisearch,
+which versions and which platforms are used.
+This process is entirely anonymous.
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
 ## services.memcached.enable
 
 Whether to enable memcached process.
