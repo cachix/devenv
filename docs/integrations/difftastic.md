@@ -1,4 +1,4 @@
-To get started using [diffstatic - a structural diff that understands syntax for over 30 langauges](https://difftastic.wilfred.me.uk/), flip a toggle:
+To get started using [Difftastic, a structural diff that understands syntax for over 30 langauges](https://difftastic.wilfred.me.uk/), flip a toggle:
 
 
 ```nix title="devenv.nix"
@@ -9,7 +9,7 @@ To get started using [diffstatic - a structural diff that understands syntax for
 }
 ```
 
-Once you run `devenv shell`, you should see the following output when using `git diff`:
+When you run `devenv shell` using `git diff`, you should see the following output:
 
 
 ![Screenshot of difftastic and JS](https://github.com/Wilfred/difftastic/raw/master/img/js.png)
