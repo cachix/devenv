@@ -5,6 +5,11 @@
 
     namespaces = [ "mynamespace" ];
 
-    ephemeral = false;
+    state = {
+      ephemeral = false;
+      sqlite-pragma = {
+        journal_mode = "wal";
+      };
+    };
   };
 }
