@@ -49,9 +49,9 @@ c) Install ``devenv``
 
 !!! note
 
-    To update `devenv` re-run the installation commands below. 
+    To update `devenv`, rerun the installation commands below. 
     
-    If you're getting errors that devenv already exists, run `nix profile list` and `nix profile remove <number>` beforehand.
+    If you get errors that `devenv` already exists, run `nix profile list` and `nix profile remove <number>` beforehand.
 
 === "Newcomers"
 
