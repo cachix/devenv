@@ -15,7 +15,8 @@ let
     "--ui-port=${toString cfg.ui.port}"
   ] ++
   (lib.forEach cfg.namespaces (namespace: "--namespace=${namespace}")) ++
-  (lib.optionals (!cfg.ephemeral) [ "--db-filename=${databaseFile}" ]);
+  (lib.optionals (!cfg.state.ephemeral) [ "--db-filename=${databaseFile}" ]) ++
+  (lib.mapAttrsToList (name: value: "--sqlite-pragma ${name}=${value}") cfg.state.sqlite-pragma);
 in
 {
   options.services.temporal = {
@@ -67,22 +68,38 @@ in
       description = "UI configuration.";
     };
 
-    ephemeral = lib.mkOption {
-      type = types.bool;
-      default = true;
-      description = "When enabled, the Temporal state gets lost when the process exists.";
-    };
-
     namespaces = lib.mkOption {
       type = types.listOf types.str;
       default = [ ];
       description = "Specify namespaces that should be pre-created (namespace \"default\" is always created).";
-      example = lib.literalExpression ''
-        [
-          "my-namespace"
-          "my-other-namespace"
-        ]
-      '';
+      example = [
+        "my-namespace"
+        "my-other-namespace"
+      ];
+    };
+
+    state = lib.mkOption {
+      type = types.submodule {
+        options = {
+          ephemeral = lib.mkOption {
+            type = types.bool;
+            default = true;
+            description = "When enabled, the Temporal state gets lost when the process exists.";
+          };
+
+          sqlite-pragma = lib.mkOption {
+            type = types.attrsOf types.str;
+            default = { };
+            description = "Sqlite pragma statements";
+            example = {
+              journal_mode = "wal";
+              synchronous = "2";
+            };
+          };
+        };
+      };
+      default = { };
+      description = "State configuration.";
     };
   };
 
