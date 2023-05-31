@@ -1330,6 +1330,30 @@ package
 
 
 
+## languages.javascript.corepack.enable
+
+Whether to enable shims for package managers besides npm.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
 ## languages.julia.enable
 
 Whether to enable tools for Julia development.
@@ -2269,8 +2293,6 @@ boolean
 
 Whether the root package (your project) should be installed. See `--no-root`
 
-
-
 *Type:*
 boolean
 
@@ -2287,6 +2309,8 @@ boolean
 ## languages.python.poetry.install.quiet
 
 Whether `poetry install` should avoid outputting messages during devenv initialisation.
+
+
 
 *Type:*
 boolean
