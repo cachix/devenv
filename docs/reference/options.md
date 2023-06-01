@@ -2289,9 +2289,47 @@ boolean
 
 
 
+## languages.python.poetry.install.extras
+
+Which extras to install. See `--extras`.
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.groups
+
+Which dependency-groups to install. See `--with`.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.poetry.install.installRootPackage
 
 Whether the root package (your project) should be installed. See `--no-root`
+
+
 
 *Type:*
 boolean
