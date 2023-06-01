@@ -23,7 +23,8 @@
         pkgs = import nixpkgs {
           system = "${pkgs.stdenv.system}";
           config = {
-            allowUnfree = devenv.allowUnfree or false; 
+            allowUnfree = devenv.allowUnfree or false;
+            permittedInsecurePackages = devenv.permittedInsecurePackages or [];
           };
           inherit overlays;
         };
