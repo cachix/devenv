@@ -129,6 +129,11 @@ in
           default = [ ];
           description = "Which extras to install. See `--extras`.";
         };
+        allExtras = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether to install all extras. See `--all-extras`.";
+        };
       };
       activate.enable = lib.mkEnableOption "activate the poetry virtual environment automatically";
 
@@ -146,8 +151,9 @@ in
     languages.python.poetry.install.arguments =
       lib.optional (!cfg.poetry.install.installRootPackage) "--no-root" ++
       lib.optional cfg.poetry.install.quiet "--quiet" ++
-      lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" "${lib.concatStringsSep "," cfg.poetry.install.groups}" ] ++
-      lib.optionals (cfg.poetry.install.extras != [ ]) [ "--extras" "${lib.concatStringsSep " " cfg.poetry.install.extras}" ];
+      lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"'' ] ++
+      lib.optionals (cfg.poetry.install.extras != [ ]) [ "--extras" ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"'' ] ++
+      lib.optional cfg.poetry.install.allExtras "--all-extras";
 
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
