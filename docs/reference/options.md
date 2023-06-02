@@ -2269,8 +2269,6 @@ boolean
 
 Whether to enable poetry install during devenv initialisation.
 
-
-
 *Type:*
 boolean
 
@@ -2289,9 +2287,30 @@ boolean
 
 
 
+## languages.python.poetry.install.allExtras
+
+Whether to install all extras. See `--all-extras`.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.poetry.install.extras
 
 Which extras to install. See `--extras`.
+
+
 
 *Type:*
 list of string
