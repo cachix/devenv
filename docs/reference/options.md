@@ -2406,6 +2406,32 @@ boolean
 
 
 
+## languages.python.version
+
+The Python version to use.
+This automatically sets the `languages.python.package` using [nixpkgs-python](https://github.com/cachix/nixpkgs-python).
+
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "3.11 or 3.11.2" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.r.enable
 
 Whether to enable tools for R development.
