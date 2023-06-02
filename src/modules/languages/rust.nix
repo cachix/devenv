@@ -108,7 +108,6 @@ ${profile}
       packages = [toolchain_derivation] ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
-      env.RUST_SRC_PATH = "${toolchain_derivation}/lib/rustlib/src/rust/library/";
     }))
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = ["-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks"];
