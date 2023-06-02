@@ -1,7 +1,15 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, lib, inputs, ... }:
 
 let
   cfg = config.languages.python;
+
+  nixpkgs-python = inputs.nixpkgs-python or (throw ''
+    To use languages.python.version, you need to add the following to your devenv.yaml:
+
+      inputs:
+        nixpkgs-python:
+          url: github:cachix/nixpkgs-python
+  '');
 
   venvPath = "${config.env.DEVENV_STATE}/venv";
 
@@ -96,6 +104,16 @@ in
       description = "The Python package to use.";
     };
 
+    version = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        The Python version to use.
+        This automatically sets the `languages.python.package` using [nixpkgs-python](https://github.com/cachix/nixpkgs-python).
+      '';
+      example = "3.11 or 3.11.2";
+    };
+
     venv.enable = lib.mkEnableOption "Python virtual environment";
 
     poetry = {
@@ -137,6 +155,10 @@ in
       lib.optional cfg.poetry.install.quiet "--quiet";
 
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
+
+    languages.python.package = lib.mkMerge [
+      (lib.mkIf (cfg.version != null) (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
+    ];
 
     packages = [
       cfg.package
