@@ -143,6 +143,22 @@ in
     env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
     env.RABBITMQ_NODENAME = "rabbit@localhost";
 
-    processes.rabbitmq.exec = "${cfg.package}/bin/rabbitmq-server";
+    processes.rabbitmq = {
+      exec = "${cfg.package}/bin/rabbitmq-server";
+
+      process-compose = {
+        readiness_probe = {
+          exec.command = "${cfg.package}/bin/rabbitmq-diagnostics -q ping";
+          initial_delay_seconds = 10;
+          period_seconds = 3;
+          timeout_seconds = 3;
+          success_threshold = 1;
+          failure_threshold = 5;
+        };
+
+        # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
+        availability.restart = "on_failure";
+      };
+    };
   };
 }
