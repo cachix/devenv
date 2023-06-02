@@ -49,6 +49,24 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.memcached.exec = "${cfg.package}/bin/memcached --port=${toString cfg.port} --listen=${cfg.bind} ${lib.concatStringsSep " " cfg.startArgs}";
+    processes.memcached = {
+      exec = "${cfg.package}/bin/memcached --port=${toString cfg.port} --listen=${cfg.bind} ${lib.concatStringsSep " " cfg.startArgs}";
+
+      process-compose = {
+        readiness_probe = {
+          exec.command = ''
+            3<>/dev/tcp/${cfg.bind}/${toString cfg.port}; printf "stats\nquit\n" >&3; cat <&3
+          '';
+          initial_delay_seconds = 2;
+          period_seconds = 10;
+          timeout_seconds = 4;
+          success_threshold = 1;
+          failure_threshold = 5;
+        };
+
+        # https://github.com/F1bonacc1/process-compose#-auto-restart-if-not-healthy
+        availability.restart = "on_failure";
+      };
+    };
   };
 }
