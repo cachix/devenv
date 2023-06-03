@@ -34,11 +34,11 @@ in
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       cfg.package
-      cfg.languageServer
       stack
       cabal-install
       zlib
       hpack
-    ];
+    ]
+    ++ (lib.optional (cfg.languageServer != null) cfg.languageServer);
   };
 }
