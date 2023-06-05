@@ -1157,6 +1157,26 @@ null or package
 
 
 
+## languages.haskell.stack
+
+Haskell stack to use.
+
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` "pkgs.stack" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
 ## languages.java.enable
 
 Whether to enable tools for Java development.
@@ -2269,6 +2289,8 @@ boolean
 
 Whether to enable poetry install during devenv initialisation.
 
+
+
 *Type:*
 boolean
 
@@ -2290,8 +2312,6 @@ boolean
 ## languages.python.poetry.install.allExtras
 
 Whether to install all extras. See `--all-extras`.
-
-
 
 *Type:*
 boolean
