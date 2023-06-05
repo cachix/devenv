@@ -7,8 +7,11 @@
 
   languages.rust = {
     enable = true;
-    # https://devenv.sh/reference/options/#languagesrustversion
-    version = "latest";
+    # https://devenv.sh/reference/options/#languagesrusttoolchain
+    toolchain = {
+      channel = "nightly";
+      profile = "default";
+    };
   };
 
   pre-commit.hooks = {
