@@ -6,6 +6,7 @@
   processes.foo.exec = "echo foo; sleep 5";
 
   services.postgres.enable = true;
+  services.memcached.enable = true;
 
   languages.ruby.enable = true;
 
