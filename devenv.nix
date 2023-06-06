@@ -9,6 +9,7 @@
   ];
 
   languages.python.enable = true;
+  languages.python.venv.enable = true;
   languages.python.poetry.enable = true;
 
   devcontainer.enable = true;
