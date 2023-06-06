@@ -33,6 +33,9 @@ let
       ${pkgs.coreutils}/bin/ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
     fi
     source ${venvPath}/bin/activate
+    ${lib.optionalString (cfg.venv.requirements != null) ''
+      ${venvPath}/bin/pip install -r ${pkgs.writeText "requirements.txt" cfg.venv.requirements}
+    ''}
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
@@ -116,6 +119,15 @@ in
     };
 
     venv.enable = lib.mkEnableOption "Python virtual environment";
+
+    venv.requirements = lib.mkOption {
+      type = lib.types.nullOr lib.types.lines;
+      default = null;
+      description = ''
+        Contents of pip requirements.txt file.
+        This is passed to `pip install -r` during `devenv shell` initialisation.
+      '';
+    };
 
     poetry = {
       enable = lib.mkEnableOption "poetry";

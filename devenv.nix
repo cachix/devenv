@@ -9,6 +9,7 @@
   ];
 
   languages.python.enable = true;
+  languages.python.venv.enable = true;
   languages.python.poetry.enable = true;
 
   devcontainer.enable = true;
@@ -84,7 +85,15 @@
   '';
   scripts.devenv-test-example.exec = ''
     set -e
-    pushd examples/$1 
+    pushd examples/$1
+    mv devenv.yaml devenv.yaml.orig
+    awk '
+      { print }
+      /^inputs:$/ {
+        print "  devenv:";
+        print "    url: path:../../src/modules";
+      }
+    ' devenv.yaml.orig > devenv.yaml
     devenv ci
     if [ -f .test.sh ]
     then
@@ -92,6 +101,7 @@
     else
       devenv shell ls
     fi
+    mv devenv.yaml.orig devenv.yaml
     popd
   '';
   scripts."devenv-generate-doc-options".exec = ''
