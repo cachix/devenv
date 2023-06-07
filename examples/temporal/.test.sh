@@ -6,6 +6,8 @@ echo "Starting temporal service..."
 devenv up &
 DEVENV_PID=$!
 
+export TEMPORAL_ADDRESS=127.0.0.1:17233
+
 # temporal status and store its exit status
 check_temporal_status() {
 	echo "Waiting for service to become available..."

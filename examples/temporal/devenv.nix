@@ -3,6 +3,8 @@
   services.temporal = {
     enable = true;
 
+    port = 17233;
+
     namespaces = [ "mynamespace" ];
 
     state = {
