@@ -55,7 +55,7 @@ in
       process-compose = {
         readiness_probe = {
           exec.command = ''
-            3<>/dev/tcp/${cfg.bind}/${toString cfg.port}; printf "stats\nquit\n" >&3; cat <&3
+            echo stats | ${pkgs.netcat}/bin/nc ${cfg.bind} ${toString cfg.port} > /dev/null 2>&1
           '';
           initial_delay_seconds = 2;
           period_seconds = 10;
