@@ -3409,13 +3409,27 @@ list of string
 
 The hook definitions.
 
-Pre-defined hooks can be enabled by, for example:
+You can both specify your own hooks here and you can enable predefined hooks.
+
+Example of enabling a predefined hook:
 
 ```nix
 hooks.nixpkgs-fmt.enable = true;
 ```
 
-The pre-defined hooks are:
+Example of a custom hook:
+
+```nix
+hooks.my-tool = {
+  enable = true;
+  name = "my-tool";
+  description = "Run MyTool on all files in the project";
+  files = "\.mtl$";
+  entry = "${pkgs.my-tool}/bin/mytoolctl";
+};
+```
+
+The predefined hooks are:
 
 **` actionlint `**
 
@@ -3472,6 +3486,12 @@ Lint Rust code.
 **` commitizen `**
 
 Check whether the current commit message follows commiting rules.
+
+**` convco `**
+
+**` cspell `**
+
+A Spell Checker for Code
 
 **` deadnix `**
 
@@ -3569,6 +3589,10 @@ A Python utility / library to sort imports.
 
 Perl script to add indentation to LaTeX files.
 
+**` lua-ls `**
+
+Uses the lua-language-server CLI to statically type-check and lint Lua code.
+
 **` luacheck `**
 
 A tool for linting and static analysis of Lua code.
@@ -3636,6 +3660,10 @@ Format purescript files.
 **` pylint `**
 
 Lint Python files.
+
+**` pyright `**
+
+Static type checker for Python
 
 **` revive `**
 
@@ -4003,6 +4031,27 @@ list of string
 
 
 
+## pre-commit.hooks.\<name>.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
 ## pre-commit.installationScript
 
 
@@ -4241,6 +4290,48 @@ boolean
 
 
 
+## pre-commit.settings.deadnix.exclude
+
+
+
+Files to exclude from analysis.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.deadnix.hidden
+
+
+
+Recurse into hidden subdirectories and process hidden .\*.nix files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.deadnix.noLambdaArg
 
 
@@ -4346,6 +4437,27 @@ boolean
 
 
 
+## pre-commit.settings.dune-fmt.extraRuntimeInputs
+
+
+
+Extra runtimeInputs to add to the environment, eg. ` ocamlformat `.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.eslint.binPath
 
 
@@ -4434,6 +4546,27 @@ string
 
 
 
+## pre-commit.settings.hlint.hintFile
+
+
+
+Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project root.
+
+
+
+*Type:*
+null or path
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.hpack.silent
 
 
@@ -4449,6 +4582,48 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.lua-ls.checklevel
+
+
+
+The diagnostic check level
+
+
+
+*Type:*
+one of “Error”, “Warning”, “Information”, “Hint”
+
+
+
+*Default:*
+` "Warning" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.lua-ls.config
+
+
+
+See https://github.com/LuaLS/lua-language-server/wiki/Configuration-File\#luarcjson
+
+
+
+*Type:*
+attribute set
+
+
+
+*Default:*
+` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
@@ -4773,6 +4948,31 @@ boolean
 
 
 
+## pre-commit.settings.pyright.binPath
+
+
+
+Pyright binary path. Should be used to specify the pyright executable in an environment containing your typing stubs.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+"${pkgs.pyright}/bin/pyright"
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.revive.configPath
 
 
@@ -4907,7 +5107,7 @@ package
 
 
 
-Wheter to print a diff of what would change.
+Whether to print a diff of what would change.
 
 
 
