@@ -57,11 +57,6 @@ in
       default = { };
       description = "Attribute set of toolchain file values. See https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file for more information.";
     };
-    sha256 = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Paste the correct sha256 returned by the error.";
-    };
   };
   config = lib.mkMerge [
     (lib.mkIf cfg.enable (
@@ -103,10 +98,7 @@ ${profile}
 '';
         toolchain_derivation = fenix.fromToolchainFile {
           file = toolchain_toml;
-          sha256 =
-            if cfg.sha256 == null
-            then lib.fakeSha256
-            else cfg.sha256;
+          sha256 = null;
         };
       in
       {

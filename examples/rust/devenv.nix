@@ -12,7 +12,6 @@
       channel = "nightly";
       profile = "default";
     };
-    sha256 = "sha256-6Q90iheJHltM1tvGGhjMGbRKkJtdTEJ6RTFOUoHxrjg=";
   };
 
   pre-commit.hooks = {
