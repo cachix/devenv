@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [nscloud-arm64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [nscloud-arm64]]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -76,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [nscloud-arm64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
@@ -110,7 +110,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS]]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [nscloud-arm64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v3
