@@ -40,8 +40,10 @@ let
               cat "${database.schema}" | postgres --single -E ${database.name}
             elif [ -d "${database.schema}" ]
             then
-              echo "Running sql files in ${database.schema}"
-              cat "${database.schema}/*.sql" | postgres --single -E ${database.name}
+              # Read sql files in version order.
+              ls -1v "${database.schema}"/*.sql | while read f ; do
+                 cat "$f"
+              done | postgres --single -E ${database.name}
             else
               echo "ERROR: Could not determine how to apply schema with ${database.schema}"
               exit 1
