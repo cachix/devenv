@@ -37,7 +37,7 @@ let
             if [ -f "${database.schema}" ]
             then
               echo "Running file ${database.schema}"
-              cat "${database.schema}" | postgres --single -j -E ${database.name}
+              ${pkgs.gawk}/bin/awk 'NF' "${database.schema}" | postgres --single -j -E ${database.name}
             elif [ -d "${database.schema}" ]
             then
               # Read sql files in version order. Apply one file
@@ -45,7 +45,7 @@ let
               # doesn't end in a ;.
               ls -1v "${database.schema}"/*.sql | while read f ; do
                  echo "Applying sql file: $f"
-                 cat "$f" | postgres --single -j -E ${database.name}
+                 ${pkgs.gawk}/bin/awk 'NF' "$f" | postgres --single -j -E ${database.name}
               done
             else
               echo "ERROR: Could not determine how to apply schema with ${database.schema}"
