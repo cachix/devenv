@@ -29,8 +29,8 @@ in
 
     packages = lib.mkOption {
       type = lib.types.listOf lib.types.package;
-      default = lib.optional pkgs.stdenv.isDarwin [ pkgs.libiconv ];
-      defaultText = lib.literalExpression "lib.optional pkgs.stdenv.isDarwin [ pkgs.libiconv ]";
+      default = [ ];
+      defaultText = lib.literalExpression "[ ]";
       description = "Packages to install";
     };
 
@@ -96,4 +96,21 @@ in
       description = "Rust channel to use";
     };
   };
+
+  config = lib.mkMerge [
+    (lib.mkIf cfg.enable {
+      packages = cfg.packages
+        ++ cfg.toolchain cfg.components
+        ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
+
+      # enable compiler tooling by default to expose things like cc
+      languages.c.enable = lib.mkDefault true;
+
+      env.RUST_SRC_PATH = cfg.packages.rust-src;
+
+      pre-commit.tools.cargo = lib.mkForce cfg.packages.cargo;
+      pre-commit.tools.rustfmt = lib.mkForce cfg.packages.rustfmt;
+      pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
+    })
+  ];
 }
