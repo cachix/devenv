@@ -1,10 +1,7 @@
 { pkgs, config, lib, inputs, ... }:
 
 let
-  inherit (lib.attrsets) attrValues genAttrs getAttrs;
-
   cfg = config.languages.rust;
-  tools = [ "rustc" "cargo" "rustfmt" "clippy" "rust-analyzer" ];
   setup = ''
     inputs:
       fenix:
@@ -18,26 +15,26 @@ in
   options.languages.rust = {
     enable = lib.mkEnableOption "tools for Rust development";
 
-    packages = lib.mkOption {
-      type = lib.types.submodule ({
-        options = {
-          rust-src = lib.mkOption {
-            type = lib.types.either lib.types.package lib.types.str;
-            default = pkgs.rustPlatform.rustLibSrc;
-            defaultText = lib.literalExpression "pkgs.rustPlatform.rustLibSrc";
-            description = "rust-src package";
-          };
-        }
-        // genAttrs tools (name: lib.mkOption {
-          type = lib.types.package;
-          default = pkgs.${name};
-          defaultText = lib.literalExpression "pkgs.${name}";
-          description = "${name} package";
-        });
-      });
-      defaultText = lib.literalExpression "pkgs";
-      default = { };
-      description = "Attribute set of packages including rustc and Cargo.";
+    components = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "rustc" "cargo" "rustfmt" "clippy" "rust-analyzer" "rust-src" ];
+      defaultText = lib.literalExpression ''[ "rustc" "cargo" "rustfmt" "clippy" "rust-analyzer" "rust-src" ]'';
+      description = "Rust components to install.";
+    };
+
+    package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.symlinkJoin {
+        name = "rust-pkgs";
+        paths = map
+          (component:
+            if component == "rust-src"
+            then pkgs.rustPlatform.rustLibSrc
+            else pkgs.${component})
+          cfg.components;
+      };
+      defaultText = lib.literalExpression "pkgs.rustPlatform.rust";
+      description = "Rust package including rustc and Cargo.";
     };
 
     version = lib.mkOption {
@@ -49,7 +46,7 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      packages = attrValues (getAttrs tools cfg.packages) ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
+      packages = [ cfg.package ] ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
@@ -68,12 +65,17 @@ in
     (lib.mkIf (cfg.version != null) (
       let
         fenix = inputs.fenix or (throw "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}");
-        rustPackages = fenix.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "languages.rust.version is set to ${cfg.version}, but should be one of: stable, beta or latest.");
+        fenixPackages = fenix.packages.${pkgs.stdenv.system};
+        rustPackages = fenixPackages.${cfg.version} or (throw "languages.rust.version is set to ${cfg.version}, but should be one of: stable, beta or latest.");
       in
       {
-        languages.rust.packages =
-          { rust-src = lib.mkDefault "${rustPackages.rust-src}/lib/rustlib/src/rust/library"; }
-          // genAttrs tools (package: lib.mkDefault rustPackages.${package});
+        languages.rust.package = fenixPackages.combine
+          (map
+            (component:
+              if component == "rust-src"
+              then "${rustPackages.rust-src}/lib/rustlib/src/rust/library"
+              else rustPackages.${component})
+            cfg.components);
       }
     ))
   ];
