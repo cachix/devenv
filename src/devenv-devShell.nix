@@ -23,7 +23,7 @@ pkgs.writeScriptBin "devenv" ''
         echo "No 'processes' option defined: https://devenv.sh/processes/"
         exit 1
       else
-        $procfilescript
+        exec $procfilescript "$@"
       fi
       ;;
     version)
