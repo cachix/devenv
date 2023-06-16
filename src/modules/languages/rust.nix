@@ -33,7 +33,7 @@ in
             else pkgs.${component})
           cfg.components;
       };
-      defaultText = lib.literalExpression "pkgs.rustPlatform.rust";
+      defaultText = lib.literalExpression "pkgs";
       description = "Rust package including rustc and Cargo.";
     };
 
