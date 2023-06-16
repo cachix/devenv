@@ -51,8 +51,6 @@ in
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
 
-      env.RUST_SRC_PATH = cfg.packages.rust-src;
-
       pre-commit.tools.cargo = lib.mkForce cfg.packages.cargo;
       pre-commit.tools.rustfmt = lib.mkForce cfg.packages.rustfmt;
       pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
