@@ -24,6 +24,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
+      defaultText = lib.literalExpression "pkgs";
       default = pkgs.symlinkJoin {
         name = "rust-pkgs";
         paths = map
@@ -33,7 +34,6 @@ in
             else pkgs.${component})
           cfg.components;
       };
-      defaultText = lib.literalExpression "pkgs";
       description = "Rust package including rustc and Cargo.";
     };
 
