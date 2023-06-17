@@ -112,6 +112,7 @@ in
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
   ++ (listEntries ./integrations)
+  ++ (listEntries ./process-managers)
   ;
 
   config = {

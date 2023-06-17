@@ -7,6 +7,8 @@ let
         type = types.str;
         description = "Bash code to run the process.";
       };
+
+      # TODO: Deprecate this option in favor of `process-managers.process-compose.settings.processes.${name}`.
       process-compose = lib.mkOption {
         type = types.attrs; # TODO: type this explicitly?
         default = { };
@@ -32,37 +34,15 @@ let
   });
 
   implementation = config.process.implementation;
-  implementation-options = config.process.${implementation};
-  envValSerializer = if implementation == "process-compose" then toString else builtins.toJSON;
   envList =
     lib.mapAttrsToList
-      (name: value: "${name}=${envValSerializer value}")
+      (name: value: "${name}=${builtins.toJSON value}")
       (if config.devenv.flakesIntegration then
       # avoid infinite recursion in the scenario the `config` parameter is
       # used in a `processes` declaration inside a devenv module.
         builtins.removeAttrs config.env [ "DEVENV_PROFILE" ]
       else
         config.env);
-
-  procfileScripts = {
-    honcho = ''
-      ${pkgs.honcho}/bin/honcho start -f ${config.procfile} --env ${config.procfileEnv} "$@" & 
-    '';
-
-    overmind = ''
-      OVERMIND_ENV=${config.procfileEnv} ${pkgs.overmind}/bin/overmind start --root ${config.env.DEVENV_ROOT} --procfile ${config.procfile} "$@" &
-    '';
-
-    process-compose = ''
-      ${pkgs.process-compose}/bin/process-compose --config ${config.procfile} \
-         --port ''${PC_HTTP_PORT:-${toString config.process.process-compose.port}} \
-         --tui=''${PC_TUI_ENABLED:-${toString config.process.process-compose.tui}} up "$@" &
-    '';
-
-    hivemind = ''
-      ${pkgs.hivemind}/bin/hivemind --print-timestamps "$@" ${config.procfile} &
-    '';
-  };
 in
 {
   options = {
@@ -73,6 +53,7 @@ in
         "Processes can be started with ``devenv up`` and run in foreground mode.";
     };
 
+    # TODO: Rename this from `process.${option}` to `process-manager.${option}` or `devenv.up.${option}`.
     process = {
       implementation = lib.mkOption {
         type = types.enum [ "honcho" "overmind" "process-compose" "hivemind" ];
@@ -113,6 +94,15 @@ in
     };
 
     # INTERNAL
+    # TODO: Rename these to `process-manager.${option}`
+    processManagerCommand = lib.mkOption {
+      type = types.str;
+      internal = true;
+      description = ''
+        The command to run the process-manager. This is meant to be set by the process-manager.''${implementation}.
+      '';
+    };
+
     procfile = lib.mkOption {
       type = types.package;
       internal = true;
@@ -131,21 +121,12 @@ in
   };
 
   config = lib.mkIf (config.processes != { }) {
-    packages = [ pkgs.${implementation} ];
+    process-managers.${implementation}.enable = lib.mkDefault true;
 
     procfile =
-      if implementation == "process-compose" then
-        (pkgs.formats.yaml { }).generate "process-compose.yaml"
-          ((builtins.removeAttrs implementation-options [ "port" "tui" ]) // {
-            environment = envList;
-            processes = lib.mapAttrs
-              (name: value: { command = value.exec; } // value.process-compose)
-              config.processes;
-          })
-      else # procfile based implementations
-        pkgs.writeText "procfile" (lib.concatStringsSep "\n"
-          (lib.mapAttrsToList (name: process: "${name}: ${process.exec}")
-            config.processes));
+      pkgs.writeText "procfile" (lib.concatStringsSep "\n"
+        (lib.mapAttrsToList (name: process: "${name}: ${process.exec}")
+          config.processes));
 
     procfileEnv =
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
@@ -153,7 +134,7 @@ in
     procfileScript = pkgs.writeShellScript "devenv-up" ''
       ${config.process.before}
 
-      ${procfileScripts.${implementation}}
+      ${config.processManagerCommand}
 
       if [[ ! -d "$DEVENV_STATE" ]]; then
         mkdir -p "$DEVENV_STATE"
@@ -178,13 +159,5 @@ in
     ci = [ config.procfileScript ];
 
     infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes;
-
-    env =
-      if implementation == "process-compose" then {
-        PC_HTTP_PORT = implementation-options.port;
-        PC_TUI_ENABLED = lib.boolToString implementation-options.tui;
-      } else
-        { };
-
   };
 }
