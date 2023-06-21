@@ -150,6 +150,21 @@ in
   config = mkIf cfg.enable {
     env.OPENSEARCH_DATA = config.env.DEVENV_STATE + "/opensearch";
 
-    processes.opensearch.exec = "${startScript}";
+    processes.opensearch = {
+      exec = "${startScript}";
+
+      process-compose = {
+        readiness_probe = {
+          exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.listenAddress}:${toString cfg.port}";
+          initial_delay_seconds = 15;
+          period_seconds = 10;
+          timeout_seconds = 2;
+          success_threshold = 1;
+          failure_threshold = 5;
+        };
+
+        availability.restart = "on_failure";
+      };
+    };
   };
 }
