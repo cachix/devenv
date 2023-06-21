@@ -127,6 +127,7 @@ in
 
     services.rabbitmq.configItems = {
       "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString cfg.port}";
+      "distribution.listener.interface" = mkDefault cfg.listenAddress;
     } // optionalAttrs cfg.managementPlugin.enable {
       "management.tcp.port" = toString cfg.managementPlugin.port;
       "management.tcp.ip" = cfg.listenAddress;
@@ -142,6 +143,8 @@ in
     env.RABBITMQ_PLUGINS_DIR = concatStringsSep ":" cfg.pluginDirs;
     env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
     env.RABBITMQ_NODENAME = "rabbit@localhost";
+    env.RABBITMQ_HOST = cfg.listenAddress;
+    env.ERL_EPMD_ADDRESS = cfg.listenAddress;
 
     processes.rabbitmq = {
       exec = "${cfg.package}/bin/rabbitmq-server";
