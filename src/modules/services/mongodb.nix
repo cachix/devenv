@@ -42,7 +42,6 @@ let
     done
 
     if [ "${cfg.initDatabaseUsername}" ] && [ "${cfg.initDatabasePassword}" ]; then
-        echo "CREATING USER"
         rootAuthDatabase="admin"
         mongo ''${mongoShellArgs} "$rootAuthDatabase" >/dev/null <<-EOJS
             db.createUser({
