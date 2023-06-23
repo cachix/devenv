@@ -37,13 +37,14 @@ let
        fi
     done
 
-    while ! mongo --quiet --eval "{ ping: 1 }" ''${mongoShellArgs} 2>&1 >/dev/null ; do
+    while ! ${pkgs.mongosh}/bin/mongosh --quiet --eval "{ ping: 1 }" ''${mongoShellArgs} 2>&1 >/dev/null ; do
         sleep 1
     done
 
     if [ "${cfg.initDatabaseUsername}" ] && [ "${cfg.initDatabasePassword}" ]; then
+        echo "Creating initial user"
         rootAuthDatabase="admin"
-        mongo ''${mongoShellArgs} "$rootAuthDatabase" >/dev/null <<-EOJS
+        ${pkgs.mongosh}/bin/mongosh ''${mongoShellArgs} "$rootAuthDatabase" >/dev/null <<-EOJS
             db.createUser({
                 user: "${cfg.initDatabaseUsername}",
                 pwd: "${cfg.initDatabasePassword}",``
@@ -105,7 +106,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [ cfg.package pkgs.mongodb-tools ];
+    packages = [ cfg.package pkgs.mongodb-tools pkgs.mongosh ];
 
     env.MONGODBDATA = config.env.DEVENV_STATE + "/mongodb";
 
