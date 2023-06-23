@@ -9,6 +9,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # enable compiler tooling by default to expose things like cc
+    languages.c.enable = lib.mkDefault true;
+
     packages = [
       pkgs.crystal
       pkgs.shards
