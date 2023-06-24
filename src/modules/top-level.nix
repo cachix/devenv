@@ -38,7 +38,39 @@ in
 {
   options = {
     env = lib.mkOption {
-      type = types.lazyAttrsOf types.anything;
+      type =
+        let
+          atomTypes = [
+            types.str
+            types.package
+            types.int
+            types.bool
+          ];
+        in
+        types.lazyAttrsOf (types.oneOf (atomTypes ++ [
+          (types.submodule ({ name, options, ... }: {
+            options = {
+              eval = lib.mkOption {
+                type = types.oneOf atomTypes;
+                description = "Shell expression to evaluate.";
+              };
+              envToBashValue = lib.mkOption {
+                type = types.str;
+                internal = true;
+                readOnly = true;
+                default =
+                  let
+                    errNone = throw "Environment variable '${name}' has no matching mode definitons. Bug?";
+                    errMultiple = throw "Environment variable '${name}' has multiple mode definitions. Please use only one.";
+                    mode = lib.findSingle (mode: options.${mode}.isDefined) errNone errMultiple [
+                      "eval"
+                    ];
+                  in
+                  "\"${toString options.${mode}.value}\"";
+              };
+            };
+          }))
+        ]));
       description = "Environment variables to be exposed inside the developer environment.";
       default = { };
     };
@@ -116,21 +148,9 @@ in
   ;
 
   config = {
-    # TODO: figure out how to get relative path without impure mode
-    env.DEVENV_ROOT =
-      let
-        pwd = builtins.getEnv "PWD";
-      in
-      if pwd == "" then
-        throw ''
-          devenv was not able to determine the current directory.
-          Make sure Nix runs with the `--impure` flag.
-
-          See https://devenv.sh/guides/using-with-flakes/
-        ''
-      else pwd;
-    env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
-    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
+    env.DEVENV_ROOT.eval = "$PWD";
+    env.DEVENV_DOTFILE.eval = config.env.DEVENV_ROOT.eval + "/.devenv";
+    env.DEVENV_STATE.eval = config.env.DEVENV_DOTFILE.eval + "/state";
     env.DEVENV_PROFILE = profile;
 
     enterShell = ''

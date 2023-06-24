@@ -56,7 +56,7 @@ in
 
   config = lib.mkIf config.devcontainer.enable {
     enterShell = ''
-      cat ${file} > ${config.env.DEVENV_ROOT}/.devcontainer.json
+      cat ${file} > "$DEVENV_ROOT/.devcontainer.json"
     '';
   };
 }

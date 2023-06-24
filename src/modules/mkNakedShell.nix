@@ -57,7 +57,11 @@ in
 }:
 let
   # simpler version of https://github.com/numtide/devshell/blob/20d50fc6adf77fd8a652fc824c6e282d7737b85d/modules/env.nix#L41
-  envToBash = name: value: "export ${name}=${lib.escapeShellArg (toString value)}";
+  envToBash = name: value:
+    let
+      str = value.envToBashValue or (lib.escapeShellArg (toString value));
+    in
+    "export ${name}=${str}";
   startupEnv = lib.concatStringsSep "\n" (lib.mapAttrsToList envToBash env);
   derivationArg = {
     inherit name;
