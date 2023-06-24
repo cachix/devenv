@@ -101,8 +101,5 @@ in
         languages.rust.package = mkFenixPackage toolchain;
       }
     ))
-    (lib.mkIf ((cfg.toolchain != null) && (cfg.version != null)) (
-      throw "languages.rust.toolchain and languages.rust.version are both set. Please set only one of them."
-    ))
   ];
 }
