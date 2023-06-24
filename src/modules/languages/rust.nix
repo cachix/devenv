@@ -51,7 +51,10 @@ in
     };
 
     toolchain = lib.mkOption {
-      type = lib.types.nullOr ((fenix-input "toolchain").packages.${pkgs.stdenv.system}.stable).type;
+      type = lib.types.nullOr (
+        lib.types.lazyAttrsOf
+          ((fenix-input "toolchain").packages.${pkgs.stdenv.system}.stable).type
+      );
       default = null;
       description = ''
         The [fenix toolchain](https://github.com/nix-community/fenix#toolchain) to use.
