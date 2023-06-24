@@ -79,9 +79,9 @@ in
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
 
-      pre-commit.tools.cargo = tryPath cfg.packages.cargo;
-      pre-commit.tools.rustfmt = tryPath cfg.packages.rustfmt;
-      pre-commit.tools.clippy = tryPath cfg.packages.clippy;
+      pre-commit.tools.cargo = tryPath "${cfg.package}/bin/cargo";
+      pre-commit.tools.rustfmt = tryPath "${cfg.package}/bin/rustfmt";
+      pre-commit.tools.clippy = tryPath "${cfg.package}/bin/clippy";
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
