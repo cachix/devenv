@@ -21,6 +21,8 @@ let
           then "${toolchain.rust-src}/lib/rustlib/src/rust/library"
           else toolchain.${component})
         cfg.components);
+
+  tryPath = p: pkgs.lib.optional (pkgs.lib.pathExists p) p;
 in
 {
   options.languages.rust = {
@@ -77,9 +79,9 @@ in
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
 
-      pre-commit.tools.cargo = lib.mkForce cfg.packages.cargo;
-      pre-commit.tools.rustfmt = lib.mkForce cfg.packages.rustfmt;
-      pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
+      pre-commit.tools.cargo = tryPath cfg.packages.cargo;
+      pre-commit.tools.rustfmt = tryPath cfg.packages.rustfmt;
+      pre-commit.tools.clippy = tryPath cfg.packages.clippy;
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
