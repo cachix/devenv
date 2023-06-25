@@ -45,7 +45,7 @@ jobs:
         json=$(tree -J -L 1 examples | jq -c '[.[0].contents[] | .name]')
         echo "examples=$json" >> $GITHUB_OUTPUT
   examples:
-    name: example ${{ matrix.example }} (${{ join(matrix.os) }})
+    name: ${{ matrix.example }} (${{ join(matrix.os) }})
     needs: [generate-examples]
     strategy:
       fail-fast: false
@@ -54,6 +54,7 @@ jobs:
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
     steps:
+    - run: sudo rm -rf /opt&
     - uses: actions/checkout@v3
     - uses: cachix/install-nix-action@v22
       with:
