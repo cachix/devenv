@@ -1374,6 +1374,30 @@ boolean
 
 
 
+## languages.jsonnet.enable
+
+Whether to enable tools for jsonnet development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/jsonnet.nix)
+
+
+
 ## languages.julia.enable
 
 Whether to enable tools for Julia development.
@@ -2222,8 +2246,6 @@ package
 
 Whether to enable poetry.
 
-
-
 *Type:*
 boolean
 
@@ -2312,6 +2334,8 @@ boolean
 ## languages.python.poetry.install.allExtras
 
 Whether to install all extras. See `--all-extras`.
+
+
 
 *Type:*
 boolean
