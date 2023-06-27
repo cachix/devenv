@@ -94,6 +94,7 @@
         print "    url: path:../../src/modules";
       }
     ' devenv.yaml.orig > devenv.yaml
+    trap "mv $PWD/devenv.yaml.orig $PWD/devenv.yaml" EXIT
     devenv ci
     if [ -f .test.sh ]
     then
@@ -101,7 +102,6 @@
     else
       devenv shell ls
     fi
-    mv devenv.yaml.orig devenv.yaml
     popd
   '';
   scripts."devenv-generate-doc-options".exec = ''
