@@ -6377,6 +6377,82 @@ list of string
 
 
 
+## services.clickhouse.enable
+
+Whether to enable clickhouse-server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.package
+
+Which package of clickhouse to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clickhouse `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.config
+
+ClickHouse configuration in YAML.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
+## services.clickhouse.port
+
+Which port to run clickhouse on
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 9000 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
 ## services.couchdb.enable
 
 Whether to enable CouchDB process.
