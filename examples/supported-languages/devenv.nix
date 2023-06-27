@@ -19,6 +19,7 @@
   languages.haskell.enable = true;
   languages.java.enable = true;
   languages.javascript.enable = true;
+  languages.jsonnet.enable = true;
   languages.julia.enable = true;
   languages.kotlin.enable = true;
   languages.lua.enable = true;
