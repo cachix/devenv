@@ -62,7 +62,7 @@ let
   runInitialScript =
     if cfg.initialScript != null then
       ''
-        echo "${lib.escapeShellArg cfg.initialScript}" | postgres --single -E postgres
+        echo ${lib.escapeShellArg cfg.initialScript} | postgres --single -E postgres
       ''
     else
       "";
