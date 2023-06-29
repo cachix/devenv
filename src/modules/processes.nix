@@ -4,7 +4,7 @@ let
   processType = types.submodule ({ config, ... }: {
     options = {
       exec = lib.mkOption {
-        type = types.str;
+        type = types.lines;
         description = "Bash code to run the process.";
       };
 
@@ -125,7 +125,7 @@ in
 
     procfile =
       pkgs.writeText "procfile" (lib.concatStringsSep "\n"
-        (lib.mapAttrsToList (name: process: "${name}: ${process.exec}")
+        (lib.mapAttrsToList (name: process: "${name}: ${pkgs.writeShellScript name process.exec}")
           config.processes));
 
     procfileEnv =
