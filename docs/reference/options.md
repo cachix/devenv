@@ -430,7 +430,7 @@ string
 
 
 *Default:*
-` "0.6.2" `
+` "0.6.3" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
