@@ -3513,6 +3513,14 @@ Check whether the current commit message follows commiting rules.
 
 **` convco `**
 
+**` credo `**
+
+Runs a static code analysis using Credo
+
+**` crystal `**
+
+A tool that automatically formats Crystal source code
+
 **` cspell `**
 
 A Spell Checker for Code
@@ -3524,6 +3532,10 @@ Scan Nix files for dead code (unused variable bindings).
 **` dhall-format `**
 
 Dhall code formatter.
+
+**` dialyzer `**
+
+Runs a static code analysis using Dialyzer
 
 **` dune-fmt `**
 
@@ -3629,6 +3641,14 @@ Style checker and linter for markdown files.
 
 Markdown shell pre-processor.
 
+**` mix-format `**
+
+Runs the built-in Elixir syntax formatter
+
+**` mix-test `**
+
+Runs the built-in Elixir test framework
+
 **` mypy `**
 
 Static type checker for Python
@@ -3688,6 +3708,10 @@ Lint Python files.
 **` pyright `**
 
 Static type checker for Python
+
+**` pyupgrade `**
+
+Automatically upgrade syntax for newer versions.
 
 **` revive `**
 
@@ -3924,7 +3948,10 @@ The name of the hook - shown during hook execution.
 *Type:*
 string
 
-*Default:* internal name, same as id
+
+
+*Default:*
+internal name, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -4251,6 +4278,27 @@ string
 
 
 
+## pre-commit.settings.clippy.allFeatures
+
+
+
+Run clippy with --all-features
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.clippy.denyWarnings
 
 
@@ -4277,6 +4325,27 @@ boolean
 
 
 Run clippy offline
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.credo.strict
+
+
+
+Whether to auto-promote the changes.
 
 
 
@@ -4989,6 +5058,31 @@ string
 
 ```
 "${pkgs.pyright}/bin/pyright"
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.pyupgrade.binPath
+
+
+
+pyupgrade binary path. Should be used to specify the pyupgrade binary from your Nix-managed Python environment.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+"${pkgs.pyupgrade}/bin/pyupgrade"
 
 ```
 
