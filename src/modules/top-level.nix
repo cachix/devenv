@@ -45,7 +45,7 @@ in
 
             # TODO: figure out how to get relative path without impure mode
             options.DEVENV_ROOT = lib.mkOption {
-              type = types.path;
+              type = types.str;
               default =
                 let
                   pwd = builtins.getEnv "PWD";
@@ -60,15 +60,15 @@ in
                 else pwd;
             };
             options.DEVENV_DOTFILE = lib.mkOption {
-              type = types.path;
+              type = types.str;
               default = env.config.DEVENV_ROOT + "/.devenv";
             };
             options.DEVENV_STATE = lib.mkOption {
-              type = types.path;
+              type = types.str;
               default = env.config.DEVENV_DOTFILE + "/state";
             };
             options.DEVENV_PROFILE = lib.mkOption {
-              type = types.path;
+              type = types.str;
               default = profile;
             };
           })
