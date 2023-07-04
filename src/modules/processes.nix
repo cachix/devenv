@@ -4,7 +4,7 @@ let
   processType = types.submodule ({ config, ... }: {
     options = {
       exec = lib.mkOption {
-        type = types.lines;
+        type = types.str;
         description = "Bash code to run the process.";
       };
 
