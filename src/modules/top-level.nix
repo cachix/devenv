@@ -68,7 +68,7 @@ in
               default = env.config.DEVENV_DOTFILE + "/state";
             };
             options.DEVENV_PROFILE = lib.mkOption {
-              type = types.str;
+              type = types.path;
               default = profile;
             };
           })
