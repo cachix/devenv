@@ -85,8 +85,8 @@ in
       env.RUST_SRC_PATH = cfg.rust-src;
 
       pre-commit.tools.cargo = tryPath "${cfg.package}/bin/cargo";
-      pre-commit.tools.clippy = tryPath "${cfg.package}/bin/clippy";
       pre-commit.tools.rustfmt = tryPath "${cfg.package}/bin/rustfmt";
+      pre-commit.tools.clippy = tryPath "${cfg.package}/bin/clippy";
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
