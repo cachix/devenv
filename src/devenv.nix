@@ -238,7 +238,7 @@ pkgs.writeScriptBin "devenv" ''
       ${nix}/bin/nix $NIX_FLAGS flake update
       ;;
     version)
-      echo "devenv: ${version}"
+      echo "devenv: ${version} ${pkgs.stdenv.system}"
       ;;
     ci)
       assemble
