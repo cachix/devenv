@@ -31,6 +31,8 @@ jobs:
         message: 'Auto generate docs/reference/options.md'
     - name: Generate supported-languages example
       run: devenv shell devenv-generate-languages-example
+    - name: Generate docs
+      run: devenv shell devenv-generate-docs
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
