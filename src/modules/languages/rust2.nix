@@ -38,6 +38,7 @@ in
     };
 
     toolchain = lib.mkOption {
+      # TODO: better type
       type = lib.types.anything;
       description = ''
         The [fenix toolchain](https://github.com/nix-community/fenix#toolchain) to use.
