@@ -14,6 +14,8 @@ let
   fenix' = dbg: inputs.fenix or
     (throw "to use languages.rust.${dbg}, you must add the following to your devenv.yaml:\n\n${setup}");
   fenix = dbg: (fenix' dbg).packages.${pkgs.stdenv.system};
+
+  tryPath = p: pkgs.lib.optional (pkgs.lib.pathExists p) p;
 in
 {
   options.languages.rust = {
@@ -81,6 +83,10 @@ in
       languages.c.enable = lib.mkDefault true;
 
       env.RUST_SRC_PATH = cfg.rust-src;
+
+      pre-commit.tools.cargo = tryPath "${cfg.package}/bin/cargo";
+      pre-commit.tools.clippy = tryPath "${cfg.package}/bin/clippy";
+      pre-commit.tools.rustfmt = tryPath "${cfg.package}/bin/rustfmt";
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
