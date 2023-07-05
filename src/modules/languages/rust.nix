@@ -8,12 +8,12 @@ let
         url: github:nix-community/fenix
         inputs:
           nixpkgs:
-            follow: nixpkgs
+            follows: nixpkgs
   '';
 
-  fenix' = inputs.fenix or
-    (throw "to use languages.rust, you must add the following to your devenv.yaml:\n\n${setup}");
-  fenix = fenix'.packages.${pkgs.stdenv.system};
+  fenix' = dbg: inputs.fenix or
+    (throw "to use languages.rust.${dbg}, you must add the following to your devenv.yaml:\n\n${setup}");
+  fenix = dbg: (fenix' dbg).packages.${pkgs.stdenv.system};
 in
 {
   options.languages.rust = {
@@ -21,7 +21,6 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "Rust package including rustc and Cargo.";
       defaultText = lib.literalExpression "nixpkgs";
       default = pkgs.symlinkJoin {
         name = "nixpkgs-rust";
@@ -33,46 +32,43 @@ in
           rust-analyzer
         ];
       };
+      description = "Rust package including rustc and Cargo.";
     };
 
     components = lib.mkOption {
       type = lib.types.listOf lib.types.str;
+      default = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
+      defaultText = lib.literalExpression ''[ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ]'';
       description = ''
         List of [Rustup components](https://rust-lang.github.io/rustup/concepts/components.html)
-        to install.
+        to install. Defaults to those available in ${lib.literalExpression "nixpkgs"}.
       '';
-      default = [
-        "rustc"
-        "cargo"
-        "clippy"
-        "rustfmt"
-        "rust-analyzer"
-      ];
-      defaultText = lib.literalExpression ''[ "rust-analyzer" ]'';
     };
 
     rust-src = lib.mkOption {
       type = lib.types.path;
       default = pkgs.rustPlatform.rustLibSrc;
+      defaultText = "${lib.literalExpression "pkgs.rustPlatform.rustLibSrc"} or "
+        + "${lib.literalExpression "toolchain.rust-src"}, depending on if a fenix toolchain is set.";
+      description = ''
+        The path to the rust-src Rustup component. Note that this is necessary for some tools
+        like rust-analyzer to work.
+      '';
     };
 
     toolchain = lib.mkOption {
       # TODO: better type with https://nixos.org/manual/nixos/stable/index.html
       type = lib.types.nullOr lib.types.anything;
-      description = ''
-        The [fenix toolchain](https://github.com/nix-community/fenix#toolchain) to use.
-      '';
       default = null;
       defaultText = lib.literalExpression "fenix.packages.stable";
+      description = "The [fenix toolchain](https://github.com/nix-community/fenix#toolchain) to use.";
     };
 
     version = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      description = ''
-        The [Rustup channel](https://rust-lang.github.io/rustup/concepts/channels.html) to install.
-      '';
+      type = lib.types.nullOr (lib.types.enum [ "stable" "beta" "latest" ]);
       default = null;
       defaultText = lib.literalExpression "null";
+      description = "The toolchain version to install.";
     };
   };
 
@@ -87,13 +83,11 @@ in
       languages.c.enable = lib.mkDefault true;
     })
     (lib.mkIf (cfg.toolchain != null) {
-      languages.rust.package = lib.mkForce
-        (cfg.toolchain.withComponents cfg.components);
-
+      languages.rust.package = lib.mkForce (cfg.toolchain.withComponents cfg.components);
       languages.rust.rust-src = lib.mkForce "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library";
     })
     (lib.mkIf (cfg.version != null) {
-      languages.rust.toolchain = lib.mkForce (fenix.${cfg.version});
+      languages.rust.toolchain = lib.mkForce ((fenix "version").${cfg.version});
     })
   ];
 }
