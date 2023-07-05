@@ -38,7 +38,10 @@ in
   };
   config = lib.mkIf cfg.enable {
     processManagerCommand = ''
-      ${cfg.package}/bin/process-compose --config ${cfg.configFile}  up "$@" &
+      ${cfg.package}/bin/process-compose --config ${cfg.configFile} \
+        --port ''${PC_HTTP_PORT:-${toString config.process.process-compose.port}} \
+        --tui=''${PC_TUI_ENABLED:-${toString config.process.process-compose.tui}} \
+        up "$@" &
     '';
 
     packages = [ cfg.package ];
