@@ -79,9 +79,9 @@ in
 
       env.RUST_SRC_PATH = cfg.rust-src;
 
-      pre-commit.tools.cargo = tryPath "${cfg.package}/bin/cargo";
-      pre-commit.tools.rustfmt = tryPath "${cfg.package}/bin/rustfmt";
-      pre-commit.tools.clippy = tryPath "${cfg.package}/bin/clippy";
+      pre-commit.tools.cargo = lib.mkDefault pkgs.cargo;
+      pre-commit.tools.rustfmt = lib.mkDefault pkgs.rustfmt;
+      pre-commit.tools.clippy = lib.mkDefault pkgs.clippy;
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
@@ -91,6 +91,10 @@ in
     (lib.mkIf (cfg.toolchain != null) {
       languages.rust.package = lib.mkForce (cfg.toolchain.withComponents cfg.components);
       languages.rust.rust-src = lib.mkForce "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library";
+
+      pre-commit.tools.cargo = lib.mkForce cfg.toolchain.cargo;
+      pre-commit.tools.clippy = lib.mkForce cfg.toolchain.clippy;
+      pre-commit.tools.rustfmt = lib.mkForce cfg.toolchain.rustfmt;
     })
     (lib.mkIf (cfg.version != null) (
       let
