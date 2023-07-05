@@ -77,6 +77,8 @@ in
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
 
+      # RUST_SRC_PATH is necessary when rust-src is not at the same location as
+      # as rustc. This is the case with the rust toolchain from nixpkgs.
       env.RUST_SRC_PATH = cfg.rust-src;
 
       pre-commit.tools.cargo = lib.mkDefault pkgs.cargo;
