@@ -11,10 +11,6 @@ let
             follows: nixpkgs
   '';
 
-  fenix' = dbg: inputs.fenix or
-    (throw "to use languages.rust.${dbg}, you must add the following to your devenv.yaml:\n\n${setup}");
-  fenix = dbg: (fenix' dbg).packages.${pkgs.stdenv.system};
-
   tryPath = p: pkgs.lib.optional (pkgs.lib.pathExists p) p;
 in
 {
@@ -97,8 +93,14 @@ in
       languages.rust.package = lib.mkForce (cfg.toolchain.withComponents cfg.components);
       languages.rust.rust-src = lib.mkForce "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library";
     })
-    (lib.mkIf (cfg.version != null) {
-      languages.rust.toolchain = lib.mkForce ((fenix "version").${cfg.version});
-    })
+    (lib.mkIf (cfg.version != null) (
+      let
+        fenix = inputs.fenix or (throw "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}");
+        rustPackages = fenix.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "languages.rust.version is set to ${cfg.version}, but should be one of: stable, beta or latest.");
+      in
+      {
+        languages.rust.toolchain = rustPackages;
+      }
+    ))
   ];
 }
