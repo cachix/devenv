@@ -10,8 +10,6 @@ let
           nixpkgs:
             follows: nixpkgs
   '';
-
-  tryPath = p: pkgs.lib.optional (pkgs.lib.pathExists p) p;
 in
 {
   options.languages.rust = {
