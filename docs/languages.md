@@ -7,7 +7,13 @@ What if you could have the tooling for any programming language by flipping a to
 
 {
   languages.python.enable = true;
-  languages.typescript.enable = true;
+  langauges.python.version = "3.11.3";
+
+  languages.rust = {
+    enable = true;
+    # https://devenv.sh/reference/options/#languagesrustversion
+    version = "latest";
+  };
 }
 ```
 
@@ -18,16 +24,12 @@ $ devenv shell
 Building shell ...
 Entering shell ...
 
-Python 3.10.8
-tsc --version
-Version 4.8.4
-(devenv) $ 
+(devenv) $ python --version
+Python 3.11.3
 ```
 
-See the [supported-languages](https://github.com/cachix/devenv/blob/main/examples/supported-languages/devenv.nix) example for a list of currently supported languages.
+## Supported languages
 
-!!! note 
-
-    Currently the latest versions of the tooling is provided,
-    but [in the future package sets and pinning will be supported
-    and documented](https://github.com/cachix/devenv/issues/16).
+{%
+  include-markdown "languages-all.md"
+%}
