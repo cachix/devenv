@@ -60,8 +60,8 @@ in
     };
 
     toolchain = lib.mkOption {
-      # TODO: better type with https://nixos.org/manual/nixos/stable/index.html
-      type = lib.types.nullOr lib.types.anything;
+      # TODO: better type
+      type = lib.types.nullOr (lib.types.attrsOf lib.types.anything);
       default = null;
       defaultText = lib.literalExpression "fenix.packages.stable";
       description = "The [fenix toolchain](https://github.com/nix-community/fenix#toolchain) to use.";
