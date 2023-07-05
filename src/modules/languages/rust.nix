@@ -39,15 +39,14 @@ in
       defaultText = lib.literalExpression ''[ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ]'';
       description = ''
         List of [Rustup components](https://rust-lang.github.io/rustup/concepts/components.html)
-        to install. Defaults to those available in ${lib.literalExpression "nixpkgs"}.
+        to install. Defaults to those available in `nixpkgs`.
       '';
     };
 
     rust-src = lib.mkOption {
       type = lib.types.path;
       default = pkgs.rustPlatform.rustLibSrc;
-      defaultText = "${lib.literalExpression "pkgs.rustPlatform.rustLibSrc"} or "
-        + "${lib.literalExpression "toolchain.rust-src"}, depending on if a fenix toolchain is set.";
+      defaultText = "`pkgs.rustPlatform.rustLibSrc` or `toolchain.rust-src`, depending on if a fenix toolchain is set.";
       description = ''
         The path to the rust-src Rustup component. Note that this is necessary for some tools
         like rust-analyzer to work. See [Rustup docs](https://rust-lang.github.io/rustup/concepts/components.html)
