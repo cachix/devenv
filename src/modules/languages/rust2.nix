@@ -37,17 +37,8 @@ in
       defaultText = lib.literalExpression ''[ "rust-analyzer" ]'';
     };
 
-    profile = lib.mkOption {
-      type = lib.types.str;
-      description = ''
-        The [Rustup profile](https://rust-lang.github.io/rustup/concepts/profiles.html) to install.
-      '';
-      default = "default";
-      defaultText = lib.literalExpression "default";
-    };
-
     toolchain = lib.mkOption {
-      type = lib.types.attrsOf fenix.stable.type;
+      type = lib.types.anything;
       description = ''
         The [fenix toolchain](https://github.com/nix-community/fenix#toolchain) to use.
       '';
@@ -58,10 +49,7 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = [
-      (fenix.combine [
-        cfg.toolchain.${cfg.profile}
-        (builtins.map (component: cfg.toolchain.${component}) cfg.components)
-      ])
+      (cfg.toolchain.withComponents cfg.components)
     ] ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
     # enable compiler tooling by default to expose things like cc
