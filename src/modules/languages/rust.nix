@@ -52,7 +52,8 @@ in
         + "${lib.literalExpression "toolchain.rust-src"}, depending on if a fenix toolchain is set.";
       description = ''
         The path to the rust-src Rustup component. Note that this is necessary for some tools
-        like rust-analyzer to work.
+        like rust-analyzer to work. See [Rustup docs](https://rust-lang.github.io/rustup/concepts/components.html)
+        for more information.
       '';
     };
 
@@ -65,7 +66,7 @@ in
     };
 
     version = lib.mkOption {
-      type = lib.types.nullOr (lib.types.enum [ "stable" "beta" "latest" ]);
+      type = lib.types.enum [ null "stable" "beta" "latest" ];
       default = null;
       defaultText = lib.literalExpression "null";
       description = "The toolchain version to install.";
@@ -74,13 +75,17 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      packages = [ cfg.package ]
-        ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
-
-      env.RUST_SRC_PATH = cfg.rust-src;
+      packages = [ cfg.package ] ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
+
+      env.RUST_SRC_PATH = cfg.rust-src;
+    })
+    (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
+      env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+      env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+      env.CFLAGS = [ "-iframework ${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
     })
     (lib.mkIf (cfg.toolchain != null) {
       languages.rust.package = lib.mkForce (cfg.toolchain.withComponents cfg.components);
