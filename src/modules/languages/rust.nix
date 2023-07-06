@@ -26,9 +26,9 @@ in
     };
 
     channel = lib.mkOption {
-      type = lib.types.enum [ null "stable" "beta" "nightly" ];
-      default = null;
-      defaultText = lib.literalExpression "null";
+      type = lib.types.enum [ "nixpkgs" "stable" "beta" "nightly" ];
+      default = "nixpkgs";
+      defaultText = lib.literalExpression ''"nixpkgs"'';
       description = "The rustup toolchain to install.";
     };
 
@@ -80,7 +80,7 @@ in
     })
     (lib.mkIf (cfg.channel != null) (
       let
-        error = "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}";
+        error = "To use languages.rust.channel, you need to add the following to your devenv.yaml:\n\n${setup}";
         fenix = inputs.fenix or (throw error);
         rustPackages = fenix.packages.${pkgs.stdenv.system} or (throw error);
       in
