@@ -36,3 +36,5 @@ Starting processes ...
 {%
   include-markdown "services-all.md"
 %}
+
+You can find the definitions of all services [here](https://github.com/cachix/devenv/tree/main/src/modules/services).
