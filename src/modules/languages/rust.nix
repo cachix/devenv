@@ -4,8 +4,8 @@ let
   cfg = config.languages.rust;
   setup = ''
     inputs:
-      fenix:
-        url: github:nix-community/fenix
+      rust-overlay:
+        url: github:oxalica/rust-overlay
         inputs:
           nixpkgs:
             follows: nixpkgs
@@ -14,22 +14,6 @@ in
 {
   options.languages.rust = {
     enable = lib.mkEnableOption "tools for Rust development";
-
-    package = lib.mkOption {
-      type = lib.types.package;
-      defaultText = lib.literalExpression "nixpkgs";
-      default = pkgs.symlinkJoin {
-        name = "nixpkgs-rust";
-        paths = with pkgs; [
-          rustc
-          cargo
-          rustfmt
-          clippy
-          rust-analyzer
-        ];
-      };
-      description = "Rust package including rustc and Cargo.";
-    };
 
     components = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -41,68 +25,74 @@ in
       '';
     };
 
-    rust-src = lib.mkOption {
-      type = lib.types.path;
-      default = pkgs.rustPlatform.rustLibSrc;
-      defaultText = "`pkgs.rustPlatform.rustLibSrc` or `toolchain.rust-src`, depending on if a fenix toolchain is set.";
-      description = ''
-        The path to the rust-src Rustup component. Note that this is necessary for some tools
-        like rust-analyzer to work. See [Rustup docs](https://rust-lang.github.io/rustup/concepts/components.html)
-        for more information.
-      '';
+    channel = lib.mkOption {
+      type = lib.types.enum [ null "stable" "beta" "nightly" ];
+      default = null;
+      defaultText = lib.literalExpression "null";
+      description = "The rustup toolchain to install.";
     };
 
     toolchain = lib.mkOption {
-      # TODO: better type
-      type = lib.types.nullOr (lib.types.attrsOf lib.types.anything);
-      default = null;
-      defaultText = lib.literalExpression "fenix.packages.stable";
-      description = "The [fenix toolchain](https://github.com/nix-community/fenix#toolchain) to use.";
-    };
+      type = lib.types.submodule ({
+        freeformType = lib.types.attrsOf lib.types.package;
 
-    version = lib.mkOption {
-      type = lib.types.enum [ null "stable" "beta" "latest" ];
-      default = null;
-      defaultText = lib.literalExpression "null";
-      description = "The toolchain version to install.";
+        options = {
+          rust-src = lib.mkOption {
+            type = lib.types.path;
+            default = pkgs.rustPlatform.rustLibSrc;
+            defaultText = lib.literalExpression "pkgs.rustPlatform.rustLibSrc";
+            description = "rust-src package";
+          };
+        } // (
+          let
+            documented-components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
+            mkComponentOption = component: lib.mkOption {
+              type = lib.types.nullOr lib.types.package;
+              default = pkgs.${component};
+              defaultText = lib.literalExpression "pkgs.${component}";
+              description = "${component} package";
+            };
+          in
+          lib.genAttrs documented-components mkComponentOption
+        );
+      });
+      defaultText = lib.literalExpression "fenix.packages.stable";
+      description = "The location of every component to use.";
     };
   };
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      packages = [ cfg.package ] ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
+      packages = (lib.getAttrs cfg.components cfg.toolchain)
+        ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
       # enable compiler tooling by default to expose things like cc
       languages.c.enable = lib.mkDefault true;
 
       # RUST_SRC_PATH is necessary when rust-src is not at the same location as
       # as rustc. This is the case with the rust toolchain from nixpkgs.
-      env.RUST_SRC_PATH = cfg.rust-src;
+      env.RUST_SRC_PATH = cfg.toolchain.rust-src;
 
-      pre-commit.tools.cargo = lib.mkDefault pkgs.cargo;
-      pre-commit.tools.rustfmt = lib.mkDefault pkgs.rustfmt;
-      pre-commit.tools.clippy = lib.mkDefault pkgs.clippy;
+      pre-commit.tools.cargo = cfg.toolchain.cargo;
+      pre-commit.tools.rustfmt = cfg.toolchain.rustfmt;
+      pre-commit.tools.clippy = cfg.toolchain.clippy;
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
       env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
       env.CFLAGS = [ "-iframework ${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
     })
-    (lib.mkIf (cfg.toolchain != null) {
-      languages.rust.package = lib.mkForce (cfg.toolchain.withComponents cfg.components);
-      languages.rust.rust-src = lib.mkForce "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library";
-
-      pre-commit.tools.cargo = lib.mkForce cfg.toolchain.cargo;
-      pre-commit.tools.clippy = lib.mkForce cfg.toolchain.clippy;
-      pre-commit.tools.rustfmt = lib.mkForce cfg.toolchain.rustfmt;
-    })
-    (lib.mkIf (cfg.version != null) (
+    (lib.mkIf (cfg.channel != null) (
       let
-        fenix = inputs.fenix or (throw "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}");
-        rustPackages = fenix.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "languages.rust.version is set to ${cfg.version}, but should be one of: stable, beta or latest.");
+        error = "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}";
+        rust-overlay = inputs.rust-overlay or (throw error);
+        rustPackages = rust-overlay.packages.${pkgs.stdenv.system} or (throw error);
       in
       {
-        languages.rust.toolchain = rustPackages;
+        languages.rust.toolchain =
+          if cfg.channel == "stable"
+          then rustPackages.rust
+          else rustPackages."rust-${cfg.channel}";
       }
     ))
   ];
