@@ -56,14 +56,15 @@ in
           lib.genAttrs documented-components mkComponentOption
         );
       });
-      defaultText = lib.literalExpression "fenix.packages.stable";
+      default = { };
+      defaultText = lib.literalExpression "nixpkgs";
       description = "The location of every component to use.";
     };
   };
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      packages = (lib.getAttrs cfg.components cfg.toolchain)
+      packages = (lib.attrVals cfg.components cfg.toolchain)
         ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
       # enable compiler tooling by default to expose things like cc
