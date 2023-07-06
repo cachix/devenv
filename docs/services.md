@@ -36,3 +36,5 @@ Starting processes ...
 {%
   include-markdown "services-all.md"
 %}
+
+You can find all supported options for services [here](https://devenv.sh/reference/options/#servicesadminerenable).
