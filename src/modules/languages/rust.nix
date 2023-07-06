@@ -50,7 +50,7 @@ in
       });
       default = { };
       defaultText = lib.literalExpression "nixpkgs";
-      description = "The location of every component to use.";
+      description = "Rust component packages. May optionally define additional components, for example `miri`.";
     };
   };
 
