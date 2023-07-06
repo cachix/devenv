@@ -10,6 +10,8 @@ let
           nixpkgs:
             follows: nixpkgs
   '';
+
+  error = dbg: "To use languages.rust.${dbg}, you need to add the following to your devenv.yaml:\n\n${setup}";
 in
 {
   options.languages.rust = {
@@ -56,7 +58,7 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
-      packages = (lib.attrVals cfg.components cfg.toolchain)
+      packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
         ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
       # enable compiler tooling by default to expose things like cc
@@ -80,9 +82,9 @@ in
     })
     (lib.mkIf (cfg.channel != null) (
       let
-        error = "To use languages.rust.channel, you need to add the following to your devenv.yaml:\n\n${setup}";
-        fenix = inputs.fenix or (throw error);
-        rustPackages = fenix.packages.${pkgs.stdenv.system} or (throw error);
+        err = error "channel";
+        fenix = inputs.fenix or (throw err);
+        rustPackages = fenix.packages.${pkgs.stdenv.system} or (throw err);
       in
       {
         languages.rust.toolchain =
