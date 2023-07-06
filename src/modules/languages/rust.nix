@@ -80,7 +80,7 @@ in
       env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
       env.CFLAGS = [ "-iframework ${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
     })
-    (lib.mkIf (cfg.channel != null) (
+    (lib.mkIf (cfg.channel != "nixpkgs") (
       let
         err = error "channel";
         fenix = inputs.fenix or (throw err);
