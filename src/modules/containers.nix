@@ -44,7 +44,10 @@ let
         paths = [
           pkgs.coreutils-full
           pkgs.bash
-        ] ++ lib.optionals (cfg.copyToRoot != null) [ cfg.copyToRoot ];
+        ] ++ lib.optionals (cfg.copyToRoot != null)
+          (if builtins.typeOf cfg.copyToRoot == "list"
+          then cfg.copyToRoot
+          else [ cfg.copyToRoot ]);
         pathsToLink = "/";
       })
     ];
@@ -97,7 +100,7 @@ let
       };
 
       copyToRoot = lib.mkOption {
-        type = types.nullOr types.path;
+        type = types.nullOr (types.either types.path (types.listOf types.path));
         description = "Add a path to the container. Defaults to the whole git repo.";
         default = self;
         defaultText = "self";
