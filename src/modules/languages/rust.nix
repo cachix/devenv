@@ -36,14 +36,7 @@ in
       type = lib.types.submodule ({
         freeformType = lib.types.attrsOf lib.types.package;
 
-        options = {
-          rust-src = lib.mkOption {
-            type = lib.types.path;
-            default = pkgs.rustPlatform.rustLibSrc;
-            defaultText = lib.literalExpression "pkgs.rustPlatform.rustLibSrc";
-            description = "rust-src package";
-          };
-        } // (
+        options =
           let
             documented-components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
             mkComponentOption = component: lib.mkOption {
@@ -53,8 +46,7 @@ in
               description = "${component} package";
             };
           in
-          lib.genAttrs documented-components mkComponentOption
-        );
+          lib.genAttrs documented-components mkComponentOption;
       });
       default = { };
       defaultText = lib.literalExpression "nixpkgs";
@@ -72,7 +64,10 @@ in
 
       # RUST_SRC_PATH is necessary when rust-src is not at the same location as
       # as rustc. This is the case with the rust toolchain from nixpkgs.
-      env.RUST_SRC_PATH = cfg.toolchain.rust-src;
+      env.RUST_SRC_PATH =
+        if cfg.toolchain.rust-src != null
+        then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
+        else pkgs.rustPlatform.rustLibSrc;
 
       pre-commit.tools.cargo = cfg.toolchain.cargo;
       pre-commit.tools.rustfmt = cfg.toolchain.rustfmt;
