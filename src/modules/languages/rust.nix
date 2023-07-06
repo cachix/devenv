@@ -88,9 +88,13 @@ in
       in
       {
         languages.rust.toolchain =
-          if cfg.channel == "nightly"
-          then rustPackages.latest
-          else rustPackages.${cfg.channel};
+          let
+            toolchain =
+              if cfg.channel == "nightly"
+              then rustPackages.latest
+              else rustPackages.${cfg.channel};
+          in
+          (builtins.mapAttrs (_: pkgs.lib.mkDefault) toolchain);
       }
     ))
   ];
