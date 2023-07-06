@@ -4,8 +4,8 @@ let
   cfg = config.languages.rust;
   setup = ''
     inputs:
-      rust-overlay:
-        url: github:oxalica/rust-overlay
+      fenix:
+        url: github:nix-community/fenix
         inputs:
           nixpkgs:
             follows: nixpkgs
@@ -65,7 +65,7 @@ in
       # RUST_SRC_PATH is necessary when rust-src is not at the same location as
       # as rustc. This is the case with the rust toolchain from nixpkgs.
       env.RUST_SRC_PATH =
-        if cfg.toolchain.rust-src != null
+        if cfg.toolchain ? rust-src
         then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
         else pkgs.rustPlatform.rustLibSrc;
 
@@ -81,14 +81,14 @@ in
     (lib.mkIf (cfg.channel != null) (
       let
         error = "To use languages.rust.version, you need to add the following to your devenv.yaml:\n\n${setup}";
-        rust-overlay = inputs.rust-overlay or (throw error);
-        rustPackages = rust-overlay.packages.${pkgs.stdenv.system} or (throw error);
+        fenix = inputs.fenix or (throw error);
+        rustPackages = fenix.packages.${pkgs.stdenv.system} or (throw error);
       in
       {
         languages.rust.toolchain =
-          if cfg.channel == "stable"
-          then rustPackages.rust
-          else rustPackages."rust-${cfg.channel}";
+          if cfg.channel == "nightly"
+          then rustPackages.latest
+          else rustPackages.${cfg.channel};
       }
     ))
   ];
