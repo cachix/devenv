@@ -252,8 +252,11 @@ in
     packages = [ postgresPkg startScript ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
-    env.PGHOST = config.env.PGDATA;
     env.PGPORT = cfg.port;
+
+    enterShell = ''
+      export PGHOST="$(${pkgs.coreutils}/bin/realpath "$PGDATA")"
+    '';
 
     services.postgres.settings = {
       listen_addresses = cfg.listen_addresses;
