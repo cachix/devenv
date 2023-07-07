@@ -16,6 +16,12 @@ Examples of what `devenv container` can do:
 - `devenv container <name> --registry docker://ghcr.io/ --copy`: [Copy the container](#copying-container-to-a-registry) `<name>` into the **GitHub package registry**.
 - `devenv container <name> --docker-run`: Run the container `<name>` using **Docker**.
 
+!!! note
+
+    To be able to generate containers on macOS, you will need to use a remote Linux builder.
+
+    The easiest way is to [set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
+
 ## Entering the development environment
 
 Given a simple environment, using Python:
