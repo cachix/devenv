@@ -31,3 +31,5 @@ Python 3.11.3
 {%
   include-markdown "languages-all.md"
 %}
+
+You can find all supported options for languages [here](https://devenv.sh/reference/options/#languagesansibleenable).
