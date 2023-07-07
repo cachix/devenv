@@ -46,6 +46,7 @@ in
             # TODO: figure out how to get relative path without impure mode
             options.DEVENV_ROOT = lib.mkOption {
               type = types.str;
+              example = lib.literalExpression ".";
               default =
                 let
                   pwd = builtins.getEnv "PWD";
