@@ -1,9 +1,10 @@
 !!! info "New in version 0.6."
 
-!!! warning 
+!!! note
 
-    Creating containers is [only possible on Linux](https://github.com/cachix/devenv/issues/430) at the moment.
+    To be able to generate containers on macOS, you will need to use a remote Linux builder.
 
+    The easiest way is to [set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
 
 Use `devenv container <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
 
@@ -15,12 +16,6 @@ Examples of what `devenv container` can do:
 - `devenv container processes`: Generate a container and [start processes](#running-processes), equivalent of using `devenv up`.
 - `devenv container <name> --registry docker://ghcr.io/ --copy`: [Copy the container](#copying-container-to-a-registry) `<name>` into the **GitHub package registry**.
 - `devenv container <name> --docker-run`: Run the container `<name>` using **Docker**.
-
-!!! note
-
-    To be able to generate containers on macOS, you will need to use a remote Linux builder.
-
-    The easiest way is to [set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
 
 ## Entering the development environment
 
