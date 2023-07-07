@@ -15,4 +15,6 @@
     clippy.enable = true;
     rustfmt.enable = true;
   };
+
+  env.RUSTFLAGS = "--jobs 1";
 }
