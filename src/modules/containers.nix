@@ -21,8 +21,6 @@ let
   nix2container = nix2containerInput.packages.${pkgs.stdenv.system};
   mk-shell-bin = inputs.mk-shell-bin or (throw "To build the container, you need to add the following to your devenv.yaml:\n\n${setup}");
   shell = mk-shell-bin.lib.mkShellBin { drv = config.shell; nixpkgs = pkgs; };
-  # set devenv root to be at /
-  containerEnv = config.env // { DEVENV_ROOT = ""; };
   mkEntrypoint = cfg: pkgs.writeScript "entrypoint" ''
     #!${pkgs.bash}/bin/bash
 
@@ -52,7 +50,7 @@ let
       })
     ];
     config = {
-      Env = lib.mapAttrsToList (name: value: "${name}=${lib.escapeShellArg (toString value)}") containerEnv;
+      Env = lib.mapAttrsToList (name: value: "${name}=${lib.escapeShellArg (toString value)}") config.env;
       Cmd = [ cfg.startupCommand ];
       Entrypoint = cfg.entrypoint;
     };
@@ -198,6 +196,9 @@ in
     }
     (if envContainerName == "" then { } else {
       containers.${envContainerName}.isBuilding = true;
+    })
+    (lib.mkIf config.container.isBuilding {
+      devenv.root = lib.mkForce "/";
     })
   ];
 }
