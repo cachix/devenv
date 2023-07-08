@@ -54,12 +54,7 @@ in
         tui = lib.mkDefault true;
         environment = lib.mapAttrsToList
           (name: value: "${name}=${toString value}")
-          (if config.devenv.flakesIntegration then
-          # avoid infinite recursion in the scenario the `config` parameter is
-          # used in a `processes` declaration inside a devenv module.
-            builtins.removeAttrs config.env [ "DEVENV_PROFILE" ]
-          else
-            config.env);
+          config.env;
         processes = lib.mapAttrs
           (name: value: { command = value.exec; } // value.process-compose)
           config.processes;
