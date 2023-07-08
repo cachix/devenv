@@ -16,5 +16,5 @@
     rustfmt.enable = true;
   };
 
-  env.RUSTFLAGS = "--jobs 1";
+  env.RUSTFLAGS = "--verbose";
 }
