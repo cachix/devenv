@@ -8,7 +8,7 @@
   languages.rust = {
     enable = true;
     # https://devenv.sh/reference/options/#languagesrustchannel
-    version = "nightly";
+    channel = "nightly";
   };
 
   pre-commit.hooks = {
