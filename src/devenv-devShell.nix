@@ -18,7 +18,7 @@ pkgs.writeScriptBin "devenv" ''
 
   case $command in
     up)
-      procfilescript=${config.procfileScript}
+      procfilescript=$(nix build '.#devShells.${pkgs.stdenv.system}.default.config.procfileScript' --impure)
       if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"
         exit 1
