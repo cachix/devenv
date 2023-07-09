@@ -5,6 +5,10 @@ If you have a `.env`, you'll see instructions how to enable integration:
 ```nix title="devenv.nix"
 {
   dotenv.enable = true;
+
+  # Optionally, you can choose which filename to load.
+  # 
+  # dotenv.filename = ".env.production";
 }
 ```
 
