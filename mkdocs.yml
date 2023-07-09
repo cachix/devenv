@@ -49,10 +49,10 @@ nav:
       - Using With Flakes: guides/using-with-flakes.md
       - Using With flake.parts: guides/using-with-flake-parts.md
     - Integrations:
+      - .env: integrations/dotenv.md
       - GitHub Actions: integrations/github-actions.md
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
       - Difftastic: integrations/difftastic.md
-
     - Examples: examples.md
     - Roadmap: roadmap.md
     - Reference:
