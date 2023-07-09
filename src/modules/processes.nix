@@ -37,12 +37,7 @@ let
   envList =
     lib.mapAttrsToList
       (name: value: "${name}=${builtins.toJSON value}")
-      (if config.devenv.flakesIntegration then
-      # avoid infinite recursion in the scenario the `config` parameter is
-      # used in a `processes` declaration inside a devenv module.
-        builtins.removeAttrs config.env [ "DEVENV_PROFILE" ]
-      else
-        config.env);
+      config.env;
 in
 {
   options = {
@@ -109,8 +104,8 @@ in
     };
 
     procfileEnv = lib.mkOption {
-      type = types.package;
       internal = true;
+      type = types.package;
     };
 
     procfileScript = lib.mkOption {
@@ -125,7 +120,7 @@ in
 
     procfile =
       pkgs.writeText "procfile" (lib.concatStringsSep "\n"
-        (lib.mapAttrsToList (name: process: "${name}: ${process.exec}")
+        (lib.mapAttrsToList (name: process: "${name}: ${pkgs.writeShellScript name process.exec}")
           config.processes));
 
     procfileEnv =

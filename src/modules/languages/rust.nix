@@ -61,9 +61,9 @@ in
       pre-commit.tools.clippy = lib.mkForce cfg.packages.clippy;
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
-      env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
-      env.RUSTDOCFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
-      env.CFLAGS = [ "-iframework ${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
+      env.RUSTFLAGS = [ "-L framework=${config.devenv.profile}/Library/Frameworks" ];
+      env.RUSTDOCFLAGS = [ "-L framework=${config.devenv.profile}/Library/Frameworks" ];
+      env.CFLAGS = [ "-iframework ${config.devenv.profile}/Library/Frameworks" ];
     })
     (lib.mkIf (cfg.version != null) (
       let
