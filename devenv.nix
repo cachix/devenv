@@ -122,6 +122,18 @@
     }
     EOF
   '';
+  scripts."devenv-generate-docs".exec = ''
+    cat > docs/services-all.md <<EOF
+      \`\`\`nix
+      ${lib.concatStringsSep "\n  " (map (lang: "services.${lang}.enable = true;") (builtins.attrNames config.services))}
+      \`\`\`
+    EOF
+    cat > docs/languages-all.md <<EOF
+      \`\`\`nix
+      ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
+      \`\`\`   
+    EOF
+  '';
 
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;

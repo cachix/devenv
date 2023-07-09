@@ -1,9 +1,10 @@
 !!! info "New in version 0.6."
 
-!!! warning 
+!!! note
 
-    Creating containers is [only possible on Linux](https://github.com/cachix/devenv/issues/430) at the moment.
+    To be able to generate containers on macOS, you will need to use a remote Linux builder.
 
+    The easiest way is to [set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
 
 Use `devenv container <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
 
