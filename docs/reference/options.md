@@ -476,6 +476,70 @@ boolean
 
 
 
+## dotenv.enable
+
+Whether to enable .env integration, doesn't support comments or multiline values..
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix)
+
+
+
+## dotenv.disableHint
+
+Disable the hint that are printed when the dotenv module is not enabled, but .env is present.
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix)
+
+
+
+## dotenv.filename
+
+The name of the dotenv file to load.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` ".env" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/dotenv.nix)
+
+
+
 ## enterShell
 
 Bash code to execute when entering the shell.
@@ -2203,8 +2267,6 @@ package
 
 Whether to enable tools for Python development.
 
-
-
 *Type:*
 boolean
 
@@ -2245,6 +2307,8 @@ package
 ## languages.python.poetry.enable
 
 Whether to enable poetry.
+
+
 
 *Type:*
 boolean
