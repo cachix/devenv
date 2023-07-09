@@ -50,10 +50,12 @@ in
     })
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell = lib.optionalString dotenvFound ''
-        echo "💡 ${cfg.filename} file found, but dotenv integration is not enabled."
+        echo "💡 A ${cfg.filename} file found, but dotenv integration is currently not enabled."
         echo 
         echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
         echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
+        echo
+        echo "See https://devenv.sh/integrations/dotenv/ for more information.";
       '';
     })
   ];
