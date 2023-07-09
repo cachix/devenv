@@ -54,6 +54,8 @@ nav:
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
       - Difftastic: integrations/difftastic.md
     - Examples: examples.md
+    - Editor Support:
+      - VSCode: editor-support/vscode.md
     - Roadmap: roadmap.md
     - Reference:
       - devenv.yaml: reference/yaml-options.md
