@@ -14,6 +14,11 @@ let
   error = dbg: "To use languages.rust.${dbg}, you need to add the following to your devenv.yaml:\n\n${setup}";
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "languages" "rust" "version" ] [ "languages" "rust" "channel" ])
+    (lib.mkRenamedOptionModule [ "languages" "rust" "packages" ] [ "languages" "rust" "toolchain" ])
+  ];
+
   options.languages.rust = {
     enable = lib.mkEnableOption "tools for Rust development";
 
