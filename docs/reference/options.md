@@ -2885,33 +2885,73 @@ boolean
 
 
 
-## languages.rust.packages
+## languages.rust.channel
 
-Attribute set of packages including rustc and Cargo.
+The rustup toolchain to install.
 
 
 
 *Type:*
-submodule
+one of “nixpkgs”, “stable”, “beta”, “nightly”
 
 
 
 *Default:*
-` pkgs `
+` "nixpkgs" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
-## languages.rust.packages.cargo
+## languages.rust.components
+
+List of [Rustup components](https://rust-lang.github.io/rustup/concepts/components.html)
+to install. Defaults to those available in `nixpkgs`.
+
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.toolchain
+
+Rust component packages. May optionally define additional components, for example `miri`.
+
+
+
+*Type:*
+attribute set of package
+
+
+
+*Default:*
+` nixpkgs `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.toolchain.cargo
 
 cargo package
 
 
 
 *Type:*
-package
+null or package
 
 
 
@@ -2923,14 +2963,14 @@ package
 
 
 
-## languages.rust.packages.clippy
+## languages.rust.toolchain.clippy
 
 clippy package
 
 
 
 *Type:*
-package
+null or package
 
 
 
@@ -2942,14 +2982,14 @@ package
 
 
 
-## languages.rust.packages.rust-analyzer
+## languages.rust.toolchain.rust-analyzer
 
 rust-analyzer package
 
 
 
 *Type:*
-package
+null or package
 
 
 
@@ -2961,33 +3001,14 @@ package
 
 
 
-## languages.rust.packages.rust-src
-
-rust-src package
-
-
-
-*Type:*
-package or string
-
-
-
-*Default:*
-` pkgs.rustPlatform.rustLibSrc `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
-
-
-
-## languages.rust.packages.rustc
+## languages.rust.toolchain.rustc
 
 rustc package
 
 
 
 *Type:*
-package
+null or package
 
 
 
@@ -2999,38 +3020,19 @@ package
 
 
 
-## languages.rust.packages.rustfmt
+## languages.rust.toolchain.rustfmt
 
 rustfmt package
 
 
 
 *Type:*
-package
+null or package
 
 
 
 *Default:*
 ` pkgs.rustfmt `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
-
-
-
-## languages.rust.version
-
-Set to stable, beta, or latest.
-
-
-
-*Type:*
-null or string
-
-
-
-*Default:*
-` null `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
