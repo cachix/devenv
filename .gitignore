@@ -9,3 +9,4 @@ result
 pyvenv.cfg
 /.direnv
 /.venv
+examples/rust/app/target
