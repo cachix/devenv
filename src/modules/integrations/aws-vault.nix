@@ -17,7 +17,7 @@ in
     profile = lib.mkOption {
       type = lib.types.str;
       description = lib.mdDoc ''
-        The profile name to be passed to `aws-vault exec`.
+        The profile name passed to `aws-vault exec`.
       '';
     };
 
