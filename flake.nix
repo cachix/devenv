@@ -22,14 +22,16 @@
     url = "github:domenkozar/nix/relaxed-flakes";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.poetry2nix = {
+    url = "github:nix-community/poetry2nix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }@inputs:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
-      mkPackage = pkgs: import ./src/devenv.nix {
-        inherit pkgs nix;
-      };
+      mkPackage = pkgs: import ./package.nix { inherit pkgs inputs; };
       mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions = pkgs:
         let
