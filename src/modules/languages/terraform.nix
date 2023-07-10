@@ -13,54 +13,11 @@ in
       defaultText = lib.literalExpression "pkgs.terraform";
       description = "The Terraform package to use.";
     };
-
-    awsProfile = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = lib.mdDoc ''
-        Defines `AWS_PROFILE` environment variable if `awsVaultWrapper` is
-        disabled, otherwise, it becomes the name of the profile passed to
-        `aws-vault exec`.
-      '';
-    };
-
-    awsVaultWrapper = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = lib.mdDoc ''
-        Create a script that replaces the original Terraform binary with the
-        following wrapper if enabled:
-
-        ```sh
-        aws-vault exec <profile> -- terraform "$@"
-        ```
-
-        Where `<profile>` is the value coming from `awsProfile`.
-      '';
-    };
-
-    awsVaultArgs = lib.mkOption {
-      type = lib.types.str;
-      default = "";
-      description = lib.mdDoc ''
-        Extra arguments passed to `aws-vault exec` when `awsVaultWrapper` is
-        enabled.
-      '';
-    };
   };
 
   config = lib.mkIf cfg.enable {
-    env = lib.mkIf (cfg.awsProfile != null && !cfg.awsVaultWrapper) {
-      AWS_PROFILE = cfg.awsProfile;
-    };
-
     packages = with pkgs; [
-      (if cfg.awsVaultWrapper then
-        writeScriptBin "terraform" ''
-          ${aws-vault}/bin/aws-vault exec ${cfg.awsVaultArgs} ${cfg.awsProfile} -- \
-            ${cfg.package}/bin/terraform "$@"
-        ''
-      else cfg.package)
+      cfg.package
       terraform-ls
       tfsec
     ];
