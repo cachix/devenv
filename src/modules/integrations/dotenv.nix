@@ -44,13 +44,33 @@ in
   };
 
   config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
+    (lib.mkIf (cfg.enable && builtins.pathExists dotenvPath) {
       env = lib.mapAttrs (name: value: lib.mkDefault value) config.dotenv.resolved;
       dotenv.resolved = parseEnvFile (builtins.readFile dotenvPath);
     })
+    (lib.mkIf (cfg.enable && !builtins.pathExists dotenvPath) (
+      let
+        exampleExists = builtins.pathExists (dotenvPath + ".example");
+      in
+      {
+        enterShell = ''
+          echo "💡 A ${cfg.filename} file was not found, while dotenv integration is enabled."
+          echo 
+          ${lib.optionalString exampleExists ''
+            echo "   To create .env, you can copy the example file:"
+            echo
+            echo "   $ cp ${dotenvPath}.example ${dotenvPath}";
+            echo
+          ''}
+          echo "   To disable it, add \`dotenv.enable = false;\` to your devenv.nix file.";
+          echo
+          echo "See https://devenv.sh/integrations/dotenv/ for more information.";
+        '';
+      }
+    ))
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell = lib.optionalString dotenvFound ''
-        echo "💡 A ${cfg.filename} file found, but dotenv integration is currently not enabled."
+        echo "💡 A ${cfg.filename} file found, while dotenv integration is currently not enabled."
         echo 
         echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
         echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
