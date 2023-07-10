@@ -1,8 +1,11 @@
 { inputs, pkgs, lib, config, ... }:
 
 {
+  env = {
+    DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
+  };
+
   packages = [
-    (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
     pkgs.cairo
     pkgs.xorg.libxcb
     pkgs.yaml2json
@@ -10,8 +13,9 @@
 
   languages.nix.enable = true;
   languages.python.enable = true;
-  languages.python.venv.enable = true;
   languages.python.poetry.enable = true;
+  languages.python.poetry.install.installRootPackage = true;
+  languages.python.poetry.install.groups = [ "docs" ];
 
   devcontainer.enable = true;
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
@@ -20,7 +24,6 @@
   dotenv.enable = true;
 
   processes.docs.exec = "mkdocs serve";
-  processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   scripts.devenv-bump-version.exec = ''
     # TODO: ask for the new version
@@ -50,7 +53,7 @@
       nix flake init --template ''${DEVENV_ROOT}#simple
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
+      nix develop --accept-flake-config --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
 
@@ -70,15 +73,13 @@
       nix flake init --template ''${DEVENV_ROOT}#flake-parts
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
+      nix develop --accept-flake-config --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
       # Test that a container can be built
-      nix build --impure .#container-processes
+      nix build --impure --accept-flake-config .#container-processes
     popd
     rm -rf "$tmp"
-
-    # TODO: test DIRENV_ACTIVE
   '';
   scripts.devenv-test-all-examples.exec = ''
     for dir in $(ls examples); do
