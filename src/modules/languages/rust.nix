@@ -71,9 +71,9 @@ in
         then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
         else pkgs.rustPlatform.rustLibSrc;
 
-      pre-commit.tools.cargo = cfg.toolchain.cargo or null;
-      pre-commit.tools.rustfmt = cfg.toolchain.rustfmt or null;
-      pre-commit.tools.clippy = cfg.toolchain.clippy or null;
+      pre-commit.tools.cargo = lib.mkDefault cfg.toolchain.cargo or null;
+      pre-commit.tools.rustfmt = lib.mkDefault cfg.toolchain.rustfmt or null;
+      pre-commit.tools.clippy = lib.mkDefault cfg.toolchain.clippy or null;
     })
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.env.DEVENV_PROFILE}/Library/Frameworks" ];
