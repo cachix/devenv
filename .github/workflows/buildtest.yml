@@ -80,6 +80,7 @@ jobs:
     - run: devenv shell devenv-test-example ${{ matrix.example }}
   direnv:
     name: direnv (${{ join(matrix.os) }})
+    needs: build
     strategy:
       fail-fast: false
       matrix:
@@ -104,7 +105,7 @@ jobs:
           }
         ' ./examples/simple/devenv.yaml.orig > ./examples/simple/devenv.yaml
         nix profile remove '.*'
-        nix profile install . 'nixpkgs#direnv'
+        nix profile install . 'nixpkgs#direnv' nix profile install --accept-flake-config
         mkdir -p ~/.config/direnv/
         cat > ~/.config/direnv/direnv.toml << 'EOF'
         [global]
@@ -114,6 +115,7 @@ jobs:
         direnv exec ./examples/simple true
   fish-zsh:
     name: zsh/fish (${{ join(matrix.os) }})
+    needs: build
     strategy:
       fail-fast: false
       matrix:
