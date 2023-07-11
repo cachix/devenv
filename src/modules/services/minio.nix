@@ -3,6 +3,8 @@
 let
   cfg = config.services.minio;
   types = lib.types;
+  json = pkgs.formats.json { };
+
   startScript = pkgs.writeShellScript "start-minio" ''
     if [[ ! -d "$MINIO_DATA_DIR" ]]; then
       mkdir -p "$MINIO_DATA_DIR"
@@ -17,6 +19,14 @@ let
     done
 
     exec ${cfg.package}/bin/minio server --json --address ${cfg.listenAddress} --console-address ${cfg.consoleAddress} "--config-dir=$MINIO_CONFIG_DIR" "$MINIO_DATA_DIR"
+  '';
+
+  clientWrapper = pkgs.writeShellScriptBin "mc" ''
+    mkdir -p "$MINIO_CLIENT_CONFIG_DIR"
+    install -m 0644 \
+      '${json.generate "mc-config.json" cfg.clientConfig}' \
+      "$MINIO_CLIENT_CONFIG_DIR/config.json"
+    exec ${cfg.clientPackage}/bin/mc --config-dir "$MINIO_CLIENT_CONFIG_DIR" "$@"
   '';
 in
 {
@@ -84,6 +94,23 @@ in
         List of buckets to ensure exist on startup.
       '';
     };
+
+    clientPackage = lib.mkOption {
+      default = pkgs.minio-client;
+      defaultText = lib.literalExpression "pkgs.minio-client";
+      type = types.package;
+      description = "MinIO client package to use.";
+    };
+
+    clientConfig = lib.mkOption {
+      type = types.nullOr json.type;
+      description = ''
+        Contents of the mc `config.json`, as a nix attribute set.
+
+        By default, `local` is configured to connect to the devenv minio service.
+        Use `lib.mkForce null` to use your regular mc configuration from `$HOME/.mc` instead.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -95,5 +122,21 @@ in
     env.MINIO_BROWSER = "${if cfg.browser then "on" else "off"}";
     env.MINIO_ROOT_USER = "${cfg.accessKey}";
     env.MINIO_ROOT_PASSWORD = "${cfg.secretKey}";
+    env.MINIO_CLIENT_CONFIG_DIR = config.env.DEVENV_STATE + "/minio/mc";
+
+    packages = [
+      (if cfg.clientConfig == null then cfg.clientPackage else clientWrapper)
+    ];
+
+    services.minio.clientConfig = lib.mkBefore {
+      version = "10";
+      aliases.local = {
+        url = "http://${if lib.hasPrefix ":" cfg.listenAddress then "localhost:${cfg.listenAddress}" else cfg.listenAddress}";
+        inherit (cfg) accessKey secretKey;
+        api = "S3v4";
+        path = "auto";
+      };
+    };
+
   };
 }
