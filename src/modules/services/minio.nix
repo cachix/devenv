@@ -5,14 +5,36 @@ let
   types = lib.types;
   json = pkgs.formats.json { };
 
+  serverCommand = lib.escapeShellArgs [
+    "${cfg.package}/bin/minio"
+    "server"
+    "--json"
+    "--address"
+    cfg.listenAddress
+    "--console-address"
+    cfg.consoleAddress
+    "--config-dir=${config.env.MINIO_CONFIG_DIR}"
+    config.env.MINIO_DATA_DIR
+  ];
+
   startScript = ''
     mkdir -p "$MINIO_DATA_DIR" "$MINIO_CONFIG_DIR"
     for bucket in ${lib.escapeShellArgs cfg.buckets}; do
       mkdir -p "$MINIO_DATA_DIR/$bucket"
     done
+  '' + (if cfg.afterStart != "" then ''
+    ${serverCommand} &
 
-    exec ${cfg.package}/bin/minio server --json --address ${cfg.listenAddress} --console-address ${cfg.consoleAddress} "--config-dir=$MINIO_CONFIG_DIR" "$MINIO_DATA_DIR"
-  '';
+    while ! mc admin info local >& /dev/null; do
+      sleep 1
+    done
+
+    ${cfg.afterStart}
+
+    wait
+  '' else ''
+    exec ${serverCommand}
+  '');
 
   clientWrapper = pkgs.writeShellScriptBin "mc" ''
     mkdir -p "$MINIO_CLIENT_CONFIG_DIR"
@@ -104,9 +126,26 @@ in
         Use `lib.mkForce null` to use your regular mc configuration from `$HOME/.mc` instead.
       '';
     };
+
+    afterStart = lib.mkOption {
+      type = types.lines;
+      description = "Bash code to execute after minio is running.";
+      default = "";
+      example = ''
+        mc anonymous set download local/mybucket
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
+
+    assertions = [
+      {
+        assertion = cfg.afterStart != "" -> lib.hasAttrByPath [ "aliases" "local" ] cfg.clientConfig;
+        message = "minio 'afterStart' script requires a 'local' alias in client config";
+      }
+    ];
+
     processes.minio.exec = "${startScript}";
 
     env.MINIO_DATA_DIR = config.env.DEVENV_STATE + "/minio/data";
