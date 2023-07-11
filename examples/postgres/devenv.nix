@@ -1,11 +1,14 @@
 { ... }:
 
 {
-  services.postgres.enable = true;
+  services.postgres = {
+    enable = true;
+    extensions = extensions: [ extensions.postgis ];
 
-  # Enable the optional PostGIS extension.
-  services.postgres.extensions = extensions: [ extensions.postgis ];
-  services.postgres.initialScript = ''
-    CREATE EXTENSION IF NOT EXISTS postgis;
-  '';
+    initialDatabases = [{ name = "mydb"; }];
+
+    initialScript = ''
+      CREATE EXTENSION IF NOT EXISTS postgis;
+    '';
+  };
 }
