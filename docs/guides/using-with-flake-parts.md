@@ -79,6 +79,65 @@ use flake . --impure
 
 In a standard Nix flake project, the `--impure` flag is not needed. However, using `devenv` in your flake _requires_ the `--impure` flag.
 
+## Import a devenv module
+
+You can import a devenv configuration or module, such as `devenv-foo.nix` into an individual shell as follows.
+
+Add `imports` to your `devenv.shells.<name>` definition:
+
+```nix
+# perSystem = { ... }: {
+
+devenv.shells.default = {
+  imports = [ ./devenv-foo.nix ];
+
+  enterShell = ''
+    hello
+  '';
+};
+```
+
+You can use definitions from your flake in your devenv configuration.
+In this case it's recommended to use a different file name than `devenv.nix`, because it may not be standalone capable.
+
+For example, if `devenv-foo.nix` declares a devenv [service](../services.md), and you've packaged it locally into [`perSystem.packages`](https://flake.parts/options/flake-parts.html#opt-perSystem.packages), you can provide the package as follows:
+
+```nix
+# perSystem = { config, ... }: {
+
+devenv.shells.default = {
+  imports = [ ./devenv-foo.nix ];
+
+  services.foo.package = config.packages.foo;
+
+  enterShell = ''
+    hello
+  '';
+};
+```
+
+Your devenv module doesn't have to provide a default:
+
+```nix
+{ config, lib, ... }:
+let cfg = config.services.foo;
+in {
+  options = {
+    services.foo = {
+      package = lib.mkOption {
+        type = lib.types.package;
+        defaultText = lib.literalMD "defined internally";
+        description = "The foo package to use.";
+      };
+      # ...
+    };
+  };
+  config = lib.mkIf cfg.enable {
+    processes.foo.exec = "${cfg.package}/bin/foo";
+  };
+}
+```
+
 ## Multiple shells
 
 Depending on the structure of your project, you may want to define multiple development shells using flakes. We'll take a look at two use cases for multiple shells here: A single project with multiple shells and a project with an external flake.
