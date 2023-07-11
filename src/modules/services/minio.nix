@@ -5,7 +5,7 @@ let
   types = lib.types;
   json = pkgs.formats.json { };
 
-  startScript = pkgs.writeShellScript "start-minio" ''
+  startScript = ''
     if [[ ! -d "$MINIO_DATA_DIR" ]]; then
       mkdir -p "$MINIO_DATA_DIR"
     fi
