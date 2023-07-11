@@ -21,6 +21,14 @@ in
       '';
     };
 
+    awscli2WrapperEnable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Wraps awscli2 binary as `aws-vault exec <profile> -- aws <args>`.
+      '';
+    };
+
     terraformWrapperEnable = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -30,9 +38,18 @@ in
     };
   };
 
-  config = lib.mkIf (cfg.enable && cfg.terraformWrapperEnable) {
-    languages.terraform.package = pkgs.writeScriptBin "terraform" ''
-      ${cfg.package}/bin/aws-vault exec ${cfg.profile} -- ${pkgs.terraform}/bin/terraform "$@"
-    '';
-  };
+  config = lib.mkMerge [
+    (lib.mkIf (cfg.enable && cfg.awscli2WrapperEnable) {
+      packages = [
+        (pkgs.writeScriptBin "aws" ''
+          ${cfg.package}/bin/aws-vault exec ${cfg.profile} -- ${pkgs.awscli2}/bin/aws "$@"
+        '')
+      ];
+    })
+    (lib.mkIf (cfg.enable && cfg.terraformWrapperEnable) {
+      languages.terraform.package = pkgs.writeScriptBin "terraform" ''
+        ${cfg.package}/bin/aws-vault exec ${cfg.profile} -- ${pkgs.terraform}/bin/terraform "$@"
+      '';
+    })
+  ];
 }
