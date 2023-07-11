@@ -261,6 +261,7 @@ in
     services.postgres.settings = {
       listen_addresses = cfg.listen_addresses;
       port = cfg.port;
+      # relative to PGDATA
       unix_socket_directories = lib.mkDefault ".";
     };
 

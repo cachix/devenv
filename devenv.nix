@@ -16,6 +16,8 @@
   devcontainer.settings.customizations.vscode.extensions = [ "bbenoist.Nix" ];
   difftastic.enable = true;
 
+  dotenv.enable = true;
+
   # bin/mkdocs serve --config-file mkdocs.insiders.yml
   processes.docs.exec = "mkdocs serve";
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
@@ -84,8 +86,12 @@
     done
   '';
   scripts.devenv-test-example.exec = ''
+    # execute all trap_ function on exit
+    trap 'eval $(declare -F | grep -o "trap_[^ ]*" | tr "\n" ";")' EXIT
+
     set -e
-    pushd examples/$1
+    example="$PWD/examples/$1"
+    pushd $example
     mv devenv.yaml devenv.yaml.orig
     awk '
       { print }
@@ -94,10 +100,17 @@
         print "    url: path:../../src/modules";
       }
     ' devenv.yaml.orig > devenv.yaml
-    trap "mv $PWD/devenv.yaml.orig $PWD/devenv.yaml" EXIT
+    trap_restore_yaml() { 
+      mv "$example/devenv.yaml.orig" "$example/devenv.yaml"
+    }
     devenv ci
-    if [ -f .test.sh ]
-    then
+    if [ -f .test.sh ]; then
+      trap_restore_local() { 
+        rm "$example/devenv.local.nix" 
+        rm -rf "$example/.devenv"
+      }
+      # coreutils-full provides timeout on darwin
+      echo "{ pkgs, ... }: { packages = [ pkgs.coreutils-full ]; }" > devenv.local.nix
       devenv shell ./.test.sh
     else
       devenv shell ls

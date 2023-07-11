@@ -38,7 +38,13 @@ in
 {
   options = {
     env = lib.mkOption {
-      type = types.lazyAttrsOf types.anything;
+      type = types.submoduleWith {
+        modules = [
+          (env: {
+            config._module.freeformType = types.lazyAttrsOf types.anything;
+          })
+        ];
+      };
       description = "Environment variables to be exposed inside the developer environment.";
       default = { };
     };
@@ -99,6 +105,29 @@ in
         display a warning message when a renamed option is used.
       '';
     };
+
+    devenv = {
+      root = lib.mkOption {
+        type = types.str;
+        internal = true;
+      };
+
+      dotfile = lib.mkOption {
+        type = types.str;
+        internal = true;
+      };
+
+      state = lib.mkOption {
+        type = types.str;
+        internal = true;
+      };
+
+      profile = lib.mkOption {
+        type = types.package;
+        internal = true;
+      };
+
+    };
   };
 
   imports = [
@@ -117,7 +146,7 @@ in
 
   config = {
     # TODO: figure out how to get relative path without impure mode
-    env.DEVENV_ROOT =
+    devenv.root =
       let
         pwd = builtins.getEnv "PWD";
       in
@@ -129,9 +158,14 @@ in
           See https://devenv.sh/guides/using-with-flakes/
         ''
       else pwd;
-    env.DEVENV_DOTFILE = config.env.DEVENV_ROOT + "/.devenv";
-    env.DEVENV_STATE = config.env.DEVENV_DOTFILE + "/state";
-    env.DEVENV_PROFILE = profile;
+    devenv.dotfile = config.devenv.root + "/.devenv";
+    devenv.state = config.devenv.dotfile + "/state";
+    devenv.profile = profile;
+
+    env.DEVENV_PROFILE = config.devenv.profile;
+    env.DEVENV_STATE = config.devenv.state;
+    env.DEVENV_DOTFILE = config.devenv.dotfile;
+    env.DEVENV_ROOT = config.devenv.root;
 
     enterShell = ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"

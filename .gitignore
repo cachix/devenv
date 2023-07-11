@@ -1,4 +1,5 @@
 result
+.env*
 .devenv*
 /.cache
 /.pre-commit-config.yaml
@@ -8,3 +9,4 @@ result
 pyvenv.cfg
 /.direnv
 /.venv
+examples/rust/app/target

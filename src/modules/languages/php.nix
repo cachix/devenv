@@ -43,7 +43,7 @@ let
     ${optionalString (poolOpts.extraConfig != null) poolOpts.extraConfig}
   '';
 
-  startScript = pool: poolOpts: pkgs.writeShellScriptBin "start-phpfpm" ''
+  startScript = pool: poolOpts: ''
     set -euo pipefail
 
     if [[ ! -d "$PHPFPMDIR" ]]; then

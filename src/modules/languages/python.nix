@@ -19,7 +19,7 @@ let
     unset VIRTUAL_ENV
 
     if [ ! -L ${venvPath}/devenv-profile ] \
-    || [ "$(${pkgs.coreutils}/bin/readlink ${venvPath}/devenv-profile)" != "${config.env.DEVENV_PROFILE}" ]
+    || [ "$(${pkgs.coreutils}/bin/readlink ${venvPath}/devenv-profile)" != "${config.devenv.profile}" ]
     then
       if [ -d ${venvPath} ]
       then
@@ -30,7 +30,7 @@ let
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
       ${cfg.package.interpreter} -m venv ${venvPath}
-      ${pkgs.coreutils}/bin/ln -sf ${config.env.DEVENV_PROFILE} ${venvPath}/devenv-profile
+      ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} ${venvPath}/devenv-profile
     fi
     source ${venvPath}/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
