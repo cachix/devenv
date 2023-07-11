@@ -146,7 +146,7 @@ in
 
   config = {
     # TODO: figure out how to get relative path without impure mode
-    devenv.root =
+    devenv.root = lib.mkDefault (
       let
         pwd = builtins.getEnv "PWD";
       in
@@ -157,7 +157,8 @@ in
 
           See https://devenv.sh/guides/using-with-flakes/
         ''
-      else pwd;
+      else pwd
+    );
     devenv.dotfile = config.devenv.root + "/.devenv";
     devenv.state = config.devenv.dotfile + "/state";
     devenv.profile = profile;
