@@ -5,7 +5,6 @@ let
 
   dotenvPath = config.devenv.root + "/" + cfg.filename;
 
-  dotenvFound = lib.pathExists dotenvPath;
   parseLine = line:
     let
       parts = builtins.match "(.+) *= *(.+)" line;
@@ -70,12 +69,15 @@ in
     ))
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell = lib.optionalString dotenvFound ''
-        echo "💡 A ${cfg.filename} file found, while dotenv integration is currently not enabled."
-        echo 
-        echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
-        echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
-        echo
-        echo "See https://devenv.sh/integrations/dotenv/ for more information.";
+        if test -f ${lib.escapeShellArg dotenvPath}
+        then
+          echo "💡 A ${cfg.filename} file found, while dotenv integration is currently not enabled."
+          echo 
+          echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
+          echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
+          echo
+          echo "See https://devenv.sh/integrations/dotenv/ for more information.";
+        fi
       '';
     })
   ];
