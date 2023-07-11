@@ -21,7 +21,7 @@ in
       '';
     };
 
-    awscli2Wrapper = lib.mkOption {
+    awscliWrapper = lib.mkOption {
       type = lib.types.submodule {
         options = {
           enable = lib.mkEnableOption ''
@@ -63,10 +63,10 @@ in
   };
 
   config = lib.mkMerge [
-    (lib.mkIf (cfg.enable && cfg.awscli2Wrapper.enable) {
+    (lib.mkIf (cfg.enable && cfg.awscliWrapper.enable) {
       packages = [
         (pkgs.writeScriptBin "aws" ''
-          ${cfg.package}/bin/aws-vault exec ${cfg.profile} -- ${cfg.awscli2Wrapper.package}/bin/aws "$@"
+          ${cfg.package}/bin/aws-vault exec ${cfg.profile} -- ${cfg.awscliWrapper.package}/bin/aws "$@"
         '')
       ];
     })
