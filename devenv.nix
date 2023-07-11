@@ -87,7 +87,7 @@
   '';
   scripts.devenv-test-example.exec = ''
     # execute all trap_ function on exit
-    trap 'eval $(declare -F | grep -oP "trap_[^ ]+" | tr "\n" ";")' EXIT
+    trap 'eval $(declare -F | grep -o "trap_[^ ]*" | tr "\n" ";")' EXIT
 
     set -e
     example="$PWD/examples/$1"
