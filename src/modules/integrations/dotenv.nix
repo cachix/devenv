@@ -68,7 +68,7 @@ in
       }
     ))
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
-      enterShell = lib.optionalString dotenvFound ''
+      enterShell = ''
         if test -f ${lib.escapeShellArg dotenvPath}
         then
           echo "💡 A ${cfg.filename} file found, while dotenv integration is currently not enabled."
