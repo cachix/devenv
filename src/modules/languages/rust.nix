@@ -63,6 +63,19 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
+
+      # Set $CARGO_INSTALL_ROOT so that executables installed by `cargo install` can be found from $PATH
+      enterShell = ''
+        export CARGO_INSTALL_ROOT=$(${
+          lib.strings.escapeShellArgs [
+            "${pkgs.coreutils}/bin/realpath"
+            "--no-symlinks"
+            "${config.devenv.state}/cargo-install"
+          ]
+        })
+        export PATH="$PATH:$CARGO_INSTALL_ROOT/bin"
+      '';
+
       packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
         ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
