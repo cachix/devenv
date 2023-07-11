@@ -6,14 +6,7 @@ let
   json = pkgs.formats.json { };
 
   startScript = ''
-    if [[ ! -d "$MINIO_DATA_DIR" ]]; then
-      mkdir -p "$MINIO_DATA_DIR"
-    fi
-
-    if [[ ! -d "$MINIO_CONFIG_DIR" ]]; then
-      mkdir -p "$MINIO_CONFIG_DIR"
-    fi
-
+    mkdir -p "$MINIO_DATA_DIR" "$MINIO_CONFIG_DIR"
     for bucket in ${lib.escapeShellArgs cfg.buckets}; do
       mkdir -p "$MINIO_DATA_DIR/$bucket"
     done
