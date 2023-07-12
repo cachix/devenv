@@ -27,6 +27,12 @@
         devenv.shells.default = {
           name = "my-project";
 
+          imports = [
+            # This is just like the imports in devenv.nix.
+            # See https://devenv.sh/guides/using-with-flake-parts/#import-a-devenv-module
+            # ./devenv-foo.nix
+          ];
+
           # https://devenv.sh/reference/options/
           packages = [ config.packages.default ];
 
