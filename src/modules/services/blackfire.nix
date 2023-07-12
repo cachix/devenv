@@ -22,6 +22,10 @@ in
       It automatically installs Blackfire PHP extension.
     '';
 
+    enableApm = lib.mkEnableOption ''
+      Enables application performance monitoring, requires special subscription.
+    '';
+
     client-id = lib.mkOption {
       type = lib.types.str;
       description = ''
@@ -82,6 +86,7 @@ in
     env.BLACKFIRE_AGENT_SOCKET = cfg.socket;
     env.BLACKFIRE_CLIENT_ID = cfg.client-id;
     env.BLACKFIRE_CLIENT_TOKEN = cfg.client-token;
+    env.BLACKFIRE_APM_ENABLED = (if cfg.enableApm then "1" else "0");
 
     processes.blackfire-agent.exec = "${cfg.package}/bin/blackfire agent:start --config=${configFile}";
   };
