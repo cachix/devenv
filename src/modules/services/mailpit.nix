@@ -38,6 +38,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.mailpit.exec = "${cfg.package}/bin/mailpit --listen ${cfg.uiListenAddress} --smtp ${cfg.smtpListenAddress} ${lib.concatStringsSep " " cfg.additionalArgs}";
+    processes.mailpit.exec = ''
+      mkdir -p "$DEVENV_STATE/mailpit"
+      exec "${cfg.package}/bin/mailpit" \
+        --db-file "$DEVENV_STATE/mailpit/db.sqlite3" \
+        --listen ${lib.escapeShellArg cfg.uiListenAddress} \
+        --smtp ${lib.escapeShellArg cfg.smtpListenAddress} \
+        ${lib.escapeShellArgs cfg.additionalArgs}
+    '';
   };
 }
