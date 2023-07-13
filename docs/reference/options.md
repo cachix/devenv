@@ -1852,6 +1852,26 @@ null or package
 
 
 
+## languages.php.disableExtensions
+
+PHP extensions to disable.
+
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
+
+
 ## languages.php.extensions
 
 PHP extensions to enable.
@@ -2248,8 +2268,6 @@ boolean
 
 The PureScript package to use.
 
-
-
 *Type:*
 package
 
@@ -2266,6 +2284,8 @@ package
 ## languages.python.enable
 
 Whether to enable tools for Python development.
+
+
 
 *Type:*
 boolean
