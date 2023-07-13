@@ -38,6 +38,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # For `sendmail`
+    packages = [ cfg.package ];
+
     processes.mailpit.exec = ''
       mkdir -p "$DEVENV_STATE/mailpit"
       exec "${cfg.package}/bin/mailpit" \
