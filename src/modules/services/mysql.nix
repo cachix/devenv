@@ -58,7 +58,11 @@ with lib; let
 
     ${concatMapStrings (database: ''
         # Create initial databases
-        if ! MYSQL_PWD="" ${cfg.package}/bin/mysqlshow -u root "${database.name}" > /dev/null 2>&1; then
+        exists="$(
+          MYSQL_PWD="" ${cfg.package}/bin/mysql -u root -sB information_schema \
+            <<< 'select count(*) from schemata where schema_name = "${database.name}"'
+        )"
+        if [[ "$exists" -eq 0 ]]; then
           echo "Creating initial database: ${database.name}"
           ( echo 'create database `${database.name}`;'
             ${optionalString (database.schema != null) ''
