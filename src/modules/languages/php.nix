@@ -337,7 +337,7 @@ in
       processes = mapAttrs'
         (pool: poolOpts:
           nameValuePair "phpfpm-${pool}" {
-            exec = "${startScript pool poolOpts}/bin/start-phpfpm";
+            exec = startScript pool poolOpts;
           }
         )
         cfg.fpm.pools;
