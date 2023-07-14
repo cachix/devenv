@@ -2,8 +2,8 @@
 
 {
   services.mysql.enable = true;
-  # enable for mariadb
-  # services.mysql.package = pkgs.mariadb;
+  # The default is MariaDB. To use MySQL instead:
+  # services.mysql.package = pkgs.mysql80;
   services.mysql.initialDatabases = [{ name = "test_database"; }];
   services.mysql.ensureUsers = [
     {
