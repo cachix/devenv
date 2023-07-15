@@ -56,34 +56,26 @@ c) Install ``devenv``
 === "Newcomers"
 
     ```
-    nix-env -if https://github.com/cachix/devenv/tarball/latest
+    nix-env -if https://install.devenv.sh/latest
     ```
 
 === "Advanced (flake profiles)"
 
     ```
-    nix profile install --accept-flake-config github:cachix/devenv/latest 
+    nix profile install --accept-flake-config tarball+https://install.devenv.sh/latest
     ```
 
 === "Advanced (declaratively without flakes)"
 
     ```nix title="configuration.nix"
     environment.systemPackages = [ 
-      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz)).default
+      (import (fetchTarball https://install.devenv.sh/latest)).default
     ];
     ```
 
 === "Advanced (declaratively with flakes)"
 
-    ```nix title="flake.nix"
-     {
-        inputs.devenv.url = "github:cachix/devenv/latest";
-
-        outputs = { devenv, ... }: {
-            packages.x86_64-linux = [devenv.packages.x86_64-linux.devenv];
-        };
-    }
-    ```
+    See [Using flakes](./guides/using-with-flakes)
 
 ## Initial set up
 
