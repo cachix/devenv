@@ -48,10 +48,6 @@ Recommended, speeds up the installation by providing binaries.
 ### 3. Install [devenv](https://github.com/cachix/devenv)
 
 
-!!! note
-
-    To update `devenv` follow the installation commands below. 
-
 === "Newcomers"
 
     ```
@@ -75,6 +71,10 @@ Recommended, speeds up the installation by providing binaries.
     ];
     ```
 
+
+!!! Updating
+
+    Follow the instructions for an installation above. 
 
 ## Initial set up
 
