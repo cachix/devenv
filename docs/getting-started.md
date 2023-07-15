@@ -38,7 +38,7 @@ Recommended, speeds up the installation by providing binaries.
     cachix use devenv
     ```
 
-=== "Advanced (flake profiles)"
+=== "Flake profiles"
 
     ```
     nix profile install nixpkgs#cachix
@@ -58,13 +58,16 @@ Recommended, speeds up the installation by providing binaries.
     nix-env -if https://install.devenv.sh/latest
     ```
 
-=== "Advanced (flake profiles)"
+=== "Flake profiles"
 
     ```
     nix profile install --accept-flake-config tarball+https://install.devenv.sh/latest
     ```
+=== "Declaratively using flakes"
 
-=== "Advanced (declaratively without flakes)"
+    See [Using flakes](../guides/using-with-flakes)
+
+=== "Declaratively without flakes"
 
     ```nix title="configuration.nix"
     environment.systemPackages = [ 
@@ -72,9 +75,6 @@ Recommended, speeds up the installation by providing binaries.
     ];
     ```
 
-=== "Advanced (declaratively with flakes)"
-
-    See [Using flakes](./guides/using-with-flakes)
 
 ## Initial set up
 
