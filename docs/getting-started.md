@@ -1,9 +1,8 @@
-Here are the minimum steps to get started.
 
 ## Installation
 
 
-a) Install [Nix](https://nixos.org)
+### 1. Install [Nix](https://nixos.org)
 
 === "Linux"
 
@@ -28,7 +27,9 @@ a) Install [Nix](https://nixos.org)
     docker run -it nixos/nix
     ```
 
-b) Install [Cachix](https://cachix.org) (recommended, speeds up the installation by providing binaries)
+### 2. Install [Cachix](https://cachix.org)
+
+Recommended, speeds up the installation by providing binaries.
 
 === "Newcomers"
 
@@ -44,14 +45,12 @@ b) Install [Cachix](https://cachix.org) (recommended, speeds up the installation
     cachix use devenv
     ```
 
-c) Install ``devenv``
+### 3. Install [devenv](https://github.com/cachix/devenv)
 
 
 !!! note
 
-    To update `devenv`, rerun the installation commands below. 
-    
-    If you get errors that `devenv` already exists, run `nix profile list` and `nix profile remove <number>` beforehand.
+    To update `devenv` follow the installation commands below. 
 
 === "Newcomers"
 
