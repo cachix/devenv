@@ -45,13 +45,8 @@ let
       # existing virtual environment. For instance if devenv was started within an venv.
       unset VIRTUAL_ENV
 
-      if [ ! -L ${config.env.DEVENV_ROOT}/.venv ]
-      then
-        ${pkgs.coreutils}/bin/ln --symbolic --no-target-directory --force ${venvPath} ${config.env.DEVENV_ROOT}/.venv
-      fi
-
-      if [ ! -d ${venvPath} ] \
-        || [ ! "$(${pkgs.coreutils}/bin/readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
+      if [ ! -d $DEVENV_ROOT/.venv ] \
+        || [ ! "$(${pkgs.coreutils}/bin/readlink $DEVENV_ROOT/.venv/bin/python)" -ef "${cfg.package.interpreter}" ]
       then
         ${cfg.poetry.package}/bin/poetry env use --no-interaction ${cfg.package.interpreter}
       fi
@@ -64,7 +59,7 @@ let
       # Only run it when the "poetry.lock" file or python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
       local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
-      local POETRY_CHECKSUM_FILE="${venvPath}/poetry.lock.checksum"
+      local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/.venv/poetry.lock.checksum
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
         read -r EXPECTED_POETRY_CHECKSUM < "$POETRY_CHECKSUM_FILE"
@@ -92,7 +87,7 @@ let
         _devenv-poetry-install
       ''}
       ${lib.optionalString cfg.poetry.activate.enable ''
-        source ${venvPath}/bin/activate
+        source "$DEVENV_ROOT"/.venv/bin/activate
       ''}
     fi
   '';
