@@ -31,7 +31,9 @@
         lib = pkgs.lib;
         importModule = path:
           if lib.hasPrefix "./" path
-          then ./. + (builtins.substring 1 255 path) + "/devenv.nix"
+          then if lib.hasSuffix ".nix" path
+               then ./. + (builtins.substring 1 255 path)
+               else ./. + (builtins.substring 1 255 path) + "/devenv.nix"
           else if lib.hasPrefix "../" path 
               then throw "devenv: ../ is not supported for imports"
               else let
