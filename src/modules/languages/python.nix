@@ -45,11 +45,8 @@ let
       # existing virtual environment. For instance if devenv was started within an venv.
       unset VIRTUAL_ENV
 
-      if [ ! -d $DEVENV_ROOT/.venv ] \
-        || [ ! "$(${pkgs.coreutils}/bin/readlink $DEVENV_ROOT/.venv/bin/python)" -ef "${cfg.package.interpreter}" ]
-      then
-        ${cfg.poetry.package}/bin/poetry env use --no-interaction ${cfg.package.interpreter}
-      fi
+      # Make sure poetry's venv uses the configured python executable.
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
     }
 
     function _devenv-poetry-install()
