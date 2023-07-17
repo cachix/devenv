@@ -11,30 +11,30 @@ let
           url: github:cachix/nixpkgs-python
   '');
 
-  venvPath = "${config.env.DEVENV_STATE}/venv";
-
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
     # Make sure any tools are not attempting to use the python interpreter from any
     # existing virtual environment. For instance if devenv was started within an venv.
     unset VIRTUAL_ENV
 
-    if [ ! -L ${venvPath}/devenv-profile ] \
-    || [ "$(${pkgs.coreutils}/bin/readlink ${venvPath}/devenv-profile)" != "${config.devenv.profile}" ]
+    VENV_PATH="${config.env.DEVENV_STATE}/venv"
+
+    if [ ! -L "$VENV_PATH"/devenv-profile ] \
+    || [ "$(${pkgs.coreutils}/bin/readlink "$VENV_PATH"/devenv-profile)" != "${config.devenv.profile}" ]
     then
-      if [ -d ${venvPath} ]
+      if [ -d "$VENV_PATH" ]
       then
         echo "Rebuilding Python venv..."
-        ${pkgs.coreutils}/bin/rm -rf ${venvPath}
+        ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
       fi
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      ${cfg.package.interpreter} -m venv ${venvPath}
-      ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} ${venvPath}/devenv-profile
+      ${cfg.package.interpreter} -m venv "$VENV_PATH"
+      ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} "$VENV_PATH"/devenv-profile
     fi
-    source ${venvPath}/bin/activate
+    source "$VENV_PATH"/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
-      ${venvPath}/bin/pip install -r ${pkgs.writeText "requirements.txt" cfg.venv.requirements}
+      "$VENV_PATH"/bin/pip install -r ${pkgs.writeText "requirements.txt" cfg.venv.requirements}
     ''}
   '';
 
