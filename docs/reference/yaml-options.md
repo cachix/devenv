@@ -45,7 +45,7 @@ inputs:
 imports:
   - ./frontend
   - ./backend
-  . ./mymodule.nix
+  - ./mymodule.nix
   - myproject
   - myproject/relative/path
 ```
