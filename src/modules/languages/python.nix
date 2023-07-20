@@ -16,7 +16,7 @@ let
     # existing virtual environment. For instance if devenv was started within an venv.
     unset VIRTUAL_ENV
 
-    VENV_PATH="${config.env.DEVENV_STATE}/venv"
+    VENV_PATH="${config.env.DEVENV_ROOT}/.venv"
 
     if [ ! -L "$VENV_PATH"/devenv-profile ] \
     || [ "$(${pkgs.coreutils}/bin/readlink "$VENV_PATH"/devenv-profile)" != "${config.devenv.profile}" ]
