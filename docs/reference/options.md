@@ -3103,6 +3103,30 @@ package
 
 
 
+## languages.shell.enable
+
+Whether to enable tools for shell development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/shell.nix)
+
+
+
 ## languages.swift.enable
 
 Whether to enable tools for Swift development.
