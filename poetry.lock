@@ -627,9 +627,9 @@ doc = ["mkdocs-bootswatch (>=1,<2)", "mkdocs-minify-plugin (==0.5.*)", "pygments
 
 [package.source]
 type = "git"
-url = "https://github.com/cachix/mkdocs-rss-plugin"
-reference = "no-git"
-resolved_reference = "017bdb52095703c79e0632f219b5adf9f212873c"
+url = "https://github.com/Guts/mkdocs-rss-plugin"
+reference = "feature/no-git-no-cry"
+resolved_reference = "bac5e8935196011b4fb16c5076113d5e3ff13806"
 
 [[package]]
 name = "packaging"
