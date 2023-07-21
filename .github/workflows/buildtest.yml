@@ -51,7 +51,7 @@ jobs:
         echo "examples=$json" >> $GITHUB_OUTPUT
   examples:
     name: ${{ matrix.example }} (${{ join(matrix.os) }})
-    needs: [generate-examples]
+    needs: [generate-examples, build]
     strategy:
       fail-fast: false
       matrix:
