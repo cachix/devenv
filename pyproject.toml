@@ -11,8 +11,8 @@ pillow = "^9.5.0"
 cairosvg = "^2.7.0"
 mkdocs-markdownextradata-plugin = "^0.2.5"
 mkdocs-include-markdown-plugin = "^4.0.4"
-mkdocs-material = "^9.1.6"
-mkdocs-rss-plugin = {git = "https://github.com/cachix/mkdocs-rss-plugin", rev = "no-git"}
+mkdocs-rss-plugin = {git = "https://github.com/Guts/mkdocs-rss-plugin", rev = "feature/no-git-no-cry"}
+mkdocs-material = "^9.1.19"
 
 
 [build-system]
