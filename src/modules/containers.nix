@@ -185,13 +185,13 @@ in
       container.isBuilding = envContainerName != "";
 
       containers.shell = {
-        name = "shell";
-        startupCommand = "bash";
+        name = lib.mkDefault "shell";
+        startupCommand = lib.mkDefault "bash";
       };
 
       containers.processes = {
-        name = "processes";
-        startupCommand = config.procfileScript;
+        name = lib.mkDefault "processes";
+        startupCommand = lib.mkDefault config.procfileScript;
       };
     }
     (if envContainerName == "" then { } else {
