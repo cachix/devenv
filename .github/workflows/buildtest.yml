@@ -25,9 +25,10 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: |
-        nix profile remove '.*'
-        nix profile install --accept-flake-config .
+    - name: "Reinstall devenv"
+      run: |
+        nix profile remove '.*' 
+        nix profile install --accept-flake-config . 
     - name: Run tests
       run: |
         devenv ci
