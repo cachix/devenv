@@ -1438,6 +1438,30 @@ boolean
 
 
 
+## languages.javascript.npm.install.enable
+
+Whether to enable npm install during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
 ## languages.jsonnet.enable
 
 Whether to enable tools for jsonnet development.
