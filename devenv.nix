@@ -14,7 +14,7 @@
   languages.python.poetry.enable = true;
 
   devcontainer.enable = true;
-  devcontainer.settings.customizations.vscode.extensions = [ "bbenoist.Nix" ];
+  devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
   difftastic.enable = true;
 
   dotenv.enable = true;
