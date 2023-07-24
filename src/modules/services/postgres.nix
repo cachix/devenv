@@ -31,7 +31,6 @@ let
             echo "Creating database: ${database.name}"
             echo 'create database "${database.name}";' | psql --dbname postgres
 
-
             ${lib.optionalString (database.schema != null) ''
             echo "Applying database schema on ${database.name}"
             if [ -f "${database.schema}" ]
@@ -83,8 +82,10 @@ let
     set -euo pipefail
     export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
 
+    SEED_DATABASES="false"
     if [[ ! -d "$PGDATA" ]]; then
       initdb ${lib.concatStringsSep " " cfg.initdbArgs}
+      SEED_DATABASES="true"
       echo
       echo "PostgreSQL init process complete; ready for start up."
       echo
@@ -93,17 +94,32 @@ let
     # Setup config
     cp ${configFile} "$PGDATA/postgresql.conf"
 
-    if [[ ! -f "$PGDATA/.configured" ]]; then
-      touch "$PGDATA/.configured"
+    if [[ "$SEED_DATABASES" = "true" ]]; then
       echo
-      echo "PostgreSQL appears unconfigured; going to run initialization scripts."
+      echo "PostgreSQL recently initialized; going to seed databases."
       echo
+      OLDPGHOST="$PGHOST"
+      PGHOST="$DEVENV_STATE/$(mktemp -d "pg-init-XXXXXX")"
+      mkdir -p "$PGHOST"
 
-      pg_ctl -D "$PGDATA" -w start
+      function remove_tmp_pg_init_sock_dir() {
+        if [[ -d "$1" ]]; then
+          echo
+          echo "Removing temporary socket directory for initialization/seeding: $1"
+          echo
+          rm -rf "$1"
+        fi
+      }
+      trap "remove_tmp_pg_init_sock_dir '$PGHOST'" EXIT
+
+      pg_ctl -D "$PGDATA" -w start -o "-c unix_socket_directories=$PGHOST -c listen_addresses= -p ${toString cfg.port}"
       ${setupInitialDatabases}
 
       ${runInitialScript}
       pg_ctl -D "$PGDATA" -m fast -w stop
+      remove_tmp_pg_init_sock_dir "$PGHOST"
+      PGHOST="$OLDPGHOST"
+      unset OLDPGHOST
     else
       echo
       echo "PostgreSQL Database directory appears to contain a database; Skipping initialization"
