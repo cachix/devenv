@@ -14,7 +14,7 @@ This example adds Elixir install scripts to `~/.mix/escripts`:
 }
 ```
 
-## How Can I use Rosetta packages?
+## How can I use Rosetta packages?
 
 It's possible to tell Nix to use Intel packages when using macOS ARM:
 
@@ -30,6 +30,18 @@ in {
   packages = [
     pkgs.git
     rosettaPkgs.vim
+  ];
+}
+```
+
+## How to exclude packages from the container?
+
+```nix
+{ pkgs, ... }: {
+  packages = [
+    pkgs.git
+  ] ++ lib.optionals !config.container.isBuilding [
+    pkgs.haskell-language-server
   ];
 }
 ```
