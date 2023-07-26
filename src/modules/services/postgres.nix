@@ -82,21 +82,21 @@ let
     set -euo pipefail
     export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
 
-    SEED_DATABASES="false"
+    POSTGRES_RUN_INITIAL_SCRIPT="false"
     if [[ ! -d "$PGDATA" ]]; then
       initdb ${lib.concatStringsSep " " cfg.initdbArgs}
-      SEED_DATABASES="true"
+      POSTGRES_RUN_INITIAL_SCRIPT="true"
       echo
-      echo "PostgreSQL init process complete; ready for start up."
+      echo "PostgreSQL initdb process complete."
       echo
     fi
 
     # Setup config
     cp ${configFile} "$PGDATA/postgresql.conf"
 
-    if [[ "$SEED_DATABASES" = "true" ]]; then
+    if [[ "$POSTGRES_RUN_INITIAL_SCRIPT" = "true" ]]; then
       echo
-      echo "PostgreSQL recently initialized; going to seed databases."
+      echo "PostgreSQL is setting up the initial database."
       echo
       OLDPGHOST="$PGHOST"
       PGHOST="$DEVENV_STATE/$(mktemp -d "pg-init-XXXXXX")"
@@ -104,9 +104,6 @@ let
 
       function remove_tmp_pg_init_sock_dir() {
         if [[ -d "$1" ]]; then
-          echo
-          echo "Removing temporary socket directory for initialization/seeding: $1"
-          echo
           rm -rf "$1"
         fi
       }
@@ -125,6 +122,7 @@ let
       echo "PostgreSQL Database directory appears to contain a database; Skipping initialization"
       echo
     fi
+    unset POSTGRES_RUN_INITIAL_SCRIPT
   '';
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail
