@@ -22,7 +22,7 @@ in
       mkdir -p "${config.env.DEVENV_STATE}/mkcert"
 
       if [[ ! -f "$DEVENV_STATE/mkcert/rootCA.pem" ]]; then
-        ${pkgs.mkcert}/bin/mkcert -install
+        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert -install
       fi
 
       if [[ ! -f "$DEVENV_STATE/mkcert/hash" || "$(cat "$DEVENV_STATE/mkcert/hash")" != "${hash}" ]]; then
@@ -30,7 +30,7 @@ in
 
         pushd ${config.env.DEVENV_STATE}/mkcert > /dev/null
 
-        PATH="${pkgs.nss}/bin/certutil:$PATH" ${pkgs.mkcert}/bin/mkcert ${domainList} 2> /dev/null
+        PATH="${pkgs.nssTools}/bin:$PATH" ${pkgs.mkcert}/bin/mkcert ${domainList} 2> /dev/null
 
         popd > /dev/null
       fi
