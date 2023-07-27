@@ -3,13 +3,13 @@
 let
   cfg = config.languages.python;
 
-  nixpkgs-python = inputs.nixpkgs-python or (throw ''
-    To use languages.python.version, you need to add the following to your devenv.yaml:
+  devenvlib = import ../devenv-lib.nix { inherit pkgs config inputs lib; };
 
-      inputs:
-        nixpkgs-python:
-          url: github:cachix/nixpkgs-python
-  '');
+  nixpkgs-python = devenvlib.getInput {
+    name = "nixpkgs-python";
+    url = "github:cachix/nixpkgs-python";
+    attribute = "languages.python.version";
+  };
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
     # Make sure any tools are not attempting to use the python interpreter from any

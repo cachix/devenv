@@ -13,7 +13,7 @@ import click
 import terminaltables
 
 
-from .yaml import validate_and_parse_yaml
+from .yaml import validate_and_parse_yaml, read_yaml, write_yaml
 from .log import log, log_task
 
 
@@ -66,6 +66,7 @@ def run_command(command: str) -> str:
         if e.returncode == 130:
             pass  # we're exiting the shell
         else:
+            click.echo("\n", err=True)
             log(f"Following command exited with code {e.returncode}:\n\n  {e.cmd}", level="error")
             exit(e.returncode)
 
@@ -457,3 +458,35 @@ def print_dev_env(ctx):
 def get_version():
     with open(Path(MODULES_DIR, "latest-version")) as f:
         return f.read().strip()
+
+@cli.group(
+    help="Manage inputs in devenv.yaml. See http://devenv.sh/inputs/",
+    short_help="Manage inputs in devenv.yaml. See http://devenv.sh/inputs/"     
+)
+def inputs():
+    pass
+
+@inputs.command(
+    help="Add a new input to the developer environment.",
+    short_help="Add a new input to the developer environment.",
+)
+@click.argument('name')
+@click.argument('url')
+@click.option('--follows', '-f', multiple=True, help='Add a dependency to the input.')
+@click.pass_context
+def add(ctx, name, url, follows):
+    devenv = read_yaml()
+    attrs = {'url': url}
+
+    inputs = {}
+    for follow in follows:
+        if follow not in devenv['inputs']:
+            log(f"Input {follow} does not exist so it can't be followed.", level="error")
+            exit(1)
+        inputs[follow] = {"follows": follow}
+
+    if inputs:
+        attrs['inputs'] = inputs
+    devenv['inputs'][name] = attrs
+    
+    write_yaml(devenv)

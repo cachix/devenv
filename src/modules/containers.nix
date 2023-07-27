@@ -5,21 +5,22 @@ let
     if config.name == null
     then throw ''You need to set `name = "myproject";` or `containers.${name}.name = "mycontainer"; to be able to generate a container.''
     else config.name;
-  setup = ''
-    inputs:
-      nix2container:
-        url: github:nlewo/nix2container
-        inputs:
-          nixpkgs:
-            follows: nixpkgs
-      mk-shell-bin:
-        url: github:rrbutani/nix-mk-shell-bin
-  '';
   types = lib.types;
   envContainerName = builtins.getEnv "DEVENV_CONTAINER";
-  nix2containerInput = inputs.nix2container or (throw "To build the container, you need to add the following to your devenv.yaml:\n\n${setup}");
+  devenvlib = import ./devenv-lib.nix { inherit pkgs config inputs lib; };
+
+  nix2containerInput = devenvlib.getInput {
+    name = "nix2container";
+    url = "github:nlewo/nix2container";
+    attribute = "containers";
+    follows = [ "nixpkgs" ];
+  };
   nix2container = nix2containerInput.packages.${pkgs.stdenv.system};
-  mk-shell-bin = inputs.mk-shell-bin or (throw "To build the container, you need to add the following to your devenv.yaml:\n\n${setup}");
+  mk-shell-bin = devenvlib.getInput {
+    name = "mk-shell-bin";
+    url = "github:rrbutani/nix-mk-shell-bin";
+    attribute = "containers";
+  };
   shell = mk-shell-bin.lib.mkShellBin { drv = config.shell; nixpkgs = pkgs; };
   mkEntrypoint = cfg: pkgs.writeScript "entrypoint" ''
     #!${pkgs.bash}/bin/bash
