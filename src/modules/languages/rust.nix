@@ -2,16 +2,16 @@
 
 let
   cfg = config.languages.rust;
-  setup = ''
-    inputs:
-      fenix:
-        url: github:nix-community/fenix
-        inputs:
-          nixpkgs:
-            follows: nixpkgs
-  '';
 
-  error = dbg: "To use languages.rust.${dbg}, you need to add the following to your devenv.yaml:\n\n${setup}";
+  devenvlib = import ../devenv-lib.nix { inherit pkgs config inputs lib; };
+
+  fenix = devenvlib.getInput {
+    name = "fenix";
+    url = "github:nix-community/fenix";
+    attribute = "languages.rust.version";
+    follows = [ "nixpkgs" ];
+  };
+
 in
 {
   imports = [
@@ -104,9 +104,7 @@ in
     })
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        err = error "channel";
-        fenix = inputs.fenix or (throw err);
-        rustPackages = fenix.packages.${pkgs.stdenv.system} or (throw err);
+        rustPackages = fenix.packages.${pkgs.stdenv.system};
       in
       {
         languages.rust.toolchain =

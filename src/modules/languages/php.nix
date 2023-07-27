@@ -3,20 +3,18 @@
 with lib;
 
 let
-  inherit (lib.attrsets) attrValues genAttrs;
+  inherit (lib.attrsets) attrValues;
 
   cfg = config.languages.php;
 
-  setup = ''
-    inputs:
-      phps:
-        url: github:fossar/nix-phps
-        inputs:
-          nixpkgs:
-            follows: nixpkgs
-  '';
+  devenvlib = import ../devenv-lib.nix { inherit pkgs config inputs lib; };
 
-  phps = inputs.phps or (throw "To use languages.php.version, you need to add the following to your devenv.yaml:\n\n${setup}");
+  phps = devenvlib.getInput {
+    name = "phps";
+    url = "github:fossar/nix-phps";
+    attribute = "languages.php.version";
+    follows = [ "nixpkgs" ];
+  };
 
   filterDefaultExtensions = ext: builtins.length (builtins.filter (inner: inner == ext.extensionName) cfg.disableExtensions) == 0;
 
