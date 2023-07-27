@@ -2,16 +2,16 @@
 
 let
   cfg = config.languages.rust;
-  setup = ''
-    inputs:
-      fenix:
-        url: github:nix-community/fenix
-        inputs:
-          nixpkgs:
-            follows: nixpkgs
-  '';
 
-  error = dbg: "To use languages.rust.${dbg}, you need to add the following to your devenv.yaml:\n\n${setup}";
+  devenvlib = import ../devenv-lib.nix { inherit pkgs config inputs lib; };
+
+  fenix = devenvlib.getInput {
+    name = "fenix";
+    url = "github:nix-community/fenix";
+    attribute = "languages.rust.version";
+    follows = [ "nixpkgs" ];
+  };
+
 in
 {
   imports = [
@@ -67,7 +67,7 @@ in
         mkOverrideTools = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
       in
       {
-        packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
+        packages = (builtins.map (c: cfg.toolchain.${c} or fenix) cfg.components)
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
         # enable compiler tooling by default to expose things like cc
@@ -92,9 +92,7 @@ in
     })
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        err = error "channel";
-        fenix = inputs.fenix or (throw err);
-        rustPackages = fenix.packages.${pkgs.stdenv.system} or (throw err);
+        rustPackages = fenix.packages.${pkgs.stdenv.system};
       in
       {
         languages.rust.toolchain =
