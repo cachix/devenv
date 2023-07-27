@@ -1,17 +1,15 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   cfg = config.languages.python;
-  
+
   requirements = pkgs.writeText "requirements.txt" (
     if lib.isPath cfg.venv.requirements
     then builtins.readFile cfg.venv.requirements
     else cfg.venv.requirements
   );
 
-  devenvlib = import ../devenv-lib.nix { inherit pkgs config inputs lib; };
-
-  nixpkgs-python = devenvlib.getInput {
+  nixpkgs-python = config.lib.getInput {
     name = "nixpkgs-python";
     url = "github:cachix/nixpkgs-python";
     attribute = "languages.python.version";
@@ -47,7 +45,7 @@ let
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
-    function _devenv-init-poetry-venv()
+    function _devenv_init_poetry_venv
     {
       # Make sure any tools are not attempting to use the python interpreter from any
       # existing virtual environment. For instance if devenv was started within an venv.
@@ -57,7 +55,7 @@ let
       ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
     }
 
-    function _devenv-poetry-install()
+    function _devenv_poetry_install
     {
       local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments})
       # Avoid running "poetry install" for every shell.
@@ -87,9 +85,9 @@ let
     then
       echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
     else
-      _devenv-init-poetry-venv
+      _devenv_init_poetry_venv
       ${lib.optionalString cfg.poetry.install.enable ''
-        _devenv-poetry-install
+        _devenv_poetry_install
       ''}
       ${lib.optionalString cfg.poetry.activate.enable ''
         source "$DEVENV_ROOT"/.venv/bin/activate
@@ -196,6 +194,8 @@ in
     languages.python.package = lib.mkMerge [
       (lib.mkIf (cfg.version != null) (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
     ];
+
+    cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
     packages = [
       cfg.package

@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
 set -x
 
-echo "Starting temporal service..."
-devenv up &
-DEVENV_PID=$!
-export DEVENV_PID
-
-devenv_stop() {
-    pkill -P "$DEVENV_PID"
-}
-
-trap devenv_stop EXIT
-
 export TEMPORAL_ADDRESS=127.0.0.1:17233
 
 timeout 20 bash -c 'until echo > /dev/tcp/localhost/17233; do sleep 0.5; done'
@@ -30,3 +19,6 @@ temporal operator namespace describe mynamespace
 echo "Startup complete..."
 temporal operator cluster system
 echo "$TEMPORAL_OUTPUT"
+
+# Exit the script
+exit $TEMPORAL_EXIT_STATUS

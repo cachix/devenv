@@ -5,11 +5,11 @@ inputs:
     url: github:domenkozar/nix/relaxed-flakes
     inputs:
       nixpkgs:
-        follows: "nixpkgs"
+        follows: nixpkgs
   devenv:
     url: path:./src/modules
   pre-commit-hooks:
     url: github:cachix/pre-commit-hooks.nix
     inputs:
       nixpkgs:
-        follows: "nixpkgs"
+        follows: nixpkgs

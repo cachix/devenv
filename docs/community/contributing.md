@@ -6,28 +6,23 @@ We have a rule that new features need to come with documentation and tests (`dev
 
 ## Preparing the `devenv` development environment
 
-1. Follow the [installation instructions for Nix and Cachix](../../getting-started/#installation).
+1. Follow the [installation instructions for Nix and Cachix](../../getting-started/#installation) and [install direnv](../../automatic-shell-activation/).
 
 2. `git clone https://github.com/cachix/devenv.git`
 
 3. `cd devenv`
 
-4. To build the project, run `nix-build`.
-
-5. `./result/bin/devenv shell`
-
-6. Once you have made changes, run `./result/bin/devenv shell` again.
-
-To automate this workflow, [install and use direnv](../../automatic-shell-activation/).
+4. To build the project, run `direnv allow .`.
 
 ## Repository structure
 
-- The `devenv` CLI is in `src/devenv.nix`.
-- The `flake.nix` auto-generation logic lies in `src/flake.nix`.
+- The `devenv` CLI is in `src/devenv/cli.py`.
+- The `flake.nix` auto-generation logic lies in `src/modules/flake.tmpl.nix`.
 - All modules related to `devenv.nix` are in `src/modules/`.
-- Examples are automatically tested on CI and are the best way to work on developing new modules, see `examples/`.
+- Examples are automatically tested on CI and are the best way to work on developing new modules, see `examples/` and `tests/`
 - Documentation is in `docs/`.
 - To run a development server, run `devenv up`.
+- To run a test, run `devnenv test <example-name>`.
 
 ## Contributing language improvements
 
