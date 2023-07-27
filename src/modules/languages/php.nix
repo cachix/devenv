@@ -1,4 +1,4 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 with lib;
 
@@ -7,9 +7,7 @@ let
 
   cfg = config.languages.php;
 
-  devenvlib = import ../devenv-lib.nix { inherit pkgs config inputs lib; };
-
-  phps = devenvlib.getInput {
+  phps = config.lib.getInput {
     name = "phps";
     url = "github:fossar/nix-phps";
     attribute = "languages.php.version";
