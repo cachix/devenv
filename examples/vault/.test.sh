@@ -1,11 +1,6 @@
 #!/bin/sh
 set -x
 
-# Start the services in the background and store the PID
-echo "Starting vault service..."
-devenv up&
-DEVENV_PID=$!
-
 # vault status and store its exit status
 check_vault_status() {
   echo "Waiting for service to become available..."
@@ -28,10 +23,6 @@ done
 echo "Startup complete..."
 vault version
 echo "$VAULT_OUTPUT"
-
-# Clean up by terminating all spawned processes
-pkill -P $DEVENV_PID
-wait $DEVENV_PID &> /dev/null
 
 # Exit the script
 exit $VAULT_EXIT_STATUS

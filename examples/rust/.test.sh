@@ -1,4 +1,3 @@
-#!/bin/sh
 set -ex
 cargo --version
 rustc --version

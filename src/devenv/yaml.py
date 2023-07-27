@@ -4,10 +4,10 @@ import os
 from pathlib import Path
 
 from strictyaml import Map, MapPattern, Str, Seq
-from strictyaml import load, Bool, Any, Optional, YAMLError
+from strictyaml import load, Bool, Any, Optional, YAMLError, EmptyDict
 
 
-inputsSchema = MapPattern(Str(), Map({
+inputsSchema = EmptyDict() | MapPattern(Str(), Map({
       "url": Str(),
       Optional("flake", default=None): Bool(),
       Optional("inputs", default=None): Any(),
@@ -24,12 +24,12 @@ schema = Map({
 YAML_FILE = Path("devenv.yaml")
 
 def read_yaml():
-  try:
-      with open(YAML_FILE) as f:
-          return load(f.read(), schema, label="devenv.yaml")
-  except YAMLError as error:
-      print("Validation error in `devenv.yaml`", error)
-      sys.exit(1)
+    try:
+        with open(YAML_FILE) as f:
+            return load(f.read(), schema, label="devenv.yaml")
+    except YAMLError as error:
+        print("Validation error in `devenv.yaml`", error)
+        sys.exit(1)
 
 def write_yaml(yaml):
     with open(YAML_FILE, "w") as f:
