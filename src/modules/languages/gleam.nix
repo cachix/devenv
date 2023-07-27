@@ -1,35 +1,7 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   cfg = config.languages.gleam;
-
-  setup = ''
-    To use gleam, you need to add the following to your devenv.yaml:
-
-      inputs:
-         gleam-nix:
-           url: github:vic/gleam-nix
-           overlays:
-             - default
-
-
-    Optionally, if you want a specific gleam branch or version, do
-    the following:
-
-      inputs:
-        gleam:
-           url: github:gleam-lang/gleam/main # or any other branch
-           flake: false
-        gleam-nix:
-           url: github:vic/gleam-nix
-           overlays:
-             - default
-           inputs:
-             gleam = "gleam"
-  '';
-
-  gleamPkg = pkgs.gleam or (throw setup);
-
 in
 {
   options.languages.gleam = {
@@ -37,7 +9,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = gleamPkg;
+      default = pkgs.gleam;
       description = "The Gleam package to use.";
       defaultText = lib.literalExpression "pkgs.gleam";
     };
