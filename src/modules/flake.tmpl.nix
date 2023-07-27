@@ -55,7 +55,10 @@
         specialArgs = inputs // { inherit inputs pkgs; };
         modules = [
           (inputs.devenv.modules + /top-level.nix)
-          { devenv.cliVersion = "${version}"; }
+          {
+            devenv.cliVersion = "${version}";
+            devenv.root = devenv_root;
+          }
         ] ++ (map importModule (devenv.imports or [ ])) ++ [
           ./devenv.nix
           (devenv.devenv or { })
@@ -85,7 +88,9 @@
         inherit (config) info procfileScript procfileEnv procfile;
         ci = config.ciDerivation;
       };
-      devenv.containers = config.containers;
+      devenv = {
+        inherit (config) containers tests;
+      };
       devShell."${system}" = config.shell;
     };
 }

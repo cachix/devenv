@@ -1,26 +1,34 @@
 import os
+import shlex
 import shutil
+import signal
 import subprocess
+import tempfile
 import time
 import re
+import sys
 from filelock import FileLock
 from contextlib import suppress
 from pathlib import Path
+
 import pkgutil
 import json
 
 import click
 import terminaltables
+import strictyaml
 
 
-from .yaml import validate_and_parse_yaml, read_yaml, write_yaml
+from .yaml import validate_and_parse_yaml, read_yaml, write_yaml, schema
 from .log import log, log_task
 
 
 NIX_FLAGS = [
     "--show-trace",
     "--extra-experimental-features",
-    "\"nix-command flakes\"",
+    "nix-command",
+    "--extra-experimental-features",
+    "flakes",
     "--option",
     "warn-dirty",
     "false",
@@ -38,14 +46,16 @@ FLAKE_LOCK = "devenv.lock"
 # define system like x86_64-linux
 SYSTEM = os.uname().machine.lower().replace("arm", "aarch") + "-" + os.uname().sysname.lower()
 
-def run_nix(command: str) -> str:
+def run_nix(command: str, skip_exc_wrapping=False, replace_shell=False) -> str:
     ctx = click.get_current_context()
     nix_flags = ctx.obj['nix_flags']
     flags = " ".join(NIX_FLAGS) + " " + " ".join(nix_flags)
     command_flags = " ".join(ctx.obj['command_flags'])
-    return run_command(f"nix {flags} {command} {command_flags}")
+    return run_command(f"nix {flags} {command} {command_flags}",
+                       skip_exc_wrapping=skip_exc_wrapping,
+                       replace_shell=replace_shell)
 
-def run_command(command: str) -> str:
+def run_command(command: str, disable_stderr=False, skip_exc_wrapping=False, replace_shell=False) -> str:
     if command.startswith("nix"):
         if os.environ.get("DEVENV_NIX"):
             nix = os.path.join(os.environ["DEVENV_NIX"], "bin")
@@ -55,16 +65,24 @@ def run_command(command: str) -> str:
             log("Please follow https://devenv.sh/getting-started/ to install devenv.", level="error")
             exit(1)
     try:
-        return subprocess.run(
-            command, 
-            shell=True,
-            check=True, 
-            env=os.environ.copy(),
-            stdout=subprocess.PIPE,
-            universal_newlines=True).stdout.strip()
+        if click.get_current_context().obj['verbose']:
+            log(f"Running command: {command}", level="debug")
+        if replace_shell:
+            splitted_command = shlex.split(command.strip())
+            os.execv(splitted_command[0], splitted_command)
+        else:
+            return subprocess.run(
+                command, 
+                shell=True,
+                check=True, 
+                env=os.environ.copy(),
+                stdout=subprocess.PIPE,
+                stdin=subprocess.PIPE,
+                stderr=None if not disable_stderr else subprocess.DEVNULL,
+                universal_newlines=True).stdout.strip()
     except subprocess.CalledProcessError as e:
-        if e.returncode == 130:
-            pass  # we're exiting the shell
+        if skip_exc_wrapping:
+            exit(e.returncode)
         else:
             click.echo("\n", err=True)
             log(f"Following command exited with code {e.returncode}:\n\n  {e.cmd}", level="error")
@@ -73,6 +91,10 @@ def run_command(command: str) -> str:
 CONTEXT_SETTINGS = dict(max_content_width=120)
 
 @click.group(context_settings=CONTEXT_SETTINGS)
+@click.option(
+    '--verbose', '-v',
+    help='Enable verbose output.',
+    is_flag=True)
 @click.option(
     '--nix-flags', '-n', 
     help='Flags to pass to Nix. See `man nix.conf 5`. Example: --nix-flags "--option bash-prompt >"',
@@ -95,10 +117,11 @@ CONTEXT_SETTINGS = dict(max_content_width=120)
     help='Disable Nix evaluation cache.',
     is_flag=True)
 @click.pass_context
-def cli(ctx, disable_eval_cache, offline, system, debugger, nix_flags):
+def cli(ctx, disable_eval_cache, offline, system, debugger, nix_flags, verbose):
     """https://devenv.sh: Fast, Declarative, Reproducible, and Composable Developer Environments."""
     ctx.ensure_object(dict)
     ctx.obj['system'] = system
+    ctx.obj['verbose'] = verbose
     ctx.obj['command_flags'] = []
     ctx.obj['nix_flags'] = list(nix_flags)
     ctx.obj['nix_flags'] += ['--system', system]
@@ -120,6 +143,19 @@ def cli(ctx, disable_eval_cache, offline, system, debugger, nix_flags):
     Path(ctx.obj['gc_root']).mkdir(parents=True, exist_ok=True)
     ctx.obj['gc_project'] = os.path.join(ctx.obj['gc_root'], str(int(time.time() * 1000)))
 
+@cli.group()
+def processes():
+    pass
+
+
+DEVENV_DIR = Path(os.getcwd()) / '.devenv'
+os.environ['DEVENV_DIR'] = str(DEVENV_DIR)
+DEVENV_GC = DEVENV_DIR / 'gc'
+os.environ['DEVENV_GC'] = str(DEVENV_GC)
+
+PROCESSES_PID = DEVENV_DIR / 'processes.pid'
+PROCESSES_LOG = DEVENV_DIR / 'processes.log'
+
 
 def add_gc(name, store_path):
     """Register a GC root"""
@@ -136,10 +172,6 @@ def assemble(ctx):
         log('  $ devenv init', level="error")
         exit(1)
 
-    DEVENV_DIR = Path(os.getcwd()) / '.devenv'
-    os.environ['DEVENV_DIR'] = str(DEVENV_DIR)
-    DEVENV_GC = DEVENV_DIR / 'gc'
-    os.environ['DEVENV_GC'] = str(DEVENV_GC)
     DEVENV_GC.mkdir(parents=True, exist_ok=True)
 
     if os.path.exists('devenv.yaml'):
@@ -206,16 +238,16 @@ def cleanup_symlinks(folder):
                     to_gc.append(full_path)
     return to_gc, removed_symlinks
 
-def get_dev_environment(ctx, is_shell=False):
+def get_dev_environment(ctx, logging=True):
     ctx.invoke(assemble)
-    if is_shell:
+    if logging:
         action = log_task('Building shell')
     else:
         action = suppress()
     with action:
         gc_root = os.path.join(os.environ['DEVENV_GC'], 'shell')
-        env = run_nix(f"print-dev-env --impure --profile '{gc_root}'")
-        run_command(f"nix-env -p '{gc_root}' --delete-generations old")
+        env = run_nix(f"print-dev-env --profile '{gc_root}'")
+        run_command(f"nix-env -p '{gc_root}' --delete-generations old", disable_stderr=True)
         symlink_force(Path(f'{ctx.obj["gc_project"]}-shell'), gc_root)
     return env, gc_root
 
@@ -232,12 +264,12 @@ def get_dev_environment(ctx, is_shell=False):
 @click.argument('cmd', required=False)
 @click.pass_context
 def shell(ctx, cmd, extra_args):
-    env, gc_root = get_dev_environment(ctx, is_shell=True)
+    env, gc_root = get_dev_environment(ctx)
     if cmd:
-        run_nix(f"develop '{gc_root}' -c {cmd} {' '.join(extra_args)}")
+        run_nix(f"develop '{gc_root}' -c {cmd} {' '.join(extra_args)}", replace_shell=True)
     else:
         log('Entering shell', level="info")
-        run_nix(f"develop '{gc_root}'")
+        run_nix(f"develop '{gc_root}'", replace_shell=True)
         
 def symlink_force(src, dst):
     # locking is needed until https://github.com/python/cpython/pull/14464
@@ -250,23 +282,66 @@ def symlink_force(src, dst):
     short_help="Starts processes in foreground. See http://devenv.sh/processes",
 )
 @click.argument('command', required=False)
+@click.option('--detach', '-d', is_flag=True, help="Starts processes in the background.")
 @click.pass_context
-def up(ctx, command):
+def up(ctx, command, detach):
     with log_task('Building processes'):
         ctx.invoke(assemble)
-        procfilescript = run_nix(f"build --no-link --print-out-paths --impure '.#procfileScript'")
+        procfilescript = run_nix(f"build --no-link --print-out-paths '.#procfileScript'")
     with open(procfilescript, 'r') as file:
         contents = file.read().strip()
     if contents == '':
         log("No 'processes' option defined: https://devenv.sh/processes/", level="error")
         exit(1)
     else:
+        env, _ = get_dev_environment(ctx)
         log('Starting processes ...', level="info")
         add_gc('procfilescript', procfilescript)
-        # TODO: print output to stdout
-        #run_command(procfilescript + ' ' + (command or ''))
-        args = [] if not command else [command]
-        subprocess.run([procfilescript] + args)
+        processes_script = os.path.join(DEVENV_DIR, 'processes')
+        with open(processes_script, 'w') as f:
+            f.write(f"""#!/usr/bin/env bash
+{env}
+{procfilescript} {command or ""}
+            """)
+        os.chmod(processes_script, 0o755)
+        
+        if detach:
+            process = subprocess.Popen(
+                [processes_script],
+                stdout=open(PROCESSES_LOG, 'w'),
+                stderr=subprocess.STDOUT,
+            )
+            
+            with open(PROCESSES_PID, 'w') as file:
+                file.write(str(process.pid))
+            log(f"  PID is {process.pid}.", level="info")
+            log(f"  See logs:  $ tail -f {PROCESSES_LOG}", level="info")
+            log(f"  Stop:      $ devenv processes stop", level="info")
+        else:
+            os.execv(processes_script, [processes_script])
+
+processes.add_command(up)
+
+@processes.command(
+    help="Stops processes started with 'devenv up'.",
+    short_help="Stops processes started with 'devenv up'.",
+)
+def stop():
+    with log_task('Stopping processes', newline=False):
+        if not os.path.exists(PROCESSES_PID):
+            log("No processes running.", level="error")
+            exit(1)
+
+        with open(PROCESSES_PID, 'r') as file:
+            pid = int(file.read())
+        
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            log(f"Process with PID {pid} not found.", level="error")
+            exit(1)
+
+        os.remove(PROCESSES_PID)
 
 @cli.command()
 @click.argument('name')
@@ -274,7 +349,7 @@ def up(ctx, command):
 def search(ctx, name):
     """Search packages matching NAME in nixpkgs input."""
     ctx.invoke(assemble)
-    options = run_nix(f"build --no-link --print-out-paths '.#optionsJSON' --impure")
+    options = run_nix(f"build --no-link --print-out-paths '.#optionsJSON' ")
     search = run_nix(f"search --json nixpkgs {name}")
 
     with open(Path(options) / 'share' / 'doc' / 'nixos' / 'options.json') as f:
@@ -292,7 +367,7 @@ def search(ctx, name):
     search_results = []
     for key, value in json.loads(search).items():
         search_results.append(
-            (".".join(key.split('.')[2:])
+            ("pkgs." + (".".join(key.split('.')[2:]))
             , value['version']
             , value['description'][:80]
             )
@@ -339,6 +414,7 @@ def container(ctx, registry, copy, copy_args, docker_run, container_name):
     # copy container
     if copy or docker_run:
         with log_task(f'Copying {container_name} container'):
+            # we need --impure here for DEVENV_CONTAINER
             copy_script = run_nix(f"build --print-out-paths --no-link \
             --impure .#devenv.containers.\"{container_name}\".copyScript")
             
@@ -351,8 +427,9 @@ def container(ctx, registry, copy, copy_args, docker_run, container_name):
                 check=True)
 
     if docker_run:
-        with log_task(f'Starting {container_name} container'):
-            docker_script = run_nix(f"build --print-out-paths --no-link --impure \
+        log(f'Starting {container_name} container', level="info")
+        # we need --impure here for DEVENV_CONTAINER
+        docker_script = run_nix(f"build --print-out-paths --no-link --impure \
               .#devenv.containers.\"{container_name}\".dockerRun")
             
         subprocess.run(docker_script)
@@ -371,7 +448,7 @@ def info(ctx):
         inputs = matches.group(1)
     else:
         inputs = ""
-    info_ = run_nix("eval --raw '.#info' --impure")
+    info_ = run_nix("eval --raw '.#info'")
     click.echo(f"{inputs}\n{info_}")
 
 @cli.command()
@@ -449,10 +526,10 @@ def ci(ctx):
     output_path = run_nix(f"build --no-link --print-out-paths --impure .#ci")
     add_gc('ci', output_path)
 
-@cli.command()
+@cli.command(hidden=True)
 @click.pass_context
 def print_dev_env(ctx):
-    env, _ = get_dev_environment(ctx)
+    env, _ = get_dev_environment(ctx, logging=False)
     click.echo(env)
 
 def get_version():
@@ -490,3 +567,123 @@ def add(ctx, name, url, follows):
     devenv['inputs'][name] = attrs
     
     write_yaml(devenv)
+
+@cli.command(
+    help="Run tests. See http://devenv.sh/tests/",
+    short_help="Run tests. See http://devenv.sh/tests/",
+)
+@click.argument('names', nargs=-1)
+@click.option('--debug', is_flag=True, help='Run tests in debug mode.')
+@click.pass_context
+def test(ctx, debug, names):
+    ctx.invoke(assemble)
+    with log_task(f"Gathering tests", newline=False):
+        tests = json.loads(run_nix(f"eval .#devenv.tests --json"))
+
+    if not names:
+        names = "local"
+
+    # group tests by tags
+    tags = {}
+    for name, test in tests.items():
+        for tag in test['tags']:
+            if tag not in tags:
+                tags[tag] = []
+            tags[tag].append(name)
+
+    selected_tests = []
+    for name in names:
+        if name in tests:
+            selected_tests.append(name)
+        tag_tests = tags.get(name, {})
+        if tag_tests:
+            selected_tests.extend(tag_tests)
+
+    log(f"Found {len(selected_tests)} tests:", level="info")
+
+    pwd = os.getcwd()
+
+    for name in selected_tests:
+        with log_task(f"  Running {name}"):
+            with tempfile.TemporaryDirectory(prefix=name + "_") as tmpdir:
+                os.chdir(tmpdir)
+                test = tests[name]
+
+                if test.get('src'):
+                    shutil.copytree(
+                        test['src'], '.', 
+                        dirs_exist_ok=True,
+                        copy_function=shutil.copy
+                    )
+                    run_command("find . -type d -exec chmod +wx {} \;")
+                else:
+                    write_if_defined("devenv.nix", test.get('nix'))
+                    write_if_defined("devenv.yaml", test.get('yaml'))
+                    write_if_defined(".test.sh", test.get('test'))
+                    if os.path.exists(".test.sh"):
+                        os.chmod(".test.sh", 0o755)
+
+                # predefined utilities
+                write_if_defined("devenv.local.nix", """
+{ pkgs, ... }: {
+  packages = [ pkgs.coreutils-full ];
+}
+                """.strip() + "\n")
+
+                # plug in devenv input if needed
+                if os.path.exists(os.path.join(pwd, 'src/modules/latest-version')):
+                    log("    Detected devenv module. Using src/modules for tests.", level="info")
+                    
+                    modules = os.path.join(pwd, 'src/modules')
+                    if not os.path.exists("devenv.yaml"):
+                        write_yaml(strictyaml.as_document({"inputs": {}}, schema=schema))
+                    os.chmod("devenv.yaml", 0o644)
+                    yaml = read_yaml()
+                    inputs = yaml.get('inputs', {})
+                    inputs['devenv'] = {'url': f'path:{modules}'}
+                    yaml['inputs'] = inputs
+                    write_yaml(yaml)
+
+                devenv = sys.argv[0]
+                has_processes = False
+                try:
+                    log("    Running $ devenv ci", level="info")
+                    run_command(f"{devenv} ci")
+
+                    has_processes = os.path.exists(".devenv/gc/ci") and "-devenv-up" in run_command("cat .devenv/gc/ci")
+
+                    if has_processes:
+                        log("    Detected processes. Starting them.", level="info")
+                        run_command(f"{devenv} up -d")
+                        # stream logs
+                        p = subprocess.Popen(f"tail -f .devenv/processes.log", 
+                            shell=True,
+                        )
+                    else:
+                        p = None
+
+                    try:
+                        if os.path.exists(".test.sh"):
+                            log("    Detected .test.sh. Running it.", level="info")
+                            run_command(f"{devenv} shell bash ./.test.sh")
+                    finally:
+                        if has_processes and not debug:
+                            run_command(f"{devenv} processes stop")
+                            if p:
+                                p.kill()
+                except BaseException as e:
+                    log(f"Test {name} failed.", level="error")
+                    if debug:
+                        log(f"Entering shell because of the --debug flag:", level="warning")
+                        log(f"  - devenv: {devenv}", level="warning")
+                        log(f"  - cwd: {tmpdir}", level="warning")
+                        if has_processes:
+                            log(f"  - up logs: .devenv/processes.log:", level="warning")
+                        os.execv("/bin/sh", ["/bin/sh"])
+                    else:
+                        raise e
+
+def write_if_defined(file, content):
+    if content:
+        with open(file, 'w') as f:
+            f.write(content)

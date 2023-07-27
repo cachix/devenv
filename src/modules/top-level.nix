@@ -110,6 +110,7 @@ in
       root = lib.mkOption {
         type = types.str;
         internal = true;
+        default = builtins.getEnv "PWD";
       };
 
       dotfile = lib.mkOption {
@@ -137,6 +138,8 @@ in
     ./update-check.nix
     ./containers.nix
     ./debug.nix
+    ./lib.nix
+    ./tests.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -145,20 +148,16 @@ in
   ;
 
   config = {
-    # TODO: figure out how to get relative path without impure mode
-    devenv.root = lib.mkDefault (
-      let
-        pwd = builtins.getEnv "PWD";
-      in
-      if pwd == "" then
-        throw ''
+    assertions = [
+      {
+        assertion = config.devenv.root != "";
+        message = ''
           devenv was not able to determine the current directory.
-          Make sure Nix runs with the `--impure` flag.
 
-          See https://devenv.sh/guides/using-with-flakes/
-        ''
-      else pwd
-    );
+          See https://devenv.sh/guides/using-with-flakes/ how to use it with flakes.
+        '';
+      }
+    ];
     devenv.dotfile = config.devenv.root + "/.devenv";
     devenv.state = config.devenv.dotfile + "/state";
     devenv.profile = profile;
@@ -208,6 +207,6 @@ in
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
 
     ci = [ config.shell.inputDerivation ];
-    ciDerivation = pkgs.runCommand "ci" { } ("ls " + toString config.ci + " && touch $out");
+    ciDerivation = pkgs.runCommand "ci" { } "echo ${toString config.ci} > $out";
   };
 }
