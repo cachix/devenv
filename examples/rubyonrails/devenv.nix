@@ -9,7 +9,12 @@
   processes.rails.exec = "rails server";
 
   enterShell = ''
+    if [ ! -d "blog" ]; then
+      rails new blog -d=postgresql
+    fi
     export PATH="$DEVENV_ROOT/blog/bin:$PATH"
-    bundle
+    pushd blog
+      bundle
+    popd
   '';
 }

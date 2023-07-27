@@ -1,7 +1,11 @@
 { pkgs, ... }:
 
 {
-  packages = [ pkgs.rust-bin.stable.latest.default ];
+  packages = [
+    # from the rust-overlay
+    pkgs.rust-bin.stable.latest.default
 
-  services.blackfire.enable = true;
+    # from subflake
+    pkgs.hello2
+  ];
 }

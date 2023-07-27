@@ -1,11 +1,9 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   cfg = config.languages.ruby;
 
-  devenvlib = import ../devenv-lib.nix { inherit pkgs config inputs lib; };
-
-  nixpkgs-ruby = devenvlib.getInput {
+  nixpkgs-ruby = config.lib.getInput {
     name = "nixpkgs-ruby";
     url = "github:bobvanderlinden/nixpkgs-ruby";
     attribute = "languages.ruby.version or languages.ruby.versionFile";
