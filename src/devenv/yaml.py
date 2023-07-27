@@ -21,13 +21,22 @@ schema = Map({
       Optional("permittedInsecurePackages", default=None): Seq(Str())
 })
 
-def validate_and_parse_yaml(dot_devenv_root):
+YAML_FILE = Path("devenv.yaml")
+
+def read_yaml():
   try:
-      with open(Path("devenv.yaml")) as f:
-          devenv = load(f.read(), schema, label="devenv.yaml").data
+      with open(YAML_FILE) as f:
+          return load(f.read(), schema, label="devenv.yaml")
   except YAMLError as error:
       print("Validation error in `devenv.yaml`", error)
       sys.exit(1)
+
+def write_yaml(yaml):
+    with open(YAML_FILE, "w") as f:
+        f.write(yaml.as_yaml())
+
+def validate_and_parse_yaml(dot_devenv_root):
+  devenv = read_yaml().data
 
   inputs = {}
   for input, attrs in devenv.get('inputs', {}).items():
