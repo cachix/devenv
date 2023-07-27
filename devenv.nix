@@ -1,14 +1,15 @@
 { inputs, pkgs, lib, config, ... }:
 
 {
-  env = {
-    DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
-  };
+  env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
+  # TODO: manylinux for python
+  env.LD_LIBRARY_PATH = config.devenv.dotfile + "/profile/lib";
 
   packages = [
     pkgs.cairo
     pkgs.xorg.libxcb
     pkgs.yaml2json
+    pkgs.tesh
   ];
 
   languages.nix.enable = true;
@@ -43,7 +44,11 @@
     tmp="$(mktemp -d)"
     devenv init "$tmp"
     pushd "$tmp"
+      echo -e "  devenv:\n    url: path:${config.devenv.root}/src/modules" >> devenv.yaml
+      cat devenv.yaml
+      devenv version
       devenv ci
+      devenv test
     popd
     rm -rf "$tmp"
 
@@ -80,43 +85,6 @@
       nix build --impure --accept-flake-config .#container-processes
     popd
     rm -rf "$tmp"
-  '';
-  scripts.devenv-test-all-examples.exec = ''
-    for dir in $(ls examples); do
-      devenv-test-example $dir
-    done
-  '';
-  scripts.devenv-test-example.exec = ''
-    # execute all trap_ function on exit
-    trap 'eval $(declare -F | grep -o "trap_[^ ]*" | tr "\n" ";")' EXIT
-
-    set -e
-    example="$PWD/examples/$1"
-    pushd $example
-    mv devenv.yaml devenv.yaml.orig
-    awk '
-      { print }
-      /^inputs:$/ {
-        print "  devenv:";
-        print "    url: path:../../src/modules";
-      }
-    ' devenv.yaml.orig > devenv.yaml
-    trap_restore_yaml() { 
-      mv "$example/devenv.yaml.orig" "$example/devenv.yaml"
-    }
-    devenv ci
-    if [ -f .test.sh ]; then
-      trap_restore_local() { 
-        rm "$example/devenv.local.nix" 
-        rm -rf "$example/.devenv"
-      }
-      # coreutils-full provides timeout on darwin
-      echo "{ pkgs, ... }: { packages = [ pkgs.coreutils-full ]; }" > devenv.local.nix
-      devenv shell ./.test.sh
-    else
-      devenv shell ls
-    fi
-    popd
   '';
   scripts."devenv-generate-doc-options".exec = ''
     set -e
@@ -161,4 +129,7 @@
     MD033 = false;
     MD034 = false;
   };
+
+  tests = config.lib.mkTests ./examples
+    // config.lib.mkTests ./tests;
 }
