@@ -245,6 +245,7 @@ in
       {
         MYSQL_HOME = config.env.DEVENV_STATE + "/mysql";
         MYSQL_UNIX_PORT = config.env.DEVENV_STATE + "/mysql.sock";
+        MYSQLX_UNIX_PORT = config.env.DEVENV_STATE + "/mysqlx.sock";
       }
       // (optionalAttrs (hasAttrByPath [ "mysqld" "port" ] cfg.settings) {
         MYSQL_TCP_PORT = toString cfg.settings.mysqld.port;
