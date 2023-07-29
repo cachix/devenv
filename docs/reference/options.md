@@ -2268,8 +2268,6 @@ string
 
 Whether to enable tools for PureScript development.
 
-
-
 *Type:*
 boolean
 
@@ -2291,6 +2289,8 @@ boolean
 ## languages.purescript.package
 
 The PureScript package to use.
+
+
 
 *Type:*
 package
