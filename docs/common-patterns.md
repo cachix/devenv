@@ -45,3 +45,14 @@ in {
   ];
 }
 ```
+
+# How can I escape Nix curly braces if I'm writing shell code?
+
+```nix
+{ pkgs, ... }: {
+  scripts.myscript.exec = ''
+    foobar=1
+    echo ''${foobar}
+  '';
+}
+```
