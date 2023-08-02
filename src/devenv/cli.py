@@ -39,8 +39,8 @@ if 'site-packages' in FILE:
 else:
     SRC_DIR = Path(FILE, '..', '..')
 MODULES_DIR = (SRC_DIR / 'modules').resolve()
-FLAKE_FILE_TEMPL = os.path.join(MODULES_DIR, "flake.tmpl.nix")
-FLAKE_FILE = ".devenv.flake.nix"
+FLAKE_FILE_TEMPL = Path(MODULES_DIR) / "flake.tmpl.nix"
+FLAKE_FILE = Path(".devenv.flake.nix")
 FLAKE_LOCK = "devenv.lock"
 
 # define system like x86_64-linux
@@ -179,8 +179,7 @@ def assemble(ctx):
     else:
         for file in ['devenv.json', 'flake.json', 'imports.txt']:
             file_path = DEVENV_DIR / file
-            if file_path.exists():
-                os.remove(file_path)
+            file_path.unlink(missing_ok=True)
 
     with open(FLAKE_FILE_TEMPL) as f:
         flake = f.read()
