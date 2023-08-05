@@ -23,21 +23,20 @@ let
           # Create initial databases
           dbAlreadyExists="$(
             echo "SELECT 1 as exists FROM pg_database WHERE datname = '${database.name}';" | \
-            postgres --single -E postgres | \
+            psql --dbname postgres | \
             ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
           )"
           echo $dbAlreadyExists
           if [ 1 -ne "$dbAlreadyExists" ]; then
             echo "Creating database: ${database.name}"
-            echo 'create database "${database.name}";' | postgres --single -E postgres
-
+            echo 'create database "${database.name}";' | psql --dbname postgres
 
             ${lib.optionalString (database.schema != null) ''
             echo "Applying database schema on ${database.name}"
             if [ -f "${database.schema}" ]
             then
               echo "Running file ${database.schema}"
-              ${pkgs.gawk}/bin/awk 'NF' "${database.schema}" | postgres --single -j -E ${database.name}
+              ${pkgs.gawk}/bin/awk 'NF' "${database.schema}" | psql --dbname ${database.name}
             elif [ -d "${database.schema}" ]
             then
               # Read sql files in version order. Apply one file
@@ -45,7 +44,7 @@ let
               # doesn't end in a ;.
               ls -1v "${database.schema}"/*.sql | while read f ; do
                  echo "Applying sql file: $f"
-                 ${pkgs.gawk}/bin/awk 'NF' "$f" | postgres --single -j -E ${database.name}
+                 ${pkgs.gawk}/bin/awk 'NF' "$f" | psql --dbname ${database.name}
               done
             else
               echo "ERROR: Could not determine how to apply schema with ${database.schema}"
@@ -57,12 +56,12 @@ let
         cfg.initialDatabases)
     else
       lib.optionalString cfg.createDatabase ''
-        echo "CREATE DATABASE ''${USER:-$(id -nu)};" | postgres --single -E postgres '';
+        echo "CREATE DATABASE ''${USER:-$(id -nu)};" | psql --dbname postgres'';
 
   runInitialScript =
     if cfg.initialScript != null then
       ''
-        echo ${lib.escapeShellArg cfg.initialScript} | postgres --single -E postgres
+        echo ${lib.escapeShellArg cfg.initialScript} | psql --dbname postgres
       ''
     else
       "";
@@ -83,15 +82,47 @@ let
     set -euo pipefail
     export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
 
+    POSTGRES_RUN_INITIAL_SCRIPT="false"
     if [[ ! -d "$PGDATA" ]]; then
       initdb ${lib.concatStringsSep " " cfg.initdbArgs}
-      ${setupInitialDatabases}
-
-      ${runInitialScript}
+      POSTGRES_RUN_INITIAL_SCRIPT="true"
+      echo
+      echo "PostgreSQL initdb process complete."
+      echo
     fi
 
     # Setup config
     cp ${configFile} "$PGDATA/postgresql.conf"
+
+    if [[ "$POSTGRES_RUN_INITIAL_SCRIPT" = "true" ]]; then
+      echo
+      echo "PostgreSQL is setting up the initial database."
+      echo
+      OLDPGHOST="$PGHOST"
+      PGHOST="$DEVENV_STATE/$(mktemp -d "pg-init-XXXXXX")"
+      mkdir -p "$PGHOST"
+
+      function remove_tmp_pg_init_sock_dir() {
+        if [[ -d "$1" ]]; then
+          rm -rf "$1"
+        fi
+      }
+      trap "remove_tmp_pg_init_sock_dir '$PGHOST'" EXIT
+
+      pg_ctl -D "$PGDATA" -w start -o "-c unix_socket_directories=$PGHOST -c listen_addresses= -p ${toString cfg.port}"
+      ${setupInitialDatabases}
+
+      ${runInitialScript}
+      pg_ctl -D "$PGDATA" -m fast -w stop
+      remove_tmp_pg_init_sock_dir "$PGHOST"
+      PGHOST="$OLDPGHOST"
+      unset OLDPGHOST
+    else
+      echo
+      echo "PostgreSQL Database directory appears to contain a database; Skipping initialization"
+      echo
+    fi
+    unset POSTGRES_RUN_INITIAL_SCRIPT
   '';
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail

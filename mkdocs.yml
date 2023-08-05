@@ -23,6 +23,7 @@ theme:
     - navigation.instant
     - navigation.tracking
     - content.code.annotate
+    - content.code.copy
     - content.tabs.link
 nav:
   - Home: index.md
@@ -41,7 +42,7 @@ nav:
       - Common Patterns: common-patterns.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
-      - Composing Using Imports: composing-using-imports.md
+      - Imports: composing-using-imports.md
     - Overview:
       - Automatic Shell Activation: automatic-shell-activation.md
       - Garbage Collection: garbage-collection.md

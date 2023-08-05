@@ -11,30 +11,30 @@ let
           url: github:cachix/nixpkgs-python
   '');
 
-  venvPath = "${config.env.DEVENV_STATE}/venv";
-
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
     # Make sure any tools are not attempting to use the python interpreter from any
     # existing virtual environment. For instance if devenv was started within an venv.
     unset VIRTUAL_ENV
 
-    if [ ! -L ${venvPath}/devenv-profile ] \
-    || [ "$(${pkgs.coreutils}/bin/readlink ${venvPath}/devenv-profile)" != "${config.devenv.profile}" ]
+    VENV_PATH="${config.env.DEVENV_STATE}/venv"
+
+    if [ ! -L "$VENV_PATH"/devenv-profile ] \
+    || [ "$(${pkgs.coreutils}/bin/readlink "$VENV_PATH"/devenv-profile)" != "${config.devenv.profile}" ]
     then
-      if [ -d ${venvPath} ]
+      if [ -d "$VENV_PATH" ]
       then
         echo "Rebuilding Python venv..."
-        ${pkgs.coreutils}/bin/rm -rf ${venvPath}
+        ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
       fi
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      ${cfg.package.interpreter} -m venv ${venvPath}
-      ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} ${venvPath}/devenv-profile
+      ${cfg.package.interpreter} -m venv "$VENV_PATH"
+      ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} "$VENV_PATH"/devenv-profile
     fi
-    source ${venvPath}/bin/activate
+    source "$VENV_PATH"/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
-      ${venvPath}/bin/pip install -r ${pkgs.writeText "requirements.txt" cfg.venv.requirements}
+      "$VENV_PATH"/bin/pip install -r ${pkgs.writeText "requirements.txt" cfg.venv.requirements}
     ''}
   '';
 
@@ -45,16 +45,8 @@ let
       # existing virtual environment. For instance if devenv was started within an venv.
       unset VIRTUAL_ENV
 
-      if [ ! -L ${config.env.DEVENV_ROOT}/.venv ]
-      then
-        ${pkgs.coreutils}/bin/ln --symbolic --no-target-directory --force ${venvPath} ${config.env.DEVENV_ROOT}/.venv
-      fi
-
-      if [ ! -d ${venvPath} ] \
-        || [ ! "$(${pkgs.coreutils}/bin/readlink ${venvPath}/bin/python)" -ef "${cfg.package.interpreter}" ]
-      then
-        ${cfg.poetry.package}/bin/poetry env use --no-interaction ${cfg.package.interpreter}
-      fi
+      # Make sure poetry's venv uses the configured python executable.
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
     }
 
     function _devenv-poetry-install()
@@ -63,8 +55,8 @@ let
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
-      local POETRY_CHECKSUM_FILE="${venvPath}/poetry.lock.checksum"
+      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/.venv/poetry.lock.checksum
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
         read -r EXPECTED_POETRY_CHECKSUM < "$POETRY_CHECKSUM_FILE"
@@ -92,7 +84,7 @@ let
         _devenv-poetry-install
       ''}
       ${lib.optionalString cfg.poetry.activate.enable ''
-        source ${venvPath}/bin/activate
+        source "$DEVENV_ROOT"/.venv/bin/activate
       ''}
     fi
   '';

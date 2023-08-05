@@ -18,9 +18,11 @@ let
 
   phps = inputs.phps or (throw "To use languages.php.version, you need to add the following to your devenv.yaml:\n\n${setup}");
 
+  filterDefaultExtensions = ext: builtins.length (builtins.filter (inner: inner == ext.extensionName) cfg.disableExtensions) == 0;
+
   configurePackage = package:
     package.buildEnv {
-      extensions = { all, enabled }: with all; enabled ++ attrValues (getAttrs cfg.extensions package.extensions);
+      extensions = { all, enabled }: with all; (builtins.filter filterDefaultExtensions (enabled ++ attrValues (getAttrs cfg.extensions package.extensions)));
       extraConfig = cfg.ini;
     };
 
@@ -224,6 +226,14 @@ in
       '';
     };
 
+    disableExtensions = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = ''
+        PHP extensions to disable.
+      '';
+    };
+
     fpm = {
       settings = mkOption {
         type = with types; attrsOf (oneOf [ str int bool ]);
@@ -327,7 +337,7 @@ in
       processes = mapAttrs'
         (pool: poolOpts:
           nameValuePair "phpfpm-${pool}" {
-            exec = "${startScript pool poolOpts}/bin/start-phpfpm";
+            exec = startScript pool poolOpts;
           }
         )
         cfg.fpm.pools;

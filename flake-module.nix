@@ -42,11 +42,14 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
       config.packages =
         lib.concatMapAttrs
           (shellName: devenv:
-            lib.concatMapAttrs
+            (lib.concatMapAttrs
               (containerName: container:
                 { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
               )
               devenv.containers
+            ) // {
+              "${shellPrefix shellName}devenv-up" = devenv.procfileScript;
+            }
           )
           config.devenv.shells;
     });

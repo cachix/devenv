@@ -1,0 +1,3 @@
+imports:
+- ./file.nix
+- ./folder/
