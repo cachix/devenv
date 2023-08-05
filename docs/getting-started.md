@@ -1,9 +1,8 @@
-Here are the minimum steps to get started.
 
 ## Installation
 
 
-a) Install [Nix](https://nixos.org)
+### 1. Install [Nix](https://nixos.org)
 
 === "Linux"
 
@@ -28,7 +27,9 @@ a) Install [Nix](https://nixos.org)
     docker run -it nixos/nix
     ```
 
-b) Install [Cachix](https://cachix.org) (recommended, speeds up the installation by providing binaries)
+### 2. Install [Cachix](https://cachix.org)
+
+Recommended, speeds up the installation by providing binaries.
 
 === "Newcomers"
 
@@ -37,53 +38,43 @@ b) Install [Cachix](https://cachix.org) (recommended, speeds up the installation
     cachix use devenv
     ```
 
-=== "Advanced (flake profiles)"
+=== "Flake profiles"
 
     ```
     nix profile install nixpkgs#cachix
     cachix use devenv
     ```
 
-c) Install ``devenv``
+### 3. Install [devenv](https://github.com/cachix/devenv)
 
-
-!!! note
-
-    To update `devenv`, rerun the installation commands below. 
-    
-    If you get errors that `devenv` already exists, run `nix profile list` and `nix profile remove <number>` beforehand.
 
 === "Newcomers"
 
     ```
-    nix-env -if https://github.com/cachix/devenv/tarball/latest
+    nix-env -if https://install.devenv.sh/latest
     ```
 
-=== "Advanced (flake profiles)"
+=== "Flake profiles"
 
     ```
-    nix profile install --accept-flake-config github:cachix/devenv/latest 
+    nix profile install --accept-flake-config tarball+https://install.devenv.sh/latest
     ```
+=== "Declaratively using flakes"
 
-=== "Advanced (declaratively without flakes)"
+    See [Using flakes](../guides/using-with-flakes)
+
+=== "Declaratively without flakes"
 
     ```nix title="configuration.nix"
     environment.systemPackages = [ 
-      (import (fetchTarball https://github.com/cachix/devenv/archive/v{{ devenv.version }}.tar.gz)).default
+      (import (fetchTarball https://install.devenv.sh/latest)).default
     ];
     ```
 
-=== "Advanced (declaratively with flakes)"
 
-    ```nix title="flake.nix"
-     {
-        inputs.devenv.url = "github:cachix/devenv/latest";
+!!! Updating
 
-        outputs = { devenv, ... }: {
-            packages.x86_64-linux = [devenv.packages.x86_64-linux.devenv];
-        };
-    }
-    ```
+    Follow the instructions for an installation above. 
 
 ## Initial set up
 

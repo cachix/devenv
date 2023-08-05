@@ -10,6 +10,9 @@
 | imports                      | A list of relative paths or references to inputs to import ``devenv.nix``.    |
 | permittedInsecurePackages    | A list of insecure permitted packages.                                        |
 
+!!! note "Added in 1.0"
+
+    - relative file support in imports: `./mymodule.nix`
 
 ## inputs.&lt;name&gt;.url
 
@@ -42,6 +45,11 @@ inputs:
 imports:
   - ./frontend
   - ./backend
+  - ./mymodule.nix
   - myproject
   - myproject/relative/path
 ```
+
+!!! note "Added in 1.0"
+
+    - relative file support in imports: `./mymodule.nix`

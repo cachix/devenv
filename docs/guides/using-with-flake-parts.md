@@ -1,10 +1,10 @@
-If you're familiar with the Nix language and ecosystem, `devenv` can be used without the `devenv` CLI by integrating into [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/).
+If you're familiar with the Nix language and ecosystem, `devenv` can be used without the `devenv` CLI by integrating into [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/) using [flake-parts](https://flake.parts).
 
 Using `devenv` configuration in flakes is useful for projects that need to define other Nix flake features in addition to the development shell.
 Additional flake features may include the Nix package for the project or NixOS and Home Manager modules related to the project.
 Using the same lock file for the development shell and other features ensures that everything is based on the same `nixpkgs`.
 
-A Nix flake includes the inputs from `devenv.yaml` as well as the `devenv` configuration that you would usually find in `devenv.nix`. `flake.lock` is the lock file for Nix flakes, the equivalent to `devenv.lock`.
+A Nix flake needs to consist of at least the input declarations from `devenv.yaml`, as well as the `devenv` configuration that you would usually find in `devenv.nix`. `flake.lock` is the lock file for Nix flakes, the equivalent to `devenv.lock`.
 
 ## Getting started
 
@@ -22,7 +22,7 @@ Open the `devenv` shell using:
 $ nix develop --impure
 ```
 
-This will create a lock file and open a new shell that adheres to the `devenv` configuration contained in `flake.nix`.
+This will also create a lock file and open a new shell that adheres to the `devenv` configuration contained in `flake.nix`.
 
 ## The `flake.nix` file
 
@@ -63,9 +63,9 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
 }
 ```
 
-Here a single shell is defined for all listed systems. The shell includes a single `devenv` configuration module.
+Here a single shell is defined for all listed [systems](https://flake.parts/options/flake-parts.html#opt-systems). The shell includes a single `devenv` configuration module, under [`devenv.shells`](https://flake.parts/options/devenv.html#opt-perSystem.devenv.shells), named `default`.
 
-Add your `devenv` configuration (usually in the `devenv.nix` file) to this module. See [`devenv.nix` options](https://devenv.sh/reference/options/) for more information about configuration options.
+Add your `devenv` configuration (usually in the `devenv.nix` file) to this module. See [`devenv.nix` options](../reference/options.md) for more information about configuration options.
 
 ## The direnv extension
 
@@ -79,6 +79,65 @@ use flake . --impure
 
 In a standard Nix flake project, the `--impure` flag is not needed. However, using `devenv` in your flake _requires_ the `--impure` flag.
 
+## Import a devenv module
+
+You can import a devenv configuration or module, such as `devenv-foo.nix` into an individual shell as follows.
+
+Add `imports` to your `devenv.shells.<name>` definition:
+
+```nix
+# inside perSystem = { ... }: {
+
+devenv.shells.default = {
+  imports = [ ./devenv-foo.nix ];
+
+  enterShell = ''
+    hello
+  '';
+};
+```
+
+You can use definitions from your flake in your devenv configuration.
+When you do so it's recommended to use a different file name than `devenv.nix`, because it may not be standalone capable.
+
+For example, if `devenv-foo.nix` declares a devenv [service](../services.md), and you've packaged it locally into [`perSystem.packages`](https://flake.parts/options/flake-parts.html#opt-perSystem.packages), you can provide the package as follows:
+
+```nix
+# inside perSystem = { config, ... }: {
+
+devenv.shells.default = {
+  imports = [ ./devenv-foo.nix ];
+
+  services.foo.package = config.packages.foo;
+
+  enterShell = ''
+    hello
+  '';
+};
+```
+
+Your devenv module then doesn't have to provide a default:
+
+```nix
+{ config, lib, ... }:
+let cfg = config.services.foo;
+in {
+  options = {
+    services.foo = {
+      package = lib.mkOption {
+        type = lib.types.package;
+        defaultText = lib.literalMD "defined internally";
+        description = "The foo package to use.";
+      };
+      # ...
+    };
+  };
+  config = lib.mkIf cfg.enable {
+    processes.foo.exec = "${cfg.package}/bin/foo";
+  };
+}
+```
+
 ## Multiple shells
 
 Depending on the structure of your project, you may want to define multiple development shells using flakes. We'll take a look at two use cases for multiple shells here: A single project with multiple shells and a project with an external flake.
@@ -87,36 +146,36 @@ Depending on the structure of your project, you may want to define multiple deve
 
 Some projects lend themselves to defining multiple development shells. For instance, you may want to define multiple development shells for different subprojects in a monorepo. You can do this by defining the various development shells in a central `flake.nix` file in the root of the repository.
 
-The `flake.nix` file contains multiple `devShells`. For example:
+The `flake.nix` file outputs multiple [`devShells`](https://flake.parts/options/flake-parts.html#opt-flake.devShells) when you provide multiple [perSystem.devenv.shells](https://flake.parts/options/devenv.html#opt-perSystem.devenv.shells) definitions. For example:
 
 ```nix
-        # inside perSystem
+# inside perSystem = { ... }: {
 
-        devenv.shells.projectA = {
-          # https://devenv.sh/reference/options/
-          packages = [ config.packages.default ];
+devenv.shells.projectA = {
+  # https://devenv.sh/reference/options/
+  packages = [ config.packages.default ];
 
-          enterShell = ''
-            echo this is project A
-            hello
-          '';
-        };
+  enterShell = ''
+    echo this is project A
+    hello
+  '';
+};
 
-        devenv.shells.projectB = {
-          # https://devenv.sh/reference/options/
-          packages = [ config.packages.default ];
+devenv.shells.projectB = {
+  # https://devenv.sh/reference/options/
+  packages = [ config.packages.default ];
 
-          enterShell = ''
-            echo this is project A
-            hello
-          '';
-        };
+  enterShell = ''
+    echo this is project A
+    hello
+  '';
+};
 
-        # If you'd like to pick a default
-        devShells.default = config.devShells.projectA;
+# If you'd like to pick a default
+devShells.default = config.devShells.projectA;
 ```
 
-Here we define two shells, each with a `devenv` configuration and differently defined `enterShell` command.
+Here we have defined two shells, each with a `devenv` configuration and differently defined [`enterShell`](../reference/options.md#entershell) command.
 
 To enter the shell of `projectA`:
 
