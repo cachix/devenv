@@ -62,24 +62,29 @@ in
   };
 
   config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
-      packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
-        ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
+    (lib.mkIf cfg.enable (
+      let
+        mkOverrideTools = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
+      in
+      {
+        packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
+          ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
-      # enable compiler tooling by default to expose things like cc
-      languages.c.enable = lib.mkDefault true;
+        # enable compiler tooling by default to expose things like cc
+        languages.c.enable = lib.mkDefault true;
 
-      # RUST_SRC_PATH is necessary when rust-src is not at the same location as
-      # as rustc. This is the case with the rust toolchain from nixpkgs.
-      env.RUST_SRC_PATH =
-        if cfg.toolchain ? rust-src
-        then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
-        else pkgs.rustPlatform.rustLibSrc;
+        # RUST_SRC_PATH is necessary when rust-src is not at the same location as
+        # as rustc. This is the case with the rust toolchain from nixpkgs.
+        env.RUST_SRC_PATH =
+          if cfg.toolchain ? rust-src
+          then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
+          else pkgs.rustPlatform.rustLibSrc;
 
-      pre-commit.tools.cargo = lib.mkDefault cfg.toolchain.cargo or null;
-      pre-commit.tools.rustfmt = lib.mkDefault cfg.toolchain.rustfmt or null;
-      pre-commit.tools.clippy = lib.mkDefault cfg.toolchain.clippy or null;
-    })
+        pre-commit.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
+        pre-commit.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
+        pre-commit.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
+      }
+    ))
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
       env.RUSTFLAGS = [ "-L framework=${config.devenv.profile}/Library/Frameworks" ];
       env.RUSTDOCFLAGS = [ "-L framework=${config.devenv.profile}/Library/Frameworks" ];
