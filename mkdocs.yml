@@ -10,7 +10,8 @@ theme:
   name: material
   logo: assets/logo.webp
   favicon: assets/favicon.svg
-
+  icon:
+    repo: fontawesome/brands/github
   custom_dir: docs/overrides
   palette:
     primary: white
@@ -25,6 +26,7 @@ theme:
     - content.code.annotate
     - content.code.copy
     - content.tabs.link
+    - content.action.edit
 nav:
   - Home: index.md
   - Documentation:
