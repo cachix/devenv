@@ -6,7 +6,8 @@ let
   requirements = pkgs.writeText "requirements.txt" (
     if lib.isPath cfg.venv.requirements
     then builtins.readFile cfg.venv.requirements
-    else cfg.venv.requirements);
+    else cfg.venv.requirements
+  );
 
   nixpkgs-python = inputs.nixpkgs-python or (throw ''
     To use languages.python.version, you need to add the following to your devenv.yaml:
