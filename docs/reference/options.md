@@ -2567,7 +2567,7 @@ This is passed to `pip install -r` during `devenv shell` initialisation.
 
 
 *Type:*
-null or strings concatenated with “\\n”
+null or strings concatenated with “\\n” or path
 
 
 
