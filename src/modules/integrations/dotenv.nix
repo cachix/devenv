@@ -6,16 +6,9 @@ let
   dotenvPath = config.devenv.root + "/" + cfg.filename;
 
   dotenvFound = lib.pathExists dotenvPath;
-  parseLine = line:
-    let
-      parts = builtins.match "(.+) *= *(.+)" line;
-    in
-    if (!builtins.isNull parts) && (builtins.length parts) == 2 then
-      { name = builtins.elemAt parts 0; value = builtins.elemAt parts 1; }
-    else
-      null;
-
-  parseEnvFile = content: builtins.listToAttrs (lib.filter (x: !builtins.isNull x) (map parseLine (lib.splitString "\n" content)));
+  dlib = import ./dotenv-functions.nix { inherit lib; };
+  parseLine = dlib.parseLine;
+  parseEnvFile = dlib.parseEnvFile;
 in
 {
   options.dotenv = {
