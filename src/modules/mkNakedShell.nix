@@ -54,6 +54,7 @@ in
 , meta ? { }
 , passthru ? { }
 , debug ? false
+, skipLibraryPathEnv ? false
 }:
 let
   # simpler version of https://github.com/numtide/devshell/blob/20d50fc6adf77fd8a652fc824c6e282d7737b85d/modules/env.nix#L41
@@ -100,7 +101,11 @@ let
 
       # prepend common compilation lookup paths
       export PKG_CONFIG_PATH="$DEVENV_PROFILE/lib/pkgconfig:''${PKG_CONFIG_PATH-}"
-      export LD_LIBRARY_PATH="$DEVENV_PROFILE/lib:''${LD_LIBRARY_PATH-}"
+      ${
+        lib.optionalString (!skipLibraryPathEnv) ''
+          export LD_LIBRARY_PATH="$DEVENV_PROFILE/lib:''${LD_LIBRARY_PATH-}"
+        ''
+      }
       export LIBRARY_PATH="$DEVENV_PROFILE/lib:''${LIBRARY_PATH-}"
       export C_INCLUDE_PATH="$DEVENV_PROFILE/include:''${C_INCLUDE_PATH-}"
 

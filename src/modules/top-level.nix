@@ -127,6 +127,11 @@ in
         internal = true;
       };
 
+      skipLibraryPathEnv = lib.mkOption {
+        type = types.bool;
+        default = false;
+      };
+
     };
   };
 
@@ -201,6 +206,7 @@ in
         profile = profile;
         shellHook = config.enterShell;
         debug = config.devenv.debug;
+        skipLibraryPathEnv = config.devenv.skipLibraryPathEnv;
       }
     );
 
