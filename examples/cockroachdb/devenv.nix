@@ -1,0 +1,7 @@
+{ ... }:
+
+{
+  services.cockroachdb = {
+    enable = true;
+  };
+}
