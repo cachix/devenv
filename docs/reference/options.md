@@ -6706,6 +6706,90 @@ signed integer
 
 
 
+## services.cockroachdb.enable
+
+Whether to enable Add CockroachDB process.
+.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+## services.cockroachdb.package
+
+The CockroachDB package to use.
+
+
+
+*Type:*
+unspecified value
+
+
+
+*Default:*
+` "pkgs.cockroachdb-bin" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+## services.cockroachdb.http_addr
+
+The hostname or IP address to bind to for HTTP requests.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "localhost:8080" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+## services.cockroachdb.listen_addr
+
+The address/hostname and port to listen on.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "localhost:26257" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
 ## services.couchdb.enable
 
 Whether to enable CouchDB process.
