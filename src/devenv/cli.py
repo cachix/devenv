@@ -254,7 +254,7 @@ def cleanup_symlinks(folder):
                     to_gc.append(full_path)
     return to_gc, removed_symlinks
 
-def get_dev_environment(ctx, logging=True):
+def get_dev_environment(ctx, json=False, logging=True):
     ctx.invoke(assemble)
     if logging:
         action = log_task('Building shell')
@@ -262,7 +262,10 @@ def get_dev_environment(ctx, logging=True):
         action = suppress()
     with action:
         gc_root = os.path.join(os.environ['DEVENV_GC'], 'shell')
-        env = run_nix(f"print-dev-env --profile '{gc_root}'", logging=False, use_cachix=True)
+        cmd = f"print-dev-env --profile '{gc_root}'"
+        if json:
+            cmd += " --json"
+        env = run_nix(cmd, logging=False, use_cachix=True)
         run_command(f"nix-env -p '{gc_root}' --delete-generations old", logging=False, disable_stderr=True)
         symlink_force(Path(f'{ctx.obj["gc_project"]}-shell'), gc_root)
     return env, gc_root
@@ -547,9 +550,10 @@ def ci(ctx):
     add_gc('ci', output_path)
 
 @cli.command(hidden=True)
+@click.option("--json", is_flag=True)
 @click.pass_context
-def print_dev_env(ctx):
-    env, _ = get_dev_environment(ctx, logging=False)
+def print_dev_env(ctx, json):
+    env, _ = get_dev_environment(ctx, json=json, logging=False)
     click.echo(env)
 
 def get_version():
