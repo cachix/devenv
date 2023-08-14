@@ -28,6 +28,8 @@ in
 
     package = lib.mkOption {
       default = pkgs.cockroachdb-bin;
+      defaultText = "pkgs.cockroachdb-bin";
+      description = "The CockroachDB package to use.";
     };
   };
 
