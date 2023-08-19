@@ -10,8 +10,8 @@ What if you could have the tooling for any programming language by flipping a to
   languages.python.version = "3.11.3";
 
   languages.rust.enable = true;
-  # https://devenv.sh/reference/options/#languagesrustversion
-  languages.rust.version = "latest";
+  # https://devenv.sh/reference/options/#languagesrustchannel
+  languages.rust.channel = "stable";
 }
 ```
 
