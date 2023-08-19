@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -ex
 cargo --version
 rustc --version

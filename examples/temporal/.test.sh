@@ -11,6 +11,7 @@ check_temporal_status() {
 }
 
 # Continuously check temporal status until it returns successfully (up to a maximum of 20 times)
+# shellcheck disable=SC2034
 for i in $(seq 1 20); do
 	check_temporal_status
 	if [ $TEMPORAL_EXIT_STATUS -eq 0 ]; then
@@ -30,4 +31,4 @@ temporal operator cluster system
 echo "$TEMPORAL_OUTPUT"
 
 # Exit the script
-exit $TEMPORAL_EXIT_STATUS
+exit "$TEMPORAL_EXIT_STATUS"
