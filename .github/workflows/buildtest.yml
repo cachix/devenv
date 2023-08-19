@@ -29,8 +29,6 @@ jobs:
       run: |
         nix profile remove '.*' 
         nix profile install --accept-flake-config . 
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
     - name: Run tests
       run: |
         devenv ci
