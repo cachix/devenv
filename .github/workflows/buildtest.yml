@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+        os: [[ubuntu-latest], [self-hosted, macOS], [nscloud-arm64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -29,8 +29,6 @@ jobs:
       run: |
         nix profile remove '.*' 
         nix profile install --accept-flake-config . 
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
     - name: Run tests
       run: |
         devenv ci
