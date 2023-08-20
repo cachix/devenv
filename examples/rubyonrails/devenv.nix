@@ -4,6 +4,10 @@
   languages.ruby.enable = true;
   languages.ruby.version = "3.2.2";
 
+  packages = [
+    pkgs.openssl
+  ];
+
   services.postgres.enable = true;
 
   processes.rails.exec = "rails server";
