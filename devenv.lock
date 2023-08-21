@@ -108,11 +108,11 @@
         "nixpkgs-regression": "nixpkgs-regression"
       },
       "locked": {
-        "lastModified": 1692371301,
+        "lastModified": 1692627130,
         "owner": "domenkozar",
         "repo": "nix",
-        "rev": "46fdc0fc02ca40b12c825176e8ae8aa1c9ea78dd",
-        "treeHash": "2e6d64573b0179ba7698ff499d53d8fdcadb824c",
+        "rev": "96e8d6a3f33fa0c770ad421463ab168239dc921b",
+        "treeHash": "8ce5bd7323dd5d1a7015cb7f5fcf0cefb0047069",
         "type": "github"
       },
       "original": {
@@ -124,11 +124,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1692311226,
+        "lastModified": 1692494774,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "ef8288935ba859fc3b30632fa6e04705f81b9c2a",
-        "treeHash": "f5a95213a097b73df9d76855ed69477a10203da5",
+        "rev": "3476a10478587dec90acb14ec6bde0966c545cc0",
+        "treeHash": "96162525b38e424adc09e55f362302401e9f1762",
         "type": "github"
       },
       "original": {
