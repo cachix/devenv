@@ -12,15 +12,14 @@ let
   baseDir = config.env.DEVENV_STATE + "/couchdb";
   startScript = pkgs.writeShellScriptBin "start-couchdb" ''
     set -euo pipefail
-    if [[ ! -d "${baseDir}" ]]; then
-      mkdir -p "${baseDir}"
-      touch ${baseDir}/couchdb.uri
-    fi
+    mkdir -p '${baseDir}'
+    touch '${baseDir}/couchdb.uri'
+    touch '${baseDir}/couchdb.ini'
 
-    if ! test -e ${baseDir}/.erlang.cookie; then
-      touch ${baseDir}/.erlang.cookie
-      chmod 600 ${baseDir}/.erlang.cookie
-      dd if=/dev/random bs=16 count=1 | base64 > ${baseDir}/.erlang.cookie
+    if [[ ! -e '${baseDir}/.erlang.cookie' ]]; then
+      touch '${baseDir}/.erlang.cookie'
+      chmod 600 '${baseDir}/.erlang.cookie'
+      dd if=/dev/random bs=16 count=1 status=none | base64 > ${baseDir}/.erlang.cookie
     fi
 
     exec ${cfg.package}/bin/couchdb
@@ -140,7 +139,7 @@ in
         port = 5984;
       };
     };
-    env.ERL_FLAGS = "-couch_ini ${configFile}";
+    env.ERL_FLAGS = "-couch_ini ${cfg.package}/etc/default.ini ${configFile} '${baseDir}/couchdb.ini'";
     processes.couchdb.exec = "${startScript}/bin/start-couchdb";
   };
 }
