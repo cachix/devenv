@@ -2,6 +2,18 @@
 
 let
   cfg = config.languages.python;
+  package = cfg.package.override (old: {
+    self = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
+      python = old.self;
+      requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
+      makeWrapperArgs = [
+        "--set"
+        "LD_LIBRARY_PATH"
+        # Make sure the python interpreter can find the native libraries.
+        "${config.devenv.dotfile}/profile/lib"
+      ];
+    };
+  });
 
   requirements = pkgs.writeText "requirements.txt" (
     if lib.isPath cfg.venv.requirements
@@ -33,7 +45,7 @@ let
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      ${cfg.package.interpreter} -m venv "$VENV_PATH"
+      ${package.interpreter} -m venv "$VENV_PATH"
       ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} "$VENV_PATH"/devenv-profile
     fi
     source "$VENV_PATH"/bin/activate
@@ -52,7 +64,7 @@ let
       unset VIRTUAL_ENV
 
       # Make sure poetry's venv uses the configured python executable.
-      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
     }
 
     function _devenv_poetry_install
@@ -61,7 +73,7 @@ let
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
       local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/.venv/poetry.lock.checksum
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
@@ -192,13 +204,14 @@ in
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
     languages.python.package = lib.mkMerge [
-      (lib.mkIf (cfg.version != null) (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
+      (lib.mkIf (cfg.version != null)
+        (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
     ];
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
     packages = [
-      cfg.package
+      package
     ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
 
     env = lib.optionalAttrs cfg.poetry.enable {
@@ -212,7 +225,7 @@ in
 
     enterShell = lib.concatStringsSep "\n" ([
       ''
-        export PYTHONPATH="$DEVENV_PROFILE/${cfg.package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+        export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
       ''
     ] ++
     (lib.optional cfg.venv.enable ''
