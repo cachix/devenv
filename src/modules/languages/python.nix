@@ -2,23 +2,29 @@
 
 let
   cfg = config.languages.python;
-  package = cfg.package.override (old: {
-    self = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
-      python = old.self;
-      requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
-      makeWrapperArgs = [
-        "--prefix"
-        "LIBRARY_PATH"
-        # Make sure the python interpreter can find the native libraries.
-        "${config.devenv.dotfile}/profile/lib"
-      ] ++ lib.optionals pkgs.stdenv.isDarwin [
-        "--prefix"
-        "DYLD_LIBRARY_PATH"
-        # Make sure the python interpreter can find the native libraries.
-        "${config.devenv.dotfile}/profile/lib"
-      ];
-    };
-  });
+  libraries = lib.makeLibraryPath
+    ((lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
+      # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
+      ++ [ pkgs.stdenv.cc.cc.lib ]
+      ++ cfg.libraries
+    );
+
+  readlink = "${pkgs.coreutils}/bin/readlink -f ";
+  package = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
+    python = cfg.package;
+    requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
+    makeWrapperArgs = [
+      "--prefix"
+      "LD_LIBRARY_PATH"
+      ":"
+      libraries
+    ] ++ lib.optionals pkgs.stdenv.isDarwin [
+      "--prefix"
+      "DYLD_LIBRARY_PATH"
+      ":"
+      libraries
+    ];
+  };
 
   requirements = pkgs.writeText "requirements.txt" (
     if lib.isPath cfg.venv.requirements
@@ -39,19 +45,19 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    if [ ! -L "$VENV_PATH"/devenv-profile ] \
-    || [ "$(${pkgs.coreutils}/bin/readlink "$VENV_PATH"/devenv-profile)" != "${config.devenv.profile}" ]
+    if [ "$(${readlink} "$VENV_PATH"/bin/python)" != "$(${readlink} ${package.interpreter}/bin/python)" ] \
+    || [ "$(${readlink} "$VENV_PATH"/requirements.txt)" != "$(${readlink} ${if requirements != null then requirements else "$VENV_PATH/requirements.txt"})" ]
     then
       if [ -d "$VENV_PATH" ]
       then
-        echo "Rebuilding Python venv..."
+        echo "Python interpreter/requirements changed, rebuilding Python venv..."
         ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
       fi
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
+      echo ${package.interpreter} -m venv "$VENV_PATH"
       ${package.interpreter} -m venv "$VENV_PATH"
-      ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} "$VENV_PATH"/devenv-profile
     fi
     source "$VENV_PATH"/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
@@ -121,6 +127,28 @@ in
       default = pkgs.python3;
       defaultText = lib.literalExpression "pkgs.python3";
       description = "The Python package to use.";
+    };
+
+    manylinux.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = pkgs.stdenv.isLinux;
+      description = ''
+        Whether to install manylinux2014 libraries.
+
+        Enabled by default on linux;
+
+        This is useful when you want to use Python wheels that depend on manylinux2014 libraries.
+      '';
+    };
+
+    libraries = lib.mkOption {
+      type = lib.types.listOf lib.types.path;
+      default = [ "${config.devenv.dotfile}/profile" ];
+      description = ''
+        Additional libraries to make available to the Python interpreter.
+
+        This is useful when you want to use Python wheels that depend on native libraries.
+      '';
     };
 
     version = lib.mkOption {
