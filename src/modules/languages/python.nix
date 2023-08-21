@@ -7,8 +7,13 @@ let
       python = old.self;
       requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
       makeWrapperArgs = [
-        "--set"
-        "LD_LIBRARY_PATH"
+        "--prefix"
+        "LIBRARY_PATH"
+        # Make sure the python interpreter can find the native libraries.
+        "${config.devenv.dotfile}/profile/lib"
+      ] ++ lib.optionals pkgs.stdenv.isDarwin [
+        "--prefix"
+        "DYLD_LIBRARY_PATH"
         # Make sure the python interpreter can find the native libraries.
         "${config.devenv.dotfile}/profile/lib"
       ];
