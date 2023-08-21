@@ -1,0 +1,3 @@
+inputs:
+  devenv:
+    url: path:./../../src/modules
