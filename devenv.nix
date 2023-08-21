@@ -2,8 +2,6 @@
 
 {
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
-  # TODO: manylinux for python
-  env.LD_LIBRARY_PATH = config.devenv.dotfile + "/profile/lib";
 
   packages = [
     pkgs.cairo
