@@ -1,9 +1,5 @@
 { pkgs, ... }: {
-  packages = with pkgs; [
-    pkgs.stdenv.cc.cc.lib
-    pkgs.cairo
-    pkgs.glibc
-  ];
+  packages = [ pkgs.cairo ];
 
   languages.python = {
     enable = true;
