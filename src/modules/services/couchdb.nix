@@ -58,7 +58,7 @@ in
             CouchDB installation.
           '';
         };
-        options.couchdb.viewIndexDir = lib.mkOption {
+        options.couchdb.view_index_dir = lib.mkOption {
           type = lib.types.path;
           default = baseDir;
           description = ''
@@ -67,7 +67,7 @@ in
             (couchdb by default).
           '';
         };
-        options.couchdb.uriFile = lib.mkOption {
+        options.couchdb.uri_file = lib.mkOption {
           type = lib.types.path;
           default = "${baseDir}/couchdb.uri";
           description = ''
@@ -79,7 +79,7 @@ in
           '';
         };
 
-        options.chttpd.bindAddress = lib.mkOption {
+        options.chttpd.bind_address = lib.mkOption {
           type = lib.types.str;
           default = "127.0.0.1";
           description = lib.mdDoc ''
@@ -108,14 +108,14 @@ in
           couchdb = {
             database_dir = baseDir;
             single_node = true;
-            viewIndexDir = baseDir;
-            uriFile = "${baseDir}/couchdb.uri";
+            view_index_dir = baseDir;
+            uri_file = "${baseDir}/couchdb.uri";
           };
           admins = {
             "admin_username" = "pass";
           };
           chttpd = {
-            bindAddress = "127.0.0.1";
+            bind_address = "127.0.0.1";
             port = 5984;
           };
         }
@@ -129,14 +129,14 @@ in
       couchdb = {
         database_dir = baseDir;
         single_node = true;
-        viewIndexDir = baseDir;
-        uriFile = "${baseDir}/couchdb.uri";
+        view_index_dir = baseDir;
+        uri_file = "${baseDir}/couchdb.uri";
       };
       admins = {
         admin = "admin";
       };
       chttpd = {
-        bindAddress = "127.0.0.1";
+        bind_address = "127.0.0.1";
         port = 5984;
       };
     };
