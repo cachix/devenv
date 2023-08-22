@@ -94,14 +94,6 @@ in
             Defined the port number to listen.
           '';
         };
-
-        options.chttpd.logFile = lib.mkOption {
-          type = lib.types.path;
-          default = "${baseDir}/couchdb.log";
-          description = lib.mdDoc ''
-            Specifies the location of file for logging output.
-          '';
-        };
       };
       description = ''
         CouchDB configuration.
@@ -125,7 +117,6 @@ in
           chttpd = {
             bindAddress = "127.0.0.1";
             port = 5984;
-            logFile = "${baseDir}/couchdb.log";
           };
         }
       '';
@@ -147,7 +138,6 @@ in
       chttpd = {
         bindAddress = "127.0.0.1";
         port = 5984;
-        logFile = "${baseDir}/couchdb.log";
       };
     };
     env.ERL_FLAGS = "-couch_ini ${configFile}";
