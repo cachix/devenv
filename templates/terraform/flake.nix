@@ -2,7 +2,7 @@
   inputs = {
     devenv.url = "github:cachix/devenv";
     flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url = "nixpkgs/nixos-22.11";
+    nixpkgs.url = "nixpkgs/nixos-23.05";
   };
 
   outputs = { self, devenv, flake-utils, nixpkgs }@inputs:
