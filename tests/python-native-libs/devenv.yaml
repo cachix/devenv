@@ -1,3 +1,5 @@
 inputs:
   devenv:
     url: path:./../../src/modules
+  nixpkgs:
+    url: github:NixOS/nixpkgs/08a3497b59051c2839c8ced79d39687b8485ab26
