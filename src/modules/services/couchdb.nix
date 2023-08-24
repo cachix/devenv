@@ -12,15 +12,14 @@ let
   baseDir = config.env.DEVENV_STATE + "/couchdb";
   startScript = pkgs.writeShellScriptBin "start-couchdb" ''
     set -euo pipefail
-    if [[ ! -d "${baseDir}" ]]; then
-      mkdir -p "${baseDir}"
-      touch ${baseDir}/couchdb.uri
-    fi
+    mkdir -p '${baseDir}'
+    touch '${baseDir}/couchdb.uri'
+    touch '${baseDir}/couchdb.ini'
 
-    if ! test -e ${baseDir}/.erlang.cookie; then
-      touch ${baseDir}/.erlang.cookie
-      chmod 600 ${baseDir}/.erlang.cookie
-      dd if=/dev/random bs=16 count=1 | base64 > ${baseDir}/.erlang.cookie
+    if [[ ! -e '${baseDir}/.erlang.cookie' ]]; then
+      touch '${baseDir}/.erlang.cookie'
+      chmod 600 '${baseDir}/.erlang.cookie'
+      dd if=/dev/random bs=16 count=1 status=none | base64 > ${baseDir}/.erlang.cookie
     fi
 
     exec ${cfg.package}/bin/couchdb
@@ -58,7 +57,7 @@ in
             CouchDB installation.
           '';
         };
-        options.couchdb.viewIndexDir = lib.mkOption {
+        options.couchdb.view_index_dir = lib.mkOption {
           type = lib.types.path;
           default = baseDir;
           description = ''
@@ -67,7 +66,7 @@ in
             (couchdb by default).
           '';
         };
-        options.couchdb.uriFile = lib.mkOption {
+        options.couchdb.uri_file = lib.mkOption {
           type = lib.types.path;
           default = "${baseDir}/couchdb.uri";
           description = ''
@@ -79,7 +78,7 @@ in
           '';
         };
 
-        options.chttpd.bindAddress = lib.mkOption {
+        options.chttpd.bind_address = lib.mkOption {
           type = lib.types.str;
           default = "127.0.0.1";
           description = lib.mdDoc ''
@@ -92,14 +91,6 @@ in
           default = 5984;
           description = lib.mdDoc ''
             Defined the port number to listen.
-          '';
-        };
-
-        options.chttpd.logFile = lib.mkOption {
-          type = lib.types.path;
-          default = "${baseDir}/couchdb.log";
-          description = lib.mdDoc ''
-            Specifies the location of file for logging output.
           '';
         };
       };
@@ -116,16 +107,15 @@ in
           couchdb = {
             database_dir = baseDir;
             single_node = true;
-            viewIndexDir = baseDir;
-            uriFile = "${baseDir}/couchdb.uri";
+            view_index_dir = baseDir;
+            uri_file = "${baseDir}/couchdb.uri";
           };
           admins = {
             "admin_username" = "pass";
           };
           chttpd = {
-            bindAddress = "127.0.0.1";
+            bind_address = "127.0.0.1";
             port = 5984;
-            logFile = "${baseDir}/couchdb.log";
           };
         }
       '';
@@ -138,19 +128,18 @@ in
       couchdb = {
         database_dir = baseDir;
         single_node = true;
-        viewIndexDir = baseDir;
-        uriFile = "${baseDir}/couchdb.uri";
+        view_index_dir = baseDir;
+        uri_file = "${baseDir}/couchdb.uri";
       };
       admins = {
         admin = "admin";
       };
       chttpd = {
-        bindAddress = "127.0.0.1";
+        bind_address = "127.0.0.1";
         port = 5984;
-        logFile = "${baseDir}/couchdb.log";
       };
     };
-    env.ERL_FLAGS = "-couch_ini ${configFile}";
+    env.ERL_FLAGS = "-couch_ini ${cfg.package}/etc/default.ini ${configFile} '${baseDir}/couchdb.ini'";
     processes.couchdb.exec = "${startScript}/bin/start-couchdb";
   };
 }

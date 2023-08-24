@@ -3,6 +3,12 @@
 let
   cfg = config.languages.python;
 
+  requirements = pkgs.writeText "requirements.txt" (
+    if lib.isPath cfg.venv.requirements
+    then builtins.readFile cfg.venv.requirements
+    else cfg.venv.requirements
+  );
+
   nixpkgs-python = inputs.nixpkgs-python or (throw ''
     To use languages.python.version, you need to add the following to your devenv.yaml:
 
@@ -34,7 +40,7 @@ let
     fi
     source "$VENV_PATH"/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
-      "$VENV_PATH"/bin/pip install -r ${pkgs.writeText "requirements.txt" cfg.venv.requirements}
+      "$VENV_PATH"/bin/pip install -r ${requirements}
     ''}
   '';
 
@@ -113,7 +119,7 @@ in
     venv.enable = lib.mkEnableOption "Python virtual environment";
 
     venv.requirements = lib.mkOption {
-      type = lib.types.nullOr lib.types.lines;
+      type = lib.types.nullOr (lib.types.either lib.types.lines lib.types.path);
       default = null;
       description = ''
         Contents of pip requirements.txt file.

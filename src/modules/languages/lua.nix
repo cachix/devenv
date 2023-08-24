@@ -18,6 +18,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
+      pkgs.lua-language-server
     ];
   };
 }
