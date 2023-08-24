@@ -60,7 +60,11 @@ CACHIX_KNOWN_PUBKEYS = DEVENV_HOME / "cachix_pubkeys.json"
 # define system like x86_64-linux
 SYSTEM = os.uname().machine.lower().replace("arm", "aarch") + "-" + os.uname().sysname.lower()
 
-def run_nix(command: str, replace_shell=False, use_cachix=False, logging=True) -> str:
+def run_nix(command: str,
+            replace_shell=False,
+            use_cachix=False,
+            logging=True,
+            dont_exit=False) -> str:
     ctx = click.get_current_context()
     nix_flags = ctx.obj['nix_flags']
     flags = " ".join(NIX_FLAGS) + " " + " ".join(nix_flags)
@@ -68,13 +72,15 @@ def run_nix(command: str, replace_shell=False, use_cachix=False, logging=True) -
     return run_command(f"nix {flags} {command} {command_flags}",
                        replace_shell=replace_shell,
                        use_cachix=use_cachix,
-                       logging=logging)
+                       logging=logging,
+                       dont_exit=dont_exit)
 
 def run_command(command: str, 
                 disable_stderr=False,
                 replace_shell=False,
                 use_cachix=False,
-                logging=True) -> str:
+                logging=True,
+                dont_exit=False) -> str:
     nix = ""
     if command.startswith("nix"):
         if os.environ.get("DEVENV_NIX"):
@@ -116,7 +122,10 @@ def run_command(command: str,
     except subprocess.CalledProcessError as e:
         click.echo("\n", err=True)
         log(f"Following command exited with code {e.returncode}:\n\n  {e.cmd}", level="error")
-        exit(e.returncode)
+        if dont_exit:
+            raise e
+        else:
+            exit(e.returncode)
 
 CONTEXT_SETTINGS = dict(max_content_width=120)
 
@@ -719,8 +728,15 @@ def get_cachix_caches(logging=True):
     
     This is cached because it's expensive to run.
     """
+    try:
+        caches_raw = run_nix("eval .#devenv.cachix --json", dont_exit=True)
+    except subprocess.CalledProcessError as e:
+        log_warning("Failed to evaluate .#devenv.cachix")
+        log_warning("Maybe you need to upgrade to devenv 1.0: https://devenv.sh/getting-started/")
+        return {"pull": [], "push": None}, {}
+
+    caches = json.loads(caches_raw)
     
-    caches = json.loads(run_nix("eval .#devenv.cachix --json"))
     if CACHIX_KNOWN_PUBKEYS.exists():
         known_keys = json.loads(CACHIX_KNOWN_PUBKEYS.read_text())
     else:
