@@ -2567,7 +2567,7 @@ This is passed to `pip install -r` during `devenv shell` initialisation.
 
 
 *Type:*
-null or strings concatenated with “\\n”
+null or strings concatenated with “\\n” or path
 
 
 
@@ -6706,6 +6706,90 @@ signed integer
 
 
 
+## services.cockroachdb.enable
+
+Whether to enable Add CockroachDB process.
+.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+## services.cockroachdb.package
+
+The CockroachDB package to use.
+
+
+
+*Type:*
+unspecified value
+
+
+
+*Default:*
+` "pkgs.cockroachdb-bin" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+## services.cockroachdb.http_addr
+
+The hostname or IP address to bind to for HTTP requests.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "localhost:8080" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
+## services.cockroachdb.listen_addr
+
+The address/hostname and port to listen on.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "localhost:26257" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
+
+
 ## services.couchdb.enable
 
 Whether to enable CouchDB process.
@@ -6777,16 +6861,15 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
   couchdb = {
     database_dir = baseDir;
     single_node = true;
-    viewIndexDir = baseDir;
-    uriFile = "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.uri";
+    view_index_dir = baseDir;
+    uri_file = "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.uri";
   };
   admins = {
     "admin_username" = "pass";
   };
   chttpd = {
-    bindAddress = "127.0.0.1";
+    bind_address = "127.0.0.1";
     port = 5984;
-    logFile = "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.log";
   };
 }
 
@@ -6797,7 +6880,7 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
 
 
 
-## services.couchdb.settings.chttpd.bindAddress
+## services.couchdb.settings.chttpd.bind_address
 
 
 
@@ -6812,27 +6895,6 @@ string
 
 *Default:*
 ` "127.0.0.1" `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
-
-
-
-## services.couchdb.settings.chttpd.logFile
-
-
-
-Specifies the location of file for logging output.
-
-
-
-*Type:*
-path
-
-
-
-*Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.log" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -6904,7 +6966,7 @@ boolean
 
 
 
-## services.couchdb.settings.couchdb.uriFile
+## services.couchdb.settings.couchdb.uri_file
 
 This file contains the full URI that can be used to access this
 instance of CouchDB. It is used to help discover the port CouchDB is
@@ -6928,7 +6990,7 @@ path
 
 
 
-## services.couchdb.settings.couchdb.viewIndexDir
+## services.couchdb.settings.couchdb.view_index_dir
 
 Specifies location of CouchDB view index files. This location should
 be writable and readable for the user that runs the CouchDB service

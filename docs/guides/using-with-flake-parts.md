@@ -31,7 +31,7 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
     devenv.url = "github:cachix/devenv";
   };
 
@@ -40,7 +40,7 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
       imports = [
         inputs.devenv.flakeModule
       ];
-      systems = [ "x86_64-linux" "aarch64-darwin" ];
+      systems = nixpkgs.lib.systems.flakeExposed;
 
       perSystem = { config, self', inputs', pkgs, system, ... }: {
         # Per-system attributes can be defined here. The self' and inputs'

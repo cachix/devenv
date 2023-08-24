@@ -56,3 +56,17 @@ in {
   '';
 }
 ```
+
+# How to install packages only on Linux or macOS?
+
+```nix
+{ pkgs, lib, ... }: {
+  packages = [
+    pkgs.ncdu
+  ] ++ lib.optionals pkgs.stdenv.isLinux [
+    pkgs.inotify-tools
+  ] ++ lib.optionals pkgs.stdenv.isDarwin [
+    pkgs.darwin.apple_sdk.frameworks.Security
+  ];
+}
+```
