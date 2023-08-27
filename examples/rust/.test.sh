@@ -9,5 +9,8 @@ if [[ "$(uname)" == "Darwin" ]]; then
   echo "$CFLAGS" | grep -- "-iframework $DEVENV_PROFILE/Library/Frameworks"
 fi
 
+[[ "$CARGO_INSTALL_ROOT" == "$DEVENV_STATE/cargo-install" ]]
+echo "$PATH" | grep -- "$CARGO_INSTALL_ROOT/bin"
+
 cd app
 cargo run
