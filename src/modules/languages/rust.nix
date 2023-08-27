@@ -78,7 +78,7 @@ in
           })
           export PATH="$PATH:$CARGO_INSTALL_ROOT/bin"
         '';
-        
+
         packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
