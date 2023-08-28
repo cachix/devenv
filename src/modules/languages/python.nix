@@ -17,6 +17,29 @@ let
           url: github:cachix/nixpkgs-python
   '');
 
+  libPrefix = cfg.package.libPrefix;
+
+  isPythonPackage = pkg: pkg ? pythonModule;
+
+  # List of Python package dependencies for a given derivation
+  pythonPackageDeps = pkg: builtins.filter isPythonPackage (
+    [ pkg ] ++ pkg.propagatedBuildInputs ++ pkg.propagatedNativeBuildInputs
+  );
+
+  # List of Python package derivations to include in the virtualenv
+  pythonPackages = lib.lists.unique (
+    lib.lists.concatMap pythonPackageDeps (
+      cfg.venv.pythonPackages cfg.package.pkgs
+    )
+  );
+
+  # Bash commands for creating .pth files for Python package derivations
+  pythonPackagesScript = lib.concatMapStrings
+    (pkg: ''
+      echo ${pkg}/lib/${libPrefix}/site-packages > $VENV_PATH/lib/${libPrefix}/site-packages/${pkg.pname}.pth
+    '')
+    pythonPackages;
+
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
     # Make sure any tools are not attempting to use the python interpreter from any
     # existing virtual environment. For instance if devenv was started within an venv.
@@ -38,6 +61,7 @@ let
       ${cfg.package.interpreter} -m venv "$VENV_PATH"
       ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} "$VENV_PATH"/devenv-profile
     fi
+    ${pythonPackagesScript}
     source "$VENV_PATH"/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
       "$VENV_PATH"/bin/pip install -r ${requirements}
@@ -124,6 +148,15 @@ in
       description = ''
         Contents of pip requirements.txt file.
         This is passed to `pip install -r` during `devenv shell` initialisation.
+      '';
+    };
+
+    venv.pythonPackages = lib.mkOption {
+      type = lib.types.functionTo (lib.types.listOf lib.types.package);
+      default = ps: [ ];
+      example = "ps: [ps.requests]";
+      description = ''
+        Python packages packaged for Nix to install inside the virtual environment.
       '';
     };
 
