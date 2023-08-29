@@ -36,6 +36,8 @@ let
     copyToRoot = [
       (pkgs.runCommand "create-paths" { } ''
         mkdir -p $out/tmp
+        mkdir -p $out/usr/bin
+        ln -s ${pkgs.coreutils-full}/bin/env $out/usr/bin/env
       '')
       (pkgs.buildEnv {
         name = "root";
