@@ -2558,6 +2558,25 @@ boolean
 
 
 
+## languages.python.venv.quiet
+
+Whether `pip install` should avoid outputting messages during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.venv.requirements
 
 Contents of pip requirements.txt file.
@@ -2573,25 +2592,6 @@ null or strings concatenated with “\\n” or path
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
-
-
-
-## languages.python.venv.quiet
-
-Whether `pip install` should avoid outputting messages during devenv initialisation.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
