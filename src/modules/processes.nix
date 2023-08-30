@@ -153,6 +153,6 @@ in
 
     ci = [ config.procfileScript ];
 
-    infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: ${process.exec}") config.processes;
+    infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") config.processes;
   };
 }
