@@ -40,7 +40,9 @@ let
     fi
     source "$VENV_PATH"/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
-      "$VENV_PATH"/bin/pip install -r ${requirements}
+      "$VENV_PATH"/bin/pip install -r ${requirements} ${lib.optionalString cfg.venv.quiet ''
+        --quiet
+      ''}
     ''}
   '';
 
@@ -125,6 +127,12 @@ in
         Contents of pip requirements.txt file.
         This is passed to `pip install -r` during `devenv shell` initialisation.
       '';
+    };
+
+    venv.quiet = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
     };
 
     poetry = {
