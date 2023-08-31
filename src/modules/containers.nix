@@ -59,12 +59,13 @@ let
     };
   };
 
-  # <registry> <args>
+  # <container> <registry> <args>
   mkCopyScript = cfg: pkgs.writeScript "copy-container" ''
     container=$1
     shift
 
-    if [[ "$1" == false ]]; then
+
+    if [[ "$1" == "" ]]; then
       registry=${cfg.registry}
     else
       registry="$1"
