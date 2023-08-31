@@ -5,10 +5,7 @@
 
   languages.elixir.enable = true;
 
-  services.postgres = {
-    enable = true;
-    listen_addresses = "127.0.0.1";
-  };
+  services.postgres.enable = true;
 
   processes.phoenix.exec = "cd hello && mix ecto.create && mix phx.server";
 }
