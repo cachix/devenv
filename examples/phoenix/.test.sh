@@ -1,6 +1,7 @@
 #!/bin/sh
 set -ex
 mix local.hex --force
+mix local.rebar --force
 echo Y | mix archive.install hex phx_new
 echo Y | mix phx.new hello
 awk -i inplace '{
