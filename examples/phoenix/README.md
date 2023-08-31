@@ -6,10 +6,9 @@ $ mix local.hex --force
 $ mix local.rebar --force
 $ mix archive.install hex phx_new
 $ mix phx.new hello
-$ awk -i inplace '{
-    gsub(/username: "postgres",/, "username: \"" ENVIRON["USER"] "\",")
-    gsub(/password: "postgres",/, "password: \"\",")
-    print
-  }' 'hello/config/dev.exs'
+$ sed -i.bak \
+    -e "s/username: \"postgres\",/username: \"$USER\",/" \
+    -e "s/password: \"postgres\",/password: \"\",/" \
+    ./hello/config/dev.exs && rm ./hello/config/dev.exs.bak
 $ devenv up
 ```
