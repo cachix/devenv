@@ -43,6 +43,7 @@ let
         name = "root";
         paths = [
           pkgs.coreutils-full
+          pkgs.dockerTools.caCertificates
           pkgs.bash
         ] ++ lib.optionals (cfg.copyToRoot != null)
           (if builtins.typeOf cfg.copyToRoot == "list"
