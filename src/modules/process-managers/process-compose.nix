@@ -56,7 +56,7 @@ in
           (name: value: "${name}=${toString value}")
           config.env;
         processes = lib.mapAttrs
-          (name: value: { command = value.exec; } // value.process-compose)
+          (name: value: { command = "exec ${pkgs.writeShellScript name value.exec}"; } // value.process-compose)
           config.processes;
       };
     };
