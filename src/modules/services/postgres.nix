@@ -99,8 +99,7 @@ let
       echo "PostgreSQL is setting up the initial database."
       echo
       OLDPGHOST="$PGHOST"
-      PGHOST="$DEVENV_STATE/$(mktemp -d "pg-init-XXXXXX")"
-      mkdir -p "$PGHOST"
+      PGHOST=$(mktemp -d "$DEVENV_STATE/pg-init-XXXXXX")
 
       function remove_tmp_pg_init_sock_dir() {
         if [[ -d "$1" ]]; then
