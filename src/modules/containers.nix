@@ -30,9 +30,31 @@ let
 
     exec "$@"
   '';
+  user = "user";
+  group = "user";
+  uid = "1001";
+  gid = "1001";
+  mkUser = (pkgs.runCommand "user" { } ''
+    mkdir -p $out/etc
+    mkdir -p $out/home/${user}
+    echo "${user}:x:${uid}:${gid}::" > $out/etc/passwd
+    echo "${user}:!x:::::::" > $out/etc/shadow
+
+    echo "${group}:x:${gid}:" > $out/etc/group
+    echo "${group}:x::" > $out/etc/gshadow
+  '');
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
     tag = cfg.version;
+    perms = [{
+      path = mkUser;
+      regex = "/home/${user}";
+      mode = "0744";
+      uid = lib.toInt uid;
+      gid = lib.toInt gid;
+      uname = user;
+      gname = group;
+    }];
     copyToRoot = [
       (pkgs.runCommand "create-paths" { } ''
         mkdir -p $out/tmp
@@ -45,16 +67,23 @@ let
           pkgs.coreutils-full
           pkgs.dockerTools.caCertificates
           pkgs.bash
+          mkUser
         ] ++ lib.optionals (cfg.copyToRoot != null)
           (if builtins.typeOf cfg.copyToRoot == "list"
           then cfg.copyToRoot
-          else [ cfg.copyToRoot ]);
+          else [ cfg.copyToRoot ])
+        ++ lib.optional true (pkgs.runCommand "self" { } ''
+          mkdir -p $out/home/${user}
+          cp -R ${self} $out/home/${user}/
+        '');
         pathsToLink = "/";
       })
     ];
     config = {
-      Env = lib.mapAttrsToList (name: value: "${name}=${lib.escapeShellArg (toString value)}") config.env;
+      Env = lib.mapAttrsToList (name: value: "${name}=${lib.escapeShellArg (toString value)}") config.env ++ [ "HOME=/home/user" "USER=user" ];
       Cmd = [ cfg.startupCommand ];
+      User = "user";
+      WorkingDir = "/home/user/";
       Entrypoint = cfg.entrypoint;
     };
   };
@@ -202,7 +231,7 @@ in
       containers.${envContainerName}.isBuilding = true;
     })
     (lib.mkIf config.container.isBuilding {
-      devenv.root = lib.mkForce "/";
+      devenv.root = lib.mkForce "/home/user/";
     })
   ];
 }
