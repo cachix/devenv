@@ -270,13 +270,13 @@ def get_dev_environment(ctx, json=False, logging=True):
     else:
         action = suppress()
     with action:
-        gc_root = os.path.join(os.environ['DEVENV_GC'], 'shell')
+        gc_root = DEVENV_GC / 'shell'
         cmd = f"print-dev-env --profile '{gc_root}'"
         if json:
             cmd += " --json"
         env = run_nix(cmd, logging=False, use_cachix=True)
         run_command(f"nix-env -p '{gc_root}' --delete-generations old", logging=False, disable_stderr=True)
-        symlink_force(Path(f'{ctx.obj["gc_project"]}-shell'), gc_root)
+        symlink_force(gc_root, Path(f'{ctx.obj["gc_project"]}-shell'))
     return env, gc_root
 
 
