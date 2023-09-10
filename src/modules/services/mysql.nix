@@ -116,7 +116,7 @@ in
     };
 
     settings = mkOption {
-      type = format.type;
+      type = types.lazyAttrsOf (types.lazyAttrsOf types.anything);
       default = { };
       description = ''
         MySQL configuration.
