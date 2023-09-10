@@ -288,8 +288,8 @@ def get_dev_environment(ctx, json=False, logging=True):
         ignore_unknown_options=True,
     )
 )
-@click.argument('extra_args', nargs=-1, type=click.UNPROCESSED)
 @click.argument('cmd', required=False)
+@click.argument('extra_args', nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def shell(ctx, cmd, extra_args):
     env, gc_root = get_dev_environment(ctx)
