@@ -8394,7 +8394,7 @@ MySQL configuration.
 
 
 *Type:*
-attribute set of attribute set of (INI atom (null, bool, int, float or string) or a list of them for duplicate keys)
+lazy attribute set of lazy attribute set of anything
 
 
 
