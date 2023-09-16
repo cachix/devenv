@@ -8,6 +8,7 @@
     pkgs.xorg.libxcb
     pkgs.yaml2json
     pkgs.tesh
+    pkgs.python3Packages.black
   ];
 
   languages.nix.enable = true;
@@ -118,6 +119,7 @@
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
     shellcheck.enable = true;
+    black.enable = true;
     #markdownlint.enable = true;
   };
   pre-commit.settings.markdownlint.config = {
