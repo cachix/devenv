@@ -724,10 +724,8 @@ def get_cachix_caches(logging=True):
     This is cached because it's expensive to run.
     """
     try:
-        caches_raw = run_nix("eval .#devenv.cachix --json", dont_exit=True)
+        caches_raw = run_nix("eval .#devenv.cachix --json", dont_exit=True, disable_stderr=True, logging=False)
     except subprocess.CalledProcessError as e:
-        log_warning("Failed to evaluate .#devenv.cachix")
-        log_warning("Maybe you need to upgrade to devenv 1.0: https://devenv.sh/getting-started/")
         return {"pull": [], "push": None}, {}
 
     caches = json.loads(caches_raw)
