@@ -114,8 +114,9 @@ def run_command(command: str,
                 stderr=None if not disable_stderr else subprocess.DEVNULL,
                 universal_newlines=True).stdout.strip()
     except subprocess.CalledProcessError as e:
-        click.echo("\n", err=True)
-        log(f"Following command exited with code {e.returncode}:\n\n  {e.cmd}", level="error")
+        if logging:
+            click.echo("\n", err=True)
+            log(f"Following command exited with code {e.returncode}:\n\n  {e.cmd}", level="error")
         if dont_exit:
             raise e
         else:
