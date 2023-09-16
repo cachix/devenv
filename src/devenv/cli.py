@@ -61,19 +61,13 @@ CACHIX_KNOWN_PUBKEYS = DEVENV_HOME / "cachix_pubkeys.json"
 SYSTEM = os.uname().machine.lower().replace("arm", "aarch") + "-" + os.uname().sysname.lower()
 
 def run_nix(command: str,
-            replace_shell=False,
-            use_cachix=False,
-            logging=True,
-            dont_exit=False) -> str:
+            **kwargs) -> str:
     ctx = click.get_current_context()
     nix_flags = ctx.obj['nix_flags']
     flags = " ".join(NIX_FLAGS) + " " + " ".join(nix_flags)
     command_flags = " ".join(ctx.obj['command_flags'])
     return run_command(f"nix {flags} {command} {command_flags}",
-                       replace_shell=replace_shell,
-                       use_cachix=use_cachix,
-                       logging=logging,
-                       dont_exit=dont_exit)
+                       **kwargs)
 
 def run_command(command: str, 
                 disable_stderr=False,
