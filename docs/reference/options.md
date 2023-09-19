@@ -9782,6 +9782,32 @@ package
 
 
 
+## services.varnish.extraModules
+
+
+
+Varnish modules (except ‘std’).
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+` [ pkgs.varnish73Packages.modules ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
+
+
 ## services.varnish.listen
 
 Which address to listen on.
