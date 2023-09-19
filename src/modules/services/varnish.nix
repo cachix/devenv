@@ -42,10 +42,19 @@ in
         }
       '';
     };
+
+    extraModules = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      example = literalExpression "[ pkgs.varnish73Packages.modules ]";
+      description = lib.mdDoc ''
+        Varnish modules (except 'std').
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    processes.varnish.exec = "${cfg.package}/bin/varnishd -n ${workingDir} -F -f ${cfgFile} -s malloc,${toString cfg.memorySize} -a ${cfg.listen}";
+    processes.varnish.exec = "${cfg.package}/bin/varnishd -n ${workingDir} -F -f ${cfgFile} -s malloc,${toString cfg.memorySize} -a ${cfg.listen} ${lib.optionalString (cfg.extraModules != []) " -p vmod_path='${lib.makeSearchPathOutput "lib" "lib/varnish/vmods" ([cfg.package] ++ cfg.extraModules)}' -r vmod_path"}";
 
     scripts.varnishadm.exec = "exec ${cfg.package}/bin/varnishadm -n ${workingDir} $@";
     scripts.varnishtop.exec = "exec ${cfg.package}/bin/varnishtop -n ${workingDir} $@";
