@@ -45,7 +45,7 @@ in
 
     extraModules = mkOption {
       type = types.listOf types.package;
-      default = [];
+      default = [ ];
       example = literalExpression "[ pkgs.varnish73Packages.modules ]";
       description = lib.mdDoc ''
         Varnish modules (except 'std').
