@@ -1,3 +1,8 @@
+---
+title: Using devenv in GitHub Actions
+description: Use developer environments powered by devenv to check, build, and test code in GitHub Actions workflows.
+---
+
 # GitHub Actions
 
 ### Introduction
