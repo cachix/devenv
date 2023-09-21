@@ -1,4 +1,5 @@
-domenkozar:
-  name: Domen Kožar
-  description: Cachix founder
-  avatar: https://github.com/domenkozar.png
+authors:
+  domenkozar:
+    name: Domen Kožar
+    description: Cachix founder
+    avatar: https://github.com/domenkozar.png

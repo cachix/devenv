@@ -71,6 +71,7 @@ nav:
 
 # Defined as a dictionary to allow extending plugins in mkdocs.insiders.yml
 plugins:
+  blog: {}
   search: {}
   markdownextradata: {}
   include-markdown: {}
