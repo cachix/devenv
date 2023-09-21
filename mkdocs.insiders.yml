@@ -1,3 +1,4 @@
+# To merge plugins and markdown_extensions, use dictionaries instead of lists.
 INHERIT: mkdocs.yml
 plugins:
   blog: {}
