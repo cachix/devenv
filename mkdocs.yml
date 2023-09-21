@@ -69,6 +69,7 @@ nav:
       - Get Involved: community/get-involved.md
       - Contributing: community/contributing.md
 plugins:
+  blog: {}
   search: {}
   markdownextradata: {}
   include-markdown: {}
