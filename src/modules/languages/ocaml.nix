@@ -24,6 +24,7 @@ in
       cfg.packages.merlin
       cfg.packages.utop
       cfg.packages.odoc
+      cfg.packages.ocp-indent
       pkgs.ocamlformat
     ];
   };
