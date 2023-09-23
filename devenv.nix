@@ -19,7 +19,6 @@
 
   dotenv.enable = true;
 
-  # bin/mkdocs serve --config-file mkdocs.insiders.yml
   processes.docs.exec = "mkdocs serve";
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
