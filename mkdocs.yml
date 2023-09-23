@@ -69,7 +69,6 @@ nav:
       - Get Involved: community/get-involved.md
       - Contributing: community/contributing.md
 
-# Defined as a dictionary to allow extending plugins in mkdocs.insiders.yml
 plugins:
   blog: {}
   search: {}
