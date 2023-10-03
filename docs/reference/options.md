@@ -1778,6 +1778,35 @@ boolean
 
 
 
+## languages.perl.packages
+
+Perl packages to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "Mojolicious"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
+
+
+
 ## languages.php.enable
 
 Whether to enable tools for PHP development.
@@ -2249,8 +2278,6 @@ null or strings concatenated with “\\n”
 
 The PHP version to use.
 
-
-
 *Type:*
 string
 
@@ -2267,6 +2294,8 @@ string
 ## languages.purescript.enable
 
 Whether to enable tools for PureScript development.
+
+
 
 *Type:*
 boolean
