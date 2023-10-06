@@ -7,21 +7,29 @@ from strictyaml import Map, MapPattern, Str, Seq
 from strictyaml import load, Bool, Any, Optional, YAMLError, EmptyDict
 
 
-inputsSchema = EmptyDict() | MapPattern(Str(), Map({
-      "url": Str(),
-      Optional("flake", default=None): Bool(),
-      Optional("inputs", default=None): Any(),
-      Optional("overlays", default=None): Seq(Str())
-}))
+inputsSchema = EmptyDict() | MapPattern(
+    Str(),
+    Map(
+        {
+            "url": Str(),
+            Optional("flake", default=None): Bool(),
+            Optional("inputs", default=None): Any(),
+            Optional("overlays", default=None): Seq(Str()),
+        }
+    ),
+)
 
-schema = Map({
-      Optional("inputs", default=None): inputsSchema,
-      Optional("allowUnfree", default=False): Bool(),
-      Optional("imports", default=None): Seq(Str()),
-      Optional("permittedInsecurePackages", default=None): Seq(Str())
-})
+schema = Map(
+    {
+        Optional("inputs", default=None): inputsSchema,
+        Optional("allowUnfree", default=False): Bool(),
+        Optional("imports", default=None): Seq(Str()),
+        Optional("permittedInsecurePackages", default=None): Seq(Str()),
+    }
+)
 
 YAML_FILE = Path("devenv.yaml")
+
 
 def read_yaml():
     try:
@@ -31,23 +39,24 @@ def read_yaml():
         print("Validation error in `devenv.yaml`", error)
         sys.exit(1)
 
+
 def write_yaml(yaml):
     with open(YAML_FILE, "w") as f:
         f.write(yaml.as_yaml())
 
+
 def validate_and_parse_yaml(dot_devenv_root):
-  devenv = read_yaml().data
+    devenv = read_yaml().data
 
-  inputs = {}
-  for input, attrs in devenv.get('inputs', {}).items():
-      inputs[input] = {k: attrs[k] for k in ('url', 'inputs', 'flake')
-                       if k in attrs}
+    inputs = {}
+    for input, attrs in devenv.get("inputs", {}).items():
+        inputs[input] = {k: attrs[k] for k in ("url", "inputs", "flake") if k in attrs}
 
-  with open(os.path.join(dot_devenv_root, "flake.json"), 'w') as f:
-      f.write(json.dumps(inputs))
+    with open(os.path.join(dot_devenv_root, "flake.json"), "w") as f:
+        f.write(json.dumps(inputs))
 
-  with open(os.path.join(dot_devenv_root, "devenv.json"), 'w') as f:
-      f.write(json.dumps(devenv))
+    with open(os.path.join(dot_devenv_root, "devenv.json"), "w") as f:
+        f.write(json.dumps(devenv))
 
-  with open(os.path.join(dot_devenv_root, "imports.txt"), 'w') as f:
-      f.write("\n".join(devenv.get('imports', [])))
+    with open(os.path.join(dot_devenv_root, "imports.txt"), "w") as f:
+        f.write("\n".join(devenv.get("imports", [])))
