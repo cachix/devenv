@@ -61,19 +61,13 @@ CACHIX_KNOWN_PUBKEYS = DEVENV_HOME / "cachix_pubkeys.json"
 SYSTEM = os.uname().machine.lower().replace("arm", "aarch") + "-" + os.uname().sysname.lower()
 
 def run_nix(command: str,
-            replace_shell=False,
-            use_cachix=False,
-            logging=True,
-            dont_exit=False) -> str:
+            **kwargs) -> str:
     ctx = click.get_current_context()
     nix_flags = ctx.obj['nix_flags']
     flags = " ".join(NIX_FLAGS) + " " + " ".join(nix_flags)
     command_flags = " ".join(ctx.obj['command_flags'])
     return run_command(f"nix {flags} {command} {command_flags}",
-                       replace_shell=replace_shell,
-                       use_cachix=use_cachix,
-                       logging=logging,
-                       dont_exit=dont_exit)
+                       **kwargs)
 
 def run_command(command: str, 
                 disable_stderr=False,
@@ -120,8 +114,9 @@ def run_command(command: str,
                 stderr=None if not disable_stderr else subprocess.DEVNULL,
                 universal_newlines=True).stdout.strip()
     except subprocess.CalledProcessError as e:
-        click.echo("\n", err=True)
-        log(f"Following command exited with code {e.returncode}:\n\n  {e.cmd}", level="error")
+        if logging:
+            click.echo("\n", err=True)
+            log(f"Following command exited with code {e.returncode}:\n\n  {e.cmd}", level="error")
         if dont_exit:
             raise e
         else:
@@ -729,10 +724,8 @@ def get_cachix_caches(logging=True):
     This is cached because it's expensive to run.
     """
     try:
-        caches_raw = run_nix("eval .#devenv.cachix --json", dont_exit=True)
+        caches_raw = run_nix("eval .#devenv.cachix --json", dont_exit=True, disable_stderr=True, logging=False)
     except subprocess.CalledProcessError as e:
-        log_warning("Failed to evaluate .#devenv.cachix")
-        log_warning("Maybe you need to upgrade to devenv 1.0: https://devenv.sh/getting-started/")
         return {"pull": [], "push": None}, {}
 
     caches = json.loads(caches_raw)
