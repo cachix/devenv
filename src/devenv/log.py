@@ -1,11 +1,12 @@
 from typing import Literal
-import time 
+import time
 
 import click
 
 
 class log_task:
     """Context manager for logging progress of a task."""
+
     def __init__(self, message, newline=True):
         self.message = message
         self.newline = newline
@@ -23,7 +24,9 @@ class log_task:
             prefix = click.style("✔", fg="green")
         click.echo(f"\r{prefix} {self.message} in {end - self.start:.1f}s.")
 
+
 LogLevel = Literal["info", "warning", "error", "debug"]
+
 
 def log(message, level: LogLevel):
     match level:
@@ -36,14 +39,18 @@ def log(message, level: LogLevel):
         case "debug":
             click.echo(click.style("• ", fg="magenta") + message, err=True)
 
+
 def log_error(message):
     log(message, "error")
+
 
 def log_warning(message):
     log(message, "warning")
 
+
 def log_info(message):
     log(message, "info")
+
 
 def log_debug(message):
     log(message, "debug")
