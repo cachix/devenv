@@ -53,3 +53,25 @@ imports:
 !!! note "Added in 1.0"
 
     - relative file support in imports: `./mymodule.nix`
+
+### What to do if your package is out of date?
+    - Find the email of the maintainers, found on the Nix packages website
+    - Kindly ask them how you can help upgrade, either they will do it or you can do it yourself
+    - Make a PR, get the URL of the patch
+    - It will take the form of 'github:$GH_USERNAME/nixpkgs/master'
+    - Add it to your devenv.yaml like so 
+
+#### This is an example of a rust project that needs a new dependency
+
+```yaml
+inputs:
+  nixpkgs:
+    url: 'github:taylor1791/nixpkgs/master'
+  fenix:
+    url: 'github:nix-community/fenix'
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+```
+
+
