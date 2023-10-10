@@ -58,18 +58,15 @@ imports:
     - Open [nixpkgs repo](https://github.com/NixOS/nixpkgs) and press `t` to search for your package.
     -  Try to update/change the package using [the nixpkgs contributing guide](https://nixos.org/manual/nixpkgs/stable/#chap-quick-start), optionally contacting the maintainer for help if you get stuck.
     - Make a PR and remember the branch name.
+    - Add it to your devenv.yaml like so
+    
 Using the nixpkgs input in form of 'github:$GH_USERNAME/nixpkgs/master', edit `devenv.yaml`:
 
 
 ```yaml
 inputs:
   nixpkgs:
-    url: 'github:taylor1791/nixpkgs/master'
-  fenix:
-    url: 'github:nix-community/fenix'
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
+    url: 'github:$GH_USERNAME/nixpkgs/MYBRANCH'
 ```
 
 
