@@ -3,6 +3,16 @@
 let
   cfg = config.languages.python;
 
+  autopatchelf-flake = inputs.autopatchelf or (throw ''
+    To use patchelf, you need to add the following to your devenv.yaml:
+
+      inputs:
+        autopatchelf:
+          url: github:bobvanderlinden/autopatchelf/7fe81db2d94989e41e52fcab65c9d0a88d46e25c
+  '');
+
+  autopatchelf = autopatchelf-flake.packages.${pkgs.system}.default;
+
   requirements = pkgs.writeText "requirements.txt" (
     if lib.isPath cfg.venv.requirements
     then builtins.readFile cfg.venv.requirements
@@ -135,6 +145,12 @@ in
       description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
     };
 
+    venv.patchelf = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Whether to patch ELF files in the Python virtual environment, so that they refer to libraries/packages defined in devenv.";
+    };
+
     poetry = {
       enable = lib.mkEnableOption "poetry";
       install = {
@@ -219,6 +235,11 @@ in
       source ${initVenvScript}
     '') ++ (lib.optional cfg.poetry.install.enable ''
       source ${initPoetryScript}
+    '') ++ (lib.optional cfg.venv.patchelf ''
+      if [ -d "$VIRTUAL_ENV" ]
+      then
+        ${autopatchelf}/bin/autopatchelf --libs ${config.devenv.profile}/lib --path $VIRTUAL_ENV
+      fi
     '')
     );
   };
