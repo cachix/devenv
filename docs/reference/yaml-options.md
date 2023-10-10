@@ -54,7 +54,7 @@ imports:
 
     - relative file support in imports: `./mymodule.nix`
 
-### What to do if your package is out of date?
+### What if a package is out of date?
     - Open [nixpkgs repo](https://github.com/NixOS/nixpkgs) and press `t` to search for your package.
     - Kindly ask them how you can help upgrade, either they will do it or you can do it yourself
     - Make a PR, get the URL of the patch
