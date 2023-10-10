@@ -56,7 +56,7 @@ imports:
 
 ### What if a package is out of date?
     - Open [nixpkgs repo](https://github.com/NixOS/nixpkgs) and press `t` to search for your package.
-    - Kindly ask them how you can help upgrade, either they will do it or you can do it yourself
+    -  Try to update/change the package using [the nixpkgs contributing guide](https://nixos.org/manual/nixpkgs/stable/#chap-quick-start), optionally contacting the maintainer for help if you get stuck.
     - Make a PR, get the URL of the patch
     - It will take the form of 'github:$GH_USERNAME/nixpkgs/master'
     - Add it to your devenv.yaml like so 
