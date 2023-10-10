@@ -59,7 +59,6 @@ imports:
     -  Try to update/change the package using [the nixpkgs contributing guide](https://nixos.org/manual/nixpkgs/stable/#chap-quick-start), optionally contacting the maintainer for help if you get stuck.
     - Make a PR and remember the branch name.
 Using the nixpkgs input in form of 'github:$GH_USERNAME/nixpkgs/master', edit `devenv.yaml`:
-    - Add it to your devenv.yaml like so 
 
 
 ```yaml
