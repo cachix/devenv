@@ -61,7 +61,6 @@ imports:
     - It will take the form of 'github:$GH_USERNAME/nixpkgs/master'
     - Add it to your devenv.yaml like so 
 
-#### This is an example of a rust project that needs a new dependency
 
 ```yaml
 inputs:
