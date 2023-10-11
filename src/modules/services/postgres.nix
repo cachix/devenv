@@ -118,7 +118,7 @@ let
       unset OLDPGHOST
     else
       echo
-      echo "PostgreSQL Database directory appears to contain a database; Skipping initialization"
+      echo "PostgreSQL database directory appears to contain a database; Skipping initialization"
       echo
     fi
     unset POSTGRES_RUN_INITIAL_SCRIPT
