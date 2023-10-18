@@ -94,7 +94,7 @@ let
         _devenv-poetry-install
       ''}
       ${lib.optionalString cfg.poetry.activate.enable ''
-        source "$DEVENV_ROOT"/.venv/bin/activate
+        source $(poetry env info --path)/bin/activate
       ''}
     fi
   '';
