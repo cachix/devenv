@@ -48,7 +48,6 @@ let
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     set -x
-    echo $(ls -la)
     function _devenv-init-poetry-venv()
     {
       # Make sure any tools are not attempting to use the python interpreter from any
@@ -56,7 +55,7 @@ let
       unset VIRTUAL_ENV
 
       # Make sure poetry's venv uses the configured python executable.
-      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction ${cfg.package.interpreter}
     }
 
     function _devenv-poetry-install()
