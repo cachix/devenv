@@ -47,6 +47,8 @@ let
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
+    set -x
+    echo $(ls -la)
     function _devenv-init-poetry-venv()
     {
       # Make sure any tools are not attempting to use the python interpreter from any
