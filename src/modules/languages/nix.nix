@@ -15,6 +15,7 @@ in
       vulnix
       deadnix
       nil
+      rnix-lsp
     ];
   };
 }
