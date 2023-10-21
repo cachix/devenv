@@ -56,7 +56,7 @@ let
       Env = lib.mapAttrsToList (name: value: "${name}=${lib.escapeShellArg (toString value)}") config.env;
       Cmd = [ cfg.startupCommand ];
       Entrypoint = cfg.entrypoint;
-    };
+    } // cfg.config;
   };
 
   # <container> <registry> <args>
@@ -119,6 +119,11 @@ let
         description = "Entrypoint of the container.";
         default = [ (mkEntrypoint config) ];
         defaultText = lib.literalExpression "[ entrypoint ]";
+      };
+
+      config = lib.mkOption {
+        type = types.attrsOf types.anything;
+        default = { };
       };
 
       defaultCopyArgs = lib.mkOption {
