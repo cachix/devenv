@@ -230,8 +230,10 @@ in
       fi
 
       mkdir -p .devenv
-      rm -f .devenv/profile
-      ln -s ${profile} .devenv/profile
+      if [ ! -L .devenv/profile ] || [ "$(${pkgs.coreutils}/bin/readlink .devenv/profile)" != "${profile}" ]
+      then
+        ln -nsf ${profile} .devenv/profile
+      fi
       unset ${lib.concatStringsSep " " config.unsetEnvVars}
     '';
 
