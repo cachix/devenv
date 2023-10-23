@@ -554,7 +554,14 @@ def version(ctx):
     short_help="Scaffold devenv.yaml, devenv.nix, and .envrc.",
 )
 @click.argument("target", default=".")
-def init(target):
+@click.option(
+    "-gl",
+    "--gitignore_local",
+    is_flag=True,
+    default=False,
+    help="write to .git/info/exclude instead of .gitignore",
+)
+def init(target, gitignore_local):
     os.makedirs(target, exist_ok=True)
 
     required_files = ["devenv.nix", "devenv.yaml", ".envrc"]
@@ -575,9 +582,12 @@ def init(target):
                 os.path.join(examples_path, example, filename), full_filename
             )
 
-    with open(".gitignore", "a+") as gitignore_file:
+    gitignore = ".gitignore"
+    if gitignore_local and Path(".git/info").exists():
+        gitignore = ".git/info/exclude"
+    with open(gitignore, "a+") as gitignore_file:
         if "devenv" not in gitignore_file.read():
-            log("Appending defaults to .gitignore", level="info")
+            log(f"Appending defaults to {gitignore}", level="info")
             gitignore_file.write("\n")
             gitignore_file.write("# Devenv\n")
             gitignore_file.write(".devenv*\n")
