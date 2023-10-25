@@ -3199,6 +3199,50 @@ boolean
 
 
 
+## languages.standardml.enable
+
+Whether to enable tools for Standard ML development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
+
+
+
+## languages.standardml.package
+
+The Standard ML package to use.
+
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.mlton" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
+
+
+
 ## languages.swift.enable
 
 Whether to enable tools for Swift development.
