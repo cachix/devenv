@@ -506,7 +506,7 @@ def container(ctx, registry, copy, copy_args, docker_run, container_name):
                 registry = "docker-daemon:"
 
             subprocess.run(
-                f"{copy_script} {spec} {registry} {copy_args or ''}",
+                f"{copy_script} {spec} {registry or 'false'} {copy_args or ''}",
                 shell=True,
                 check=True,
             )
