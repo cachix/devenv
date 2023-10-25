@@ -39,6 +39,7 @@
   languages.rust.enable = true;
   languages.scala.enable = true;
   languages.shell.enable = true;
+  languages.standardml.enable = true;
   languages.swift.enable = true;
   languages.terraform.enable = true;
   languages.texlive.enable = true;
