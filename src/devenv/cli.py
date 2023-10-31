@@ -400,6 +400,8 @@ def stop():
         with open(PROCESSES_PID, "r") as file:
             pid = int(file.read())
 
+        log(f"Stopping process with PID {pid} ...", level="info")
+
         try:
             os.kill(pid, signal.SIGTERM)
         except ProcessLookupError:
