@@ -1,8 +1,11 @@
 { pkgs, lib, config, ... }:
 
 let
+  reducerFn = (prev: curr: prev ++ (if builtins.typeOf curr.ip == "string" then [curr] else builtins.map (ip: { inherit ip; hostname = curr.hostname; }) curr.ip));
+  reducer = lib.lists.foldl reducerFn [];
   entries = lib.mapAttrsToList (hostname: ip: { inherit hostname ip; }) config.hosts;
-  entriesByIp = builtins.groupBy ({ ip, ... }: ip) entries;
+  separateEntriesWithIps = reducer entries;
+  entriesByIp = builtins.groupBy ({ ip, ... }: ip) separateEntriesWithIps;
   hostnamesByIp = builtins.mapAttrs (hostname: entries: builtins.map ({ hostname, ... }: hostname) entries) entriesByIp;
   lines = lib.mapAttrsToList (ip: hostnames: "${ip} ${lib.concatStringsSep " " hostnames}") hostnamesByIp;
   hostContent = lib.concatStringsSep "\n" lines;
@@ -21,11 +24,12 @@ in
     };
 
     hosts = lib.mkOption {
-      type = lib.types.attrsOf lib.types.str;
+      type = lib.types.attrsOf (lib.types.either lib.types.str (lib.types.listOf lib.types.str));
       default = { };
       description = "List of hosts entries.";
       example = {
         "example.com" = "127.0.0.1";
+        "another-example.com" = [ "::1" "127.0.0.1" ];
       };
     };
   };
