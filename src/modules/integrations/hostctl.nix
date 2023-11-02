@@ -1,8 +1,8 @@
 { pkgs, lib, config, ... }:
 
 let
-  reducerFn = (prev: curr: prev ++ (if builtins.typeOf curr.ip == "string" then [curr] else builtins.map (ip: { inherit ip; hostname = curr.hostname; }) curr.ip));
-  reducer = lib.lists.foldl reducerFn [];
+  reducerFn = (prev: curr: prev ++ (if builtins.typeOf curr.ip == "string" then [ curr ] else builtins.map (ip: { inherit ip; hostname = curr.hostname; }) curr.ip));
+  reducer = lib.lists.foldl reducerFn [ ];
   entries = lib.mapAttrsToList (hostname: ip: { inherit hostname ip; }) config.hosts;
   separateEntriesWithIps = reducer entries;
   entriesByIp = builtins.groupBy ({ ip, ... }: ip) separateEntriesWithIps;
