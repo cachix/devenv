@@ -67,6 +67,12 @@ in
       default = [ ];
     };
 
+    inputsFrom = lib.mkOption {
+      type = types.listOf types.package;
+      description = "A list of packages whose inputs will be exposed inside the developer environment";
+      default = [ ];
+    };
+
     shell = lib.mkOption {
       type = types.package;
       internal = true;
@@ -194,6 +200,21 @@ in
       ln -s ${profile} .devenv/profile
     '';
 
+    packages =
+      let
+        mergeInputs = attrPath:
+          lib.subtractLists config.inputsFrom (builtins.concatMap (lib.attrByPath attrPath [ ]) config.inputsFrom);
+        allInputs = builtins.filter lib.isDerivation (builtins.concatMap mergeInputs [
+          [ "buildInputs" ]
+          [ "nativeBuildInputs" ]
+          [ "propagatedBuildInputs" ]
+          [ "propagatedNativeBuildInputs" ]
+          [ "stdenv" "initialPath" ]
+          [ "stdenv" "defaultBuildInputs" ]
+          [ "stdenv" "defaultNativeBuildInputs" ]
+        ]);
+      in
+      lib.mkAfter allInputs;
     shell = performAssertions (
       mkNakedShell {
         name = "devenv-shell";
