@@ -585,7 +585,7 @@ List of hosts entries.
 
 
 *Type:*
-attribute set of string
+attribute set of (string or list of string)
 
 
 
@@ -598,6 +598,10 @@ attribute set of string
 
 ```
 {
+  "another-example.com" = [
+    "::1"
+    "127.0.0.1"
+  ];
   "example.com" = "127.0.0.1";
 }
 ```
