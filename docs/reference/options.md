@@ -4741,8 +4741,6 @@ boolean
 
 ## pre-commit.settings.dune-fmt.auto-promote
 
-
-
 Whether to auto-promote the changes.
 
 
@@ -7045,8 +7043,6 @@ path
 When this configuration setting is set to true, automatically create
 the system databases on startup. Must be set false for a clustered
 CouchDB installation.
-
-
 
 
 *Type:*
