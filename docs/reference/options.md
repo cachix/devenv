@@ -1245,6 +1245,55 @@ null or package
 
 
 
+## languages.idris.enable
+
+Whether to enable tools for Idris development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
+
+
+
+## languages.idris.package
+
+The Idris package to use.
+
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.idris2" `
+
+
+
+*Example:*
+` "pkgs.idris" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
+
+
+
 ## languages.java.enable
 
 Whether to enable tools for Java development.
@@ -1875,8 +1924,6 @@ pkgs.php.buildEnv {
 
 Attribute set of packages including composer
 
-
-
 *Type:*
 submodule
 
@@ -2281,6 +2328,8 @@ null or strings concatenated with “\\n”
 ## languages.php.version
 
 The PHP version to use.
+
+
 
 *Type:*
 string
@@ -4741,6 +4790,8 @@ boolean
 
 ## pre-commit.settings.dune-fmt.auto-promote
 
+
+
 Whether to auto-promote the changes.
 
 
@@ -7043,6 +7094,8 @@ path
 When this configuration setting is set to true, automatically create
 the system databases on startup. Must be set false for a clustered
 CouchDB installation.
+
+
 
 
 *Type:*
