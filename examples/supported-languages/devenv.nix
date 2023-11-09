@@ -17,6 +17,7 @@
   languages.gleam.enable = true;
   languages.go.enable = true;
   languages.haskell.enable = true;
+  languages.idris.enable = true;
   languages.java.enable = true;
   languages.javascript.enable = true;
   languages.jsonnet.enable = true;
