@@ -1,6 +1,6 @@
 # Services
 
-[processes](processes) are a low-level interface to starting a tool,
+[processes](processes.md) are a low-level interface to starting a tool,
 while services provide a higher level configuration.
 
 Here's an example starting PostgreSQL with a few extensions:
