@@ -92,6 +92,7 @@ with lib; let
             echo 'GRANT ${permission} ON ${database} TO `${user.name}`@`localhost`;'
           '')
           user.ensurePermissions)}
+          ${optionalString user.dangerWithGrantOption "GRANT GRANT OPTION ON '*.*' '${user.name}'@'localhost';"}
         ) | MYSQL_PWD="" ${cfg.package}/bin/mysql -u root -N
       '')
       cfg.ensureUsers}
@@ -193,6 +194,15 @@ in
             description = ''
               Password of the user to ensure.
             '';
+          };
+
+
+          dangerWithGrantOption = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = "
+                 Weather or not to add a GRANT GRANT OPTION *.* for the specified user (not recommended)
+            ";
           };
 
           ensurePermissions = lib.mkOption {
