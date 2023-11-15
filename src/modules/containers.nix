@@ -49,7 +49,7 @@ let
           (if builtins.typeOf cfg.copyToRoot == "list"
           then cfg.copyToRoot
           else [ cfg.copyToRoot ]);
-        pathsToLink = "/";
+        pathsToLink = [ "/" "/lib" ];
       })
     ];
     config = {
