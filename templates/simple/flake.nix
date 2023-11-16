@@ -15,6 +15,10 @@
       forEachSystem = nixpkgs.lib.genAttrs (import systems);
     in
     {
+      packages = forEachSystem (system: {
+        devenv-up = self.devShells.${system}.default.config.procfileScript;
+      });
+
       devShells = forEachSystem
         (system:
           let
