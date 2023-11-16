@@ -169,7 +169,7 @@ let
       maxLayers = lib.mkOption {
         type = types.int;
         description = "the maximum number of layers to create.";
-        defaultText = lib.literalExpression 1;
+        defaultText = lib.literalExpression "1";
         default = 1;
       };
     };
