@@ -4748,8 +4748,6 @@ boolean
 
 ## pre-commit.settings.deadnix.noUnderscore
 
-
-
 Don’t check any bindings that start with a ` _ `.
 
 
@@ -7047,8 +7045,6 @@ string
 
 
 ## services.couchdb.settings.chttpd.port
-
-
 
 Defined the port number to listen.
 
