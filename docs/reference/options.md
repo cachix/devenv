@@ -163,6 +163,25 @@ boolean
 
 
 
+## containers.\<name>.maxLayers
+
+the maximum number of layers to create.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
 ## containers.\<name>.name
 
 Name of the container.
@@ -1891,8 +1910,6 @@ to adjust the settings or add more extensions. You can find the
 extensions using `devenv search 'php extensions'`
 
 
-
-
 *Type:*
 package
 
@@ -1923,6 +1940,8 @@ pkgs.php.buildEnv {
 ## languages.php.packages
 
 Attribute set of packages including composer
+
+
 
 *Type:*
 submodule
@@ -4727,8 +4746,6 @@ boolean
 
 ## pre-commit.settings.deadnix.noLambdaPatternNames
 
-
-
 Don’t check lambda pattern names (don’t break nixpkgs ` callPackage `).
 
 
@@ -4747,6 +4764,8 @@ boolean
 
 
 ## pre-commit.settings.deadnix.noUnderscore
+
+
 
 Don’t check any bindings that start with a ` _ `.
 
@@ -7025,8 +7044,6 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
 
 ## services.couchdb.settings.chttpd.bind_address
 
-
-
 Defines the IP address by which CouchDB will be accessible.
 
 
@@ -7045,6 +7062,8 @@ string
 
 
 ## services.couchdb.settings.chttpd.port
+
+
 
 Defined the port number to listen.
 
