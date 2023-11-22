@@ -8,7 +8,7 @@ If you have a `.env`, you'll see instructions how to enable integration:
 
   # Optionally, you can choose which filename to load.
   # 
-  # dotenv.filename = ".env.production";
+  # dotenv.filename = ".env.bar";
 }
 ```
 
