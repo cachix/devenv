@@ -10,7 +10,7 @@ If you have a `.env`, you'll see instructions how to enable integration:
   # 
   # dotenv.filename = ".env.production";
   # or
-  # dotenv.filenames = [ ".env.production" ".env.development" ]
+  # dotenv.filename = [ ".env.production" ".env.development" ]
 }
 ```
 

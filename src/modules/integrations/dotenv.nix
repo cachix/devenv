@@ -3,7 +3,8 @@
 let
   cfg = config.dotenv;
 
-  dotenvFiles = if lib.length cfg.filenames > 0 then cfg.filenames else [ cfg.filename ];
+  normalizeFilenames = filenames: if lib.isList filenames then filenames else [ filenames ];
+  dotenvFiles = normalizeFilenames cfg.filename;
   dotenvPaths = map (filename: config.devenv.root + "/" + filename) dotenvFiles;
 
   parseLine = line:
@@ -24,15 +25,9 @@ in
     enable = lib.mkEnableOption ".env integration, doesn't support comments or multiline values.";
 
     filename = lib.mkOption {
-      type = lib.types.str;
+      type = lib.types.either lib.types.str (lib.types.listOf lib.types.str);
       default = ".env";
-      description = "The name of the primary dotenv file to load.";
-    };
-
-    filenames = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ ];
-      description = "The list of dotenv files to load, in order of precedence. Overrides the `filename` option if provided.";
+      description = "The name of the dotenv file to load, or a list of dotenv files to load in order of precedence.";
     };
 
     resolved = lib.mkOption {
@@ -59,7 +54,7 @@ in
         in
         lib.optionalString dotenvFound ''
           echo "💡 A dotenv file was found, while dotenv integration is currently not enabled."
-          echo 
+          echo
           echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
           echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
           echo
