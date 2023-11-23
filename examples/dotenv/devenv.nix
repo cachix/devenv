@@ -1,6 +1,6 @@
 { pkgs, ... }: {
   dotenv.enable = true;
-  dotenv.filename = [ ".env" ".env.bar" ];
+  dotenv.filename = [ ".env" "bar.env" ];
 
   env.BAR = "1";
 }
