@@ -19,6 +19,19 @@ let
   parseEnvFile = content: builtins.listToAttrs (lib.filter (x: !builtins.isNull x) (map parseLine (lib.splitString "\n" content)));
 
   mergeEnvFiles = files: lib.foldl' (acc: file: lib.recursiveUpdate acc (if lib.pathExists file then parseEnvFile (builtins.readFile file) else { })) { } files;
+
+  createMissingFileMessage = file:
+    let
+      exampleExists = builtins.pathExists (file + ".example");
+    in
+    lib.optionalString (!lib.pathExists file) ''
+      echo "💡 The dotenv file '${file}' was not found."
+      ${lib.optionalString exampleExists ''
+        echo "   To create this file, you can copy the example file:"
+        echo "   $ cp ${file}.example ${file}"
+      ''}
+    '';
+
 in
 {
   options.dotenv = {
@@ -46,6 +59,9 @@ in
     (lib.mkIf cfg.enable {
       env = lib.mapAttrs (name: value: lib.mkDefault value) config.dotenv.resolved;
       dotenv.resolved = mergeEnvFiles dotenvPaths;
+    })
+    (lib.mkIf (cfg.enable) {
+      enterShell = lib.concatStringsSep "\n" (map createMissingFileMessage dotenvPaths);
     })
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell =
