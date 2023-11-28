@@ -57,7 +57,7 @@ in
 
     extraConfig = mkOption {
       type = types.lines;
-      default = "";
+      default = "locale-collate C";
       description = "Additional text to be appended to `redis.conf`.";
     };
   };
