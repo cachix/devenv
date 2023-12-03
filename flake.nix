@@ -152,5 +152,14 @@
             inherit config;
           };
       };
+
+      # run tests with `nix eval .#tests`
+      tests =
+        let
+          results = import ./tests/dotenv/tests.nix { inherit nixpkgs; };
+        in
+        if results == [ ]
+        then "all tests passed"
+        else throw (builtins.toJSON results);
     };
 }
