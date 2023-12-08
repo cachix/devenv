@@ -6073,6 +6073,25 @@ attribute set of (submodule)
 
 
 
+## scripts.\<name>.description
+
+Description of the script.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
+
+
+
 ## scripts.\<name>.exec
 
 Bash code to execute when the script is run.
@@ -7004,8 +7023,6 @@ to know more about all settings, look at:
 />
 
 
-
-
 *Type:*
 attribute set of attribute set of (INI atom (null, bool, int, float or string))
 
@@ -7043,6 +7060,8 @@ attribute set of attribute set of (INI atom (null, bool, int, float or string))
 
 
 ## services.couchdb.settings.chttpd.bind_address
+
+
 
 Defines the IP address by which CouchDB will be accessible.
 
