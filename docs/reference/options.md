@@ -525,7 +525,6 @@ Disable the hint that are printed when the dotenv module is not enabled, but .en
 
 
 
-
 *Type:*
 boolean
 
@@ -541,13 +540,12 @@ boolean
 
 ## dotenv.filename
 
-The name of the dotenv file to load.
-
+The name of the dotenv file to load, or a list of dotenv files to load in order of precedence.
 
 
 
 *Type:*
-string
+string or list of string
 
 
 

@@ -3,9 +3,10 @@
 let
   cfg = config.dotenv;
 
-  dotenvPath = config.devenv.root + "/" + cfg.filename;
+  normalizeFilenames = filenames: if lib.isList filenames then filenames else [ filenames ];
+  dotenvFiles = normalizeFilenames cfg.filename;
+  dotenvPaths = map (filename: config.devenv.root + "/" + filename) dotenvFiles;
 
-  dotenvFound = lib.pathExists dotenvPath;
   parseLine = line:
     let
       parts = builtins.match "(.+) *= *(.+)" line;
@@ -16,17 +17,30 @@ let
       null;
 
   parseEnvFile = content: builtins.listToAttrs (lib.filter (x: !builtins.isNull x) (map parseLine (lib.splitString "\n" content)));
+
+  mergeEnvFiles = files: lib.foldl' (acc: file: lib.recursiveUpdate acc (if lib.pathExists file then parseEnvFile (builtins.readFile file) else { })) { } files;
+
+  createMissingFileMessage = file:
+    let
+      exampleExists = builtins.pathExists (file + ".example");
+    in
+    lib.optionalString (!lib.pathExists file) ''
+      echo "💡 The dotenv file '${file}' was not found."
+      ${lib.optionalString exampleExists ''
+        echo "   To create this file, you can copy the example file:"
+        echo "   $ cp ${file}.example ${file}"
+      ''}
+    '';
+
 in
 {
   options.dotenv = {
     enable = lib.mkEnableOption ".env integration, doesn't support comments or multiline values.";
 
     filename = lib.mkOption {
-      type = lib.types.str;
+      type = lib.types.either lib.types.str (lib.types.listOf lib.types.str);
       default = ".env";
-      description = ''
-        The name of the dotenv file to load.
-      '';
+      description = "The name of the dotenv file to load, or a list of dotenv files to load in order of precedence.";
     };
 
     resolved = lib.mkOption {
@@ -37,46 +51,31 @@ in
     disableHint = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = ''
-        Disable the hint that are printed when the dotenv module is not enabled, but .env is present.
-      '';
+      description = "Disable the hint that are printed when the dotenv module is not enabled, but .env is present.";
     };
   };
 
   config = lib.mkMerge [
-    (lib.mkIf (cfg.enable && builtins.pathExists dotenvPath) {
+    (lib.mkIf cfg.enable {
       env = lib.mapAttrs (name: value: lib.mkDefault value) config.dotenv.resolved;
-      dotenv.resolved = parseEnvFile (builtins.readFile dotenvPath);
+      dotenv.resolved = mergeEnvFiles dotenvPaths;
     })
-    (lib.mkIf (cfg.enable && !builtins.pathExists dotenvPath) (
-      let
-        exampleExists = builtins.pathExists (dotenvPath + ".example");
-      in
-      {
-        enterShell = ''
-          echo "💡 A ${cfg.filename} file was not found, while dotenv integration is enabled."
-          echo 
-          ${lib.optionalString exampleExists ''
-            echo "   To create .env, you can copy the example file:"
-            echo
-            echo "   $ cp ${dotenvPath}.example ${dotenvPath}";
-            echo
-          ''}
-          echo "   To disable it, add \`dotenv.enable = false;\` to your devenv.nix file.";
+    (lib.mkIf (cfg.enable) {
+      enterShell = lib.concatStringsSep "\n" (map createMissingFileMessage dotenvPaths);
+    })
+    (lib.mkIf (!cfg.enable && !cfg.disableHint) {
+      enterShell =
+        let
+          dotenvFound = lib.any (file: lib.pathExists file) dotenvPaths;
+        in
+        lib.optionalString dotenvFound ''
+          echo "💡 A dotenv file was found, while dotenv integration is currently not enabled."
+          echo
+          echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
+          echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
           echo
           echo "See https://devenv.sh/integrations/dotenv/ for more information.";
         '';
-      }
-    ))
-    (lib.mkIf (!cfg.enable && !cfg.disableHint) {
-      enterShell = lib.optionalString dotenvFound ''
-        echo "💡 A ${cfg.filename} file found, while dotenv integration is currently not enabled."
-        echo 
-        echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
-        echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
-        echo
-        echo "See https://devenv.sh/integrations/dotenv/ for more information.";
-      '';
     })
   ];
 }
