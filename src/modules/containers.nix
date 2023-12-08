@@ -33,6 +33,7 @@ let
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
     tag = cfg.version;
+    maxLayers = cfg.maxLayers;
     copyToRoot = [
       (pkgs.runCommand "create-paths" { } ''
         mkdir -p $out/tmp
@@ -163,6 +164,13 @@ let
 
           docker run -it ${config.name}:${config.version} "$@"
         '';
+      };
+
+      maxLayers = lib.mkOption {
+        type = types.int;
+        description = "the maximum number of layers to create.";
+        defaultText = lib.literalExpression "1";
+        default = 1;
       };
     };
   });

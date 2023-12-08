@@ -163,6 +163,25 @@ boolean
 
 
 
+## containers.\<name>.maxLayers
+
+the maximum number of layers to create.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
 ## containers.\<name>.name
 
 Name of the container.
@@ -1889,8 +1908,6 @@ to adjust the settings or add more extensions. You can find the
 extensions using `devenv search 'php extensions'`
 
 
-
-
 *Type:*
 package
 
@@ -1921,6 +1938,8 @@ pkgs.php.buildEnv {
 ## languages.php.packages
 
 Attribute set of packages including composer
+
+
 
 *Type:*
 submodule
@@ -4725,8 +4744,6 @@ boolean
 
 ## pre-commit.settings.deadnix.noLambdaPatternNames
 
-
-
 Don’t check lambda pattern names (don’t break nixpkgs ` callPackage `).
 
 
@@ -4745,6 +4762,8 @@ boolean
 
 
 ## pre-commit.settings.deadnix.noUnderscore
+
+
 
 Don’t check any bindings that start with a ` _ `.
 
@@ -6052,6 +6071,25 @@ attribute set of (submodule)
 
 
 
+## scripts.\<name>.description
+
+Description of the script.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
+
+
+
 ## scripts.\<name>.exec
 
 Bash code to execute when the script is run.
@@ -6983,8 +7021,6 @@ to know more about all settings, look at:
 />
 
 
-
-
 *Type:*
 attribute set of attribute set of (INI atom (null, bool, int, float or string))
 
@@ -7043,6 +7079,8 @@ string
 
 
 ## services.couchdb.settings.chttpd.port
+
+
 
 Defined the port number to listen.
 
@@ -8589,6 +8627,34 @@ package
 
 
 
+## services.nginx.defaultMimeTypes
+
+
+
+Default MIME types for NGINX, as MIME types definitions from NGINX are very incomplete,
+we use by default the ones bundled in the mailcap package, used by most of the other
+Linux distributions.
+
+
+
+*Type:*
+path
+
+
+
+*Default:*
+` $''{pkgs.mailcap}/etc/nginx/mime.types `
+
+
+
+*Example:*
+` $''{pkgs.nginx}/conf/mime.types `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
 ## services.nginx.eventsConfig
 
 The nginx events configuration.
@@ -9576,7 +9642,7 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+` "locale-collate C" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
