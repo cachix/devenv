@@ -9616,7 +9616,7 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "" `
+` "locale-collate C" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/redis.nix)
