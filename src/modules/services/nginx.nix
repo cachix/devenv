@@ -19,6 +19,8 @@ let
       scgi_temp_path ${config.env.DEVENV_STATE}/nginx/;
       uwsgi_temp_path ${config.env.DEVENV_STATE}/nginx/;
 
+      include ${cfg.defaultMimeTypes};
+
       ${cfg.httpConfig}
     }
   '';
@@ -32,6 +34,18 @@ in
       default = pkgs.nginx;
       defaultText = "pkgs.nginx";
       description = "The nginx package to use.";
+    };
+
+    defaultMimeTypes = lib.mkOption {
+      type = lib.types.path;
+      default = "${pkgs.mailcap}/etc/nginx/mime.types";
+      defaultText = lib.literalExpression "$''{pkgs.mailcap}/etc/nginx/mime.types";
+      example = lib.literalExpression "$''{pkgs.nginx}/conf/mime.types";
+      description = lib.mdDoc ''
+        Default MIME types for NGINX, as MIME types definitions from NGINX are very incomplete,
+        we use by default the ones bundled in the mailcap package, used by most of the other
+        Linux distributions.
+      '';
     };
 
     httpConfig = lib.mkOption {
