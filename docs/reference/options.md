@@ -8629,6 +8629,34 @@ package
 
 
 
+## services.nginx.defaultMimeTypes
+
+
+
+Default MIME types for NGINX, as MIME types definitions from NGINX are very incomplete,
+we use by default the ones bundled in the mailcap package, used by most of the other
+Linux distributions.
+
+
+
+*Type:*
+path
+
+
+
+*Default:*
+` $''{pkgs.mailcap}/etc/nginx/mime.types `
+
+
+
+*Example:*
+` $''{pkgs.nginx}/conf/mime.types `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
 ## services.nginx.eventsConfig
 
 The nginx events configuration.
