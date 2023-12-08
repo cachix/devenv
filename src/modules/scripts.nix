@@ -8,6 +8,11 @@ let
         type = types.str;
         description = "Bash code to execute when the script is run.";
       };
+      description = lib.mkOption {
+        type = types.str;
+        description = "Description of the script.";
+        default = "";
+      };
     };
   });
   # lib.hiPrioSet: prioritize scripts over plain packages
