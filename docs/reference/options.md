@@ -7189,6 +7189,68 @@ path
 
 
 
+## services.elasticmq.enable
+
+Whether to enable elasticmq-server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
+
+
+
+## services.elasticmq.package
+
+Which package of elasticmq-server-bin to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elasticmq-server-bin `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
+
+
+
+## services.elasticmq.settings
+
+Configuration for elasticmq-server
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
+
+
+
 ## services.elasticsearch.enable
 
 Whether to enable elasticsearch.
