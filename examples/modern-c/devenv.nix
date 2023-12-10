@@ -8,7 +8,6 @@
   '';
 
   pre-commit.hooks = {
-    clang-format.enable = true;
     clang-tidy.enable = true;
   };
 }

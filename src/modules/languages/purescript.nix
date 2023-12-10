@@ -27,7 +27,6 @@ in
       cfg.package
       pkgs.nodePackages.purescript-language-server
       pkgs.nodePackages.purs-tidy
-      pkgs.spago
       pkgs.purescript-psa
       (supportAarch64Darwin pkgs.psc-package)
     ];
