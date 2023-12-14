@@ -1,37 +1,20 @@
-#!/bin/sh
-set -x
+#!/usr/bin/env bash
+set -ex
 
-# Start the services in the background and store the PID
 echo "Starting vault service..."
-devenv up&
+devenv up &
 DEVENV_PID=$!
+export DEVENV_PID
 
-# vault status and store its exit status
-check_vault_status() {
-  echo "Waiting for service to become available..."
-  VAULT_OUTPUT=$(vault status 2>&1)
-  VAULT_EXIT_STATUS=$?
+# shellcheck disable=SC2317 # ShellCheck may incorrectly believe that code is unreachable if it's invoked by variable name or in a trap
+devenv_stop() {
+    pkill -P "$DEVENV_PID"
 }
 
-# Continuously check vault status until it returns successfully (up to a maximum of 100 times)
-for i in $(seq 1 20); do
-  check_vault_status
-  if [ $VAULT_EXIT_STATUS -eq 0 ]; then
-    echo "Service is up..."
-    break
-  else
-    sleep 1
-  fi
-done
+trap devenv_stop EXIT
 
-# Print the captured output when vault status succeeds
-echo "Startup complete..."
-vault version
-echo "$VAULT_OUTPUT"
+timeout 20 bash -c 'until echo > /dev/tcp/localhost/8200; do sleep 0.5; done'
 
-# Clean up by terminating all spawned processes
-pkill -P $DEVENV_PID
-wait $DEVENV_PID &> /dev/null
+timeout 5 bash -c 'until vault status; do sleep 0.5; done'
 
-# Exit the script
-exit $VAULT_EXIT_STATUS
+vault status

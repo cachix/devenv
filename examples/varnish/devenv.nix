@@ -2,7 +2,7 @@
 {
   services.varnish = {
     enable = true;
-    package = pkgs.varnish73;
+    package = pkgs.varnish;
     vcl = ''
       vcl 4.0;
 

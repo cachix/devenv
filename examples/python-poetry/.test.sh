@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -exu
 POETRY_VENV="$PWD/.venv"
 [ -d "$POETRY_VENV" ]
