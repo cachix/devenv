@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [self-hosted, macOS], [nscloud-arm64]]
+        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
