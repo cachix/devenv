@@ -152,5 +152,9 @@
             inherit config;
           };
       };
+
+      overlays.default = final: prev: {
+        devenv = self.packages.${prev.system}.default;
+      };
     };
 }
