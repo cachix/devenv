@@ -35,6 +35,8 @@
                   enterShell = ''
                     hello
                   '';
+
+                  processes.run.exec = "hello";
                 }
               ];
             };
