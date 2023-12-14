@@ -4,7 +4,7 @@
   services.clickhouse = {
     enable = true;
     config = ''
-      http_port: 9000
+      http_port: 9050
     '';
   };
 }
