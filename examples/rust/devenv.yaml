@@ -4,3 +4,5 @@ inputs:
     inputs:
       nixpkgs:
         follows: nixpkgs
+  devenv:
+    url: path:../../src/modules
