@@ -11,7 +11,7 @@ let
       # Avoid running "npm install" for every shell.
       # Only run it when the "package-lock.json" file or nodejs version has changed.
       # We do this by storing the nodejs version and a hash of "package-lock.json" in node_modules.
-      local ACTUAL_NPM_CHECKSUM="${cfg.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 package-lock.json)"
+      local ACTUAL_NPM_CHECKSUM="${cfg.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${cfg.npm.install.directory}/package-lock.json)"
       local NPM_CHECKSUM_FILE="${nodeModulesPath}/package-lock.json.checksum"
       if [ -f "$NPM_CHECKSUM_FILE" ]
         then
@@ -22,7 +22,7 @@ let
 
       if [ "$ACTUAL_NPM_CHECKSUM" != "$EXPECTED_NPM_CHECKSUM" ]
       then
-        if ${cfg.package}/bin/npm install
+        if ${cfg.package}/bin/npm install ${cfg.npm.install.directory}
         then
           echo "$ACTUAL_NPM_CHECKSUM" > "$NPM_CHECKSUM_FILE"
         else
@@ -31,9 +31,9 @@ let
       fi
     }
 
-    if [ ! -f package.json ]
+    if [ ! -f ${cfg.npm.install.directory}/package.json ]
     then
-      echo "No package.json found. Run 'npm init' to create one." >&2
+      echo "No ${cfg.npm.install.directory}/package.json found. Run 'npm init' to create one." >&2
     else
       _devenv-npm-install
     fi
@@ -56,6 +56,11 @@ in
 
     npm.install = {
       enable = lib.mkEnableOption "npm install during devenv initialisation";
+      directory = lib.mkOption {
+        type = lib.types.str;
+        description = "";
+        default = config.devenv.root;
+      };
     };
   };
 

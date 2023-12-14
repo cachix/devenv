@@ -59,11 +59,11 @@ let
 
     function _devenv-poetry-install()
     {
-      local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments})
+      local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install -C ${cfg.poetry.install.directory} --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments})
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${cfg.poetry.install.directory}/pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 ${cfg.poetry.install.directory}/poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
       local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/.venv/poetry.lock.checksum
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
@@ -83,9 +83,9 @@ let
       fi
     }
 
-    if [ ! -f pyproject.toml ]
+    if [ ! -f ${cfg.poetry.install.directory}/pyproject.toml ]
     then
-      echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
+      echo "No ${cfg.poetry.install.directory}/pyproject.toml found. Run 'poetry init' to create one." >&2
     else
       _devenv-init-poetry-venv
       ${lib.optionalString cfg.poetry.install.enable ''
@@ -139,6 +139,11 @@ in
       enable = lib.mkEnableOption "poetry";
       install = {
         enable = lib.mkEnableOption "poetry install during devenv initialisation";
+        directory = lib.mkOption {
+          type = lib.types.str;
+          description = "Directory with pyproject.toml";
+          default = config.devenv.root;
+        };
         arguments = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
