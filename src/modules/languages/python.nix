@@ -53,11 +53,8 @@ let
 
     if [ $profile_python != $venv_python ]
     then
-      if [ -d "$VENV_PATH" ]
-      then
-        echo "Python interpreter changed, rebuilding Python venv..."
-        ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
-      fi
+      echo "Python interpreter changed, rebuilding Python venv..."
+      ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
