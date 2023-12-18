@@ -45,7 +45,7 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    echo $(${readlink} "${package.interpreter}")
+    echo $(${readlink} "${package.python}")
     echo $(${readlink} "$VENV_PATH/bin/python")
 
     if [ "$(${readlink} "$VENV_PATH/bin/python")" != "$(${readlink} ${package.interpreter})" ]
