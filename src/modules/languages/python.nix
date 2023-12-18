@@ -45,8 +45,8 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    profile_python = $(${readlink} "${package.python}/bin/python")
-    venv_python = $(${readlink} "$VENV_PATH/bin/python")
+    profile_python=$(${readlink} "${package.python}/bin/python")
+    venv_python=$(${readlink} "$VENV_PATH/bin/python")
 
     echo $profile_python
     echo $venv_python
