@@ -45,8 +45,9 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    profile_python="$(${readlink} "${package.python}/bin/python")"
-    venv_python="$(${readlink} "$VENV_PATH/bin/python")"
+    profile_python="$(${readlink} "${package.interpreter}")"
+    devenv_interpreter_path = $(cat "$VENV_PATH/.devenv_interpreter") || ""
+    venv_python="$(${readlink} $devenv_interpreter_path"
 
     echo $profile_python
     echo $venv_python
@@ -60,6 +61,7 @@ let
       ''}
       echo ${package.interpreter} -m venv "$VENV_PATH"
       ${package.interpreter} -m venv "$VENV_PATH"
+      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
     source "$VENV_PATH"/bin/activate
     ${lib.optionalString (cfg.venv.requirements != null) ''
