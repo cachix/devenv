@@ -45,13 +45,13 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    nix_python = $(${readlink} "${package.python}/bin/python")
+    profile_python = $(${readlink} "${package.python}/bin/python")
     venv_python = $(${readlink} "$VENV_PATH/bin/python")
 
-    echo $nix_python
+    echo $profile_python
     echo $venv_python
 
-    if [ $nix_python != $venv_python ]
+    if [ $profile_python != $venv_python ]
     then
       if [ -d "$VENV_PATH" ]
       then
