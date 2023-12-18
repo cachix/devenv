@@ -15,7 +15,7 @@ in
       defaultText = lib.literalExpression "pkgs.influxdb";
     };
 
-    settings = lib.mkOption {
+    config = lib.mkOption {
       type = types.lines;
       default = "";
       description = "Configuration for InfluxDB-server";
@@ -23,6 +23,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    processes.influxdb-server.exec = "${cfg.package}/bin/influxd -config ${pkgs.writeText "influxdb.conf" cfg.settings}";
+    processes.influxdb-server.exec = "${cfg.package}/bin/influxd -config ${pkgs.writeText "influxdb.conf" cfg.config}";
   };
 }
