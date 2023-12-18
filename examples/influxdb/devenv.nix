@@ -9,7 +9,7 @@ in
   ];
 
   services.influxdb.enable = true;
-  services.influxdb.settings = ''
+  services.influxdb.config = ''
     [meta]
       dir = "/tmp/influxdb/meta"
 
