@@ -49,9 +49,6 @@ let
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null|| false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
 
-    echo $profile_python
-    echo $venv_python
-
     if [ -z $venv_python ] || [ $profile_python != $venv_python ]
     then
       echo "Python interpreter changed, rebuilding Python venv..."
