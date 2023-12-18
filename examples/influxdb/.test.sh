@@ -11,7 +11,8 @@ function stop() {
 
 trap stop EXIT
 
-timeout 10 bash -c 'until echo > /dev/tcp/localhost/8086; do sleep 0.5; done'
+# We test for the none-default port, configured in the nix file
+timeout 10 bash -c 'until echo > /dev/tcp/localhost/8087; do sleep 0.5; done'
 
 influx --execute "CREATE DATABASE devenv"
 DATABASES=$(influx --execute "SHOW DATABASES" | grep devenv)
