@@ -56,8 +56,8 @@ let
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      echo ${package.interpreter} -m venv "$VENV_PATH"
-      ${package.interpreter} -m venv "$VENV_PATH"
+      echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+      ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
       echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
     source "$VENV_PATH"/bin/activate
