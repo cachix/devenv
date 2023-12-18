@@ -51,7 +51,7 @@ let
     echo $profile_python
     echo $venv_python
 
-    if [ $profile_python != $venv_python ]
+    if [ -z $venv_python || $profile_python != $venv_python ]
     then
       echo "Python interpreter changed, rebuilding Python venv..."
       ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
