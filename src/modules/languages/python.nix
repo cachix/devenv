@@ -46,8 +46,8 @@ let
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
     profile_python="$(${readlink} ${package.interpreter})"
-    devenv_interpreter_path = "$(cat "$VENV_PATH/.devenv_interpreter")" || ""
-    venv_python="$(${readlink} $devenv_interpreter_path)"
+    devenv_interpreter_path = "$(cat "$VENV_PATH/.devenv_interpreter" || "" )"
+    venv_python="$(${readlink} "$devenv_interpreter_path")"
 
     echo $profile_python
     echo $venv_python
