@@ -45,12 +45,11 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    if [ "$(${readlink} "$VENV_PATH"/bin/python)" != "$(${readlink} ${package.interpreter}/bin/python)" ] \
-    || [ "$(${readlink} "$VENV_PATH"/requirements.txt)" != "$(${readlink} ${if requirements != null then requirements else "$VENV_PATH/requirements.txt"})" ]
+    if [ "$(${readlink} "$VENV_PATH"/bin/python)" != "$(${readlink} ${package.interpreter}/bin/python)" ]
     then
       if [ -d "$VENV_PATH" ]
       then
-        echo "Python interpreter/requirements changed, rebuilding Python venv..."
+        echo "Python interpreter changed, rebuilding Python venv..."
         ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
       fi
       ${lib.optionalString cfg.poetry.enable ''
