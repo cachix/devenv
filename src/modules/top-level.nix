@@ -194,8 +194,9 @@ in
         '';
       }
     ];
-    devenv.dotfile = config.devenv.root + "/.devenv";
-    devenv.state = config.devenv.dotfile + "/state";
+    # use builtins.toPath to normalize path if root is "/" (container)
+    devenv.dotfile = builtins.toPath (config.devenv.root + "/.devenv");
+    devenv.state = builtins.toPath (config.devenv.dotfile + "/state");
     devenv.profile = profile;
 
     env.DEVENV_PROFILE = config.devenv.profile;
