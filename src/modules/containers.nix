@@ -28,7 +28,7 @@ let
 
     source ${shell.envScript}
 
-    exec "$@"
+    exec $@
   '';
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
