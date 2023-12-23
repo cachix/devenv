@@ -28,10 +28,6 @@ let
 
     source ${shell.envScript}
 
-    # strip off leading slash
-    cmd="$@"
-    cmd="''${cmd:1}"
-
     exec $cmd
   '';
   mkDerivation = cfg: nix2container.nix2container.buildImage {
