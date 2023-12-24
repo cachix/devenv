@@ -48,7 +48,9 @@ let
     profile_python="$(${readlink} ${package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null|| false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
+    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
 
+    # recreate venv if necessary
     if [ -z $venv_python ] || [ $profile_python != $venv_python ]
     then
       echo "Python interpreter changed, rebuilding Python venv..."
@@ -59,11 +61,26 @@ let
       echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
       ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
       echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+      if [ -n "$requirements" ]
+        then
+          echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
+      fi
     fi
+
     source "$VENV_PATH"/bin/activate
-    ${lib.optionalString (cfg.venv.requirements != null) ''
-      "$VENV_PATH"/bin/pip install -r ${requirements}
-    ''}
+
+    # reinstall requirements if necessary
+    if [ -n "$requirements" ]
+      then
+        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| false )"
+        devenv_requirements="$(${readlink} "$devenv_requirements_path")"
+        if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
+          then
+            echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
+            echo "Requirements changed, running pip install -r ${requirements}..."
+           "$VENV_PATH"/bin/pip install -r ${requirements}
+       fi
+    fi
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
