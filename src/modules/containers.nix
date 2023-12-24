@@ -29,7 +29,7 @@ let
     source ${shell.envScript}
 
     # expand any envvars before exec
-    cmd=$(eval "echo $@")
+    cmd="`echo "$@"|${pkgs.envsubst}/bin/envsubst`"
 
     exec $cmd
   '';
