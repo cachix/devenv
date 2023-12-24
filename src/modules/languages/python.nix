@@ -45,26 +45,42 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    if [ "$(${readlink} "$VENV_PATH"/bin/python)" != "$(${readlink} ${package.interpreter}/bin/python)" ] \
-    || [ "$(${readlink} "$VENV_PATH"/requirements.txt)" != "$(${readlink} ${if requirements != null then requirements else "$VENV_PATH/requirements.txt"})" ]
+    profile_python="$(${readlink} ${package.interpreter})"
+    devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null|| false )"
+    venv_python="$(${readlink} "$devenv_interpreter_path")"
+    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+
+    # recreate venv if necessary
+    if [ -z $venv_python ] || [ $profile_python != $venv_python ]
     then
-      if [ -d "$VENV_PATH" ]
-      then
-        echo "Python interpreter/requirements changed, rebuilding Python venv..."
-        ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
-      fi
+      echo "Python interpreter changed, rebuilding Python venv..."
+      ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      echo ${package.interpreter} -m venv "$VENV_PATH"
-      ${package.interpreter} -m venv "$VENV_PATH"
+      echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+      ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+      if [ -n "$requirements" ]
+        then
+          echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
+      fi
     fi
+
     source "$VENV_PATH"/bin/activate
-    ${lib.optionalString (cfg.venv.requirements != null) ''
-      "$VENV_PATH"/bin/pip install -r ${requirements} ${lib.optionalString cfg.venv.quiet ''
-        --quiet
-      ''}
-    ''}
+
+    # reinstall requirements if necessary
+    if [ -n "$requirements" ]
+      then
+        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| false )"
+        devenv_requirements="$(${readlink} "$devenv_requirements_path")"
+        if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
+          then
+            echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
+            echo "Requirements changed, running pip install -r ${requirements}..."
+           "$VENV_PATH"/bin/pip install -r ${requirements}
+       fi
+    fi
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
