@@ -61,10 +61,6 @@ let
       echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
       ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
       echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
-      if [ -n "$requirements" ]
-        then
-          echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
-      fi
     fi
 
     source "$VENV_PATH"/bin/activate
