@@ -28,7 +28,10 @@ let
 
     source ${shell.envScript}
 
-    exec "$@"
+    # expand any envvars before exec
+    cmd="`echo "$@"|${pkgs.envsubst}/bin/envsubst`"
+
+    exec $cmd
   '';
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
