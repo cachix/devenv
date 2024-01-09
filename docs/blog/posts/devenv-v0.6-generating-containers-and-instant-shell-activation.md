@@ -141,7 +141,7 @@ Will allow building unfree software and wire up `default` overlay into `pkgs` fr
 
 ## Services changelog
 
-- **Cassandra:** Added by [ankers](https://github.com/ankers).
+- **Cassandra:** Added by [ankhers](https://github.com/ankhers).
 
 - **CouchDB**: Added by [MSBarbieri](https://github.com/MSBarbieri).
 
