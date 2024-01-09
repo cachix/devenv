@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import re
 import sys
@@ -12,7 +11,8 @@ def replace_envvars(text, file_path):
         val = os.environ.get(env_var, None)
         if val is None:
             raise ValueError(
-                f"No such environment variable {env_var} in {text} within {file_path}"
+                f"No such environment variable {env_var} in "
+                f"{text} within {file_path}"
             )
         return val
 

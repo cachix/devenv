@@ -2,6 +2,7 @@
 
 let
   cfg = config.languages.python;
+  flattenreq = pkgs.writers.writePython3 "flattenreq" { } (builtins.readFile ./support/python/flattenreq.py);
   libraries = lib.makeLibraryPath
     ((lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
       # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
@@ -31,6 +32,18 @@ let
     then builtins.readFile cfg.venv.requirements
     else cfg.venv.requirements
   );
+
+  requirements_and_constraints = requirements: constraints: (
+    pkgs.stdenv.mkDerivation {
+      name = "requirements_and_constraints";
+      src = ./.;
+      dontUnpack = true;
+      installPhase = ''
+        mkdir -p $out
+        echo "${requirements}" > "$out/requirements.txt"
+        echo "${constraints}" > "$out/constraints.txt"
+      '';
+    });
 
   nixpkgs-python = config.lib.getInput {
     name = "nixpkgs-python";
@@ -68,14 +81,24 @@ let
     # reinstall requirements if necessary
     if [ -n "$requirements" ]
       then
-        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| false )"
-        devenv_requirements="$(${readlink} "$devenv_requirements_path")"
-        if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
+        tmpdir=`mktemp -d`
+        ${flattenreq} "${(
+          if lib.isPath cfg.venv.requirements
+          then cfg.venv.requirements
+          else requirements
+        )}" $tmpdir
+        existing_requirements="$VENV_PATH/.devenv_requirements"
+        [ -f $existing_requirements ] || existing_requirements="/dev/null"
+        existing_constraints="$VENV_PATH/.devenv_constraints"
+        [ -f $existing_constraints ] || existing_constraints="/dev/null"
+        if ! ${pkgs.diffutils}/bin/cmp --silent "$tmpdir/requirements.txt" "$existing_requirements" || ! ${pkgs.diffutils}/bin/cmp --silent "$tmpdir/constraints.txt" "$existing_constraints";
           then
-            echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
-            echo "Requirements changed, running pip install -r ${requirements}..."
-           "$VENV_PATH"/bin/pip install -r ${requirements}
+            cp "$tmpdir/requirements.txt" "$VENV_PATH/.devenv_requirements"
+            cp "$tmpdir/constraints.txt" "$VENV_PATH/.devenv_constraints"
+            echo "Requirements changed, running pip install -r $VENV_PATH/.devenv_requirements -c $tmpdir/.devenv_constraints ..."
+           "$VENV_PATH"/bin/pip install -r "$VENV_PATH/.devenv_requirements" -c "$VENV_PATH/.devenv_constraints"
        fi
+       rm -rf "$tmpdir"
     fi
   '';
 
