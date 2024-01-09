@@ -25,6 +25,7 @@ in
       cfg.packages.utop
       cfg.packages.odoc
       cfg.packages.ocp-indent
+      cfg.packages.findlib
       pkgs.ocamlformat
     ];
   };
