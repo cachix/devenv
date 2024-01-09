@@ -3759,6 +3759,10 @@ Static checker for GitHub Actions workflow files.
 
 The Uncompromising Nix Code Formatter.
 
+**` annex `**
+
+Runs the git-annex hook for large file support
+
 **` ansible-lint `**
 
 Ansible linter.
@@ -3770,6 +3774,10 @@ Remove unused imports and variables from Python code.
 **` bats `**
 
 Run bash unit tests.
+
+**` beautysh `**
+
+Format shell files.
 
 **` black `**
 
@@ -3799,13 +3807,25 @@ LaTeX semantic checker
 
 Format your code using ` clang-format `.
 
+**` clang-tidy `**
+
+Static analyzer for C++ code.
+
 **` clippy `**
 
 Lint Rust code.
 
+**` cljfmt `**
+
+A tool for formatting Clojure code.
+
 **` commitizen `**
 
-Check whether the current commit message follows commiting rules.
+Check whether the current commit message follows committing rules.
+
+**` conform `**
+
+Policy enforcement for commits.
 
 **` convco `**
 
@@ -3825,6 +3845,14 @@ A Spell Checker for Code
 
 Scan Nix files for dead code (unused variable bindings).
 
+**` denofmt `**
+
+Auto-format JavaScript, TypeScript, Markdown, and JSON files.
+
+**` denolint `**
+
+Lint JavaScript/TypeScript source code.
+
 **` dhall-format `**
 
 Dhall code formatter.
@@ -3840,6 +3868,10 @@ Runs Dune’s formatters on the code tree.
 **` dune-opam-sync `**
 
 Check that Dune-generated OPAM files are in sync.
+
+**` eclint `**
+
+EditorConfig linter written in Go.
 
 **` editorconfig-checker `**
 
@@ -3865,6 +3897,10 @@ Find and fix problems in your JavaScript code.
 
 Check the style and quality of Python files.
 
+**` flynt `**
+
+CLI tool to convert a python project’s %-formatted strings to f-strings.
+
 **` fourmolu `**
 
 Haskell code prettifier.
@@ -3876,6 +3912,10 @@ Auto-formatter for modern Fortran code.
 **` gofmt `**
 
 A tool that automatically formats Go source code
+
+**` golangci-lint `**
+
+Fast linters runner for Go.
 
 **` gotest `**
 
@@ -3892,6 +3932,10 @@ Generate a commit message using GPT3.
 **` hadolint `**
 
 Dockerfile linter, validate inline bash.
+
+**` headache `**
+
+Lightweight tool for managing headers in source code files.
 
 **` hindent `**
 
@@ -3917,6 +3961,10 @@ Spell checker and morphological analyzer.
 
 A Python utility / library to sort imports.
 
+**` juliaformatter `**
+
+Run JuliaFormatter.jl against Julia source files
+
 **` latexindent `**
 
 Perl script to add indentation to LaTeX files.
@@ -3929,9 +3977,17 @@ Uses the lua-language-server CLI to statically type-check and lint Lua code.
 
 A tool for linting and static analysis of Lua code.
 
+**` lychee `**
+
+A fast, async, stream-based link checker that finds broken hyperlinks and mail adresses inside Markdown, HTML, reStructuredText, or any other text file or website.
+
 **` markdownlint `**
 
 Style checker and linter for markdown files.
+
+**` mdl `**
+
+A tool to check markdown files and flag style issues.
 
 **` mdsh `**
 
@@ -3944,6 +4000,10 @@ Runs the built-in Elixir syntax formatter
 **` mix-test `**
 
 Runs the built-in Elixir test framework
+
+**` mkdocs-linkcheck `**
+
+Validate links associated with markdown-based, statically generated websites.
 
 **` mypy `**
 
@@ -3985,9 +4045,19 @@ Lint PHP files.
 
 Lint PHP files.
 
+**` phpstan `**
+
+Static Analysis of PHP files.
+
+**` pre-commit-hook-ensure-sops `**
+
 **` prettier `**
 
 Opinionated multi-language code formatter.
+
+**` psalm `**
+
+Static Analysis of PHP files.
 
 **` purs-tidy `**
 
@@ -4012,6 +4082,10 @@ Automatically upgrade syntax for newer versions.
 **` revive `**
 
 A linter for Go source code.
+
+**` rome `**
+
+Unified developer tools for JavaScript, TypeScript, and the web
 
 **` ruff `**
 
@@ -4073,6 +4147,14 @@ One CLI to format the code tree.
 
 Source code spell checker
 
+**` typstfmt `**
+
+format typst
+
+**` vale `**
+
+A markup-aware linter for prose built with speed and extensibility in mind.
+
 **` yamllint `**
 
 Yaml linter.
@@ -4101,6 +4183,27 @@ attribute set of (submodule)
 
 
 Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## pre-commit.hooks.\<name>.always_run
+
+
+
+if true this hook will run even if there are no matching files.
 
 
 
@@ -4185,6 +4288,11 @@ if true pre-commit will stop running hooks if this hook fails.
 
 *Type:*
 boolean
+
+
+
+*Default:*
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -4304,6 +4412,11 @@ if true this hook will execute using a single process instead of in parallel.
 
 *Type:*
 boolean
+
+
+
+*Default:*
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -4458,6 +4571,58 @@ package *(read only)*
 
 
 
+## pre-commit.settings.alejandra.package
+
+
+
+The ` alejandra ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "\${pkgs.alejandra}" `
+
+
+
+*Example:*
+` "\${pkgs.alejandra}" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.alejandra.check
+
+
+
+Check if the input is already formatted and disable writing in-place the modified content
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.alejandra.exclude
 
 
@@ -4490,9 +4655,63 @@ list of string
 
 
 
+## pre-commit.settings.alejandra.threads
+
+
+
+Number of formatting threads to spawn.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 8 `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.alejandra.verbosity
+
+
+
+Whether informational messages or all messages should be hidden or not.
+
+
+
+*Type:*
+one of “normal”, “quiet”, “silent”
+
+
+
+*Default:*
+` "normal" `
+
+
+
+*Example:*
+` "quiet" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.ansible-lint.configPath
 
-path to the configuration YAML file
+
+
+Path to the YAML configuration file.
 
 
 
@@ -4511,7 +4730,9 @@ string
 
 ## pre-commit.settings.ansible-lint.subdir
 
-path to Ansible subdir
+
+
+Path to the Ansible subdirectory.
 
 
 
@@ -4639,8 +4860,6 @@ boolean
 
 ## pre-commit.settings.credo.strict
 
-
-
 Whether to auto-promote the changes.
 
 
@@ -4744,6 +4963,8 @@ boolean
 
 ## pre-commit.settings.deadnix.noLambdaPatternNames
 
+
+
 Don’t check lambda pattern names (don’t break nixpkgs ` callPackage `).
 
 
@@ -4803,6 +5024,90 @@ boolean
 
 
 
+## pre-commit.settings.denofmt.configPath
+
+
+
+Path to the configuration JSON file
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.denofmt.write
+
+
+
+Whether to edit files inplace.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.denolint.configPath
+
+
+
+Path to the configuration JSON file
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.denolint.format
+
+
+
+Output format.
+
+
+
+*Type:*
+one of “default”, “compact”, “json”
+
+
+
+*Default:*
+` "default" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.dune-fmt.auto-promote
 
 
@@ -4839,6 +5144,137 @@ list of package
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.eclint.package
+
+
+
+The ` eclint ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` ${tools.eclint} `
+
+
+
+*Example:*
+` ${pkgs.eclint} `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.eclint.color
+
+
+
+When to generate colored output.
+
+
+
+*Type:*
+one of “auto”, “always”, “never”
+
+
+
+*Default:*
+` "auto" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.eclint.exclude
+
+
+
+Filter to exclude files.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.eclint.fix
+
+
+
+Modify files in place rather than showing the errors.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.eclint.summary
+
+
+
+Only show number of errors per file.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.eclint.verbosity
+
+
+
+Log level verbosity
+
+
+
+*Type:*
+one of 0, 1, 2, 3, 4
+
+
+
+*Default:*
+` 0 `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
@@ -4933,6 +5369,284 @@ string
 
 
 
+## pre-commit.settings.flynt.package
+
+
+
+The ` flynt ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "\${pkgs.python311Packages.flynt}" `
+
+
+
+*Example:*
+` "\${pkgs.python310Packages.flynt}" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.aggressive
+
+
+
+Include conversions with potentially changed behavior.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.binPath
+
+
+
+flynt binary path. Can be used to specify the flynt binary from an existing Python environment.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "\${settings.flynt.package}/bin/flynt" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.dry-run
+
+
+
+Do not change files in-place and print diff instead.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.exclude
+
+
+
+Ignore files with given strings in their absolute path.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.fail-on-change
+
+
+
+Fail when diff is not empty (for linting purposes).
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.line-length
+
+
+
+Convert expressions spanning multiple lines, only if the resulting single line will fit into this line length limit.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.no-multiline
+
+
+
+Convert only single line expressions.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.quiet
+
+
+
+Run without output.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.string
+
+
+
+Interpret the input as a Python code snippet and print the converted version.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.transform-concats
+
+
+
+Replace string concatenations with f-strings.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.flynt.verbose
+
+
+
+Run with verbose output.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.headache.header-file
+
+
+
+Path to the header file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` ".header" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.hlint.hintFile
 
 
@@ -4969,6 +5683,69 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.isort.flags
+
+
+
+Flags passed to isort. See all available [here](https://pycqa.github.io/isort/docs/configuration/options.html).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.isort.profile
+
+
+
+Built-in profiles to allow easy interoperability with common projects and code styles.
+
+
+
+*Type:*
+one of “”, “black”, “django”, “pycharm”, “google”, “open_stack”, “plone”, “attrs”, “hug”, “wemake”, “appnexus”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.latexindent.flags
+
+
+
+Flags passed to latexindent. See available flags [here](https://latexindentpl.readthedocs.io/en/latest/sec-how-to-use.html\#from-the-command-line)
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "--local --silent --overwriteIfDifferent" `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
@@ -5017,6 +5794,48 @@ attribute set
 
 
 
+## pre-commit.settings.lychee.configPath
+
+
+
+Path to the config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.lychee.flags
+
+
+
+Flags passed to lychee. See all available [here](https://lychee.cli.rs/\#/usage/cli).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.markdownlint.config
 
 
@@ -5032,6 +5851,414 @@ attribute set
 
 *Default:*
 ` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.package
+
+
+
+The ` mdl ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "\${tools.mdl}" `
+
+
+
+*Example:*
+` "\${pkgs.mdl}" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.configPath
+
+
+
+The configuration file to use.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.git-recurse
+
+
+
+Only process files known to git when given a directory.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.ignore-front-matter
+
+
+
+Ignore YAML front matter.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.json
+
+
+
+Format output as JSON.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.rules
+
+
+
+Markdown rules to use for linting. Per default all rules are processed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.rulesets
+
+
+
+Specify additional ruleset files to load.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.show-aliases
+
+
+
+Show rule alias instead of rule ID when viewing rules.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.skip-default-ruleset
+
+
+
+Do not load the default markdownlint ruleset. Use this option if you only want to load custom rulesets.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.style
+
+
+
+Select which style mdl uses.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "default" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.tags
+
+
+
+Markdown rules to use for linting containing the given tags. Per default all rules are processed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.verbose
+
+
+
+Increase verbosity.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mdl.warnings
+
+
+
+Show Kramdown warnings.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mkdocs-linkcheck.binPath
+
+
+
+mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck binary from your Nix-managed Python environment.
+
+
+
+*Type:*
+path
+
+
+
+*Default:*
+
+```
+"${pkgs.python311Packages.mkdocs-linkcheck}/bin/mkdocs-linkcheck"
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mkdocs-linkcheck.extension
+
+
+
+File extension to scan for.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mkdocs-linkcheck.local-only
+
+
+
+Whether to only check local links.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mkdocs-linkcheck.method
+
+
+
+HTTP method to use when checking external links.
+
+
+
+*Type:*
+one of “get”, “head”
+
+
+
+*Default:*
+` "get" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mkdocs-linkcheck.path
+
+
+
+Path to check
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.mkdocs-linkcheck.recurse
+
+
+
+Whether to recurse directories under path.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
@@ -5201,6 +6428,31 @@ string
 
 
 
+## pre-commit.settings.phpstan.binPath
+
+
+
+PHPStan binary path.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+"${pkgs.php81Packages.phpstan}/bin/phpstan"
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.prettier.binPath
 
 
@@ -5262,6 +6514,31 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.psalm.binPath
+
+
+
+Psalm binary path.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+"${pkgs.php81Packages.phpstan}/bin/psalm"
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
@@ -5406,6 +6683,69 @@ string
 
 
 
+## pre-commit.settings.rome.binPath
+
+
+
+` rome ` binary path. E.g. if you want to use the ` rome ` in ` node_modules `, use ` ./node_modules/.bin/rome `.
+
+
+
+*Type:*
+path
+
+
+
+*Default:*
+` "\${pkgs.rome}/bin/rome" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.rome.configPath
+
+
+
+Path to the configuration JSON file
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.rome.write
+
+
+
+Whether to edit files inplace.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.rust.cargoManifestPath
 
 
@@ -5515,6 +6855,86 @@ package
 
 
 
+## pre-commit.settings.typos.color
+
+
+
+When to use generate output.
+
+
+
+*Type:*
+one of “auto”, “always”, “never”
+
+
+
+*Default:*
+` "auto" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.typos.config
+
+
+
+Multiline-string configuration passed as config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
+```
+''
+  [files]
+  ignore-dot = true
+  
+  [default]
+  binary = false
+  
+  [type.py]
+  extend-glob = []
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.typos.configPath
+
+
+
+Path to a custom config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.typos.diff
 
 
@@ -5536,11 +6956,37 @@ boolean
 
 
 
+## pre-commit.settings.typos.exclude
+
+
+
+Which files \& directories to exclude matching the glob.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "*.nix" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.typos.format
 
 
 
-Output format.
+Which output format to use.
 
 
 
@@ -5557,11 +7003,11 @@ one of “silent”, “brief”, “long”, “json”
 
 
 
-## pre-commit.settings.typos.write
+## pre-commit.settings.typos.hidden
 
 
 
-Whether to write fixes out.
+Whether to search hidden files and directories.
 
 
 
@@ -5578,9 +7024,126 @@ boolean
 
 
 
+## pre-commit.settings.typos.locale
+
+
+
+Which language to use for spell checking.
+
+
+
+*Type:*
+one of “en”, “en-us”, “en-gb”, “en-ca”, “en-au”
+
+
+
+*Default:*
+` "en" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.typos.write
+
+
+
+Whether to fix spelling in files by writing them. Cannot be used with ` typos.settings.diff `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.vale.config
+
+Multiline-string configuration passed as config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
+```
+''
+  MinAlertLevel = suggestion
+  [*]
+  BasedOnStyles = Vale
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.vale.configPath
+
+
+
+Path to the config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.vale.flags
+
+
+
+Flags passed to vale.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.settings.yamllint.configPath
 
-path to the configuration YAML file
+
+
+Path to the YAML configuration file.
 
 
 
@@ -5601,7 +7164,7 @@ string
 
 
 
-Use the relaxed configuration
+Whether to use the relaxed configuration.
 
 
 
@@ -7019,6 +8582,8 @@ to know more about all settings, look at:
 <link
   xlink:href="https://docs.couchdb.org/en/stable/config/couchdb.html"
 />
+
+
 
 
 *Type:*
