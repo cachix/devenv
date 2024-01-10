@@ -1,7 +1,7 @@
 { pkgs, config, ... }:
 
 {
-  packages = [
+  languages.python.libraries = [
     # A native dependency of numpy
     pkgs.zlib
 
