@@ -27,25 +27,17 @@ let
     ];
   };
 
+  # XXX take into account leading spaces in both hasPrefix and removePrefix
   hasPrefix = prefix: str: builtins.match "^${prefix}.*" str != null;
   removePrefix = prefix: str: builtins.replaceStrings [ prefix ] [ "" ] str;
 
   sortLex = req: builtins.sort (a: b: a < b) req;
-  replacements = {
-    DEVENV_ROOT = config.devenv.root;
-  };
-  substituteAll = str: replacements:
-    let
-      keys = builtins.attrNames replacements;
-      values = builtins.attrValues replacements;
-      from = builtins.map (key: "\${${key}}") keys;
-    in
-    builtins.replaceStrings from values str;
 
   flattenRequirements = path:
     let
-      text = substituteAll (builtins.readFile path) replacements;
-      lines = lib.debug.traceValFn (v: "${text}") lib.strings.splitString "\n" text;
+      # XX config.devenv.root is incorrect here; the file may be in a subdir
+      text = builtins.readFile (config.devenv.root + path);
+      lines = lib.strings.splitString "\n" text;
       processLine = line:
         if hasPrefix "-r " line
         then flattenRequirements (removePrefix "-r " line)
