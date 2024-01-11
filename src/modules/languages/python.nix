@@ -27,23 +27,56 @@ let
     ];
   };
 
+  hasPrefix = prefix: str: builtins.match "^${prefix}.*" str != null;
+  removePrefix = prefix: str: builtins.replaceStrings [ prefix ] [ "" ] str;
+
+  sortLex = req: builtins.sort (a: b: a < b) req;
+  replacements = {
+    DEVENV_ROOT = config.devenv.root;
+  };
+  substituteAll = str: replacements:
+    let
+      keys = builtins.attrNames replacements;
+      values = builtins.attrValues replacements;
+      from = builtins.map (key: "\${${key}}") keys;
+    in
+    builtins.replaceStrings from values str;
+
+  flattenRequirements = path:
+    let
+      text = substituteAll (builtins.readFile path) replacements;
+      lines = lib.debug.traceValFn (v: "${text}") lib.strings.splitString "\n" text;
+      processLine = line:
+        if hasPrefix "-r " line
+        then flattenRequirements (removePrefix "-r " line)
+        else if hasPrefix "-c " line
+        then { requirements = [ ]; constraints = [ removePrefix "-c " line ]; }
+        else { requirements = [ line ]; constraints = [ ]; };
+    in
+    builtins.foldl'
+      (acc: item:
+        {
+          requirements = acc.requirements ++ item.requirements;
+          constraints = acc.constraints ++ item.constraints;
+        })
+      { requirements = [ ]; constraints = [ ]; }
+      (builtins.map processLine lines);
+
   requirements = pkgs.writeText "requirements.txt" (
     if lib.isPath cfg.venv.requirements
-    then builtins.readFile cfg.venv.requirements
+    then
+      lib.concatMapStringsSep "\n" (line: line + "\n")
+        (flattenRequirements cfg.venv.requirements).requirements
     else cfg.venv.requirements
   );
 
-  requirements_and_constraints = requirements: constraints: (
-    pkgs.stdenv.mkDerivation {
-      name = "requirements_and_constraints";
-      src = ./.;
-      dontUnpack = true;
-      installPhase = ''
-        mkdir -p $out
-        echo "${requirements}" > "$out/requirements.txt"
-        echo "${constraints}" > "$out/constraints.txt"
-      '';
-    });
+  constraints = pkgs.writeText "constraints.txt" (
+    if lib.isPath cfg.venv.requirements
+    then
+      lib.concatMapStringsSep "\n" (line: line + "\n")
+        (flattenRequirements cfg.venv.requirements).constraints
+    else cfg.venv.requirements
+  );
 
   nixpkgs-python = config.lib.getInput {
     name = "nixpkgs-python";
@@ -61,7 +94,6 @@ let
     profile_python="$(${readlink} ${package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null|| false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
-    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
 
     # recreate venv if necessary
     if [ -z $venv_python ] || [ $profile_python != $venv_python ]
@@ -79,26 +111,21 @@ let
     source "$VENV_PATH"/bin/activate
 
     # reinstall requirements if necessary
+    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+    # -n means nonempty
     if [ -n "$requirements" ]
       then
-        tmpdir=`mktemp -d`
-        ${flattenreq} "${(
-          if lib.isPath cfg.venv.requirements
-          then cfg.venv.requirements
-          else requirements
-        )}" $tmpdir
         existing_requirements="$VENV_PATH/.devenv_requirements"
         [ -f $existing_requirements ] || existing_requirements="/dev/null"
         existing_constraints="$VENV_PATH/.devenv_constraints"
         [ -f $existing_constraints ] || existing_constraints="/dev/null"
-        if ! ${pkgs.diffutils}/bin/cmp --silent "$tmpdir/requirements.txt" "$existing_requirements" || ! ${pkgs.diffutils}/bin/cmp --silent "$tmpdir/constraints.txt" "$existing_constraints";
+        if ! ${pkgs.diffutils}/bin/cmp --silent "${requirements}" "$existing_requirements" || ! ${pkgs.diffutils}/bin/cmp --silent "${constraints}" "$existing_constraints";
           then
-            cp "$tmpdir/requirements.txt" "$VENV_PATH/.devenv_requirements"
-            cp "$tmpdir/constraints.txt" "$VENV_PATH/.devenv_constraints"
+            cp "${requirements}" "$VENV_PATH/.devenv_requirements"
+            cp "${constraints}" "$VENV_PATH/.devenv_constraints"
             echo "Requirements changed, running pip install -r $VENV_PATH/.devenv_requirements -c $tmpdir/.devenv_constraints ..."
            "$VENV_PATH"/bin/pip install -r "$VENV_PATH/.devenv_requirements" -c "$VENV_PATH/.devenv_constraints"
        fi
-       rm -rf "$tmpdir"
     fi
   '';
 
