@@ -3,10 +3,41 @@
 let
   cfg = config.languages.python;
 
-  requirements = pkgs.writeText "requirements.txt" (
+  writeRequirementsFile = { root, path, }:
+    let
+      process = originalLine:
+        let
+          pattern = "([[:space:]]*(-r|-c)[[:space:]]+)([^[:space:]]+)(.*)";
+          capture = builtins.match pattern originalLine;
+          leadingSpace = lib.elemAt capture 0;
+          relativePath = lib.elemAt capture 2;
+          trailingLine = lib.elemAt capture 3;
+          requiredPath = lib.path.append root relativePath;
+          replacedLine = leadingSpace + storedDependency + trailingLine;
+          storedDependency = writeRequirementsFile {
+            root = dirOf requiredPath;
+            path = requiredPath;
+          };
+        in
+        if capture == null
+        then originalLine
+        else replacedLine;
+
+      lines = lib.splitString "\n" (lib.readFile path);
+      withStorePaths = lib.concatStringsSep "\n" (map process lines);
+    in
+    pkgs.writeText (baseNameOf path) withStorePaths;
+
+  requirements = writeRequirementsFile (
     if lib.isPath cfg.venv.requirements
-    then builtins.readFile cfg.venv.requirements
-    else cfg.venv.requirements
+    then {
+      root = dirOf cfg.venv.requirements;
+      path = cfg.venv.requirements;
+    }
+    else {
+      root = /. + config.devenv.root;
+      path = pkgs.writeText "requirements.txt" cfg.venv.requirements;
+    }
   );
 
   nixpkgs-python = inputs.nixpkgs-python or (throw ''
