@@ -1,4 +1,13 @@
 inputs:
+  nixpkgs:
+    url: github:mcdonc/nixpkgs/nixos-23.11-python-env-venv
+  nixpkgs-python:
+    url: github:cachix/nixpkgs-python
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  devenv:
+    url: github:cachix/devenv/python-rewrite
   nix2container:
     url: github:nlewo/nix2container
     inputs:
@@ -6,3 +15,8 @@ inputs:
         follows: nixpkgs
   mk-shell-bin:
     url: github:rrbutani/nix-mk-shell-bin
+  overlays:
+    url: path:./overlays
+    overlays:
+      - default
+

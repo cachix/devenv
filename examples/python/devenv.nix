@@ -3,7 +3,7 @@
 {
   languages.python = {
     enable = true;
-    version = "3.11.3";
+    version = "3.11.7";
 
     venv.enable = true;
     venv.requirements = ./requirements.txt;

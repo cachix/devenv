@@ -20,7 +20,7 @@
   languages.java.enable = true;
   languages.javascript.enable = true;
   languages.jsonnet.enable = true;
-  languages.julia.enable = true;
+  # languages.julia.enable = true;
   languages.kotlin.enable = true;
   languages.lua.enable = true;
   languages.nim.enable = true;
@@ -39,7 +39,7 @@
   languages.rust.enable = true;
   languages.scala.enable = true;
   languages.shell.enable = true;
-  languages.swift.enable = true;
+  # languages.swift.enable = true;
   languages.terraform.enable = true;
   languages.texlive.enable = true;
   languages.typescript.enable = true;

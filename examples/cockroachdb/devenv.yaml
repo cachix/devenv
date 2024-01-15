@@ -1,4 +1,10 @@
+allowUnfree: true
 inputs:
   nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
-allowUnfree: true
+    url: github:mcdonc/nixpkgs/nixos-23.11-python-env-venv
+  devenv:
+    url: github:cachix/devenv/python-rewrite
+  overlays:
+    url: ./overlays
+    overlays:
+      - default

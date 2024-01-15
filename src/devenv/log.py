@@ -22,7 +22,8 @@ class log_task:
             prefix = click.style("✖", fg="red")
         else:
             prefix = click.style("✔", fg="green")
-        click.echo(f"\r{prefix} {self.message} in {end - self.start:.1f}s.")
+        click.echo(
+            f"\r{prefix} Finished: {self.message} in {end - self.start:.1f}s.")
 
 
 LogLevel = Literal["info", "warning", "error", "debug"]

@@ -1,5 +1,10 @@
 inputs:
   nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
+    url: github:mcdonc/nixpkgs/nixos-23.11-python-env-venv
   nixpkgs-python:
     url: github:cachix/nixpkgs-python
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  devenv:
+    url: github:cachix/devenv/python-rewrite

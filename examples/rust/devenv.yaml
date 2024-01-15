@@ -1,4 +1,8 @@
 inputs:
+  nixpkgs:
+    url: github:mcdonc/nixpkgs/nixos-23.11-python-env-venv
+  devenv:
+    url: github:cachix/devenv/python-rewrite
   fenix:
     url: github:nix-community/fenix
     inputs:

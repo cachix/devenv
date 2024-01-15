@@ -1,8 +1,14 @@
 inputs:
   nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
+    url: github:mcdonc/nixpkgs/nixos-23.11-python-env-venv
+  devenv:
+    url: github:cachix/devenv/python-rewrite
   getting-started:
     url: github:nix-dot-dev/getting-started-nix-template
     flake: false
+  overlays:
+    url: ./overlays
+    overlays:
+      - default
 imports:
   - getting-started
