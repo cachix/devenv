@@ -363,7 +363,7 @@ def up(ctx, process, detach):
             f.write(
                 f"""#!/usr/bin/env bash
 {env}
-{procfilescript} {process or ""}
+exec {procfilescript} {process or ""}
             """
             )
         os.chmod(processes_script, 0o755)
