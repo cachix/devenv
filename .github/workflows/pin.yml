@@ -30,7 +30,7 @@ jobs:
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@v13
+    - uses: cachix/cachix-action@v14
       with:
         name: devenv
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
