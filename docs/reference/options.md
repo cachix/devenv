@@ -258,6 +258,25 @@ null or string
 
 
 
+## delta.enable
+
+Integrate delta into git: https://dandavison.github.io/delta/.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/delta.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/delta.nix)
+
+
+
 ## devcontainer.enable
 
 Whether to enable generation .devcontainer.json for devenv integration.
@@ -1908,6 +1927,8 @@ to adjust the settings or add more extensions. You can find the
 extensions using `devenv search 'php extensions'`
 
 
+
+
 *Type:*
 package
 
@@ -2325,8 +2346,6 @@ attribute set of (string or signed integer or boolean)
 ## languages.php.ini
 
 PHP.ini directives. Refer to the "List of php.ini directives" of PHP's
-
-
 
 
 *Type:*
@@ -4839,8 +4858,6 @@ boolean
 
 ## pre-commit.settings.clippy.offline
 
-
-
 Run clippy offline
 
 
@@ -4859,6 +4876,8 @@ boolean
 
 
 ## pre-commit.settings.credo.strict
+
+
 
 Whether to auto-promote the changes.
 
@@ -7047,8 +7066,6 @@ one of “en”, “en-us”, “en-gb”, “en-ca”, “en-au”
 
 ## pre-commit.settings.typos.write
 
-
-
 Whether to fix spelling in files by writing them. Cannot be used with ` typos.settings.diff `.
 
 
@@ -7067,6 +7084,8 @@ boolean
 
 
 ## pre-commit.settings.vale.config
+
+
 
 Multiline-string configuration passed as config file.
 
