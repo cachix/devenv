@@ -1,4 +1,4 @@
-To get started using [Difftastic, a structural diff that understands syntax for over 30 langauges](https://difftastic.wilfred.me.uk/), flip a toggle:
+To get started using [Difftastic, a structural diff that understands syntax for over 30 languages](https://difftastic.wilfred.me.uk/), flip a toggle:
 
 
 ```nix title="devenv.nix"
