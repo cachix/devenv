@@ -6,6 +6,7 @@
 
   packages = [
     pkgs.openssl
+    pkgs.libyaml
   ];
 
   services.postgres.enable = true;
@@ -14,6 +15,7 @@
 
   enterShell = ''
     if [ ! -d "blog" ]; then
+      gem install rails
       rails new blog -d=postgresql
     fi
     export PATH="$DEVENV_ROOT/blog/bin:$PATH"
