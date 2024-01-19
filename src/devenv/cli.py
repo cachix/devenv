@@ -20,7 +20,7 @@ import strictyaml
 import requests
 
 from .yaml import validate_and_parse_yaml, read_yaml, write_yaml, schema
-from .log import log, log_task, log_error, log_warning, log_info, log_debug
+from .log import log, log_task, log_error, log_warning, log_info
 
 
 NIX_FLAGS = [
@@ -681,8 +681,10 @@ def add(ctx, name, url, follows):
 )
 @click.argument("names", nargs=-1)
 @click.option("--debug", is_flag=True, help="Run tests in debug mode.")
+@click.option(
+    "--keep-going", is_flag=True, help="Continue running tests if one fails.")
 @click.pass_context
-def test(ctx, debug, names):
+def test(ctx, debug, keep_going, names):
     ctx.invoke(assemble)
     with log_task("Gathering tests", newline=False):
         tests = json.loads(run_nix("eval .#devenv.tests --json"))
@@ -709,6 +711,7 @@ def test(ctx, debug, names):
     log(f"Found {len(tests)} test(s), running {len(selected_tests)}:", level="info")
 
     pwd = os.getcwd()
+    failed = []
 
     for name in selected_tests:
         with log_task(f"  Testing {name}"):
@@ -788,8 +791,13 @@ def test(ctx, debug, names):
                             run_command(f"{devenv} processes stop")
                             if p:
                                 p.kill()
+                except KeyboardInterrupt:
+                    raise
                 except BaseException as e:
                     log_error(f"Test {name} failed.")
+                    if keep_going:
+                        failed.append(name)
+                        continue
                     if debug:
                         log(
                             "Entering shell because of the --debug flag:",
@@ -803,6 +811,9 @@ def test(ctx, debug, names):
                     else:
                         log_warning("Pass --debug flag to enter shell.")
                         raise e
+    if keep_going and failed:
+        log_error(f"Failed: {', '.join(failed)}")
+        sys.exit(2)
 
 
 def write_if_defined(file, content):
@@ -824,7 +835,7 @@ def get_cachix_caches(logging=True):
             disable_stderr=True,
             logging=False,
         )
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         return {"pull": [], "push": None}, {}
 
     caches = json.loads(caches_raw)
