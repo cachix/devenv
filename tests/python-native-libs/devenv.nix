@@ -1,4 +1,5 @@
 { pkgs, ... }: {
+  # this test fails without use of the env-venv version of nixpkgs
   packages = [ pkgs.cairo ];
 
   languages.python = {
