@@ -2,11 +2,11 @@
 
 let
   cfg = config.languages.python;
-  libraries = lib.makeLibraryPath
-    ((lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
-      # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
-      ++ [ pkgs.stdenv.cc.cc.lib ]
-      ++ cfg.libraries
+  libraries = lib.makeLibraryPath (
+    cfg.libraries
+    ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
+    # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
+    ++ [ pkgs.stdenv.cc.cc.lib ]
     );
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
