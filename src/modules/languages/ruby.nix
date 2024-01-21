@@ -108,8 +108,8 @@ in
       let libdir = cfg.package.version.libDir;
       in
       ''
-        export RUBYLIB="$DEVENV_PROFILE/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}/${pkgs.stdenv.system}:$RUBYLIB"
-        export GEM_PATH="$GEM_HOME/gems:$GEM_PATH"
+        export RUBYLIB="$DEVENV_PROFILE/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}/${pkgs.stdenv.system}:''${RUBYLIB:-}"
+        export GEM_PATH="$GEM_HOME/gems:''${GEM_PATH:-}"
         export PATH="$GEM_HOME/bin:$PATH"
       '';
   };
