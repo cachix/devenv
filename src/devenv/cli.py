@@ -683,8 +683,12 @@ def add(ctx, name, url, follows):
 @click.option("--debug", is_flag=True, help="Run tests in debug mode.")
 @click.option(
     "--keep-going", is_flag=True, help="Continue running tests if one fails.")
+@click.option(
+    "--exclude", multiple=True,
+    help="A test name to exclude, may be specified multiple times"
+)
 @click.pass_context
-def test(ctx, debug, keep_going, names):
+def test(ctx, debug, keep_going, exclude, names):
     ctx.invoke(assemble)
     with log_task("Gathering tests", newline=False):
         tests = json.loads(run_nix("eval .#devenv.tests --json"))
@@ -705,8 +709,9 @@ def test(ctx, debug, keep_going, names):
         if name in tests:
             selected_tests.append(name)
         tag_tests = tags.get(name, {})
-        if tag_tests:
-            selected_tests.extend(tag_tests)
+        for test in tag_tests:
+            if not test in exclude:
+                selected_tests.append(test)
 
     log(f"Found {len(tests)} test(s), running {len(selected_tests)}:", level="info")
 
