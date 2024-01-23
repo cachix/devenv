@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -ex
+mkdir hello
 mix local.hex --force
 mix local.rebar --force
 echo Y | mix archive.install hex phx_new
