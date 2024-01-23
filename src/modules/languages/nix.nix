@@ -20,6 +20,7 @@ in
       statix
       vulnix
       deadnix
-    ] ++ cfg.lsp.package;
+      cfg.lsp.package
+    ];
   };
 }
