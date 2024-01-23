@@ -6,7 +6,7 @@ in
 {
   options.languages.nix = {
     enable = lib.mkEnableOption "tools for Nix development";
-    package = lib.mkOption {
+    lsp.package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.nil;
       defaultText = lib.literalExpression "pkgs.nil";
@@ -20,6 +20,6 @@ in
       statix
       vulnix
       deadnix
-    ] ++ cfg.package;
+    ] ++ cfg.lsp.package;
   };
 }
