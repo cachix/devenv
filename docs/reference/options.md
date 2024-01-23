@@ -1752,6 +1752,25 @@ boolean
 
 
 
+## languages.nix.lsp.package
+
+The LSP package to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nil `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
+
+
+
 ## languages.ocaml.enable
 
 Whether to enable tools for OCaml development.
@@ -2323,8 +2342,6 @@ You need not specify the options `error_log` or `daemonize` here, since
 they are already set.
 
 
-
-
 *Type:*
 attribute set of (string or signed integer or boolean)
 
@@ -2346,6 +2363,8 @@ attribute set of (string or signed integer or boolean)
 ## languages.php.ini
 
 PHP.ini directives. Refer to the "List of php.ini directives" of PHP's
+
+
 
 
 *Type:*
@@ -4837,8 +4856,6 @@ boolean
 
 ## pre-commit.settings.clippy.denyWarnings
 
-
-
 Fail when warnings are present
 
 
@@ -4857,6 +4874,8 @@ boolean
 
 
 ## pre-commit.settings.clippy.offline
+
+
 
 Run clippy offline
 
@@ -7045,8 +7064,6 @@ boolean
 
 ## pre-commit.settings.typos.locale
 
-
-
 Which language to use for spell checking.
 
 
@@ -7065,6 +7082,8 @@ one of “en”, “en-us”, “en-gb”, “en-ca”, “en-au”
 
 
 ## pre-commit.settings.typos.write
+
+
 
 Whether to fix spelling in files by writing them. Cannot be used with ` typos.settings.diff `.
 
