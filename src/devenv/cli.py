@@ -681,11 +681,11 @@ def add(ctx, name, url, follows):
 )
 @click.argument("names", nargs=-1)
 @click.option("--debug", is_flag=True, help="Run tests in debug mode.")
+@click.option("--keep-going", is_flag=True, help="Continue running tests if one fails.")
 @click.option(
-    "--keep-going", is_flag=True, help="Continue running tests if one fails.")
-@click.option(
-    "--exclude", multiple=True,
-    help="A test name to exclude, may be specified multiple times"
+    "--exclude",
+    multiple=True,
+    help="A test name to exclude, may be specified multiple times",
 )
 @click.pass_context
 def test(ctx, debug, keep_going, exclude, names):
