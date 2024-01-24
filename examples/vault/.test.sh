@@ -20,7 +20,10 @@ for i in $(seq 1 20); do
   fi
 done
 
-timeout 20 bash -c 'until echo > /dev/tcp/localhost/8200; do sleep 0.5; done'
+# Print the captured output when vault status succeeds
+echo "Startup complete..."
+vault version
+echo "$VAULT_OUTPUT"
 
 # Exit the script
 exit "$VAULT_EXIT_STATUS"
