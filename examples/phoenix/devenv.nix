@@ -1,6 +1,8 @@
 { pkgs, lib, ... }:
 
 {
+  # this example is currently broken
+
   packages = lib.optionals pkgs.stdenv.isLinux [ pkgs.inotify-tools ];
 
   languages.elixir.enable = true;
