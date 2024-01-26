@@ -24,6 +24,7 @@
           system = "${pkgs.stdenv.system}";
           config = {
             allowUnfree = devenv.allowUnfree or false;
+            allowBroken = devenv.allowBroken or false;
             permittedInsecurePackages = devenv.permittedInsecurePackages or [];
           };
           inherit overlays;
