@@ -2,6 +2,7 @@
 | Key                          | Value                                                                         |
 | ---------------------------- | ----------------------------------------------------------------------------- |
 | allowUnfree                  | Allow unfree packages. Defaults to `false`.                                   |
+| allowBroken                  | Allow packages marked as broken. Defaults to `false`.                         |
 | inputs                       | Defaults to `inputs.nixpkgs.url: github:NixOS/nixpkgs/nixpkgs-unstable`.      |
 | inputs.&lt;name&gt;          | Identifier name used when passing the input in your ``devenv.nix`` function.  |
 | inputs.&lt;name&gt;.url      | URI specification of the input, see below for possible values.                |
