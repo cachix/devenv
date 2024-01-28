@@ -507,8 +507,12 @@ def container(ctx, registry, copy, copy_args, docker_run, container_name):
             if docker_run:
                 registry = "docker-daemon:"
 
+            cp = f"{copy_script} {spec} {registry or 'false'} {copy_args or ''}"
+
+            log(f"Running '{cp}'", level="info")
+
             subprocess.run(
-                f"{copy_script} {spec} {registry or 'false'} {copy_args or ''}",
+                cp,
                 shell=True,
                 check=True,
             )
@@ -681,8 +685,7 @@ def add(ctx, name, url, follows):
 )
 @click.argument("names", nargs=-1)
 @click.option("--debug", is_flag=True, help="Run tests in debug mode.")
-@click.option(
-    "--keep-going", is_flag=True, help="Continue running tests if one fails.")
+@click.option("--keep-going", is_flag=True, help="Continue running tests if one fails.")
 @click.pass_context
 def test(ctx, debug, keep_going, names):
     ctx.invoke(assemble)
