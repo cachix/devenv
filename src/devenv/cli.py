@@ -507,11 +507,15 @@ def container(ctx, registry, copy, copy_args, docker_run, container_name):
             if docker_run:
                 registry = "docker-daemon:"
 
-            subprocess.run(
-                f"{copy_script} {spec} {registry or 'false'} {copy_args or ''}",
-                shell=True,
-                check=True,
-            )
+            cmd = f"{copy_script} {spec} {registry or 'false'} {copy_args or ''}"
+            completed = subprocess.run(cmd, shell=True, text=True, capture_output=True)
+
+            if completed.returncode:
+                raise RuntimeError(
+                    f"command '{cmd}' returned a nonzero exit code.\n\n"
+                    f"stdout:\n\n{completed.stdout}\n\n"
+                    f"stderr:\n\n{completed.stderr}\n\n"
+                )
 
     if docker_run:
         log(f"Starting {container_name} container", level="info")
@@ -681,8 +685,7 @@ def add(ctx, name, url, follows):
 )
 @click.argument("names", nargs=-1)
 @click.option("--debug", is_flag=True, help="Run tests in debug mode.")
-@click.option(
-    "--keep-going", is_flag=True, help="Continue running tests if one fails.")
+@click.option("--keep-going", is_flag=True, help="Continue running tests if one fails.")
 @click.pass_context
 def test(ctx, debug, keep_going, names):
     ctx.invoke(assemble)
