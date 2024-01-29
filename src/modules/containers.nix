@@ -112,7 +112,16 @@ let
       })
       mkEtc
       mkTmp
-    ] ++ mkMultiHome (homeRoots cfg);
+    ];
+
+    maxLayers = cfg.maxLayers;
+
+    layers = [
+      (nix2container.nix2container.buildLayer {
+        perms = map mkPerm (mkMultiHome (homeRoots cfg));
+        copyToRoot = mkMultiHome (homeRoots cfg);
+      })
+    ];
 
     perms = [
       {
@@ -124,7 +133,7 @@ let
         uname = "root";
         gname = "root";
       }
-    ] ++ (map mkPerm (mkMultiHome (homeRoots cfg)));
+    ];
 
     config = {
       Entrypoint = cfg.entrypoint;
@@ -214,6 +223,12 @@ let
         type = types.nullOr types.str;
         description = "Registry to push the container to.";
         default = "docker://";
+      };
+
+      maxLayers = lib.mkOption {
+        type = types.nullOr types.int;
+        description = "Maximum number of container layers created.";
+        default = 1;
       };
 
       isBuilding = lib.mkOption {
