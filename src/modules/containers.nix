@@ -21,9 +21,9 @@ let
     attribute = "containers";
   };
   shell = mk-shell-bin.lib.mkShellBin { drv = config.shell; nixpkgs = pkgs; };
-  intrbash = "${pkgs.bashInteractive}/bin/bash";
+  bash = "${pkgs.bashInteractive}/bin/bash";
   mkEntrypoint = cfg: pkgs.writeScript "entrypoint" ''
-    #!${intrbash}
+    #!${bash}
 
     export PATH=/bin
 
@@ -32,27 +32,37 @@ let
     # expand any envvars before exec
     cmd="`echo "$@"|${pkgs.envsubst}/bin/envsubst`"
 
-    ${intrbash} -c "$cmd"
+    ${bash} -c "$cmd"
   '';
   user = "user";
   group = "user";
   uid = "1000";
   gid = "1000";
-  homedir = "/env";
+  homeDir = "/env";
 
-  mkTemp = (pkgs.runCommand "tmp" { } ''
+  mkHome = path: (pkgs.runCommand "devenv-container-home" { } ''
+    mkdir -p $out${homeDir}
+    cp -R ${path}/* $out${homeDir}/
+  '');
+
+  mkMultiHome = paths: map mkHome paths;
+
+  homeRoots = cfg: (
+    if (builtins.typeOf cfg.copyToRoot == "list")
+    then cfg.copyToRoot
+    else [ cfg.copyToRoot ]
+  );
+
+  mkTmp = (pkgs.runCommand "devenv-container-tmp" { } ''
     mkdir -p $out/tmp
   '');
 
-  mkUser = (pkgs.runCommand "user" { } ''
-    mkdir -p $out${homedir}
-    cp -R ${self}/* $out${homedir}/
-
+  mkEtc = (pkgs.runCommand "devenv-container-etc" { } ''
     mkdir -p $out/etc/pam.d
 
-    echo "root:x:0:0:System administrator:/root:${intrbash}" > \
+    echo "root:x:0:0:System administrator:/root:${bash}" > \
           $out/etc/passwd
-    echo "${user}:x:${uid}:${gid}::${homedir}:${intrbash}" >> \
+    echo "${user}:x:${uid}:${gid}::${homeDir}:${bash}" >> \
           $out/etc/passwd
 
     echo "root:!x:::::::" > $out/etc/shadow
@@ -71,6 +81,17 @@ let
     touch $out/etc/login.defs
   '');
 
+  mkPerm = derivation:
+    {
+      path = derivation;
+      mode = "0744";
+      uid = lib.toInt uid;
+      gid = lib.toInt gid;
+      uname = user;
+      gname = group;
+    };
+
+
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
     tag = cfg.version;
@@ -80,7 +101,7 @@ let
 
     copyToRoot = [
       (pkgs.buildEnv {
-        name = "root";
+        name = "devenv-container-root";
         paths = [
           pkgs.coreutils-full
           pkgs.bashInteractive
@@ -89,22 +110,13 @@ let
         ];
         pathsToLink = "/bin";
       })
-      mkUser
-      mkTemp
-    ];
+      mkEtc
+      mkTmp
+    ] ++ mkMultiHome (homeRoots cfg);
 
     perms = [
       {
-        path = mkUser;
-        regex = "${homedir}";
-        mode = "0744";
-        uid = lib.toInt uid;
-        gid = lib.toInt gid;
-        uname = user;
-        gname = group;
-      }
-      {
-        path = mkTemp;
+        path = mkTmp;
         regex = "/tmp";
         mode = "1777";
         uid = 0;
@@ -112,17 +124,17 @@ let
         uname = "root";
         gname = "root";
       }
-    ];
+    ] ++ (map mkPerm (mkMultiHome (homeRoots cfg)));
 
     config = {
       Entrypoint = cfg.entrypoint;
       User = "${user}";
-      WorkingDir = "${homedir}";
+      WorkingDir = "${homeDir}";
       Env = lib.mapAttrsToList
         (name: value:
           "${name}=${lib.escapeShellArg (toString value)}"
         )
-        config.env ++ [ "HOME=${homedir}" "USER=${user}" ];
+        config.env ++ [ "HOME=${homeDir}" "USER=${user}" ];
       Cmd = [ cfg.startupCommand ];
     };
   };
@@ -226,7 +238,7 @@ let
         type = types.package;
         internal = true;
         default = pkgs.writeScript "docker-run" ''
-          #!${intrbash}
+          #!${bash}
 
           docker run -it ${config.name}:${config.version} "$@"
         '';
@@ -257,7 +269,7 @@ in
 
       containers.shell = {
         name = lib.mkDefault "shell";
-        startupCommand = lib.mkDefault intrbash;
+        startupCommand = lib.mkDefault bash;
       };
 
       containers.processes = {
@@ -269,7 +281,7 @@ in
       containers.${envContainerName}.isBuilding = true;
     })
     (lib.mkIf config.container.isBuilding {
-      devenv.root = lib.mkForce "${homedir}";
+      devenv.root = lib.mkForce "${homeDir}";
     })
   ];
 }
