@@ -21,8 +21,9 @@ let
     attribute = "containers";
   };
   shell = mk-shell-bin.lib.mkShellBin { drv = config.shell; nixpkgs = pkgs; };
+  intrbash = "${pkgs.bashInteractive}/bin/bash";
   mkEntrypoint = cfg: pkgs.writeScript "entrypoint" ''
-    #!${pkgs.bash}/bin/bash
+    #!${intrbash}
 
     export PATH=/bin
 
@@ -31,7 +32,7 @@ let
     # expand any envvars before exec
     cmd="`echo "$@"|${pkgs.envsubst}/bin/envsubst`"
 
-    bash -c "$cmd"
+    ${intrbash} -c "$cmd"
   '';
   user = "user";
   group = "user";
@@ -49,9 +50,9 @@ let
 
     mkdir -p $out/etc/pam.d
 
-    echo "root:x:0:0:System administrator:/root:/bin/bash" > \
+    echo "root:x:0:0:System administrator:/root:${intrbash}" > \
           $out/etc/passwd
-    echo "${user}:x:${uid}:${gid}::${homedir}:/bin/bash" >> \
+    echo "${user}:x:${uid}:${gid}::${homedir}:${intrbash}" >> \
           $out/etc/passwd
 
     echo "root:!x:::::::" > $out/etc/shadow
@@ -85,7 +86,6 @@ let
           pkgs.bashInteractive
           pkgs.su
           pkgs.sudo
-          devenv
         ];
         pathsToLink = "/bin";
       })
@@ -226,7 +226,7 @@ let
         type = types.package;
         internal = true;
         default = pkgs.writeScript "docker-run" ''
-          #!${pkgs.bash}/bin/bash
+          #!${intrbash}
 
           docker run -it ${config.name}:${config.version} "$@"
         '';
@@ -257,7 +257,7 @@ in
 
       containers.shell = {
         name = lib.mkDefault "shell";
-        startupCommand = lib.mkDefault "bash";
+        startupCommand = lib.mkDefault intrbash;
       };
 
       containers.processes = {
