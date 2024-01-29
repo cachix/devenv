@@ -681,8 +681,7 @@ def add(ctx, name, url, follows):
 )
 @click.argument("names", nargs=-1)
 @click.option("--debug", is_flag=True, help="Run tests in debug mode.")
-@click.option(
-    "--keep-going", is_flag=True, help="Continue running tests if one fails.")
+@click.option("--keep-going", is_flag=True, help="Continue running tests if one fails.")
 @click.pass_context
 def test(ctx, debug, keep_going, names):
     ctx.invoke(assemble)
