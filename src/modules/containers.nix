@@ -1,4 +1,4 @@
-{ pkgs, config, lib, self, devenv, ... }:
+{ pkgs, config, lib, self, ... }:
 
 let
   projectName = name:
