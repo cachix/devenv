@@ -3,12 +3,12 @@
 let
   cfg = config.languages.python;
   flattenreq = pkgs.writers.writePython3 "flattenreq" { } (builtins.readFile ./support/python/flattenreq.py);
-  libraries = lib.makeLibraryPath
-    ((lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
-      # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
-      ++ [ pkgs.stdenv.cc.cc.lib ]
-      ++ cfg.libraries
-    );
+  libraries = lib.makeLibraryPath (
+    cfg.libraries
+    ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
+    # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
+    ++ [ pkgs.stdenv.cc.cc.lib ]
+  );
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
   package = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
@@ -86,6 +86,7 @@ let
     profile_python="$(${readlink} ${package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null|| false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
+    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
 
     # recreate venv if necessary
     if [ -z $venv_python ] || [ $profile_python != $venv_python ]

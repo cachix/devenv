@@ -23,6 +23,7 @@ schema = Map(
     {
         Optional("inputs", default=None): inputsSchema,
         Optional("allowUnfree", default=False): Bool(),
+        Optional("allowBroken", default=False): Bool(),
         Optional("imports", default=None): Seq(Str()),
         Optional("permittedInsecurePackages", default=None): Seq(Str()),
     }
