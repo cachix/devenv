@@ -1,8 +1,8 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, lib, self, ... }:
 
 let
   cfg = config.languages.python;
-  flattenreq = pkgs.writers.writePython3 "flattenreq" { } (builtins.readFile ./support/python/flattenreq.py);
+  flattenreq = pkgs.writers.writePython3 "flattenreq" { } (builtins.readFile ../support/flattenreq.py);
   libraries = lib.makeLibraryPath (
     cfg.libraries
     ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
@@ -27,48 +27,11 @@ let
     ];
   };
 
-  # XXX take into account leading spaces in both hasPrefix and removePrefix
-  hasPrefix = prefix: str: builtins.match "^${prefix}.*" str != null;
-  removePrefix = prefix: str: builtins.replaceStrings [ prefix ] [ "" ] str;
+  requirements_str = (lib.optionalString (cfg.venv.requirements != null) ''
+    ${flattenreq} ${self}/requirements.txt $out
+  '');
 
-  sortLex = req: builtins.sort (a: b: a < b) req;
-
-  flattenRequirements = path:
-    let
-      # XX config.devenv.root is incorrect here; the file may be in a subdir
-      text = builtins.readFile (config.devenv.root + path);
-      lines = lib.strings.splitString "\n" text;
-      processLine = line:
-        if hasPrefix "-r " line
-        then flattenRequirements (removePrefix "-r " line)
-        else if hasPrefix "-c " line
-        then { requirements = [ ]; constraints = [ removePrefix "-c " line ]; }
-        else { requirements = [ line ]; constraints = [ ]; };
-    in
-    builtins.foldl'
-      (acc: item:
-        {
-          requirements = acc.requirements ++ item.requirements;
-          constraints = acc.constraints ++ item.constraints;
-        })
-      { requirements = [ ]; constraints = [ ]; }
-      (builtins.map processLine lines);
-
-  requirements = pkgs.writeText "requirements.txt" (
-    if lib.isPath cfg.venv.requirements
-    then
-      lib.concatMapStringsSep "\n" (line: line + "\n")
-        (flattenRequirements cfg.venv.requirements).requirements
-    else cfg.venv.requirements
-  );
-
-  constraints = pkgs.writeText "constraints.txt" (
-    if lib.isPath cfg.venv.requirements
-    then
-      lib.concatMapStringsSep "\n" (line: line + "\n")
-        (flattenRequirements cfg.venv.requirements).constraints
-    else cfg.venv.requirements
-  );
+  requirements = (pkgs.runCommand "python-requirements" { } requirements_str);
 
   nixpkgs-python = config.lib.getInput {
     name = "nixpkgs-python";
@@ -112,11 +75,12 @@ let
         [ -f $existing_requirements ] || existing_requirements="/dev/null"
         existing_constraints="$VENV_PATH/.devenv_constraints"
         [ -f $existing_constraints ] || existing_constraints="/dev/null"
-        if ! ${pkgs.diffutils}/bin/cmp --silent "${requirements}" "$existing_requirements" || ! ${pkgs.diffutils}/bin/cmp --silent "${constraints}" "$existing_constraints";
+        if ! ${pkgs.diffutils}/bin/cmp --silent "${requirements}/requirements.txt" "$existing_requirements" || ! ${pkgs.diffutils}/bin/cmp --silent "${requirements}/constraints.txt" "$existing_constraints";
           then
-            cp "${requirements}" "$VENV_PATH/.devenv_requirements"
-            cp "${constraints}" "$VENV_PATH/.devenv_constraints"
+            ${pkgs.coreutils}/bin/install "${requirements}/requirements.txt" "$VENV_PATH/.devenv_requirements"
+            ${pkgs.coreutils}/bin/install "${requirements}/constraints.txt" "$VENV_PATH/.devenv_constraints"
             echo "Requirements changed, running pip install -r $VENV_PATH/.devenv_requirements -c $tmpdir/.devenv_constraints ..."
+           "$VENV_PATH"/bin/pip uninstall -y -r "$VENV_PATH/.devenv_requirements"
            "$VENV_PATH"/bin/pip install -r "$VENV_PATH/.devenv_requirements" -c "$VENV_PATH/.devenv_constraints"
        fi
     fi
