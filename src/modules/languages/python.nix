@@ -2,7 +2,7 @@
 
 let
   cfg = config.languages.python;
-  flattenreq = pkgs.writers.writePython3 "flattenreq" { } (builtins.readFile ../support/flattenreq.py);
+  flattenreq = pkgs.writers.writePython3 "flattenreq" { flakeIgnore = [ "E501" ]; } (builtins.readFile ../support/flattenreq.py);
   libraries = lib.makeLibraryPath (
     cfg.libraries
     ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
@@ -77,10 +77,10 @@ let
         [ -f $existing_constraints ] || existing_constraints="/dev/null"
         if ! ${pkgs.diffutils}/bin/cmp --silent "${requirements}/requirements.txt" "$existing_requirements" || ! ${pkgs.diffutils}/bin/cmp --silent "${requirements}/constraints.txt" "$existing_constraints";
           then
-            ${pkgs.coreutils}/bin/install "${requirements}/requirements.txt" "$VENV_PATH/.devenv_requirements"
-            ${pkgs.coreutils}/bin/install "${requirements}/constraints.txt" "$VENV_PATH/.devenv_constraints"
             echo "Requirements changed, running pip install -r $VENV_PATH/.devenv_requirements -c $tmpdir/.devenv_constraints ..."
            "$VENV_PATH"/bin/pip uninstall -y -r "$VENV_PATH/.devenv_requirements"
+            ${pkgs.coreutils}/bin/install "${requirements}/requirements.txt" "$VENV_PATH/.devenv_requirements"
+            ${pkgs.coreutils}/bin/install "${requirements}/constraints.txt" "$VENV_PATH/.devenv_constraints"
            "$VENV_PATH"/bin/pip install -r "$VENV_PATH/.devenv_requirements" -c "$VENV_PATH/.devenv_constraints"
        fi
     fi
