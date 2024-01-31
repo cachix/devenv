@@ -31,7 +31,7 @@ let
     # expand any envvars before exec
     cmd="`echo "$@"|${pkgs.envsubst}/bin/envsubst`"
 
-    exec $cmd
+    ${pkgs.bash}/bin/bash -c "$cmd"
   '';
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
