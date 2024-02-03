@@ -14,10 +14,13 @@ let
     [ ${concatStringsSep "," cfg.plugins} ].
   '';
 in
-
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "rabbitmq" "enable" ] [ "services" "rabbitmq" "enable" ])
+    (lib.mkRenamedOptionModule [ "rabbitmq" "enable" ] [
+      "services"
+      "rabbitmq"
+      "enable"
+    ])
   ];
 
   options.services.rabbitmq = {
@@ -146,7 +149,8 @@ in
       "management.tcp.ip" = cfg.listenAddress;
     };
 
-    services.rabbitmq.plugins = optional cfg.managementPlugin.enable "rabbitmq_management";
+    services.rabbitmq.plugins =
+      optional cfg.managementPlugin.enable "rabbitmq_management";
 
     env.RABBITMQ_DATA_DIR = config.env.DEVENV_STATE + "/rabbitmq";
     env.RABBITMQ_MNESIA_BASE = config.env.RABBITMQ_DATA_DIR + "/mnesia";
