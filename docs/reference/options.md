@@ -11230,6 +11230,31 @@ On which port to run the management plugin
 
 
 
+## services.rabbitmq.nodeName
+
+The name of the RabbitMQ node.  This is used to identify
+the node in a cluster.  If you are running multiple
+RabbitMQ nodes on the same machine, you must give each
+node a unique name.  The name must be of the form
+`name@host`, where `name` is an arbitrary name and
+`host` is the domain name of the host.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "rabbit@localhost" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
+
+
 ## services.rabbitmq.pluginDirs
 
 The list of directories containing external plugins
