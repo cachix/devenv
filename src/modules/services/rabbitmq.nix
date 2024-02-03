@@ -64,6 +64,19 @@ in
       type = types.port;
     };
 
+    nodeName = mkOption {
+      default = "rabbit@localhost";
+      type = types.str;
+      description = ''
+        The name of the RabbitMQ node.  This is used to identify
+        the node in a cluster.  If you are running multiple
+        RabbitMQ nodes on the same machine, you must give each
+        node a unique name.  The name must be of the form
+        `name@host`, where `name` is an arbitrary name and
+        `host` is the domain name of the host.
+      '';
+    };
+
     cookie = mkOption {
       default = "";
       type = types.str;
@@ -142,7 +155,7 @@ in
     env.RABBITMQ_CONFIG_FILE = config_file;
     env.RABBITMQ_PLUGINS_DIR = concatStringsSep ":" cfg.pluginDirs;
     env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
-    env.RABBITMQ_NODENAME = "rabbit@localhost";
+    env.RABBITMQ_NODENAME = cfg.nodeName;
     env.RABBITMQ_HOST = cfg.listenAddress;
     env.ERL_EPMD_ADDRESS = cfg.listenAddress;
 
