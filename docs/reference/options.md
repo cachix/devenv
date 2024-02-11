@@ -10311,6 +10311,29 @@ lazy attribute set of lazy attribute set of anything
 
 
 
+## services.mysql.useDefaulsExtraFile
+
+Whether to use defaults-exta-file for the mysql command instead of defaults-file.
+This is useful if you want to provide a config file on the command line.
+However this can problematic if you have MySQL installed globaly because its config might leak into your environment.
+This option does not affect the mysqld command.
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
+
+
 ## services.nginx.enable
 
 Whether to enable nginx.
