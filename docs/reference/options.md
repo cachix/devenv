@@ -1486,7 +1486,7 @@ boolean
 
 ## languages.javascript.package
 
-The Node package to use.
+The Node package to use, for example pkgs.bun
 
 
 
