@@ -22,7 +22,7 @@ let
 
       if [ "$ACTUAL_NPM_CHECKSUM" != "$EXPECTED_NPM_CHECKSUM" ]
       then
-        if ${cfg.package}/bin/npm install
+        if ${lib.getExe cfg.package} install
         then
           echo "$ACTUAL_NPM_CHECKSUM" > "$NPM_CHECKSUM_FILE"
         else
@@ -47,7 +47,7 @@ in
       type = lib.types.package;
       default = pkgs.nodejs;
       defaultText = lib.literalExpression "pkgs.nodejs";
-      description = "The Node package to use.";
+      description = "The Node package to use, for example pkgs.bun";
     };
 
     corepack = {
