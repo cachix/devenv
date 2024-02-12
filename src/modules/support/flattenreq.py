@@ -6,22 +6,6 @@ import sys
 envvar_pattern = r"\$\{([^\}]+)\}"
 
 
-def compare_files_md5(file1_path, file2_path):
-    def calculate_md5(file_path):
-        hasher = hashlib.md5()
-        with open(file_path, "rb") as file:
-            chunk = file.read(8192)
-            while chunk:
-                hasher.update(chunk)
-                chunk = file.read(8192)
-        return hasher.hexdigest()
-
-    md5_file1 = calculate_md5(file1_path)
-    md5_file2 = calculate_md5(file2_path)
-
-    return md5_file1 == md5_file2
-
-
 def replace_envvars(text, file_path):
     def replace(match):
         env_var = match.group(1)
