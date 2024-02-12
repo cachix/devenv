@@ -1,0 +1,4 @@
+pillow
+grpcio-tools
+transformers
+torch

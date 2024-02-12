@@ -11,11 +11,6 @@
   languages.python = {
     enable = true;
     venv.enable = true;
-    venv.requirements = ''
-      pillow
-      grpcio-tools
-      transformers
-      torch
-    '';
+    venv.requirements = "./requirements.txt";
   };
 }
