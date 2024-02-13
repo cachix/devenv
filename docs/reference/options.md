@@ -10311,7 +10311,7 @@ lazy attribute set of lazy attribute set of anything
 
 
 
-## services.mysql.useDefaulsExtraFile
+## services.mysql.useDefaultsExtraFile
 
 Whether to use defaults-exta-file for the mysql command instead of defaults-file.
 This is useful if you want to provide a config file on the command line.
