@@ -9,7 +9,7 @@ with lib; let
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
   mysqlOptions =
-    if !cfg.useDefaulsExtraFile then
+    if !cfg.useDefaultsExtraFile then
       "--defaults-file=${configFile}"
     else
       "--defaults-extra-file=${configFile}";
@@ -181,7 +181,7 @@ in
       '';
     };
 
-    useDefaulsExtraFile = lib.mkOption {
+    useDefaultsExtraFile = lib.mkOption {
       type = types.bool;
       default = false;
       description = ''
