@@ -89,42 +89,25 @@
         "type": "github"
       }
     },
-    "lowdown-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1633514407,
-        "narHash": "sha256-Dw32tiMjdK9t3ETl5fzGrutQTzh2rufgZV4A/BbxuD4=",
-        "owner": "kristapsdz",
-        "repo": "lowdown",
-        "rev": "d2c2b44ff6c27b936ec27358a2653caaef8f73b8",
-        "type": "github"
-      },
-      "original": {
-        "owner": "kristapsdz",
-        "repo": "lowdown",
-        "type": "github"
-      }
-    },
     "nix": {
       "inputs": {
         "flake-compat": "flake-compat_2",
-        "lowdown-src": "lowdown-src",
         "nixpkgs": [
           "nixpkgs"
         ],
         "nixpkgs-regression": "nixpkgs-regression"
       },
       "locked": {
-        "lastModified": 1692895818,
-        "narHash": "sha256-lfIz37c24QpkwAHJCDHrDNtQyMBdxq7RWG5sojbtARU=",
+        "lastModified": 1708106917,
+        "narHash": "sha256-T2xF+MwHGt7yUW4WfExavF7DODIELI/hSi+IHDKlNEY=",
         "owner": "domenkozar",
         "repo": "nix",
-        "rev": "ca8a41cfc176dc7adad02ab756f6faef6e90ff1f",
+        "rev": "d250aad325d4060a6bf6d24f613f4a9b2d8419f9",
         "type": "github"
       },
       "original": {
         "owner": "domenkozar",
-        "ref": "devenv-2.17",
+        "ref": "devenv-2.21",
         "repo": "nix",
         "type": "github"
       }
