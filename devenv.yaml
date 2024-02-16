@@ -2,7 +2,7 @@ inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
   nix:
-    url: github:domenkozar/nix/devenv-2.17
+    url: github:domenkozar/nix/devenv-2.21
     inputs:
       nixpkgs:
         follows: nixpkgs

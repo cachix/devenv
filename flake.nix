@@ -19,7 +19,7 @@
     flake = false;
   };
   inputs.nix = {
-    url = "github:domenkozar/nix/devenv-2.17";
+    url = "github:domenkozar/nix/devenv-2.21";
     inputs.nixpkgs.follows = "nixpkgs";
   };
   inputs.poetry2nix = {
