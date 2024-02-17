@@ -427,7 +427,12 @@ def search(ctx, name):
         for key, value in json.load(f).items():
             if name in key:
                 options_results.append(
-                    (key, value["type"], value["default"], value["description"][:80])
+                    (
+                        key,
+                        value["type"],
+                        value.get("default", ""),
+                        value["description"][:80],
+                    )
                 )
         results_options_count = len(options_results)
 
