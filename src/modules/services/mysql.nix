@@ -8,8 +8,12 @@ with lib; let
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
-  mysqlOptions = "--defaults-file=${configFile}";
-  mysqldOptions = "${mysqlOptions} --datadir=$MYSQL_HOME --basedir=${cfg.package}";
+  mysqlOptions =
+    if !cfg.useDefaultsExtraFile then
+      "--defaults-file=${configFile}"
+    else
+      "--defaults-extra-file=${configFile}";
+  mysqldOptions = "--defaults-file=${configFile} --datadir=$MYSQL_HOME --basedir=${cfg.package}";
 
   initDatabaseCmd =
     if isMariaDB
@@ -174,6 +178,17 @@ in
       default = null;
       description = ''
         Whether to import tzdata on the first startup of the mysql server
+      '';
+    };
+
+    useDefaultsExtraFile = lib.mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Whether to use defaults-exta-file for the mysql command instead of defaults-file.
+        This is useful if you want to provide a config file on the command line.
+        However this can problematic if you have MySQL installed globaly because its config might leak into your environment.
+        This option does not affect the mysqld command.
       '';
     };
 

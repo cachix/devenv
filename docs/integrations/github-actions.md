@@ -136,7 +136,7 @@ jobs:
       with:
         name: devenv
     - name: Install devenv.sh
-      run: nix profile install tarball+https://install.devenv.sh/latest
+      run: nix profile install --accept-flake-config tarball+https://install.devenv.sh/latest
 
     - name: Build the devenv shell and run any pre-commit hooks
       run: devenv ci

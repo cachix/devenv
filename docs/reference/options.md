@@ -1486,7 +1486,7 @@ boolean
 
 ## languages.javascript.package
 
-The Node package to use.
+The Node package to use, for example pkgs.bun
 
 
 
@@ -1746,6 +1746,25 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
+
+
+
+## languages.nix.lsp.package
+
+The LSP package to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nil `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
@@ -2323,8 +2342,6 @@ You need not specify the options `error_log` or `daemonize` here, since
 they are already set.
 
 
-
-
 *Type:*
 attribute set of (string or signed integer or boolean)
 
@@ -2346,6 +2363,8 @@ attribute set of (string or signed integer or boolean)
 ## languages.php.ini
 
 PHP.ini directives. Refer to the "List of php.ini directives" of PHP's
+
+
 
 
 *Type:*
@@ -4837,8 +4856,6 @@ boolean
 
 ## pre-commit.settings.clippy.denyWarnings
 
-
-
 Fail when warnings are present
 
 
@@ -4857,6 +4874,8 @@ boolean
 
 
 ## pre-commit.settings.clippy.offline
+
+
 
 Run clippy offline
 
@@ -7045,8 +7064,6 @@ boolean
 
 ## pre-commit.settings.typos.locale
 
-
-
 Which language to use for spell checking.
 
 
@@ -7065,6 +7082,8 @@ one of “en”, “en-us”, “en-gb”, “en-ca”, “en-au”
 
 
 ## pre-commit.settings.typos.write
+
+
 
 Whether to fix spelling in files by writing them. Cannot be used with ` typos.settings.diff `.
 
@@ -10292,6 +10311,29 @@ lazy attribute set of lazy attribute set of anything
 
 
 
+## services.mysql.useDefaultsExtraFile
+
+Whether to use defaults-exta-file for the mysql command instead of defaults-file.
+This is useful if you want to provide a config file on the command line.
+However this can problematic if you have MySQL installed globaly because its config might leak into your environment.
+This option does not affect the mysqld command.
+
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
+
+
 ## services.nginx.enable
 
 Whether to enable nginx.
@@ -11205,6 +11247,31 @@ On which port to run the management plugin
 
 *Default:*
 ` 15672 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
+
+
+## services.rabbitmq.nodeName
+
+The name of the RabbitMQ node.  This is used to identify
+the node in a cluster.  If you are running multiple
+RabbitMQ nodes on the same machine, you must give each
+node a unique name.  The name must be of the form
+`name@host`, where `name` is an arbitrary name and
+`host` is the domain name of the host.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "rabbit@localhost" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)

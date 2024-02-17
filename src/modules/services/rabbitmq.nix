@@ -14,10 +14,13 @@ let
     [ ${concatStringsSep "," cfg.plugins} ].
   '';
 in
-
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "rabbitmq" "enable" ] [ "services" "rabbitmq" "enable" ])
+    (lib.mkRenamedOptionModule [ "rabbitmq" "enable" ] [
+      "services"
+      "rabbitmq"
+      "enable"
+    ])
   ];
 
   options.services.rabbitmq = {
@@ -62,6 +65,19 @@ in
         Port on which RabbitMQ will listen for AMQP connections.
       '';
       type = types.port;
+    };
+
+    nodeName = mkOption {
+      default = "rabbit@localhost";
+      type = types.str;
+      description = ''
+        The name of the RabbitMQ node.  This is used to identify
+        the node in a cluster.  If you are running multiple
+        RabbitMQ nodes on the same machine, you must give each
+        node a unique name.  The name must be of the form
+        `name@host`, where `name` is an arbitrary name and
+        `host` is the domain name of the host.
+      '';
     };
 
     cookie = mkOption {
@@ -133,7 +149,8 @@ in
       "management.tcp.ip" = cfg.listenAddress;
     };
 
-    services.rabbitmq.plugins = optional cfg.managementPlugin.enable "rabbitmq_management";
+    services.rabbitmq.plugins =
+      optional cfg.managementPlugin.enable "rabbitmq_management";
 
     env.RABBITMQ_DATA_DIR = config.env.DEVENV_STATE + "/rabbitmq";
     env.RABBITMQ_MNESIA_BASE = config.env.RABBITMQ_DATA_DIR + "/mnesia";
@@ -142,7 +159,7 @@ in
     env.RABBITMQ_CONFIG_FILE = config_file;
     env.RABBITMQ_PLUGINS_DIR = concatStringsSep ":" cfg.pluginDirs;
     env.RABBITMQ_ENABLED_PLUGINS_FILE = plugin_file;
-    env.RABBITMQ_NODENAME = "rabbit@localhost";
+    env.RABBITMQ_NODENAME = cfg.nodeName;
     env.RABBITMQ_HOST = cfg.listenAddress;
     env.ERL_EPMD_ADDRESS = cfg.listenAddress;
 
