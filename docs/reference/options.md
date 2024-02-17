@@ -8792,6 +8792,68 @@ path
 
 
 
+## services.dynamodb-local.enable
+
+Whether to enable DynamoDB Local.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
+
+
+## services.dynamodb-local.package
+
+Which package of DynamoDB to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dynamodb-local `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
+
+
+## services.dynamodb-local.port
+
+Listen address for the Dynamodb-local.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 8000 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
+
+
 ## services.elasticmq.enable
 
 Whether to enable elasticmq-server.
