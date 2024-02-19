@@ -26,10 +26,6 @@
     url = "github:nix-community/poetry2nix";
     inputs.nixpkgs.follows = "nixpkgs";
   };
-  inputs.poetry2nix = {
-    url = "github:nix-community/poetry2nix";
-    inputs.nixpkgs.follows = "nixpkgs";
-  };
 
   outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }@inputs:
     let
