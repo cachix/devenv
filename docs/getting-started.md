@@ -7,18 +7,18 @@
 === "Linux"
 
     ```
-    sh <(curl -L https://nixos.org/nix/install) --daemon
+    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
     ```
 === "macOS"
 
     ```
-    sh <(curl -L https://nixos.org/nix/install)
+    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
     ```
 
 === "Windows (WSL2)"
    
     ```
-    sh <(curl -L https://nixos.org/nix/install) --no-daemon
+    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
     ```
 
 === "Docker"
