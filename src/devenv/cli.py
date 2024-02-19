@@ -43,9 +43,11 @@ if "site-packages" in FILE:
     SRC_DIR = Path(FILE, "..", "..", "src")
 else:
     SRC_DIR = Path(FILE, "..", "..")
+DEVENV_DIR = Path(os.getcwd()) / ".devenv"
+DEVENV_DIR.mkdir(parents=True, exist_ok=True)
 MODULES_DIR = (SRC_DIR / "modules").resolve()
 FLAKE_FILE_TEMPL = Path(MODULES_DIR) / "flake.tmpl.nix"
-FLAKE_FILE = Path(".devenv.flake.nix")
+FLAKE_FILE = DEVENV_DIR / "flake.nix"
 FLAKE_LOCK = "devenv.lock"
 
 # home vars
@@ -183,7 +185,6 @@ def processes():
     pass
 
 
-DEVENV_DIR = Path(os.getcwd()) / ".devenv"
 os.environ["DEVENV_DIR"] = str(DEVENV_DIR)
 DEVENV_GC = DEVENV_DIR / "gc"
 os.environ["DEVENV_GC"] = str(DEVENV_GC)
