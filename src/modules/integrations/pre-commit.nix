@@ -9,7 +9,6 @@
           rootSrc = self;
           package = pkgs.pre-commit;
           tools = import (pre-commit-hooks + "/nix/call-tools.nix") pkgs;
-          excludes = [ ".devenv.flake.nix" ];
         }
       ];
       specialArgs = { inherit pkgs; };
