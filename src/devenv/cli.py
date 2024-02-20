@@ -47,7 +47,7 @@ DEVENV_DIR = Path(os.getcwd()) / ".devenv"
 DEVENV_DIR.mkdir(parents=True, exist_ok=True)
 MODULES_DIR = (SRC_DIR / "modules").resolve()
 FLAKE_FILE_TEMPL = Path(MODULES_DIR) / "flake.tmpl.nix"
-FLAKE_FILE = DEVENV_DIR / "flake.nix"
+FLAKE_FILE = Path(os.getcwd()) / ".devenv.flake.nix"
 FLAKE_LOCK = "devenv.lock"
 
 # home vars
