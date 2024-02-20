@@ -29,6 +29,9 @@ jobs:
       run: |
         nix profile remove '.*' 
         nix profile install --accept-flake-config . 
+        nix profile list
+        echo $PATH
+        which devenv
     - name: Run tests
       run: |
         devenv ci
