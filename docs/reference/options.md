@@ -19,9 +19,194 @@ list of package
 
 
 
+## aws-vault.enable
+
+Whether to enable aws-vault integration.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.package
+
+The aws-vault package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.aws-vault `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.awscliWrapper
+
+Attribute set of packages including awscli2
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` pkgs `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.awscliWrapper.enable
+
+Whether to enable Wraps awscli2 binary as `aws-vault exec <profile> -- aws <args>`.
+.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.awscliWrapper.package
+
+The awscli2 package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.awscli2 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.profile
+
+
+
+The profile name passed to ` aws-vault exec `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.terraformWrapper
+
+Attribute set of packages including terraform
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` pkgs `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.terraformWrapper.enable
+
+Whether to enable Wraps terraform binary as `aws-vault exec <profile> -- terraform <args>`.
+.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.terraformWrapper.package
+
+The terraform package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.terraform `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
 ## certificates
 
 List of domains to generate certificates for.
+
+
 
 *Type:*
 list of string
@@ -2081,8 +2266,6 @@ null or strings concatenated with “\\n”
 Options appended to the PHP configuration file `php.ini`.
 
 
-
-
 *Type:*
 strings concatenated with “\\n”
 
@@ -2340,6 +2523,8 @@ quotes (e.g. `"pm.max_children"` instead of `pm.max_children`).
 
 You need not specify the options `error_log` or `daemonize` here, since
 they are already set.
+
+
 
 
 *Type:*
@@ -4663,8 +4848,6 @@ boolean
 
 ## pre-commit.settings.alejandra.exclude
 
-
-
 Files or directories to exclude from formatting.
 
 
@@ -4855,6 +5038,8 @@ boolean
 
 
 ## pre-commit.settings.clippy.denyWarnings
+
+
 
 Fail when warnings are present
 
@@ -6828,8 +7013,6 @@ one of “stderr”, “errfmt”, “json”
 
 ## pre-commit.settings.statix.ignore
 
-
-
 Globs of file patterns to skip.
 
 
@@ -7063,6 +7246,8 @@ boolean
 
 
 ## pre-commit.settings.typos.locale
+
+
 
 Which language to use for spell checking.
 
