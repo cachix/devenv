@@ -104,7 +104,7 @@ jobs:
           { print }
           /^inputs:$/ {
             print "  devenv:";
-            print "    url: path:../../src/modules";
+            print "    url: path:../../?dir=src/modules";
           }
         ' ./examples/simple/devenv.yaml.orig > ./examples/simple/devenv.yaml
         nix profile remove '.*'
