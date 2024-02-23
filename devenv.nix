@@ -43,7 +43,7 @@
     tmp="$(mktemp -d)"
     devenv init "$tmp"
     pushd "$tmp"
-      echo -e "  devenv:\n    url: path:${config.devenv.root}/src/modules" >> devenv.yaml
+      echo -e "  devenv:\n    url: path:${config.devenv.root}?dir=src/modules" >> devenv.yaml
       cat devenv.yaml
       devenv version
       devenv ci
@@ -81,7 +81,10 @@
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
       # Test that a container can be built
-      nix build --impure --accept-flake-config .#container-processes
+      if $(uname) == "Linux"
+      then
+        nix build --impure --accept-flake-config --show-trace .#container-processes
+      fi
     popd
     rm -rf "$tmp"
   '';
