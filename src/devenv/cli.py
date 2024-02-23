@@ -179,11 +179,9 @@ def cli(ctx, offline, system, debugger, nix_flags, verbose):
     ctx.obj["gc_root"] = DEVENV_HOME_GC
     ctx.obj["gc_project"] = DEVENV_HOME_GC / str(int(time.time() * 1000))
 
-
 @cli.group()
 def processes():
     pass
-
 
 os.environ["DEVENV_DIR"] = str(DEVENV_DIR)
 DEVENV_GC = DEVENV_DIR / "gc"

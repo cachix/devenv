@@ -2728,17 +2728,16 @@ boolean
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
-
 ## languages.python.venv.requirements
 
-Contents of pip requirements.txt file.
+Path to pip requirements.txt file as a string.  Must be relative to devenv root.
 This is passed to `pip install -r` during `devenv shell` initialisation.
 
 
 
 
 *Type:*
-null or strings concatenated with “\\n” or path
+null or string
 
 
 
@@ -2747,7 +2746,6 @@ null or strings concatenated with “\\n” or path
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
-
 
 
 ## languages.python.version

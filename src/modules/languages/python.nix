@@ -2,6 +2,7 @@
 
 let
   cfg = config.languages.python;
+  flattenreq = pkgs.writers.writePython3 "flattenreq" { flakeIgnore = [ "E501" ]; } (builtins.readFile ../support/flattenreq.py);
   libraries = lib.makeLibraryPath (
     cfg.libraries
     ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
@@ -26,12 +27,6 @@ let
     ];
   };
 
-  requirements = pkgs.writeText "requirements.txt" (
-    if lib.isPath cfg.venv.requirements
-    then builtins.readFile cfg.venv.requirements
-    else cfg.venv.requirements
-  );
-
   nixpkgs-python = config.lib.getInput {
     name = "nixpkgs-python";
     url = "github:cachix/nixpkgs-python";
@@ -45,10 +40,16 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
+    function recreate_venv () {
+      ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
+      ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+    }
+
     profile_python="$(${readlink} ${package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null|| false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
-    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+    requirements="${lib.optionalString (cfg.venv.requirements != null) ''$DEVENV_ROOT/"${cfg.venv.requirements}"''}"
 
     # recreate venv if necessary
     if [ -z $venv_python ] || [ $profile_python != $venv_python ]
@@ -58,24 +59,37 @@ let
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
-      ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
-      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+      recreate_venv
+      venv_recreated=1
     fi
 
     source "$VENV_PATH"/bin/activate
 
     # reinstall requirements if necessary
+    # -n means nonempty
     if [ -n "$requirements" ]
       then
-        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| false )"
-        devenv_requirements="$(${readlink} "$devenv_requirements_path")"
-        if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
+        tmp="$(${pkgs.coreutils}/bin/mktemp -d)"
+        ${flattenreq} "$requirements" "$tmp"
+
+        existing_requirements="$VENV_PATH/.devenv_requirements"
+        [ -f $existing_requirements ] || existing_requirements="/dev/null"
+        existing_constraints="$VENV_PATH/.devenv_constraints"
+        [ -f $existing_constraints ] || existing_constraints="/dev/null"
+
+        if ! ${pkgs.diffutils}/bin/cmp --silent "$tmp/requirements.txt" "$existing_requirements" || ! ${pkgs.diffutils}/bin/cmp --silent "$tmp/constraints.txt" "$existing_constraints";
           then
-            echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
-            echo "Requirements changed, running pip install -r ${requirements}..."
-           "$VENV_PATH"/bin/pip install -r ${requirements}
+            if [ -z "$venv_recreated" ]
+              then
+                echo "Requirements changed, rebuilding Python venv..."
+                recreate_venv
+            fi
+            echo "Installing requirements..."
+            ${pkgs.coreutils}/bin/install "$tmp/requirements.txt" "$VENV_PATH/.devenv_requirements"
+            ${pkgs.coreutils}/bin/install "$tmp/constraints.txt" "$VENV_PATH/.devenv_constraints"
+           "$VENV_PATH"/bin/pip install -r "$VENV_PATH/.devenv_requirements" -c "$VENV_PATH/.devenv_constraints"
        fi
+       ${pkgs.coreutils}/bin/rm -rf "$tmp"
     fi
   '';
 
@@ -176,10 +190,10 @@ in
     venv.enable = lib.mkEnableOption "Python virtual environment";
 
     venv.requirements = lib.mkOption {
-      type = lib.types.nullOr (lib.types.either lib.types.lines lib.types.path);
+      type = lib.types.nullOr lib.types.str;
       default = null;
       description = ''
-        Contents of pip requirements.txt file.
+        Path to pip requirements.txt file as a string.  Must be relative to devenv root.
         This is passed to `pip install -r` during `devenv shell` initialisation.
       '';
     };
