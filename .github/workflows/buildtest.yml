@@ -25,18 +25,12 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - name: "Reinstall devenv"
-      run: |
-        nix profile remove '.*' 
-        nix profile install --accept-flake-config . 
-        nix profile list
-        echo $PATH
-        which devenv
+    - run: nix build
     - name: Run tests
       run: |
-        devenv ci
-        devenv shell devenv-run-tests
-        devenv search ncdu | grep "pkgs\.ncdu"
+        ./result/bin/devenv ci
+        ./result/bin/devenv shell devenv-run-tests
+        ./result/bin/devenv search ncdu | grep "pkgs\.ncdu"
   pin:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
@@ -73,14 +67,13 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: |
-        nix profile remove '.*'
-        nix profile install --accept-flake-config .
     - name: Disable package aliases 
       run: |
         mkdir -p ~/.config/nixpkgs
         echo '{ allowAliases = false; }' > ~/.config/nixpkgs/config.nix
-    - run: devenv test ${{ matrix.example }}
+    - run: |
+        nix build
+        ./result/bin/devenv test ${{ matrix.example }}
   direnv:
     name: direnv (${{ join(matrix.os) }})
     needs: build
@@ -133,9 +126,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    - run: nix build
     - run: |
-        nix profile remove '.*'
-        nix profile install --accept-flake-config . 
-    - run: |
-        nix shell nixpkgs#zsh -c zsh -c "$(which devenv) version"
-        nix shell nixpkgs#fish -c fish -c "$(which devenv) version"
+        nix shell nixpkgs#zsh -c zsh -c "./result/bin/devenv version"
+        nix shell nixpkgs#fish -c fish -c "./result/bin/devenv version"
