@@ -764,7 +764,6 @@ def test(ctx, debug, keep_going, exclude, names):
                         level="info",
                     )
 
-                    modules = os.path.join(pwd, "src/modules")
                     if not os.path.exists("devenv.yaml"):
                         write_yaml(
                             strictyaml.as_document({"inputs": {}}, schema=schema)
@@ -772,7 +771,7 @@ def test(ctx, debug, keep_going, exclude, names):
                     os.chmod("devenv.yaml", 0o644)
                     yaml = read_yaml()
                     inputs = yaml.get("inputs", {})
-                    inputs["devenv"] = {"url": f"path:{modules}"}
+                    inputs["devenv"] = {"url": f"path:{pwd}?dir=src/modules"}
                     yaml["inputs"] = inputs
                     write_yaml(yaml)
 
