@@ -1,4 +1,4 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, lib, inputs, ... }:
 
 let
   cfg = config.languages.python;
@@ -36,6 +36,25 @@ let
     name = "nixpkgs-python";
     url = "github:cachix/nixpkgs-python";
     attribute = "languages.python.version";
+  };
+
+  pdmLockExists = builtins.pathExists "${inputs.self}/pdm.lock";
+
+  pdmModule = { dream2nix, ... }: {
+    imports = [
+      dream2nix.modules.dream2nix.WIP-python-pdm
+    ];
+    pdm.lockfile = "${inputs.self}/pdm.lock";
+    pdm.pyproject = "${inputs.self}/pyproject.toml";
+    paths.projectRoot = inputs.self;
+    paths.projectRootFile = ".devenv.flake.nix";
+    paths.package = "./."; # relative to the root (always the root here)
+    mkDerivation.src = inputs.self;
+  };
+
+  pdmPythonPackage = inputs.dream2nix.lib.evalModules {
+    modules = [ pdmModule ];
+    packageSets.nixpkgs = pkgs;
   };
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
@@ -131,6 +150,11 @@ let
   '';
 in
 {
+  options.python-package = lib.mkOption {
+    type = lib.types.path;
+    default = pkgs.hello;
+    description = "The declarative python package build";
+  };
   options.languages.python = {
     enable = lib.mkEnableOption "tools for Python development";
 
@@ -188,6 +212,10 @@ in
       type = lib.types.bool;
       default = false;
       description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
+    };
+
+    build = {
+      enable = lib.mkEnableOption "pdm";
     };
 
     poetry = {
@@ -255,9 +283,21 @@ in
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
-    packages = [
-      package
-    ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
+    packages =
+      [
+        package
+      ]
+      ++ lib.optionals cfg.build.enable (
+        lib.warnIf (! builtins.pathExists "${inputs.self}/pyproject.toml") ''
+          languages.python.build is enabled but no pyproject.toml was found.
+          Please create one by executing `pdm init`
+        ''
+          [ pkgs.pdm ]
+      )
+      ++ lib.optionals cfg.poetry.enable [ cfg.poetry.package ];
+
+    python-package =
+      lib.mkIf (cfg.build.enable && pdmLockExists) pdmPythonPackage;
 
     env = lib.optionalAttrs cfg.poetry.enable {
       # Make poetry use DEVENV_ROOT/.venv
