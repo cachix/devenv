@@ -57,7 +57,7 @@ Recommended, speeds up the installation by providing binaries.
 === "Flake profiles"
 
     ```
-    nix profile install --accept-flake-config tarball+https://install.devenv.sh/latest
+    nix profile install --accept-flake-config github:cachix/devenv/latest
     ```
 === "Declaratively using flakes"
 
