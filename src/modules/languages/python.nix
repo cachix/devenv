@@ -46,7 +46,7 @@ let
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
     profile_python="$(${readlink} ${package.interpreter})"
-    devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null|| false )"
+    devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
     requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
 
@@ -68,7 +68,7 @@ let
     # reinstall requirements if necessary
     if [ -n "$requirements" ]
       then
-        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| false )"
+        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| echo false )"
         devenv_requirements="$(${readlink} "$devenv_requirements_path")"
         if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
           then

@@ -1,0 +1,1 @@
+echo "{ env.LOCAL = \"1\";}" > devenv.local.nix

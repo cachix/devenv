@@ -10,10 +10,16 @@
 | inputs.&lt;name&gt;.overlays | A list of overlays to include from the input.                                 |
 | imports                      | A list of relative paths or references to inputs to import ``devenv.nix``.    |
 | permittedInsecurePackages    | A list of insecure permitted packages.                                        |
+| clean.enabled                | Clean the environment when entering the shell. Defaults to `false`.           |
+| clean.keep                   | A list of environment variables to keep when cleaning the environment.        |
+| impure                       | Relax the hermeticity of the environment.                                     |
 
 !!! note "Added in 1.0"
 
     - relative file support in imports: `./mymodule.nix`
+    - `clean`
+    - `impure`
+    - `allowBroken`
 
 ## inputs.&lt;name&gt;.url
 

@@ -1,60 +1,42 @@
-{ config, lib, ... }:
+{ pkgs, config, lib, ... }:
 
-let
-  testType = lib.types.submodule ({ config, ... }: {
-    options = {
-      tags = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        default = [ "local" ];
-        description = "Tags for this test.";
-      };
-
-      nix = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        example = "{ pkgs, ... }: {}";
-        description = "devenv.nix code.";
-      };
-
-      yaml = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        example = ''
-          inputs:
-            nixpkgs:
-              url: github:NixOS/nixpkgs/nixpkgs-unstable
-        '';
-        description = "devenv.yaml code.";
-      };
-
-      test = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        description = "Bash to be executed.";
-        default = null;
-      };
-
-      src = lib.mkOption {
-        type = lib.types.nullOr lib.types.path;
-        default = null;
-        description = "Source code with all the files.";
-      };
-    };
-  });
-in
 {
-  options.tests = lib.mkOption {
-    type = lib.types.attrsOf testType;
-    default = { };
-    description = "Tests for this module.";
+  options = {
+    enterTest = lib.mkOption {
+      type = lib.types.lines;
+      description = "Bash code to execute to run the test.";
+    };
+
+    test = lib.mkOption {
+      type = lib.types.package;
+      internal = true;
+      default = pkgs.writeShellScript "devenv-test" ''
+        echo "• Setting up shell environment ..."
+        ${config.enterShell}
+
+        set -euo pipefail
+        echo "• Testing ..."
+        ${config.enterTest}
+      '';
+    };
   };
 
-  config.assertions =
-    let
-      mk = name: cfg:
-        {
-          assertion = cfg.nix != null || cfg.src != null;
-          message = "Either tests.${name}.nix or tests.${name}.src needs to be defined.";
-        };
-    in
-    lib.mapAttrsToList mk config.tests;
+  config = {
+    enterTest = ''
+      # Wait for the port to be open until the timeout is reached
+      wait_for_port() {
+        local port=$1
+        local timeout=''${2:-15}
+        
+        timeout $timeout bash -c "until echo > /dev/tcp/localhost/$port; do sleep 0.5; done"
+      }
+
+      export -f wait_for_port
+
+      if [ -f ./.test.sh ]; then
+        echo "• Running .test.sh..."
+        ./.test.sh
+      fi
+    '';
+  };
 }

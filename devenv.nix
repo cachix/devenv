@@ -8,14 +8,17 @@
     pkgs.xorg.libxcb
     pkgs.yaml2json
     pkgs.tesh
-    pkgs.python3Packages.black
-  ];
+  ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
+    frameworks.SystemConfiguration
+  ]);
 
-  languages.nix.enable = true;
+  #languages.nix.enable = true;
+  # for cli
+  languages.rust.enable = true;
+  # for docs
   languages.python.enable = true;
-  languages.python.poetry.enable = true;
-  languages.python.poetry.install.installRootPackage = true;
-  languages.python.poetry.install.groups = [ "docs" ];
+  languages.python.venv.enable = true;
+  languages.python.venv.requirements = ./requirements.txt;
 
   devcontainer.enable = true;
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
@@ -31,7 +34,7 @@
     echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
     cat mkdocs.yml | yaml2json | jq -r '.extra.devenv.version' > src/modules/latest-version
   '';
-  scripts.devenv-run-tests.exec = ''
+  scripts.devenv-test-cli.exec = ''
     set -xe
     set -o pipefail
 
@@ -43,11 +46,8 @@
     tmp="$(mktemp -d)"
     devenv init "$tmp"
     pushd "$tmp"
-      echo -e "  devenv:\n    url: path:${config.devenv.root}?dir=src/modules" >> devenv.yaml
-      cat devenv.yaml
       devenv version
-      devenv ci
-      devenv test
+      devenv test --override-input devenv path:${config.devenv.root}?dir=src/modules
     popd
     rm -rf "$tmp"
 
@@ -121,8 +121,9 @@
 
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
-    shellcheck.enable = true;
-    black.enable = true;
+    #shellcheck.enable = true;
+    clippy.enable = true;
+    rustfmt.enable = true;
     #markdownlint.enable = true;
   };
   pre-commit.settings.markdownlint.config = {
@@ -132,7 +133,4 @@
     MD033 = false;
     MD034 = false;
   };
-
-  tests = config.lib.mkTests ./examples
-    // config.lib.mkTests ./tests;
 }

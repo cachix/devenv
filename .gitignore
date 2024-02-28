@@ -3,12 +3,12 @@ result
 .env
 .env.*
 .devenv*
+.direnv*
 /.cache
 /.pre-commit-config.yaml
 
 # examples
 examples/rust/app/target
 
-# Python
-/.venv
-*.pyc
+# Rust
+target

@@ -82,6 +82,7 @@ plugins:
       background_color: "#FBFBFB"
       color: "#425C82"
   rss:
+    use_git: false
     match_path: blog/posts/.*
     date_from_meta:
       as_creation: date

@@ -1,33 +1,26 @@
 { pkgs, inputs }:
 
-let
-  python_slim = pkgs.python311.override {
-    mimetypesSupport = false;
-    x11Support = false;
-    stripConfig = true;
-    stripIdlelib = true;
-    stripTests = true;
-    stripTkinter = true;
-    enableLTO = false;
-    rebuildBytecode = false;
-    stripBytecode = true;
-    includeSiteCustomize = false;
-    enableOptimizations = false;
-    bzip2 = null;
-    gdbm = null;
-    xz = null;
-    ncurses = null;
-    readline = null;
-    sqlite = null;
-    tzdata = null;
-    self = python_slim;
+pkgs.rustPlatform.buildRustPackage {
+  pname = "devenv";
+  version = "1.0.0";
+
+  src = builtins.path {
+    path = ./.;
+    filter = path: type:
+      path != "Cargo.lock" || path != "Cargo.toml" || path != "src/devenv";
   };
-in
-(inputs.poetry2nix.legacyPackages.${pkgs.stdenv.system}.mkPoetryApplication {
-  projectDir = ./.;
-  python = python_slim;
-}).overrideAttrs (old: {
-  makeWrapperArgs = [
-    "--set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix}"
+
+  cargoLock = {
+    lockFile = ./Cargo.lock;
+  };
+
+  nativeBuildInputs = [ pkgs.makeWrapper ];
+
+  buildInputs = pkgs.lib.optionals pkgs.stdenv.isDarwin [
+    pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
   ];
-})
+
+  postInstall = ''
+    wrapProgram $out/bin/devenv --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix}
+  '';
+}

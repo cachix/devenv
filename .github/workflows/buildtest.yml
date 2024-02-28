@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+        os: [[self-hosted, linux, X64], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
     - run: nix build
     - name: Run tests
       run: |
-        ./result/bin/devenv ci
+        ./result/bin/devenv test
         ./result/bin/devenv shell devenv-run-tests
         ./result/bin/devenv search ncdu | grep "pkgs\.ncdu"
   pin:

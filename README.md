@@ -44,13 +44,39 @@ And ``devenv shell`` activates the environment.
 
 ## Commands
 
-- ``devenv init``:           Scaffold devenv.yaml, devenv.nix, and .envrc.
-- ``devenv shell``:          Activate the developer environment.
-- ``devenv shell CMD ARGS``: Run CMD with ARGS in the developer environment.
-- ``devenv update``:         Update devenv.lock from devenv.yaml inputs. See http://devenv.sh/inputs/#locking-and-updating-inputs.
-- ``devenv up``:             Start processes in foreground. See http://devenv.sh/processes.
-- ``devenv gc``:             Remove old devenv generations. See http://devenv.sh/garbage-collection.
-- ``devenv ci``:             Build your developer environment and make sure all checks pass.
+```
+$ devenv
+
+Usage: devenv [OPTIONS] <COMMAND>
+
+Commands:
+  init       Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.
+  shell      Activate the developer environment. https://devenv.sh/basics/
+  update     Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/
+  search     Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file
+  info       Print information about this developer environment.
+  up         Start processes in the foreground. https://devenv.sh/processes/
+  processes  Start or stop processes.
+  test       Run tests. http://devenv.sh/tests/
+  container  Build, copy, or run a container. https://devenv.sh/containers/
+  inputs     Add an input to devenv.yaml. https://devenv.sh/inputs/
+  gc         Deletes previous shell generations. See http://devenv.sh/garbage-collection
+  build      Build any attribute in devenv.nix.
+  version    Print the version of devenv.
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+  -v, --verbose
+          Enable debug log level.
+  -s, --system <SYSTEM>
+          [default: x86_64-linux]
+  -d, --nix-debugger
+          Enter Nix debugger on failure.
+  -n, --nix-option <NIX_OPTION> <NIX_OPTION>
+          Pass additional options to nix commands, see `man nix.conf` for full list.
+  -h, --help
+          Print help
+```
 
 ## Documentation
 

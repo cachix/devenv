@@ -1,0 +1,3 @@
+{
+  languages.rust.enable = true;
+}

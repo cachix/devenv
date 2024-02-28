@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 
-timeout 20 bash -c 'until echo > /dev/tcp/localhost/6081; do sleep 0.5; done'
+wait_for_port 6081
 
 caddy=$(curl http://localhost:8001)
 varnish=$(curl http://localhost:6081)

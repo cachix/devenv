@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
 set -xe
-poetry install --with docs
-poetry run -- mkdocs build
+pip install -r requirements.txt
+mkdocs build
