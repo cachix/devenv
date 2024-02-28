@@ -1,0 +1,25 @@
+[package]
+name = "devenv"
+version = "1.0.0"
+edition = "2021"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ansiterm = "0.12.2"
+clap = { version = "4.5.1", features = ["derive", "cargo"] }
+cli-table = "0.4.7"
+dotlock = "0.5.0"
+fs2 = "0.4.3"
+include_dir = "0.7.3"
+indoc = "2.0.4"
+miette = { version = "7.1.0", features = ["fancy"] }
+nix = { version = "0.28.0", features = ["signal"] }
+regex = "1.10.3"
+schematic = { version = "0.14.3", features = ["schema", "yaml", "renderer_template", "renderer_json_schema"] }
+serde = "1.0.197"
+serde_json = "1.0.114"
+serde_yaml = "0.9.32"
+tempdir = "0.3.7"
+tracing = "0.1.40"
+which = "6.0.0"
+xdg = "2.5.2"

@@ -58,10 +58,12 @@ in
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
       env = lib.mapAttrs (name: value: lib.mkDefault value) config.dotenv.resolved;
-      dotenv.resolved = mergeEnvFiles dotenvPaths;
-    })
-    (lib.mkIf (cfg.enable) {
       enterShell = lib.concatStringsSep "\n" (map createMissingFileMessage dotenvPaths);
+      dotenv.resolved = mergeEnvFiles dotenvPaths;
+      assertions = [{
+        assertion = lib.hasPrefix ".env" cfg.filename;
+        message = "The dotenv filename must start with '.env'.";
+      }];
     })
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell =

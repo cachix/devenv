@@ -91,9 +91,9 @@ Done.
 
 ## Commands
 
-- ``devenv ci`` builds your developer environment and makes sure that all checks pass. Useful to run in your continuous integration environment.
+- ``devenv test`` builds your developer environment and makes sure that all checks pass. Useful to run in your continuous integration environment.
 - ``devenv shell`` activates your developer environment.
-- ``devenv search NAME`` searches packages matching NAME in Nixpkgs input.
+- ``devenv search <NAME>`` searches packages matching NAME in Nixpkgs input.
 - ``devenv update`` updates and pins inputs from ``devenv.yaml`` into ``devenv.lock``.
 - ``devenv gc`` [deletes unused environments](garbage-collection.md) to save disk space.
 - ``devenv up`` starts [processes](processes.md).

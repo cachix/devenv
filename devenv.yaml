@@ -1,13 +1,18 @@
 inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  nix2container:
+    url: github:nlewo/nix2container
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+  devenv:
+    url: path:.?dir=src/modules
   nix:
     url: github:domenkozar/nix/devenv-2.21
     inputs:
       nixpkgs:
         follows: nixpkgs
-  devenv:
-    url: path:./src/modules
+  nixpkgs:
+    url: github:domenkozar/nixpkgs/0e172b739ff09c9dc652f2c9175ac0cf745cca81
   pre-commit-hooks:
     url: github:cachix/pre-commit-hooks.nix
     inputs:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 
-timeout 20 bash -c 'until echo > /dev/tcp/localhost/1025; do sleep 0.5; done'
+wait_for_port 1025
 
 sendmail john@example.com <<EOF
 Subject: Hello

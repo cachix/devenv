@@ -1,0 +1,6 @@
+inputs:
+  root:
+    url: git+file://.
+    flake: false
+imports:
+- root/examples/compose/projectA
