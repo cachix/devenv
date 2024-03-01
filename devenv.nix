@@ -116,7 +116,7 @@
     cat > docs/languages-all.md <<EOF
       \`\`\`nix
       ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
-      \`\`\`   
+      \`\`\`
     EOF
   '';
 
