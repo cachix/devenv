@@ -190,7 +190,6 @@ in
       description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
     };
 
-
     directory = lib.mkOption {
       type = lib.types.str;
       default = ".";
@@ -213,6 +212,16 @@ in
           type = lib.types.bool;
           default = false;
           description = "Whether the root package (your project) should be installed. See `--no-root`";
+        };
+        onlyInstallRootPackage = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether to only install the root package (your project) should be installed, but no dependencies. See `--only-root`";
+        };
+        compile = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether `poetry install` should compile Python source files to bytecode.";
         };
         quiet = lib.mkOption {
           type = lib.types.bool;
@@ -244,9 +253,17 @@ in
           default = false;
           description = "Whether to install all extras. See `--all-extras`.";
         };
+        verbosity = lib.mkOption {
+          type = lib.types.enum [ "no" "little" "more" "debug" ];
+          default = "no";
+          description = "What level of verbosity the output of `poetry install` should have.";
+        };
       };
-      activate.enable = lib.mkOption "Whether to activate the poetry virtual environment automatically.";
-
+      activate.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether to activate the poetry virtual environment automatically.";
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.poetry;
@@ -259,13 +276,18 @@ in
   config = lib.mkIf cfg.enable {
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
-      lib.optional (!cfg.poetry.install.installRootPackage) "--no-root" ++
+      lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root" ++
+      lib.optional (!cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage) "--no-root" ++
+      lib.optional cfg.poetry.install.compile "--compile" ++
       lib.optional cfg.poetry.install.quiet "--quiet" ++
       lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"'' ] ++
       lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [ "--without" ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"'' ] ++
       lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [ "--only" ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"'' ] ++
       lib.optionals (cfg.poetry.install.extras != [ ]) [ "--extras" ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"'' ] ++
-      lib.optional cfg.poetry.install.allExtras "--all-extras";
+      lib.optional cfg.poetry.install.allExtras "--all-extras" ++
+      lib.optional (cfg.poetry.install.verbosity == "little") "-v" ++
+      lib.optional (cfg.poetry.install.verbosity == "more") "-vv" ++
+      lib.optional (cfg.poetry.install.verbosity == "debug") "-vvv";
 
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
