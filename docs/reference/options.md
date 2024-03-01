@@ -3800,6 +3800,54 @@ package
 
 
 
+## languages.vala.enable
+
+Whether to enable tools for Vala development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
+
+
+
+## languages.vala.package
+
+The Vala package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.vala `
+
+
+
+*Example:*
+` pkgs.vala_0_54 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
+
+
+
 ## languages.zig.enable
 
 Whether to enable tools for Zig development.
@@ -4774,8 +4822,6 @@ path
 
 ## pre-commit.run
 
-
-
 A derivation that tests whether the pre-commit hooks run cleanly on
 the entire project.
 
@@ -4847,6 +4893,8 @@ boolean
 
 
 ## pre-commit.settings.alejandra.exclude
+
+
 
 Files or directories to exclude from formatting.
 
@@ -6971,8 +7019,6 @@ boolean
 
 ## pre-commit.settings.rust.cargoManifestPath
 
-
-
 Path to Cargo.toml
 
 
@@ -7012,6 +7058,8 @@ one of “stderr”, “errfmt”, “json”
 
 
 ## pre-commit.settings.statix.ignore
+
+
 
 Globs of file patterns to skip.
 
