@@ -47,6 +47,7 @@
   languages.typescript.enable = true;
   languages.unison.enable = true;
   languages.v.enable = true;
+  languages.vala.enable = true;
   languages.zig.enable = true;
 
   # If you're missing a language, please contribute it by following examples of other languages <3
