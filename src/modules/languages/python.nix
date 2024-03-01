@@ -39,7 +39,7 @@ let
   };
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
-    # Make sure any tools are not attempting to use the python interpreter from any
+    # Make sure any tools are not attempting to use the Python interpreter from any
     # existing virtual environment. For instance if devenv was started within an venv.
     unset VIRTUAL_ENV
 
@@ -82,11 +82,11 @@ let
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     function _devenv_init_poetry_venv
     {
-      # Make sure any tools are not attempting to use the python interpreter from any
+      # Make sure any tools are not attempting to use the Python interpreter from any
       # existing virtual environment. For instance if devenv was started within an venv.
       unset VIRTUAL_ENV
 
-      # Make sure poetry's venv uses the configured python executable.
+      # Make sure poetry's venv uses the configured Python executable.
       ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
     }
 
@@ -94,7 +94,7 @@ let
     {
       local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments} ${lib.optionalString (cfg.directory != ".") ''--directory=${cfg.directory}''})
       # Avoid running "poetry install" for every shell.
-      # Only run it when the "poetry.lock" file or python interpreter has changed.
+      # Only run it when the "poetry.lock" file or Python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
       local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != ".") ''${cfg.directory}/''}pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != ".") ''${cfg.directory}/''}poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
       local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/${lib.optionalString (cfg.directory != ".") ''${cfg.directory}/''}.venv/poetry.lock.checksum
@@ -245,7 +245,7 @@ in
           description = "Whether to install all extras. See `--all-extras`.";
         };
       };
-      activate.enable = lib.mkEnableOption "activate the poetry virtual environment automatically";
+      activate.enable = lib.mkOption "Whether to activate the poetry virtual environment automatically.";
 
       package = lib.mkOption {
         type = lib.types.package;
