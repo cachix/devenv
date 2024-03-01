@@ -98,9 +98,9 @@ in
       }
     ))
     (lib.mkIf (cfg.enable && pkgs.stdenv.isDarwin) {
-      env.RUSTFLAGS = [ "-L framework=${config.devenv.profile}/Library/Frameworks" ];
-      env.RUSTDOCFLAGS = [ "-L framework=${config.devenv.profile}/Library/Frameworks" ];
-      env.CFLAGS = [ "-iframework ${config.devenv.profile}/Library/Frameworks" ];
+      env.RUSTFLAGS = "-L framework=${config.devenv.profile}/Library/Frameworks";
+      env.RUSTDOCFLAGS = "-L framework=${config.devenv.profile}/Library/Frameworks";
+      env.CFLAGS = "-iframework ${config.devenv.profile}/Library/Frameworks";
     })
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
