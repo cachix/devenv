@@ -222,7 +222,17 @@ in
         groups = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
-          description = "Which dependency-groups to install. See `--with`.";
+          description = "Which dependency groups to install. See `--with`.";
+        };
+        ignoredGroups = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Which dependency groups to ignore. See `--without`.";
+        };
+        onlyGroups = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Which dependency groups to exclusively install. See `--only`.";
         };
         extras = lib.mkOption {
           type = lib.types.listOf lib.types.str;
@@ -252,6 +262,8 @@ in
       lib.optional (!cfg.poetry.install.installRootPackage) "--no-root" ++
       lib.optional cfg.poetry.install.quiet "--quiet" ++
       lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"'' ] ++
+      lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [ "--without" ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"'' ] ++
+      lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [ "--only" ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"'' ] ++
       lib.optionals (cfg.poetry.install.extras != [ ]) [ "--extras" ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"'' ] ++
       lib.optional cfg.poetry.install.allExtras "--all-extras";
 
