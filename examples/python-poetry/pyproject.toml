@@ -1,15 +1,17 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry]
 name = "python-poetry"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
-authors = ["Bob van der Linden <bobvanderlinden@gmail.com>"]
+authors = [
+    "Bob van der Linden <bobvanderlinden@gmail.com>",
+    "Matthias Thym <git@thym.at>"
+]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.10"
 numpy = "^1.24.1"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
