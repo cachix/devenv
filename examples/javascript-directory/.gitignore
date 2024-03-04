@@ -1,0 +1,8 @@
+# Devenv
+.devenv*
+devenv.local.nix
+
+# Node.js and bun
+node_modules/
+package-lock.json
+bun.lockb
