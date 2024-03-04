@@ -1,0 +1,17 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "python-directory"
+version = "0.1.0"
+description = ""
+authors = [
+    "Bob van der Linden <bobvanderlinden@gmail.com>",
+    "Matthias Thym <git@thym.at>"
+]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "^2.30"
