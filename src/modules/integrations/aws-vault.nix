@@ -41,6 +41,26 @@ in
       description = "Attribute set of packages including awscli2";
     };
 
+    opentofuWrapper = lib.mkOption {
+      type = lib.types.submodule {
+        options = {
+          enable = lib.mkEnableOption ''
+            Wraps opentofu binary as `aws-vault exec <profile> -- opentofu <args>`.
+          '';
+
+          package = lib.mkOption {
+            type = lib.types.package;
+            default = pkgs.opentofu;
+            defaultText = lib.literalExpression "pkgs.opentofu";
+            description = "The opentofu package to use.";
+          };
+        };
+      };
+      defaultText = lib.literalExpression "pkgs";
+      default = { };
+      description = "Attribute set of packages including opentofu";
+    };
+
     terraformWrapper = lib.mkOption {
       type = lib.types.submodule {
         options = {
@@ -69,6 +89,11 @@ in
           ${cfg.package}/bin/aws-vault exec ${cfg.profile} -- ${cfg.awscliWrapper.package}/bin/aws "$@"
         '')
       ];
+    })
+    (lib.mkIf (cfg.enable && cfg.opentofuWrapper.enable) {
+      languages.opentofu.package = pkgs.writeScriptBin "opentofu" ''
+        ${cfg.package}/bin/aws-vault exec ${cfg.profile} -- ${cfg.opentofuWrapper.package}/bin/tofu "$@"
+      '';
     })
     (lib.mkIf (cfg.enable && cfg.terraformWrapper.enable) {
       languages.terraform.package = pkgs.writeScriptBin "terraform" ''
