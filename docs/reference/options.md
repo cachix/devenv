@@ -123,6 +123,69 @@ package
 
 
 
+## aws-vault.opentofuWrapper
+
+Attribute set of packages including opentofu
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` pkgs `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.opentofuWrapper.enable
+
+Whether to enable Wraps opentofu binary as `aws-vault exec <profile> -- opentofu <args>`.
+.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
+## aws-vault.opentofuWrapper.package
+
+The opentofu package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.opentofu `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/aws-vault.nix)
+
+
+
 ## aws-vault.profile
 
 
@@ -1999,6 +2062,49 @@ attribute set
 
 
 
+## languages.opentofu.enable
+
+Whether to enable tools for OpenTofu development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
+
+
+
+## languages.opentofu.package
+
+The OpenTofu package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.opentofu `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
+
+
+
 ## languages.pascal.enable
 
 Whether to enable tools for Pascal development.
@@ -2074,8 +2180,6 @@ boolean
 ## languages.perl.packages
 
 Perl packages to include
-
-
 
 *Type:*
 list of string
@@ -2264,6 +2368,8 @@ null or strings concatenated with “\\n”
 ## languages.php.fpm.phpOptions
 
 Options appended to the PHP configuration file `php.ini`.
+
+
 
 
 *Type:*
@@ -4743,8 +4849,6 @@ list of string
 
 ## pre-commit.hooks.\<name>.types_or
 
-
-
 List of file types to run on, where only a single type needs to match.
 
 
@@ -4821,6 +4925,8 @@ path
 
 
 ## pre-commit.run
+
+
 
 A derivation that tests whether the pre-commit hooks run cleanly on
 the entire project.
@@ -6910,8 +7016,6 @@ string
 
 ## pre-commit.settings.pyupgrade.binPath
 
-
-
 pyupgrade binary path. Should be used to specify the pyupgrade binary from your Nix-managed Python environment.
 
 
@@ -7018,6 +7122,8 @@ boolean
 
 
 ## pre-commit.settings.rust.cargoManifestPath
+
+
 
 Path to Cargo.toml
 
