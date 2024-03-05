@@ -173,6 +173,17 @@ in
       example = "3.11 or 3.11.2";
     };
 
+    directory = lib.mkOption {
+      type = lib.types.str;
+      default = config.devenv.root;
+      defaultText = lib.literalExpression "config.devenv.root";
+      description = ''
+        The Python project's root directory. Defaults to the root of the devenv project.
+        Can be an absolute path or one relative to the root of the devenv project.
+      '';
+      example = "./directory";
+    };
+
     venv.enable = lib.mkEnableOption "Python virtual environment";
 
     venv.requirements = lib.mkOption {
@@ -188,14 +199,6 @@ in
       type = lib.types.bool;
       default = false;
       description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
-    };
-
-    directory = lib.mkOption {
-      type = lib.types.str;
-      default = config.devenv.root;
-      description = ''
-        The Python project's root directory. Defaults to the root of the devenv project.
-      '';
     };
 
     poetry = {
