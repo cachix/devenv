@@ -9,6 +9,8 @@ RUN sudo apt-get update && sudo apt install -y xz-utils acl
 
 RUN wget -O install.sh https://nixos.org/nix/install \
   && chmod +x install.sh \
+  && mkdir -m 0755 /etc/nix \
+  && printf 'sandbox = false \nfilter-syscalls = false' > /etc/nix/nix.conf \
   && addgroup --gid 30000 --system nixbld \
   && for i in $(seq 1 30); do adduser --system --no-create-home --home /var/empty --uid $((30000 + i)) nixbld$i && adduser nixbld$i nixbld ; done \
   && USER=root sh ./install.sh --daemon --no-channel-add --nix-extra-conf-file /nix.conf \
