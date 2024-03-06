@@ -3,7 +3,7 @@
 {
   languages.javascript = {
     enable = true;
-    npm = {
+    bun = {
       enable = true;
       install.enable = true;
     };
