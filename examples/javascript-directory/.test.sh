@@ -2,4 +2,5 @@
 
 set -ex
 
+cd directory
 node -e "require('axios')"
