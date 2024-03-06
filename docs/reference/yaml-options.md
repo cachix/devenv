@@ -55,13 +55,11 @@ imports:
     - relative file support in imports: `./mymodule.nix`
 
 ### What if a package is out of date?
-    - Open [nixpkgs repo](https://github.com/NixOS/nixpkgs) and press `t` to search for your package.
-    -  Try to update/change the package using [the nixpkgs contributing guide](https://nixos.org/manual/nixpkgs/stable/#chap-quick-start), optionally contacting the maintainer for help if you get stuck.
-    - Make a PR and remember the branch name.
-    - Add it to your devenv.yaml like so
-    
-Using the nixpkgs input in form of 'github:$GH_USERNAME/nixpkgs/master', edit `devenv.yaml`:
 
+- Open [nixpkgs repo](https://github.com/NixOS/nixpkgs) and press `t` to search for your package.
+- Try to update/change the package using [the nixpkgs contributing guide](https://nixos.org/manual/nixpkgs/stable/#chap-quick-start), optionally contacting the maintainer for help if you get stuck.
+- Make a PR and remember the branch name.
+- Add it to your devenv.yaml using the nixpkgs input in form of 'github:$GH_USERNAME/nixpkgs/master', edit `devenv.yaml`:
 
 ```yaml
 inputs:
