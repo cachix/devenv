@@ -3,7 +3,7 @@
 {
   languages.javascript = {
     enable = true;
-    npm = {
+    pnpm = {
       enable = true;
       install.enable = true;
     };

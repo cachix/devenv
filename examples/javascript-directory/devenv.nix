@@ -5,14 +5,9 @@
     enable = true;
     directory = "directory";
     package = pkgs.nodejs-slim;
-    bun = {
+    npm = {
       enable = true;
       install.enable = true;
     };
-    # npm = {
-    #   enable = true;
-    #   install.enable = true;
-    # };
-    corepack.enable = true;
   };
 }
