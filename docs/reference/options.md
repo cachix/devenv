@@ -1734,7 +1734,7 @@ boolean
 
 ## languages.javascript.package
 
-The Node package to use.
+The Node.js package to use.
 
 
 
@@ -1744,16 +1744,16 @@ package
 
 
 *Default:*
-` pkgs.nodejs `
+` pkgs.nodejs-slim `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
-## languages.javascript.corepack.enable
+## languages.javascript.bun.enable
 
-Whether to enable shims for package managers besides npm.
+Whether to enable install bun.
 
 
 
@@ -1775,9 +1775,279 @@ boolean
 
 
 
+## languages.javascript.bun.package
+
+The bun package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.bun `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.bun.install.enable
+
+Whether to enable bun install during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.corepack.enable
+
+Whether to enable wrappers for npm, pnpm and Yarn via Node.js Corepack.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.directory
+
+The JavaScript project's root directory. Defaults to the root of the devenv project.
+Can be an absolute path or one relative to the root of the devenv project.
+
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` config.devenv.root `
+
+
+
+*Example:*
+` "./directory" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.npm.enable
+
+Whether to enable install npm.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.npm.package
+
+The Node.js package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodejs `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
 ## languages.javascript.npm.install.enable
 
 Whether to enable npm install during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.pnpm.enable
+
+Whether to enable install pnpm.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.pnpm.package
+
+The pnpm package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.pnpm `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.pnpm.install.enable
+
+Whether to enable pnpm install during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.yarn.enable
+
+Whether to enable install yarn.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.yarn.package
+
+The yarn package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.yarn `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
+
+
+## languages.javascript.yarn.install.enable
+
+Whether to enable yarn install during devenv initialisation.
 
 
 
@@ -1917,8 +2187,6 @@ boolean
 ## languages.lua.package
 
 The Lua package to use.
-
-
 
 *Type:*
 package
@@ -2180,6 +2448,8 @@ boolean
 ## languages.perl.packages
 
 Perl packages to include
+
+
 
 *Type:*
 list of string
@@ -4557,8 +4827,6 @@ attribute set of (submodule)
 
 ## pre-commit.hooks.\<name>.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -4848,6 +5116,8 @@ list of string
 
 
 ## pre-commit.hooks.\<name>.types_or
+
+
 
 List of file types to run on, where only a single type needs to match.
 
@@ -6732,8 +7002,6 @@ list of string
 
 ## pre-commit.settings.php-cs-fixer.binPath
 
-
-
 PHP-CS-Fixer binary path.
 
 
@@ -7015,6 +7283,8 @@ string
 
 
 ## pre-commit.settings.pyupgrade.binPath
+
+
 
 pyupgrade binary path. Should be used to specify the pyupgrade binary from your Nix-managed Python environment.
 
