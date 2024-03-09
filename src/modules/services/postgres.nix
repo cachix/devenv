@@ -272,8 +272,8 @@ in
         SQL expressions separated by a semi-colon.
       '';
       example = lib.literalExpression ''
-        CREATE USER postgres SUPERUSER;
-        CREATE USER bar;
+        CREATE ROLE postgres SUPERUSER;
+        CREATE ROLE bar;
       '';
     };
   };
