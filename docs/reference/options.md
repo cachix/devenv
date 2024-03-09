@@ -11648,8 +11648,8 @@ null or string
 *Example:*
 
 ```
-CREATE USER postgres SUPERUSER;
-CREATE USER bar;
+CREATE ROLE postgres SUPERUSER;
+CREATE ROLE bar;
 
 ```
 
