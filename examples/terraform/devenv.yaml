@@ -1,0 +1,6 @@
+allowUnfree: true
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+  nixpkgs-terraform:
+    url: github:stackbuilders/nixpkgs-terraform
