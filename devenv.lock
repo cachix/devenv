@@ -50,11 +50,11 @@
         "systems": "systems"
       },
       "locked": {
-        "lastModified": 1709126324,
+        "lastModified": 1710146030,
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "d465f4819400de7c8d874d50b982301f28a84605",
-        "treeHash": "f52cf07f5dc7208c6379eb10b7505fda4c429b88",
+        "rev": "b1d9ab70662946ef0850d488da1c9019f3a9752a",
+        "treeHash": "bd263f021e345cb4a39d80c126ab650bebc3c10c",
         "type": "github"
       },
       "original": {
@@ -68,11 +68,11 @@
         "systems": "systems_2"
       },
       "locked": {
-        "lastModified": 1709126324,
+        "lastModified": 1710146030,
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "d465f4819400de7c8d874d50b982301f28a84605",
-        "treeHash": "f52cf07f5dc7208c6379eb10b7505fda4c429b88",
+        "rev": "b1d9ab70662946ef0850d488da1c9019f3a9752a",
+        "treeHash": "bd263f021e345cb4a39d80c126ab650bebc3c10c",
         "type": "github"
       },
       "original": {
@@ -111,11 +111,11 @@
         "nixpkgs-regression": "nixpkgs-regression"
       },
       "locked": {
-        "lastModified": 1709513008,
+        "lastModified": 1709963241,
         "owner": "domenkozar",
         "repo": "nix",
-        "rev": "d61bd1c0dda0ec7466079531547bbafdf538ed71",
-        "treeHash": "450086431140936247448766aecc37b90f4ff39e",
+        "rev": "e92c1fb8a57fe2e0bee725b1e7c68cfd8ffd55dc",
+        "treeHash": "86eda1beb323090366f08539b000539b461982fe",
         "type": "github"
       },
       "original": {
@@ -148,17 +148,17 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1709280738,
+        "lastModified": 1710219699,
         "owner": "domenkozar",
         "repo": "nixpkgs",
-        "rev": "0e172b739ff09c9dc652f2c9175ac0cf745cca81",
-        "treeHash": "ac7b46db5871ff29667646a328f426b945d3013c",
+        "rev": "b62ff9169f2aa2373995a690284a5681ed036f62",
+        "treeHash": "a45773f7fb8d252d7e7ca7e2b4aa067d25703fdd",
         "type": "github"
       },
       "original": {
         "owner": "domenkozar",
         "repo": "nixpkgs",
-        "rev": "0e172b739ff09c9dc652f2c9175ac0cf745cca81",
+        "rev": "b62ff9169f2aa2373995a690284a5681ed036f62",
         "type": "github"
       }
     },
@@ -180,11 +180,11 @@
     },
     "nixpkgs-stable": {
       "locked": {
-        "lastModified": 1709128929,
+        "lastModified": 1710162809,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "c8e74c2f83fe12b4e5a8bd1abbc090575b0f7611",
-        "treeHash": "087dfee039daa2a8e336580010af1f20c03569d0",
+        "rev": "ddcd7598b2184008c97e6c9c6a21c5f37590b8d2",
+        "treeHash": "a89e05b79ecfce170082536583aa56246b24f6e4",
         "type": "github"
       },
       "original": {
