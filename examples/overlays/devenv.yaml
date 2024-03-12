@@ -1,7 +1,5 @@
 allowUnfree: true
 inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
   subflake:
     url: path:./subflake
     overlays:

@@ -29,8 +29,7 @@ jobs:
     - name: Run tests
       run: |
         ./result/bin/devenv test
-        ./result/bin/devenv shell devenv-run-tests
-        ./result/bin/devenv search ncdu | grep "pkgs\.ncdu"
+        PATH=$PWD/result/bin:$PATH ./result/bin/devenv-run-tests tests
   pin:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
@@ -73,7 +72,7 @@ jobs:
         echo '{ allowAliases = false; }' > ~/.config/nixpkgs/config.nix
     - run: |
         nix build
-        ./result/bin/devenv test ${{ matrix.example }}
+        ./result/bin/devenv-run-tests --only ${{ matrix.example }} examples
   direnv:
     name: direnv (${{ join(matrix.os) }})
     needs: build
