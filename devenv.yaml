@@ -12,7 +12,7 @@ inputs:
       nixpkgs:
         follows: nixpkgs
   nixpkgs:
-    url: github:domenkozar/nixpkgs/0e172b739ff09c9dc652f2c9175ac0cf745cca81
+    url: github:domenkozar/nixpkgs/b62ff9169f2aa2373995a690284a5681ed036f62
   pre-commit-hooks:
     url: github:cachix/pre-commit-hooks.nix
     inputs:

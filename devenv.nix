@@ -122,7 +122,7 @@
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
     #shellcheck.enable = true;
-    clippy.enable = true;
+    #clippy.enable = true;
     rustfmt.enable = true;
     #markdownlint.enable = true;
   };

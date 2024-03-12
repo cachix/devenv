@@ -37,7 +37,7 @@ jobs:
     uses: ./.github/workflows/pin.yml
     secrets: inherit
   generate-examples:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, X64]
     outputs:
       examples: ${{ steps.set-examples.outputs.examples }}
     steps:
