@@ -1,6 +1,4 @@
 inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
   getting-started:
     url: github:nix-dot-dev/getting-started-nix-template
     flake: false

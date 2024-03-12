@@ -41,7 +41,7 @@
 allowUnfree: true
 inputs:
   nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
+    url: github:cachix/devenv-nixpkgs/rolling
   myproject:
     url: github:owner/myproject
     flake: false
