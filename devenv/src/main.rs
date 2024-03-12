@@ -333,9 +333,11 @@ fn main() -> Result<()> {
         Commands::Info {} => app.info(),
         Commands::Build { attributes } => app.build(&attributes),
         Commands::Update { name } => app.update(&name),
-        Commands::Up { process, detach } => app.up(process.as_deref(), &detach),
+        Commands::Up { process, detach } => app.up(process.as_deref(), &detach, &detach),
         Commands::Processes { command } => match command {
-            ProcessesCommand::Up { process, detach } => app.up(process.as_deref(), &detach),
+            ProcessesCommand::Up { process, detach } => {
+                app.up(process.as_deref(), &detach, &detach)
+            }
             ProcessesCommand::Down {} => app.down(),
         },
         Commands::Inputs { command } => match command {
@@ -818,7 +820,7 @@ impl App {
         }
 
         if self.has_processes()? {
-            self.up(None, &true)?;
+            self.up(None, &true, &false);
         }
 
         let result = {
@@ -911,7 +913,7 @@ impl App {
         Ok(())
     }
 
-    fn up(&mut self, process: Option<&str>, detach: &bool) -> Result<()> {
+    fn up(&mut self, process: Option<&str>, detach: &bool, log_to_file: &bool) -> Result<()> {
         self.assemble()?;
         if !self.has_processes()? {
             self.logger
@@ -973,19 +975,27 @@ impl App {
             if *detach {
                 let log_file = std::fs::File::create(self.processes_log())
                     .expect("Failed to create PROCESSES_LOG");
-                let process = cmd
-                    .stdout(log_file.try_clone().expect("Failed to clone Stdio"))
-                    .stderr(log_file)
-                    .spawn()
-                    .expect("Failed to spawn process");
+                let process = if !*log_to_file {
+                    cmd.stdout(std::process::Stdio::inherit())
+                        .stderr(std::process::Stdio::inherit())
+                        .spawn()
+                        .expect("Failed to spawn process")
+                } else {
+                    cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
+                        .stderr(log_file)
+                        .spawn()
+                        .expect("Failed to spawn process")
+                };
 
                 std::fs::write(self.processes_pid(), process.id().to_string())
                     .expect("Failed to write PROCESSES_PID");
                 self.logger.info(&format!("PID is {}", process.id()));
-                self.logger.info(&format!(
-                    "See logs:  $ tail -f {}",
-                    self.processes_log().display()
-                ));
+                if *log_to_file {
+                    self.logger.info(&format!(
+                        "See logs:  $ tail -f {}",
+                        self.processes_log().display()
+                    ));
+                }
                 self.logger.info("Stop:      $ devenv processes stop");
             } else {
                 cmd.exec();

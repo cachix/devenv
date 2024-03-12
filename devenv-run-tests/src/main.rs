@@ -106,5 +106,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!();
     println!("Ran {} tests, {} failed.", num_tests, num_failed_tests);
-    Ok(())
+
+    if num_failed_tests > 0 {
+        Err("Some tests failed".into())
+    } else {
+        Ok(())
+    }
 }
