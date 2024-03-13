@@ -34,6 +34,17 @@ struct Cli {
     #[arg(short, long, help = "Enable debug log level.")]
     verbose: bool,
 
+    #[arg(short = 'j', long, help = "Maximum number of Nix builds at any time.", default_value_t = max_jobs())]
+    max_jobs: u8,
+
+    #[arg(
+        short = 'j',
+        long,
+        help = "Maximum number CPU cores being used by a single build..",
+        default_value = "2"
+    )]
+    cores: u8,
+
     #[arg(short, long, default_value_t = default_system())]
     system: String,
 
@@ -376,7 +387,7 @@ impl App {
         for filename in REQUIRED_FILES {
             let file_path = target.join(filename);
             if file_path.exists() {
-                panic!("File already exists {}", file_path.display());
+                bail!("File already exists {}", file_path.display());
             }
         }
 
@@ -404,10 +415,10 @@ impl App {
             if !status.success() {
                 match status.code() {
                     Some(code) => {
-                        panic!("direnv allow failed with code: {code}!");
+                        bail!("direnv allow failed with code: {code}!");
                     }
                     None => {
-                        panic!("direnv allow failed!");
+                        bail!("direnv allow failed!");
                     }
                 }
             }
@@ -1034,7 +1045,7 @@ impl App {
 
     fn assemble(&mut self) -> Result<()> {
         if !PathBuf::from("devenv.nix").exists() {
-            panic!(indoc::indoc! {"
+            bail!(indoc::indoc! {"
             File devenv.nix does not exist. To get started, run:
 
                 $ devenv init
@@ -1232,4 +1243,12 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     }
 
     (to_gc, removed_symlinks)
+}
+
+fn max_jobs() -> u8 {
+    let num_cpus = std::thread::available_parallelism().unwrap_or_else(|e| {
+        eprintln!("Failed to get number of logical CPUs: {}", e);
+        std::num::NonZeroUsize::new(1).unwrap()
+    });
+    (num_cpus.get() / 2).try_into().unwrap()
 }

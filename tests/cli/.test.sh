@@ -1,8 +1,6 @@
 set -xe 
 
-# TODO: provide devenv cli via inputs
-export PATH=$(pwd)/../../result/bin:$PATH
-
+rm devenv.yaml || true
 devenv build languages.python.package
 devenv shell ls -- -la | grep ".test.sh" 
 devenv shell ls ../ | grep "cli"

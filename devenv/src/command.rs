@@ -109,6 +109,9 @@ impl App {
     ) -> Result<std::process::Command> {
         let cmd = if command.starts_with("nix") {
             let mut flags = NIX_FLAGS.to_vec();
+            flags.push("--max-jobs");
+            let max_jobs = self.cli.max_jobs.to_string();
+            flags.push(&max_jobs);
 
             // handle --nix-option key value
             for chunk in self.cli.nix_option.chunks_exact(2) {
