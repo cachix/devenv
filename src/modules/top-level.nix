@@ -196,6 +196,7 @@ in
     ];
     # use builtins.toPath to normalize path if root is "/" (container)
     devenv.state = builtins.toPath (config.devenv.dotfile + "/state");
+    devenv.dotfile = lib.mkDefault (builtins.toPath (config.devenv.root + "/.devenv"));
     devenv.profile = profile;
 
     env.DEVENV_PROFILE = config.devenv.profile;
