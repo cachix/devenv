@@ -15,8 +15,6 @@ jobs:
       matrix:
         os: [[self-hosted, linux, X64], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
     runs-on: ${{ matrix.os }}
-    outputs:
-      bin: ${{ steps.build.outputs.bin }}
     steps:
     - uses: actions/checkout@v4
     - uses: cachix/install-nix-action@v26
@@ -34,6 +32,7 @@ jobs:
     - name: Run tests
       run: ./result/bin/devenv test
   tests:
+    needs: build
     strategy:
       fail-fast: false
       matrix:
@@ -50,8 +49,8 @@ jobs:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
-        nix-store -r ${{ needs.build.outputs.bin }}
-        PATH=${{ needs.build.outputs.bin }}/bin:$PATH ${{ needs.build.outputs.bin }}/bin/devenv-run-tests tests
+        nix build
+        PATH=$PWD/result/bin:$PATH devenv-run-tests tests
   pin:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
@@ -89,8 +88,8 @@ jobs:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
-        nix-store -r ${{ needs.build.outputs.bin }}
-        PATH=${{ needs.build.outputs.bin }}/bin:$PATH ${{ needs.build.outputs.bin }}/bin/devenv-run-tests --only ${{ matrix.example }} examples
+        nix build
+        PATH=$PWD/result/bin:$PATH devenv-run-tests --only ${{ matrix.example }} examples
   direnv:
     name: direnv (${{ join(matrix.os) }})
     needs: build
@@ -116,8 +115,8 @@ jobs:
         EOF
 
         devenv_dir=$PWD
-        export PATH=${{ needs.build.outputs.bin }}/bin:$PATH
-        nix-store -r ${{ needs.build.outputs.bin }}
+        export PATH=$PWD/result/bin:$PATH
+        nix build
 
         pushd examples/simple
           devenv inputs add devenv path:$devenv_dir?dir=src/modules
@@ -141,7 +140,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix-store -r ${{ needs.build.outputs.bin }}
+    - run: nix build
     - run: |
-        nix shell nixpkgs#zsh -c zsh -c "${{ needs.build.outputs.bin }}/bin/devenv version"
-        nix shell nixpkgs#fish -c fish -c "${{ needs.build.outputs.bin }}/bin/devenv version"
+        nix shell nixpkgs#zsh -c zsh -c ./result/bin/devenv version
+        nix shell nixpkgs#fish -c fish -c ./result/bin/devenv version
