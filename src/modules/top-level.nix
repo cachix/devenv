@@ -34,6 +34,8 @@ let
         ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
     else lib.trivial.showWarnings config.warnings;
+
+  q = lib.escapeShellArg;
 in
 {
   options = {
@@ -122,6 +124,11 @@ in
         internal = true;
       };
 
+      runtime = lib.mkOption {
+        type = types.str;
+        internal = true;
+      };
+
       profile = lib.mkOption {
         type = types.package;
         internal = true;
@@ -163,8 +170,23 @@ in
     devenv.state = config.devenv.dotfile + "/state";
     devenv.profile = profile;
 
+    # The path has to be
+    # - unique to each DEVENV_ROOT to let multiple devenv environments coexist
+    # - deterministic so that it won't change constantly
+    # - short so that unix domain sockets won't hit the path length limit
+    # - free to create as an unprivileged user across OSes
+    devenv.runtime =
+      let
+        hashedRoot = builtins.hashString "sha256" config.devenv.root;
+
+        # same length as git's abbreviated commit hashes
+        shortHash = builtins.substring 0 7 hashedRoot;
+      in
+      "/tmp/devenv-${shortHash}";
+
     env.DEVENV_PROFILE = config.devenv.profile;
     env.DEVENV_STATE = config.devenv.state;
+    env.DEVENV_RUNTIME = config.devenv.runtime;
     env.DEVENV_DOTFILE = config.devenv.dotfile;
     env.DEVENV_ROOT = config.devenv.root;
 
@@ -192,6 +214,10 @@ in
       mkdir -p .devenv
       rm -f .devenv/profile
       ln -s ${profile} .devenv/profile
+
+      mkdir -p ${q config.devenv.runtime}
+      rm -f ${q config.devenv.dotfile}/run
+      ln -s ${q config.devenv.runtime} ${q config.devenv.dotfile}/run
     '';
 
     shell = performAssertions (
