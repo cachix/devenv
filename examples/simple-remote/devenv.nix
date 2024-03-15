@@ -1,5 +1,5 @@
-{ lib, ... }:
+{ pkgs, ... }:
 
 {
-  pre-commit.hooks.statix.enable = lib.mkForce false;
+  env.GREET2 = "Hello from Nix!";
 }
