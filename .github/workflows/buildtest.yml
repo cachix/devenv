@@ -70,9 +70,7 @@ jobs:
       run: |
         mkdir -p ~/.config/nixpkgs
         echo '{ allowAliases = false; }' > ~/.config/nixpkgs/config.nix
-    - run: |
-        nix build
-        ./result/bin/devenv-run-tests --only ${{ matrix.example }} examples
+    - run: PATH=$PWD/result/bin:$PATH ./result/bin/devenv-run-tests --only ${{ matrix.example }} examples
   direnv:
     name: direnv (${{ join(matrix.os) }})
     needs: build
@@ -91,23 +89,21 @@ jobs:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: |
-        mv ./examples/simple/devenv.yaml ./examples/simple/devenv.yaml.orig
-        nix run nixpkgs#gawk -- '
-          { print }
-          /^inputs:$/ {
-            print "  devenv:";
-            print "    url: path:../../?dir=src/modules";
-          }
-        ' ./examples/simple/devenv.yaml.orig > ./examples/simple/devenv.yaml
-        nix profile remove '.*'
-        nix profile install . 'nixpkgs#direnv' 
         mkdir -p ~/.config/direnv/
         cat > ~/.config/direnv/direnv.toml << 'EOF'
         [global]
         strict_env = true
         EOF
-        direnv allow ./examples/simple
-        direnv exec ./examples/simple true
+
+        nix build
+        devenv_dir=$PWD
+        export PATH=$PWD/result/bin:$PATH
+
+        pushd examples/simple
+          devenv inputs add devenv path:$devenv_dir?dir=src/modules
+          nix shell nixpkgs#direnv -c direnv allow .
+          nix shell nixpkgs#direnv -c direnv exec . true
+        popd
   fish-zsh:
     name: zsh/fish (${{ join(matrix.os) }})
     needs: build
