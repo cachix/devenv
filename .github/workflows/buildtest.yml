@@ -15,6 +15,8 @@ jobs:
       matrix:
         os: [[self-hosted, linux, X64], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
     runs-on: ${{ matrix.os }}
+    outputs:
+      bin: ${{ steps.build.outputs.bin }}
     steps:
     - uses: actions/checkout@v4
     - uses: cachix/install-nix-action@v26
@@ -25,11 +27,31 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix build
-    - name: Run tests
+    - id: build
       run: |
-        ./result/bin/devenv test
-        #PATH=$PWD/result/bin:$PATH ./result/bin/devenv-run-tests tests
+        bin=$(nix build --print-out-paths)
+        echo "bin=$bin" >> $GITHUB_OUTPUT
+    - name: Run tests
+      run: ./result/bin/devenv test
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [[self-hosted, linux, X64], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: cachix/install-nix-action@v26
+      with:
+        extra_nix_config: |
+          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+    - uses: cachix/cachix-action@v14
+      with:
+        name: devenv
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    - run: |
+        nix-store -r ${{ needs.build.outputs.bin }}
+        PATH=${{ needs.build.outputs.bin }}/bin:$PATH ${{ needs.build.outputs.bin }}/bin/devenv-run-tests tests
   pin:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
@@ -66,8 +88,9 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix build
-    - run: PATH=$PWD/result/bin:$PATH ./result/bin/devenv-run-tests --only ${{ matrix.example }} examples
+    - run: |
+        nix-store -r ${{ needs.build.outputs.bin }}
+        PATH=${{ needs.build.outputs.bin }}/bin:$PATH ${{ needs.build.outputs.bin }}/bin/devenv-run-tests --only ${{ matrix.example }} examples
   direnv:
     name: direnv (${{ join(matrix.os) }})
     needs: build
@@ -92,9 +115,9 @@ jobs:
         strict_env = true
         EOF
 
-        nix build
         devenv_dir=$PWD
-        export PATH=$PWD/result/bin:$PATH
+        export PATH=${{ needs.build.outputs.bin }}/bin:$PATH
+        nix-store -r ${{ needs.build.outputs.bin }}
 
         pushd examples/simple
           devenv inputs add devenv path:$devenv_dir?dir=src/modules
@@ -118,7 +141,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - run: nix build
+    - run: nix-store -r ${{ needs.build.outputs.bin }}
     - run: |
-        nix shell nixpkgs#zsh -c zsh -c "./result/bin/devenv version"
-        nix shell nixpkgs#fish -c fish -c "./result/bin/devenv version"
+        nix shell nixpkgs#zsh -c zsh -c "${{ needs.build.outputs.bin }}/bin/devenv version"
+        nix shell nixpkgs#fish -c fish -c "${{ needs.build.outputs.bin }}/bin/devenv version"
