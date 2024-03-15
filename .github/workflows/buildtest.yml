@@ -44,7 +44,7 @@ jobs:
       uses: actions/checkout@v4
     - id: set-examples
       run: |
-        json=$(tree -J -L 1 examples | jq -c '[.[0].contents[] | .name]')
+        json=$(nix shell nixpkgs#tree -c tree -J -L 1 examples | nix shell nixpkgs#jq -c jq -c '[.[0].contents[] | .name]')
         echo "examples=$json" >> $GITHUB_OUTPUT
   examples:
     name: ${{ matrix.example }} (${{ join(matrix.os) }})
@@ -66,10 +66,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - name: Disable package aliases 
-      run: |
-        mkdir -p ~/.config/nixpkgs
-        echo '{ allowAliases = false; }' > ~/.config/nixpkgs/config.nix
+    - run: nix build
     - run: PATH=$PWD/result/bin:$PATH ./result/bin/devenv-run-tests --only ${{ matrix.example }} examples
   direnv:
     name: direnv (${{ join(matrix.os) }})
