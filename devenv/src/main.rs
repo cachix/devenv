@@ -856,10 +856,6 @@ impl App {
             self.down()?;
         }
 
-        tmpdir
-            .close()
-            .expect("Failed to remove temporary directory");
-
         if !result.status.success() {
             self.logger.error("Tests failed :(");
             bail!("Tests failed");
