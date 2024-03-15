@@ -39,6 +39,11 @@
 
 ```yaml
 allowUnfree: true
+allowBroken: true
+clean:
+  enabled: true
+  keep:
+    - EDITOR
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
