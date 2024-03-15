@@ -4,6 +4,10 @@ let
   cfg = config.services.postgres;
   types = lib.types;
 
+  q = lib.escapeShellArg;
+
+  runtimeDir = "${config.env.DEVENV_RUNTIME}/postgres";
+
   postgresPkg =
     if cfg.extensions != null then
       if builtins.hasAttr "withPackages" cfg.package
@@ -64,7 +68,7 @@ let
   runInitialScript =
     if cfg.initialScript != null then
       ''
-        echo ${lib.escapeShellArg cfg.initialScript} | psql --dbname postgres
+        echo ${q cfg.initialScript} | psql --dbname postgres
       ''
     else
       "";
@@ -102,21 +106,13 @@ let
       echo "PostgreSQL is setting up the initial database."
       echo
       OLDPGHOST="$PGHOST"
-      PGHOST=$(mktemp -d "$DEVENV_STATE/pg-init-XXXXXX")
+      PGHOST=${q runtimeDir}
 
-      function remove_tmp_pg_init_sock_dir() {
-        if [[ -d "$1" ]]; then
-          rm -rf "$1"
-        fi
-      }
-      trap "remove_tmp_pg_init_sock_dir '$PGHOST'" EXIT
-
-      pg_ctl -D "$PGDATA" -w start -o "-c unix_socket_directories=$PGHOST -c listen_addresses= -p ${toString cfg.port}"
+      pg_ctl -D "$PGDATA" -w start -o "-c unix_socket_directories=${runtimeDir} -c listen_addresses= -p ${toString cfg.port}"
       ${setupInitialDatabases}
 
       ${runInitialScript}
       pg_ctl -D "$PGDATA" -m fast -w stop
-      remove_tmp_pg_init_sock_dir "$PGHOST"
       PGHOST="$OLDPGHOST"
       unset OLDPGHOST
     else
@@ -128,6 +124,7 @@ let
   '';
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail
+    mkdir -p ${q runtimeDir}
     ${setupScript}/bin/setup-postgres
     exec ${postgresPkg}/bin/postgres
   '';
@@ -285,14 +282,13 @@ in
     packages = [ postgresPkg startScript ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
-    env.PGHOST = config.env.PGDATA;
+    env.PGHOST = runtimeDir;
     env.PGPORT = cfg.port;
 
     services.postgres.settings = {
       listen_addresses = cfg.listen_addresses;
       port = cfg.port;
-      # relative to PGDATA
-      unix_socket_directories = lib.mkDefault ".";
+      unix_socket_directories = lib.mkDefault runtimeDir;
     };
 
     processes.postgres = {
