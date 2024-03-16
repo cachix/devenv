@@ -16,7 +16,7 @@
   enterShell = ''
     if [ ! -d "blog" ]; then
       gem install rails
-      rails new blog -d=postgresql
+      rails new blog --database=postgresql --force
     fi
     export PATH="$DEVENV_ROOT/blog/bin:$PATH"
     pushd blog
