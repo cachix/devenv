@@ -41,6 +41,11 @@ Points to `$DEVENV_ROOT/.devenv`.
 
 Points to `$DEVENV_DOTFILE/state`.
 
+### $DEVENV_RUNTIME
+
+Points to a temporary directory with a path that's unique to each `$DEVENV_ROOT`.
+It's similar in purpose to `/run`.
+
 ### $DEVENV_PROFILE
 
 Points to the Nix store path that has final profile of packages/scripts provided by devenv.
