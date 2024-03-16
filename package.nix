@@ -4,11 +4,12 @@ pkgs.rustPlatform.buildRustPackage {
   pname = "devenv";
   version = "1.0.0";
 
-  src = builtins.path {
-    path = ./.;
-    filter = path: type:
-      path != "Cargo.lock" || path != "Cargo.toml" || path != "src/devenv";
-  };
+  src = pkgs.lib.sourceByRegex ./. [
+    "Cargo.toml"
+    "Cargo.lock"
+    "devenv(/\.*)?"
+    "devenv-run-tests(/\.*)?"
+  ];
 
   cargoLock = {
     lockFile = ./Cargo.lock;

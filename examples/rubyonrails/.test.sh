@@ -2,9 +2,9 @@
 set -ex
 
 pushd blog
-    wait_for_port 5100
+    wait_for_port 3000
     rails db:create
-    curl -s http://localhost:5100/ | grep "version"
+    curl -s http://localhost:3000/ | grep "version"
 popd
 
 # make sure puma was compiled with ssl
