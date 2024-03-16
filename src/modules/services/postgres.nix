@@ -56,7 +56,10 @@ let
         cfg.initialDatabases)
     else
       lib.optionalString cfg.createDatabase ''
-        echo "CREATE DATABASE ''${USER:-$(id -nu)};" | psql --dbname postgres'';
+        psql --dbname postgres << EOF
+        CREATE DATABASE "''${USER:-$(id -nu)}";
+        EOF
+      '';
 
   runInitialScript =
     if cfg.initialScript != null then
