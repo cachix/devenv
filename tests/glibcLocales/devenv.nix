@@ -1,5 +1,5 @@
 {
   enterTest = ''
-    locale -a | grep "en_US.UTF-8"
+    locale -a | grep -E '(en_US.UTF-8|en_US.utf8)'
   '';
 }
