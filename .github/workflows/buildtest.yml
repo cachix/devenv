@@ -142,5 +142,5 @@ jobs:
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     - run: nix build
     - run: |
-        nix shell nixpkgs#zsh -c zsh -c ./result/bin/devenv version
-        nix shell nixpkgs#fish -c fish -c ./result/bin/devenv version
+        nix shell nixpkgs#zsh -c zsh -c "./result/bin/devenv version"
+        nix shell nixpkgs#fish -c fish -c "./result/bin/devenv version"
