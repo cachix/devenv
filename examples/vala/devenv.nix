@@ -3,7 +3,7 @@
 {
   packages = with pkgs; [
     # Check Vala code files for code-style errors
-    vala-lint
+    # vala-lint
   ];
 
   languages = {
