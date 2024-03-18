@@ -165,6 +165,12 @@ in
         internal = true;
       };
 
+      tmpdir = lib.mkOption {
+        type = types.str;
+        internal = true;
+        default = "/tmp";
+      };
+
       profile = lib.mkOption {
         type = types.package;
         internal = true;
@@ -207,18 +213,18 @@ in
     devenv.profile = profile;
 
     # The path has to be
-    # - unique to each DEVENV_ROOT to let multiple devenv environments coexist
+    # - unique to each DEVENV_STATE to let multiple devenv environments coexist
     # - deterministic so that it won't change constantly
     # - short so that unix domain sockets won't hit the path length limit
     # - free to create as an unprivileged user across OSes
     devenv.runtime =
       let
-        hashedRoot = builtins.hashString "sha256" config.devenv.root;
+        hashedRoot = builtins.hashString "sha256" config.devenv.state;
 
         # same length as git's abbreviated commit hashes
         shortHash = builtins.substring 0 7 hashedRoot;
       in
-      "/tmp/devenv-${shortHash}";
+      "${config.devenv.tmpdir}/devenv-${shortHash}";
 
     env.DEVENV_PROFILE = config.devenv.profile;
     env.DEVENV_STATE = config.devenv.state;
