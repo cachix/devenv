@@ -3,7 +3,7 @@ use miette::{bail, Result};
 use std::env;
 use std::os::unix::process::CommandExt;
 
-const NIX_FLAGS: [&str; 11] = [
+const NIX_FLAGS: [&str; 12] = [
     "--show-trace",
     "--extra-experimental-features",
     "nix-command",
@@ -17,6 +17,8 @@ const NIX_FLAGS: [&str; 11] = [
     "--option",
     "eval-cache",
     "false",
+    // always build all dependencies and report errors at the end
+    "--keep-going",
 ];
 
 pub struct Options {
