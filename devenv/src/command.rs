@@ -137,8 +137,9 @@ impl App {
 
             if self.cli.impure || self.config.impure {
                 flags.push("--impure");
+                // set a dummy value to overcome https://github.com/NixOS/nix/issues/10247
+                cmd.env("NIX_PATH", ":");
             }
-
             cmd.args(flags);
             cmd
         } else {
