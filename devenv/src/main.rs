@@ -392,6 +392,8 @@ impl App {
         }
 
         for filename in REQUIRED_FILES {
+            self.logger.info(&format!("Creating {}", filename));
+
             let path = PROJECT_DIR
                 .get_file(filename)
                 .unwrap_or_else(|| panic!("missing {} in the executable", filename));
@@ -399,30 +401,18 @@ impl App {
             // write path.contents to target/filename
             let target_path = target.join(filename);
             std::fs::write(target_path, path.contents()).expect("Failed to write file");
-
-            // check if direnv executable is available
-            let Ok(direnv) = which::which("direnv") else {
-                return Ok(());
-            };
-
-            // run direnv allow
-            let status = std::process::Command::new(direnv)
-                .arg("allow")
-                .current_dir(&target)
-                .status()
-                .expect("Failed to run direnv allow");
-
-            if !status.success() {
-                match status.code() {
-                    Some(code) => {
-                        bail!("direnv allow failed with code: {code}!");
-                    }
-                    None => {
-                        bail!("direnv allow failed!");
-                    }
-                }
-            }
         }
+
+        // check if direnv executable is available
+        let Ok(direnv) = which::which("direnv") else {
+            return Ok(());
+        };
+
+        // run direnv allow
+        let status = std::process::Command::new(direnv)
+            .arg("allow")
+            .current_dir(&target)
+            .exec();
         Ok(())
     }
 

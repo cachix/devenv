@@ -118,10 +118,9 @@ jobs:
         export PATH=$PWD/result/bin:$PATH
         nix build
 
-        pushd examples/simple
-          devenv inputs add devenv path:$devenv_dir?dir=src/modules
-          nix shell nixpkgs#direnv -c direnv allow .
-          nix shell nixpkgs#direnv -c direnv exec . true
+        tmp="$(mktemp -d)"
+        pushd "$tmp"
+          nix shell nixpkgs#direnv -c devenv --override-input devenv path:$devenv_dir?dir=src/modules init
         popd
   fish-zsh:
     name: zsh/fish (${{ join(matrix.os) }})
