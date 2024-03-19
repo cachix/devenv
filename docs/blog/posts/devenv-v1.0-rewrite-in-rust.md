@@ -12,18 +12,15 @@ We've just [released devenv 1.0](https://devenv.sh/)! 🎉
 This is a rewrite of the CLI to ~~[Python](https://github.com/cachix/devenv/pull/745)~~ [Rust](https://github.com/cachix/devenv/pull/1005),
 which brings with it many new features and improvements.
 
-I'd like to thank [mightyiam](https://app.reclaim.ai/m/mightyiam/flexible) for a week long
-pair Rust programming session at [Thaiger Sprint](https://thaigersprint.org).
+I'd like to thank [mightyiam](https://app.reclaim.ai/m/mightyiam/flexible) for a week-long, Rust pair-programming session at [Thaiger Sprint](https://thaigersprint.org).
 
 Note: Read the migration guide at the end of this post, as 1.0 is not entirely backwards compatible.
 
 ## Why rewrite twice?
 
-When I started to write this blog post for the Python rewrite, I came up with only excuses as to why it's not fast and realized that we're breaking our promise to you.
+When I started to write this blog post for the Python rewrite, I came up with only excuses as to why it's not fast and realized that we were simply breaking our promise to you.
 
-The second reason is that in the Nix community there was a lot of controversy around flakes (that's for another blog post); the [tvix](https://tvix.dev/) people decided to do something about it and rewrite Nix in Rust.
-
-This leaves us with the opportunity to use the same libraries and tools as tvix in the future.
+The second reason is that in the Nix community there has been a lot of controversy surrounding flakes (that's for another blog post); the [tvix](https://tvix.dev/) people decided to do something about it and rewrite Nix in Rust. This leaves us with the opportunity to use the same libraries and tools as tvix in the future.
 
 ## What's new?
 
@@ -70,7 +67,7 @@ Generated containers now run as a plain user—improving security and unlocking 
 
 ### DEVENV_RUNTIME
 
-Due to [socket path limits](https://github.com/cachix/devenv/issues/540), we've introduced the `DEVENV_RUNTIME` environment variable: pointing to `$XDG_RUNTIME_DIR` and falling back to `/tmp`.
+Due to [socket path limits](https://github.com/cachix/devenv/issues/540), we've introduced the `DEVENV_RUNTIME` environment variable: pointing to `$XDG_RUNTIME_DIR` by default and falling back to `/tmp`.
 
 ### first-class support for Python native libraries
 
@@ -107,11 +104,11 @@ To build any attribute in `devenv.nix`:
 
 `devenv build languages.rust.package`
 
-To run the environment as cleanly as possible while keeping variables:
+To run the environment as cleanly as possible while keeping specific variables:
 
 `devenv shell --clean EDITOR,PAGER`
 
-We've also tweaked the default number of cores to 2, and max-jobs to half of the number of cpus.
+We've also tweaked the default number of cores to 2, and max-jobs to half of the number of CPUs.
 It is impossible to find an ideal default, but we've found that too much parallelism hurts performance—running out of memory is a common issue.
 
 ... plus a number of other additions:
@@ -170,7 +167,7 @@ Options:
 
 ### Breaking changes
 
-- `.env` files must start with the `.env` prefix
+- `.env` files must start with the `.env` prefix.
 - We've finally removed the need for the `--impure` flag, meaning that devenv is now fully hermetic by default.
 
   Things like `builtins.currentSystem` no longer work—you'll have to use `pkgs.stdenv.system`.
