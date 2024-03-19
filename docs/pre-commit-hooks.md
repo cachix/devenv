@@ -17,6 +17,17 @@ We recommend a two-step approach for integrating your linters and formatters.
     mdsh.enable = true;
     # format Python code
     black.enable = true;
+
+    # override a package with a different version
+    ormolu.enable = true;
+    ormolu.package = pkgs.haskellPackages.ormolu;
+    
+    # some hooks have more than one package, like clippy:
+    clippy.enable = true;
+    clippy.packageOverrides.cargo = pkgs.cargo;
+    clippy.packageOverrides.clippy = tools.clippy;
+    # some hooks provide settings
+    clippy.settings.allFeatures = true;
   };
 }
 ```
