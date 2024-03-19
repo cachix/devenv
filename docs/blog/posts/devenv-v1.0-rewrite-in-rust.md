@@ -20,7 +20,7 @@ Note: Read the migration guide at the end of this post, as 1.0 is not entirely b
 
 When I started to write this blog post for the Python rewrite, I came up with only excuses as to why it's not fast and realized that we were simply breaking our promise to you.
 
-The second reason is that in the Nix community there has been a lot of controversy surrounding flakes (that's for another blog post); the [tvix](https://tvix.dev/) people decided to do something about it and rewrite Nix in Rust. This leaves us with the opportunity to use the same libraries and tools as tvix in the future.
+The second reason is that in the Nix community there has been a lot of controversy surrounding flakes (that's for another blog post); the [tvix](https://tvix.dev/) developers decided to do something about it and rewrite Nix in Rust. This leaves us with the opportunity to use the same libraries and tools as tvix in the future.
 
 ## What's new?
 
@@ -222,6 +222,6 @@ Would it be cool if devenv could map language specific dependencies to your loca
 
 ### Voilà
 
-Give devenv a try, and hop on to [our discord](https://discord.com/invite/naMgvexb6q) to let us know how it goes!
+Give [devenv a try](https://devenv.sh/getting-started/), and hop on to [our discord](https://discord.com/invite/naMgvexb6q) to let us know how it goes!
 
 Domen
