@@ -27,6 +27,14 @@
     docker run -it nixos/nix
     ```
 
+!!! note
+
+    We recommended to use experimental installer on macOS to avoid issues with Apple Scilicon chips:
+
+    ```
+    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
+    ```
+
 ### 2. Install [Cachix](https://cachix.org)
 
 Recommended, speeds up the installation by providing binaries.
