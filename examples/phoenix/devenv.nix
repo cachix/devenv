@@ -18,8 +18,8 @@
     if [ ! -d "hello" ]; then
       mix local.hex --force
       mix local.rebar --force
-      mix archive.install hex phx_new
-      mix phx.new hello
+      mix archive.install --force hex phx_new
+      mix phx.new --install hello
     fi
   '';
 }
