@@ -90,11 +90,10 @@ Given a Git repository, create the initial structure:
 
 ```shell-session
 $ devenv init
-Creating .envrc
-Creating devenv.nix
-Creating devenv.yaml
-Appending .devenv* to .gitignore
-Done.
+• Creating .envrc
+• reating devenv.nix
+• Creating devenv.yaml
+• Creating .gitignore
 ```
 
 ## Commands
