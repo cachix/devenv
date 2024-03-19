@@ -63,6 +63,7 @@
                 devenv.cliVersion = version;
                 devenv.root = devenv_root;
                 devenv.dotfile = pkgs.lib.mkForce (devenv_root + "/" + devenv_dotfile_string);
+                devenv.tmpdir = tmpdir;
               }
               (if container_name != null then {
                 container.isBuilding = pkgs.lib.mkForce true;

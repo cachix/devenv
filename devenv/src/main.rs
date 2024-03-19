@@ -18,7 +18,7 @@ use std::{
 };
 
 // templates
-const FLAKE_TMP: &str = include_str!("flake.tmpl.nix");
+const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 // project vars
@@ -1068,6 +1068,7 @@ impl App {
             devenv_dotfile = ./{};
             devenv_dotfile_string = \"{}\";
             container_name = {};
+            tmpdir = \"{}\";
             ",
             crate_version!(),
             self.cli.system,
@@ -1077,9 +1078,11 @@ impl App {
             self.container_name
                 .as_deref()
                 .map(|s| format!("\"{}\"", s))
-                .unwrap_or_else(|| "null".to_string())
+                .unwrap_or_else(|| "null".to_string()),
+            std::env::var("XDG_RUNTIME_DIR")
+                .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())),
         );
-        let flake = FLAKE_TMP.replace("__DEVENV_VARS__", &vars);
+        let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         std::fs::write(DEVENV_FLAKE, flake).expect("Failed to write flake.nix");
         Ok(())
     }

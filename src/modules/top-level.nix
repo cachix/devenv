@@ -168,7 +168,12 @@ in
       tmpdir = lib.mkOption {
         type = types.str;
         internal = true;
-        default = "/tmp";
+        default =
+          let
+            xdg = builtins.getEnv "XDG_RUNTIME_DIR";
+            tmp = builtins.getEnv "TMPDIR";
+          in
+          if xdg != "" then xdg else if tmp != "" then tmp else "/tmp";
       };
 
       profile = lib.mkOption {
