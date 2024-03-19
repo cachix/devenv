@@ -1,3 +1,5 @@
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
+  autopatchelf:
+    url: github:bobvanderlinden/autopatchelf/7fe81db2d94989e41e52fcab65c9d0a88d46e25c

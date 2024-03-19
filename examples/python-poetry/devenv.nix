@@ -11,5 +11,6 @@
   languages.python = {
     enable = true;
     poetry.enable = true;
+    venv.patchelf = true;
   };
 }

@@ -7,5 +7,6 @@
 
     venv.enable = true;
     venv.requirements = ./requirements.txt;
+    venv.patchelf = true;
   };
 }
