@@ -7,20 +7,20 @@ authors:
 
 # devenv 1.0: Rewrite in Rust
 
-We've just [released devenv 1.0](https://devenv.sh/)! 🎉
+We have just released [devenv 1.0](https://devenv.sh/)! 🎉
 
 This is a rewrite of the CLI to ~~[Python](https://github.com/cachix/devenv/pull/745)~~ [Rust](https://github.com/cachix/devenv/pull/1005),
 which brings with it many new features and improvements.
 
-I'd like to thank [mightyiam](https://app.reclaim.ai/m/mightyiam/flexible) for a week-long, Rust pair-programming session at [Thaiger Sprint](https://thaigersprint.org).
+I would like to thank [mightyiam](https://app.reclaim.ai/m/mightyiam/flexible) for a week-long, Rust pair-programming session at [Thaiger Sprint](https://thaigersprint.org).
 
 Note: Read the migration guide at the end of this post, as 1.0 is not entirely backwards compatible.
 
 ## Why rewrite twice?
 
-When I started to write this blog post for the Python rewrite, I came up with only excuses as to why it's not fast and realized that we were simply breaking our promise to you.
+When I started to write this blog post for the Python rewrite, I came up with only excuses as to why it is not fast and realized that we were simply breaking our promise to you.
 
-The second reason is that in the Nix community there has been a lot of controversy surrounding flakes (that's for another blog post); the [tvix](https://tvix.dev/) developers decided to do something about it and rewrite Nix in Rust. This leaves us with the opportunity to use the same libraries and tools as tvix in the future.
+The second reason is that in the Nix community there has been a lot of controversy surrounding flakes (that's for another blog post); the [tvix](https://tvix.dev/) developers decided to do something about it and rewrite Nix in Rust. This leaves us with the opportunity in the future to use the same libraries and tools as tvix.
 
 ## What's new?
 
@@ -34,9 +34,9 @@ and their logs.
 
 ### Testing infrastructure
 
-Testing has been a major focus of this release, and we've added a number of features to make it easier to write and run tests.
+Testing has been a major focus of this release, and a number of features have been added to make it easier to write and run tests.
 
-There's a new `enterTest` attribute in `devenv.nix` that allows you to define testing logic:
+The new `enterTest` attribute in `devenv.nix` allows you to define testing logic:
 
 ```nix
 { pkgs, ... }: {
@@ -57,25 +57,25 @@ Read more about this in the [testing documentation](/tests).
 ### devenv-nixpkgs
 
 Since [nixpkgs-unstable](https://status.nixos.org/) has fairly few tests,
-we've created [devenv-nixpkgs](https://github.com/cachix/devenv-nixpkgs) to run tests on top of `nixpkgs-unstable`—applying patches we're upstreaming to address any issues.
+we have created [devenv-nixpkgs](https://github.com/cachix/devenv-nixpkgs) to run tests on top of `nixpkgs-unstable`—applying patches we are upstreaming to address any issues.
 
 We run around 300 tests across different languages and processes to ensure all regressions are caught.
 
-### non-root containers
+### Non-root containers
 
 Generated containers now run as a plain user—improving security and unlocking the ability to run software that forbids root.
 
 ### DEVENV_RUNTIME
 
-Due to [socket path limits](https://github.com/cachix/devenv/issues/540), we've introduced the `DEVENV_RUNTIME` environment variable: pointing to `$XDG_RUNTIME_DIR` by default and falling back to `/tmp`.
+Due to [socket path limits](https://github.com/cachix/devenv/issues/540), the `DEVENV_RUNTIME` environment variable has been introduced: pointing to `$XDG_RUNTIME_DIR` by default and falling back to `/tmp`.
 
-### first-class support for Python native libraries
+### First-class support for Python native libraries
 
 This one was the hardest nut to crack.
 
 Nix is known to provide a poor experience when using tools like pip.
 
-We've put in a lot of work here, finally making it possible to use native libraries in Python without any extra effort:
+A lot of work has been put in here, finally making it possible to use native libraries in Python without any extra effort:
 
 ```nix
 { pkgs, lib, ... }: {
@@ -108,8 +108,8 @@ To run the environment as cleanly as possible while keeping specific variables:
 
 `devenv shell --clean EDITOR,PAGER`
 
-We've also tweaked the default number of cores to 2, and max-jobs to half of the number of CPUs.
-It is impossible to find an ideal default, but we've found that too much parallelism hurts performance—running out of memory is a common issue.
+The default number of cores has been tweaked to 2, and `max-jobs` to half of the number of CPUs.
+It is impossible to find an ideal default, but we have found that too much parallelism hurts performance—running out of memory is a common issue.
 
 ... plus a number of other additions:
 
@@ -159,7 +159,7 @@ Options:
 
 ## Migration guide
 
-### Deprecations:
+### Deprecations
 
 - `devenv container --copy <name>` has been renamed to `devenv container copy <name>`.
 - `devenv container --docker-run <name>` has been renamed to `devenv container run <name>`.
@@ -168,9 +168,9 @@ Options:
 ### Breaking changes
 
 - `.env` files must start with the `.env` prefix.
-- We've finally removed the need for the `--impure` flag, meaning that devenv is now fully hermetic by default.
+- The need for the `--impure` flag has finally been removed, meaning that devenv is now fully hermetic by default.
 
-  Things like `builtins.currentSystem` no longer work—you'll have to use `pkgs.stdenv.system`.
+  Things like `builtins.currentSystem` no longer work—you will have to use `pkgs.stdenv.system`.
 
   If you need to relax the hermeticity of the environment you can use `devenv shell --impure`.
 
@@ -178,7 +178,7 @@ Options:
 
 ## Looking ahead
 
-There are a number of features we're looking to add in the future—please vote on the issues:
+There are a number of features that we are looking to add in the future—please vote on the issues:
 
 ### Running devenv in a container
 
@@ -206,7 +206,7 @@ but it [should be possible](https://github.com/cachix/devenv/issues/997).
 
 ### Native mapping of dependencies
 
-Would it be cool if devenv could map language specific dependencies to your local system? In this example, devenv should know that `pillow` requires `pkgs.cairo`:
+Wouldn't it be cool if devenv could map language-specific dependencies to your local system? In this example, devenv should be able to determine that `pillow` requires `pkgs.cairo`:
 
 ```nix
 { pkgs, lib, ... }: {
@@ -222,6 +222,6 @@ Would it be cool if devenv could map language specific dependencies to your loca
 
 ### Voilà
 
-Give [devenv a try](https://devenv.sh/getting-started/), and hop on to [our discord](https://discord.com/invite/naMgvexb6q) to let us know how it goes!
+[Give devenv a try](https://devenv.sh/getting-started/), and [hop on to our discord](https://discord.com/invite/naMgvexb6q) to let us know how it goes!
 
 Domen
