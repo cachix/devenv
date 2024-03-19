@@ -13,4 +13,5 @@ fi
 echo "$PATH" | grep -- "$CARGO_INSTALL_ROOT/bin"
 
 cd app
-cargo run
+# cargo run
+wasm-pack build

@@ -32,6 +32,16 @@ in
       '';
     };
 
+    targets = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      defaultText = lib.literalExpression ''[ ]'';
+      description = ''
+        List of extra [targets](https://github.com/nix-community/fenix#supported-platforms-and-targets)
+        to install. Defaults to only the native target. 
+      '';
+    };
+
     channel = lib.mkOption {
       type = lib.types.enum [ "nixpkgs" "stable" "beta" "nightly" ];
       default = "nixpkgs";
@@ -79,7 +89,10 @@ in
           export PATH="$PATH:$CARGO_INSTALL_ROOT/bin"
         '';
 
-        packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
+        packages =
+          # If there are targets we want to add the whole toolchain instead
+          # TODO: It might always be fine to add the whole toolchain when not using `nixpkgs`
+          lib.optionals (cfg.targets == [ ]) (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
         # enable compiler tooling by default to expose things like cc
@@ -113,10 +126,21 @@ in
           let
             toolchain =
               if cfg.channel == "nightly"
-              then rustPackages.latest
-              else rustPackages.${cfg.channel};
+              then
+                rustPackages.latest
+              else
+                rustPackages.${cfg.channel}
+            ;
           in
           (builtins.mapAttrs (_: pkgs.lib.mkDefault) toolchain);
+
+        packages = [
+          (rustPackages.combine
+            (
+              (map (c: config.languages.rust.toolchain.${c}) cfg.components) ++
+              (map (t: rustPackages.targets.${t}.latest.rust-std) cfg.targets)
+            ))
+        ];
       }
     ))
   ];

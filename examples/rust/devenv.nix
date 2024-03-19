@@ -6,6 +6,8 @@
     # https://devenv.sh/reference/options/#languagesrustchannel
     channel = "nightly";
 
+    targets = [ "wasm32-unknown-unknown" ];
+
     components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
   };
 
@@ -14,7 +16,9 @@
   #  clippy.enable = true;
   #};
 
-  packages = lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
+  packages = [
+    pkgs.wasm-pack
+  ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
     frameworks.Security
   ]);
 }
