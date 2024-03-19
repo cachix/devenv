@@ -19,6 +19,7 @@ theme:
   features:
     - tabs
     - instant
+    - search.share
     - navigation.tabs
     - navigation.expand
     - navigation.instant
