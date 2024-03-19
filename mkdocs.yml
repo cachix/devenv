@@ -111,3 +111,4 @@ markdown_extensions:
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist
+  - pymdownx.tilde
