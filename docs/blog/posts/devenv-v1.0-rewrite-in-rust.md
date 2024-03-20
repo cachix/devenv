@@ -1,6 +1,6 @@
 ---
 draft: false
-date: 2023-03-20
+date: 2024-03-20
 authors:
   - domenkozar
 ---
@@ -20,7 +20,7 @@ Note: Read the migration guide at the end of this post, as 1.0 is not entirely b
 
 When I started to write this blog post for the Python rewrite, I came up with only excuses as to why it is not fast and realized that we were simply breaking our promise to you.
 
-The second reason is that in the Nix community there has been a lot of controversy surrounding flakes (that's for another blog post); the [tvix](https://tvix.dev/) developers decided to do something about it two years ago and started a rewrite Nix in Rust. This leaves us with the opportunity in the future to use the same libraries and tools in Rust.
+The second reason is that in the Nix community there has been a lot of controversy surrounding flakes (that's for another blog post); two years ago, the [tvix](https://tvix.dev/) developers decided to do something about it and started a rewrite of Nix in Rust. This leaves us with the opportunity in the future to use the same Rust libraries and tooling.
 
 ## What's new?
 
@@ -50,7 +50,7 @@ The new `enterTest` attribute in `devenv.nix` allows you to define testing logic
 
   enterTest = ''
     wait_for_port 5432
-    ncdu --version | grep "ncdu 2.2" 
+    ncdu --version | grep "ncdu 2.2"
   '';
 }
 ```
@@ -61,8 +61,7 @@ If you have any [processes](/processes) defined, they will be started and stoppe
 
 Read more about this in the [testing documentation](/tests).
 
-This allows you to run tests with all your tooling and processes running,
-extremely convenient for integration and functional tests.
+This allows for executing tests with all of your tooling and processes running—extremely convenient for integration and functional tests.
 
 ### devenv-nixpkgs
 
