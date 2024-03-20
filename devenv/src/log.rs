@@ -41,7 +41,7 @@ impl Drop for LogProgress {
     }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Level {
     Error,
     Warn,
@@ -49,6 +49,7 @@ pub enum Level {
     Debug,
 }
 
+#[derive(Clone)]
 pub struct Logger {
     level: Level,
 }

@@ -4,6 +4,12 @@ let
 in
 {
   options.cachix = {
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      description = "Whether to enable Cachix integration.";
+      default = true;
+    };
+
     pull = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       description = "What caches to pull from.";
@@ -16,7 +22,7 @@ in
     };
   };
 
-  config = {
+  config = lib.mkIf cfg.enable {
     cachix.pull = [ "devenv" ]
       ++ (lib.optionals (cfg.push != null) [ config.cachix.push ]);
 

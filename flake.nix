@@ -22,6 +22,11 @@
     url = "github:domenkozar/nix/devenv-2.21";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.cachix = {
+    url = "github:cachix/cachix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
 
   outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }@inputs:
     let

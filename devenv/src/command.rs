@@ -1,5 +1,7 @@
 use crate::App;
 use miette::{bail, Result};
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::env;
 use std::os::unix::process::CommandExt;
 
@@ -23,18 +25,14 @@ const NIX_FLAGS: [&str; 12] = [
 
 pub struct Options {
     pub replace_shell: bool,
-    pub use_cachix: bool,
     pub logging: bool,
-    pub dont_exit: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Options {
             replace_shell: false,
-            use_cachix: false,
             logging: true,
-            dont_exit: false,
         }
     }
 }
@@ -46,6 +44,11 @@ impl App {
         args: &[&str],
         options: &Options,
     ) -> Result<std::process::Output> {
+        let prev_logging = self.logger.clone();
+        if !options.logging {
+            self.logger = crate::log::Logger::new(crate::log::Level::Error);
+        }
+
         let mut cmd = self.prepare_command(command, args)?;
 
         if options.replace_shell {
@@ -72,19 +75,14 @@ impl App {
                 cmd.output().expect("Failed to run command")
             };
             if !result.status.success() {
+                let code = match result.status.code() {
+                    Some(code) => format!("with exit code {}", code),
+                    None => "without exit code".to_string(),
+                };
                 if options.logging {
                     println!();
-                    let code = match result.status.code() {
-                        Some(code) => format!("with exit code {}", code),
-                        None => "without exit code".to_string(),
-                    };
                     self.logger.error(&format!(
-                        "Command `{} {}` failed {code} and produced the following output:\n{}\n{}",
-                        cmd.get_program().to_string_lossy(),
-                        cmd.get_args()
-                            .map(|arg| arg.to_str().unwrap())
-                            .collect::<Vec<_>>()
-                            .join(" "),
+                        "Command produced the following output:\n{}\n{}",
                         String::from_utf8_lossy(&result.stdout),
                         String::from_utf8_lossy(&result.stderr),
                     ));
@@ -93,12 +91,16 @@ impl App {
                     self.logger.info("Starting Nix debugger ...");
                     cmd.arg("--debugger").exec();
                 }
-                if !options.dont_exit {
-                    bail!("Command failed")
-                } else {
-                    Ok(result)
-                }
+                bail!(format!(
+                    "Command `{} {}` failed with {code}",
+                    cmd.get_program().to_string_lossy(),
+                    cmd.get_args()
+                        .map(|arg| arg.to_str().unwrap())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ))
             } else {
+                self.logger = prev_logging;
                 Ok(result)
             }
         }
@@ -143,6 +145,64 @@ impl App {
                 cmd.env("NIX_PATH", ":");
             }
             cmd.args(flags);
+
+            if args
+                .first()
+                .map(|arg| arg == &"build" || arg == &"print-dev-env")
+                .unwrap_or(false)
+            {
+                let cachix_caches = self.get_cachix_caches()?;
+
+                // handle cachix.pull
+                let pull_caches = cachix_caches
+                    .caches
+                    .pull
+                    .iter()
+                    .map(|cache| format!("https://{}.cachix.org", cache))
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                cmd.arg("--option");
+                cmd.arg("extra-substituters");
+                cmd.arg(pull_caches);
+                cmd.arg("--option");
+                cmd.arg("extra-trusted-public-keys");
+                cmd.arg(
+                    cachix_caches
+                        .known_keys
+                        .values()
+                        .cloned()
+                        .collect::<Vec<String>>()
+                        .join(" "),
+                );
+
+                // handle cachix.push
+                if let Some(push_cache) = &cachix_caches.caches.push {
+                    if let Ok(_) = env::var("CACHIX_AUTH_TOKEN") {
+                        let args = cmd
+                            .get_args()
+                            .map(|arg| arg.to_str().unwrap())
+                            .collect::<Vec<_>>();
+                        let envs = cmd.get_envs().collect::<Vec<_>>();
+                        let command_name = cmd.get_program().to_string_lossy();
+                        let mut newcmd = std::process::Command::new(format!(
+                            "cachix watch-exec {} {}",
+                            push_cache, command_name
+                        ));
+                        newcmd.args(args);
+                        for (key, value) in envs {
+                            if let Some(value) = value {
+                                newcmd.env(key, value);
+                            }
+                        }
+                        cmd = newcmd;
+                    } else {
+                        self.logger.warn(&format!(
+                            "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
+                            push_cache
+                        ));
+                    }
+                }
+            }
             cmd
         } else {
             let mut cmd = std::process::Command::new(command);
@@ -163,4 +223,134 @@ impl App {
 
         Ok(cmd)
     }
+
+    fn get_cachix_caches(&mut self) -> Result<CachixCaches> {
+        match &self.cachix_caches {
+            Some(caches) => Ok(caches.clone()),
+            None => {
+                let no_logging = Options {
+                    logging: false,
+                    ..Default::default()
+                };
+                let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
+
+                let caches_raw =
+                    self.run_nix("nix", &["eval", ".#devenv.cachix", "--json"], &no_logging)?;
+
+                let cachix =
+                    serde_json::from_slice(&caches_raw.stdout).expect("Failed to parse JSON");
+
+                let known_keys =
+                    if let Ok(known_keys) = std::fs::read_to_string(&self.cachix_trusted_keys) {
+                        serde_json::from_str(&known_keys).expect("Failed to parse JSON")
+                    } else {
+                        HashMap::new()
+                    };
+
+                let mut caches = CachixCaches {
+                    caches: cachix,
+                    known_keys,
+                };
+
+                let mut new_known_keys: HashMap<String, String> = HashMap::new();
+                for name in caches.caches.pull.iter() {
+                    if !caches.known_keys.contains_key(name) {
+                        let resp = reqwest::blocking::get(&format!(
+                            "https://cachix.org/api/v1/cache/{}",
+                            name
+                        ))
+                        .expect("Failed to get cache");
+                        if resp.status().is_client_error() {
+                            self.logger.error(&format!(
+                                "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
+                                name
+                            ));
+                            self.logger
+                                .error("To create a cache, go to https://app.cachix.org/.");
+                            bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
+                        } else {
+                            let resp_json =
+                                serde_json::from_slice::<CachixResponse>(&resp.bytes().unwrap())
+                                    .expect("Failed to parse JSON");
+                            new_known_keys
+                                .insert(name.clone(), resp_json.publicSigningKeys[0].clone());
+                        }
+                    }
+                }
+
+                if !caches.caches.pull.is_empty() {
+                    // parse trusted from store and assert it's 1
+                    if serde_json::from_slice::<StorePing>(&store.stdout)
+                        .expect("Failed to parse JSON")
+                        .trusted
+                        != 1
+                    {
+                        bail!(indoc::formatdoc!(
+                            "You're not a trusted user of the Nix store. You have the following options:
+
+                            1. Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
+
+                            trusted-users = root {}
+
+                            2. Add binary caches to /etc/nix/nix.conf yourself:
+
+                            extra-substituters = {}
+                            extra-trusted-public-keys = {}
+
+                            3. Disable Cachix in `devenv.nix`:
+
+                            {{
+                                cachix.enable = false;
+                            }}
+                        ", whoami::username()
+                        , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
+                        , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
+                        ));
+                    }
+
+                    self.logger
+                        .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
+                    if !new_known_keys.is_empty() {
+                        for (name, pubkey) in new_known_keys.iter() {
+                            self.logger.info(&format!(
+                                "Trusting {}.cachix.org on first use with the public key {}",
+                                name, pubkey
+                            ));
+                        }
+                        caches.known_keys.extend(new_known_keys);
+                    }
+                    std::fs::write(
+                        &self.cachix_trusted_keys,
+                        serde_json::to_string(&caches.known_keys).unwrap(),
+                    )
+                    .expect("Failed to write cachix caches to file")
+                }
+
+                self.cachix_caches = Some(caches.clone());
+                Ok(caches)
+            }
+        }
+    }
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Cachix {
+    pull: Vec<String>,
+    push: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct CachixCaches {
+    caches: Cachix,
+    known_keys: HashMap<String, String>,
+}
+
+#[derive(Deserialize, Clone)]
+struct CachixResponse {
+    publicSigningKeys: Vec<String>,
+}
+
+#[derive(Deserialize, Clone)]
+struct StorePing {
+    trusted: u8,
 }
