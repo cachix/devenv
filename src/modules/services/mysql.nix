@@ -8,6 +8,8 @@ with lib; let
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
   configFile = format.generate "my.cnf" cfg.settings;
+  # Generate an empty config file to not resolve globally installed MySQL config like in /etc/my.cnf or ~/.my.cnf
+  emptyConfig = format.generate "empty.cnf" { };
   mysqlOptions =
     if !cfg.useDefaultsExtraFile then
       "--defaults-file=${configFile}"
@@ -19,8 +21,16 @@ with lib; let
     exec ${cfg.package}/bin/mysql ${mysqlOptions} "$@"
   '';
 
+  mysqlWrappedEmpty = pkgs.writeShellScriptBin "mysql" ''
+    exec ${cfg.package}/bin/mysql --defaults-file=${emptyConfig} "$@"
+  '';
+
   mysqladminWrapped = pkgs.writeShellScriptBin "mysqladmin" ''
     exec ${cfg.package}/bin/mysqladmin ${mysqlOptions} "$@"
+  '';
+
+  mysqladminWrappedEmpty = pkgs.writeShellScriptBin "mysqladmin" ''
+    exec ${cfg.package}/bin/mysqladmin --defaults-file=${emptyConfig} "$@"
   '';
 
   mysqldumpWrapped = pkgs.writeShellScriptBin "mysqldump" ''
@@ -42,14 +52,14 @@ with lib; let
     # and hide the temp database from the configureScript by setting a custom socket
     nohup ${cfg.package}/bin/mysqld ${mysqldOptions} --socket="$MYSQL_HOME/config.sock" --skip-networking --default-time-zone=SYSTEM &
 
-    while ! MYSQL_PWD="" ${mysqladminWrapped}/bin/mysqladmin --socket="$MYSQL_HOME/config.sock" ping -u root --silent; do
+    while ! MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin --socket="$MYSQL_HOME/config.sock" ping -u root --silent; do
       sleep 1
     done
 
-    ${cfg.package}/bin/mysql_tzinfo_to_sql ${pkgs.tzdata}/share/zoneinfo/ | MYSQL_PWD="" ${mysqlWrapped}/bin/mysql --socket="$MYSQL_HOME/config.sock" -u root mysql
+    ${cfg.package}/bin/mysql_tzinfo_to_sql ${pkgs.tzdata}/share/zoneinfo/ | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql --socket="$MYSQL_HOME/config.sock" -u root mysql
 
     # Shutdown the temp database
-    MYSQL_PWD="" ${mysqladminWrapped}/bin/mysqladmin --socket="$MYSQL_HOME/config.sock" shutdown -u root
+    MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin --socket="$MYSQL_HOME/config.sock" shutdown -u root
   '';
 
   startScript = pkgs.writeShellScriptBin "start-mysql" ''
@@ -68,7 +78,7 @@ with lib; let
     PATH="${lib.makeBinPath [cfg.package pkgs.coreutils]}:$PATH"
     set -euo pipefail
 
-    while ! MYSQL_PWD="" ${mysqladminWrapped}/bin/mysqladmin ping -u root --silent; do
+    while ! MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin ping -u root --silent; do
       echo "Sleeping 1s while we wait for MySQL to come up"
       sleep 1
     done
@@ -76,7 +86,7 @@ with lib; let
     ${concatMapStrings (database: ''
         # Create initial databases
         exists="$(
-          MYSQL_PWD="" ${mysqlWrapped}/bin/mysql -u root -sB information_schema \
+          MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -sB information_schema \
             <<< 'select count(*) from schemata where schema_name = "${database.name}"'
         )"
         if [[ "$exists" -eq 0 ]]; then
@@ -94,7 +104,7 @@ with lib; let
               cat ${database.schema}/mysql-databases/*.sql
           fi
         ''}
-          ) | MYSQL_PWD="" ${mysqlWrapped}/bin/mysql -u root -N
+          ) | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -N
         else
           echo "Database ${database.name} exists, skipping creation."
         fi
@@ -109,7 +119,7 @@ with lib; let
             echo 'GRANT ${permission} ON ${database} TO `${user.name}`@`localhost`;'
           '')
           user.ensurePermissions)}
-        ) | MYSQL_PWD="" ${mysqlWrapped}/bin/mysql -u root -N
+        ) | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -N
       '')
       cfg.ensureUsers}
 
