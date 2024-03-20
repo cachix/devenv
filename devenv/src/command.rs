@@ -80,7 +80,7 @@ impl App {
                     None => "without exit code".to_string(),
                 };
                 if options.logging {
-                    println!();
+                    eprintln!();
                     self.logger.error(&format!(
                         "Command produced the following output:\n{}\n{}",
                         String::from_utf8_lossy(&result.stdout),

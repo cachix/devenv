@@ -11,11 +11,11 @@ pub struct LogProgress {
 impl LogProgress {
     pub fn new(message: &str, newline: bool) -> LogProgress {
         let prefix = Blue.paint("•");
-        print!("{} {} ...", prefix, message);
+        eprint!("{} {} ...", prefix, message);
         if newline {
-            println!();
+            eprintln!();
         }
-        std::io::stdout().flush().unwrap();
+        std::io::stderr().flush().unwrap();
         LogProgress {
             message: message.to_string(),
             start: Some(Instant::now()),
@@ -32,7 +32,7 @@ impl Drop for LogProgress {
         } else {
             Green.paint("✔")
         };
-        println!(
+        eprintln!(
             "\r{} {} in {:.1}s.",
             prefix,
             self.message,
@@ -82,19 +82,19 @@ impl Logger {
         match level {
             Level::Info => {
                 let prefix = Blue.paint("•");
-                println!("{} {}", prefix, message);
+                eprintln!("{} {}", prefix, message);
             }
             Level::Error => {
                 let prefix = Red.paint("✖");
-                println!("{} {}", prefix, message);
+                eprintln!("{} {}", prefix, message);
             }
             Level::Warn => {
                 let prefix = Yellow.paint("•");
-                println!("{} {}", prefix, message);
+                eprintln!("{} {}", prefix, message);
             }
             Level::Debug => {
                 let prefix = DarkGray.paint("•");
-                println!("{} {}", prefix, message);
+                eprintln!("{} {}", prefix, message);
             }
         }
     }

@@ -676,7 +676,7 @@ impl App {
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
         let end = std::time::Instant::now();
 
-        println!();
+        eprintln!();
         self.logger.info(&format!(
             "Done. Successfully removed {} symlinks in {}s.",
             to_gc.len() - after_gc.len(),
@@ -1084,12 +1084,12 @@ impl App {
             args.push("--json");
         }
 
+        let env = self.run_nix("nix", &args, &command::Options::default())?;
+
         let options = command::Options {
             logging: false,
             ..command::Options::default()
         };
-
-        let env = self.run_nix("nix", &args, &options)?;
 
         let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
         self.run_nix("nix-env", &args, &options)?;
