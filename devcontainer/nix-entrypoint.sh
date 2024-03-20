@@ -4,6 +4,7 @@ set +e
 if ! pidof nix-daemon > /dev/null 2>&1; then
     start_ok=false
     if [ "$(id -u)" = "0" ]; then
+        # shellcheck disable=SC1091
         # shellcheck source=/dev/null
         ( . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh; /nix/var/nix/profiles/default/bin/nix-daemon > /tmp/nix-daemon.log 2>&1 ) &
         # shellcheck disable=SC2181

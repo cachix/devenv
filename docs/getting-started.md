@@ -27,6 +27,14 @@
     docker run -it nixos/nix
     ```
 
+!!! note
+
+    We recommended to use experimental installer on macOS to avoid issues with Apple Scilicon chips:
+
+    ```
+    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
+    ```
+
 ### 2. Install [Cachix](https://cachix.org)
 
 Recommended, speeds up the installation by providing binaries.
@@ -82,18 +90,17 @@ Given a Git repository, create the initial structure:
 
 ```shell-session
 $ devenv init
-Creating .envrc
-Creating devenv.nix
-Creating devenv.yaml
-Appending .devenv* to .gitignore
-Done.
+• Creating .envrc
+• reating devenv.nix
+• Creating devenv.yaml
+• Creating .gitignore
 ```
 
 ## Commands
 
-- ``devenv ci`` builds your developer environment and makes sure that all checks pass. Useful to run in your continuous integration environment.
+- ``devenv test`` builds your developer environment and makes sure that all checks pass. Useful to run in your continuous integration environment.
 - ``devenv shell`` activates your developer environment.
-- ``devenv search NAME`` searches packages matching NAME in Nixpkgs input.
+- ``devenv search <NAME>`` searches packages matching NAME in Nixpkgs input.
 - ``devenv update`` updates and pins inputs from ``devenv.yaml`` into ``devenv.lock``.
 - ``devenv gc`` [deletes unused environments](garbage-collection.md) to save disk space.
 - ``devenv up`` starts [processes](processes.md).

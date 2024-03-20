@@ -19,6 +19,7 @@ theme:
   features:
     - tabs
     - instant
+    - search.share
     - navigation.tabs
     - navigation.expand
     - navigation.instant
@@ -40,7 +41,9 @@ nav:
       - Processes: processes.md
       - Services: services.md
       - Containers: containers.md
+      - Binary Caching: binary-caching.md
       - Pre-Commit Hooks: pre-commit-hooks.md
+      - Tests: tests.md
       - Common Patterns: common-patterns.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
@@ -80,6 +83,7 @@ plugins:
       background_color: "#FBFBFB"
       color: "#425C82"
   rss:
+    use_git: false
     match_path: blog/posts/.*
     date_from_meta:
       as_creation: date
@@ -108,3 +112,4 @@ markdown_extensions:
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist
+  - pymdownx.tilde
