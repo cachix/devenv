@@ -72,8 +72,8 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                         "--override-input",
                         "devenv",
                         &format!("path:{cwd}?dir=src/modules"),
+                        "test",
                     ])
-                    .arg("test")
                     .current_dir(&path)
                     .status()?;
 
