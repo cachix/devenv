@@ -75,3 +75,7 @@ ncdu 2.2
 • Stopping process with PID 113105
 ✔ Tests passed. in 0.0s.
 ```
+
+## Provided functions for enterTest
+
+- `wait_for_port <port> <timeout>`: waits for a port to be open

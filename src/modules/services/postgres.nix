@@ -282,7 +282,10 @@ in
     packages = [ postgresPkg startScript ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
-    env.PGHOST = runtimeDir;
+    env.PGHOST =
+      if cfg.listen_addresses == ""
+      then runtimeDir
+      else cfg.listen_addresses;
     env.PGPORT = cfg.port;
 
     services.postgres.settings = {
@@ -299,7 +302,7 @@ in
         shutdown.signal = 2;
 
         readiness_probe = {
-          exec.command = "${postgresPkg}/bin/pg_isready -h $PGDATA -d template1";
+          exec.command = "${postgresPkg}/bin/pg_isready -d template1";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
