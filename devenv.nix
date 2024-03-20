@@ -8,6 +8,7 @@
     pkgs.xorg.libxcb
     pkgs.yaml2json
     pkgs.tesh
+    pkgs.openssl
   ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
     frameworks.SystemConfiguration
   ]);

@@ -241,6 +241,8 @@ struct App {
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
+    cachix_trusted_keys: PathBuf,
+    cachix_caches: Option<command::CachixCaches>,
 }
 
 fn main() -> Result<()> {
@@ -263,12 +265,12 @@ fn main() -> Result<()> {
     let devenv_dot_gc = devenv_root.join(".devenv").join("gc");
     std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
     let devenv_dotfile = devenv_root.join(".devenv");
+    let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
     let logger = log::Logger::new(level);
     let mut config = config::Config::load()?;
     for input in cli.override_input.chunks_exact(2) {
         config.add_input(&input[0].clone(), &input[1].clone(), &[]);
     }
-
     let mut app = App {
         cli,
         config,
@@ -279,6 +281,8 @@ fn main() -> Result<()> {
         devenv_dotfile,
         devenv_dot_gc,
         devenv_home_gc,
+        cachix_trusted_keys,
+        cachix_caches: None,
     };
 
     match app.cli.command.clone() {
@@ -409,7 +413,7 @@ impl App {
         };
 
         // run direnv allow
-        let status = std::process::Command::new(direnv)
+        std::process::Command::new(direnv)
             .arg("allow")
             .current_dir(&target)
             .exec();
@@ -520,11 +524,6 @@ impl App {
     }
 
     fn container_build(&mut self, name: &str) -> Result<String> {
-        let options = command::Options {
-            use_cachix: true,
-            ..command::Options::default()
-        };
-
         let _logprogress = log::LogProgress::new(&format!("Building {name} container"), true);
 
         self.assemble()?;
@@ -537,7 +536,7 @@ impl App {
                 "--no-link",
                 &format!(".#devenv.containers.{name}.derivation"),
             ],
-            &options,
+            &command::Options::default(),
         )?;
 
         let container_store_path_string = String::from_utf8_lossy(&container_store_path.stdout)
@@ -556,11 +555,6 @@ impl App {
     ) -> Result<()> {
         let spec = self.container_build(name)?;
 
-        let options = command::Options {
-            use_cachix: true,
-            ..command::Options::default()
-        };
-
         let _logprogress = log::LogProgress::new(&format!("Copying {name} container"), false);
 
         let copy_script = self.run_nix(
@@ -571,7 +565,7 @@ impl App {
                 "--no-link",
                 &format!(".#devenv.containers.{name}.copyScript"),
             ],
-            &options,
+            &command::Options::default(),
         )?;
 
         let copy_script = String::from_utf8_lossy(&copy_script.stdout)
@@ -612,11 +606,6 @@ impl App {
         };
         self.container_copy(name, copy_args, Some("docker-daemon:"))?;
 
-        let options = command::Options {
-            use_cachix: true,
-            ..command::Options::default()
-        };
-
         let _logprogress = log::LogProgress::new(&format!("Running {name} container"), false);
 
         let run_script = self.run_nix(
@@ -627,7 +616,7 @@ impl App {
                 "--no-link",
                 &format!(".#devenv.containers.{name}.dockerRun"),
             ],
-            &options,
+            &command::Options::default(),
         )?;
 
         let run_script = String::from_utf8_lossy(&run_script.stdout)
@@ -708,10 +697,7 @@ impl App {
                 "--print-out-paths",
                 ".#optionsJSON",
             ],
-            &command::Options {
-                use_cachix: true,
-                ..command::Options::default()
-            },
+            &command::Options::default(),
         )?;
 
         let options_str = std::str::from_utf8(&options.stdout).unwrap().trim();
@@ -821,7 +807,7 @@ impl App {
         }
 
         if self.has_processes()? {
-            self.up(None, &true, &false);
+            self.up(None, &true, &false)?;
         }
 
         let result = {
@@ -922,10 +908,6 @@ impl App {
         {
             let _logprogress = log::LogProgress::new("Building processes", true);
 
-            let options = command::Options {
-                use_cachix: true,
-                ..command::Options::default()
-            };
             let proc_script = self.run_nix(
                 "nix",
                 &[
@@ -934,7 +916,7 @@ impl App {
                     "--print-out-paths",
                     ".#procfileScript",
                 ],
-                &options,
+                &command::Options::default(),
             )?;
 
             proc_script_string = String::from_utf8_lossy(&proc_script.stdout)
@@ -1090,7 +1072,7 @@ impl App {
     fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<(Vec<u8>, PathBuf)> {
         self.assemble()?;
         let _logprogress = if logging {
-            Some(log::LogProgress::new("Building shell", false))
+            Some(log::LogProgress::new("Building shell", true))
         } else {
             None
         };
@@ -1102,12 +1084,13 @@ impl App {
             args.push("--json");
         }
 
-        let env_ = self.run_nix("nix", &args, &command::Options::default())?;
-
         let options = command::Options {
             logging: false,
             ..command::Options::default()
         };
+
+        let env = self.run_nix("nix", &args, &options)?;
+
         let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
         self.run_nix("nix-env", &args, &options)?;
         let now_ns = get_now_with_nanoseconds();
@@ -1118,7 +1101,7 @@ impl App {
             &self.devenv_home_gc.join(target),
         );
 
-        Ok((env_.stdout, gc_root))
+        Ok((env.stdout, gc_root))
     }
 }
 
