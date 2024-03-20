@@ -48,7 +48,7 @@
     devenv init "$tmp"
     pushd "$tmp"
       devenv version
-      devenv test --override-input devenv path:${config.devenv.root}?dir=src/modules
+      devenv --override-input devenv path:${config.devenv.root}?dir=src/modules test
     popd
     rm -rf "$tmp"
 
