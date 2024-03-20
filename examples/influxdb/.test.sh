@@ -1,18 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 
-devenv up &
-DEVENV_PID=$!
-export DEVENV_PID
-
-function stop() {
-    pkill -P "$DEVENV_PID"
-}
-
-trap stop EXIT
-
-# We test for the none-default port, configured in the nix file
-timeout 60 bash -c 'until echo > /dev/tcp/localhost/8087; do sleep 0.5; done'
+wait_for_port 8087 60
 
 influx --port 8087 --execute "CREATE DATABASE devenv"
 DATABASES=$(influx  --port 8087 --execute "SHOW DATABASES" | grep devenv)

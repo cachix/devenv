@@ -1,26 +1,33 @@
 { inputs, pkgs, lib, config, ... }:
 
 {
+  env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
+
   packages = [
-    (import ./src/devenv.nix { inherit pkgs; nix = inputs.nix; })
     pkgs.cairo
     pkgs.xorg.libxcb
     pkgs.yaml2json
-  ];
+    pkgs.tesh
+    pkgs.openssl
+  ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
+    frameworks.SystemConfiguration
+  ]);
 
-  languages.nix.enable = true;
+  #languages.nix.enable = true;
+  # for cli
+  languages.rust.enable = true;
+  # for docs
   languages.python.enable = true;
   languages.python.venv.enable = true;
-  languages.python.poetry.enable = true;
+  languages.python.venv.requirements = ./requirements.txt;
 
   devcontainer.enable = true;
-  devcontainer.settings.customizations.vscode.extensions = [ "bbenoist.Nix" ];
+  devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
   difftastic.enable = true;
 
   dotenv.enable = true;
 
   processes.docs.exec = "mkdocs serve";
-  processes.build.exec = "${pkgs.watchexec}/bin/watchexec -e nix nix build";
 
   scripts.devenv-bump-version.exec = ''
     # TODO: ask for the new version
@@ -28,7 +35,7 @@
     echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
     cat mkdocs.yml | yaml2json | jq -r '.extra.devenv.version' > src/modules/latest-version
   '';
-  scripts.devenv-run-tests.exec = ''
+  scripts.devenv-test-cli.exec = ''
     set -xe
     set -o pipefail
 
@@ -40,7 +47,8 @@
     tmp="$(mktemp -d)"
     devenv init "$tmp"
     pushd "$tmp"
-      devenv ci
+      devenv version
+      devenv --override-input devenv path:${config.devenv.root}?dir=src/modules test
     popd
     rm -rf "$tmp"
 
@@ -50,7 +58,7 @@
       nix flake init --template ''${DEVENV_ROOT}#simple
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
+      nix develop --accept-flake-config --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
 
@@ -70,52 +78,16 @@
       nix flake init --template ''${DEVENV_ROOT}#flake-parts
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --impure --command echo nix-develop started succesfully |& tee ./console
+      nix develop --accept-flake-config --impure --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
       # Test that a container can be built
-      nix build --impure .#container-processes
+      if $(uname) == "Linux"
+      then
+        nix build --impure --accept-flake-config --show-trace .#container-processes
+      fi
     popd
     rm -rf "$tmp"
-
-    # TODO: test DIRENV_ACTIVE
-  '';
-  scripts.devenv-test-all-examples.exec = ''
-    for dir in $(ls examples); do
-      devenv-test-example $dir
-    done
-  '';
-  scripts.devenv-test-example.exec = ''
-    # execute all trap_ function on exit
-    trap 'eval $(declare -F | grep -o "trap_[^ ]*" | tr "\n" ";")' EXIT
-
-    set -e
-    example="$PWD/examples/$1"
-    pushd $example
-    mv devenv.yaml devenv.yaml.orig
-    awk '
-      { print }
-      /^inputs:$/ {
-        print "  devenv:";
-        print "    url: path:../../src/modules";
-      }
-    ' devenv.yaml.orig > devenv.yaml
-    trap_restore_yaml() { 
-      mv "$example/devenv.yaml.orig" "$example/devenv.yaml"
-    }
-    devenv ci
-    if [ -f .test.sh ]; then
-      trap_restore_local() { 
-        rm "$example/devenv.local.nix" 
-        rm -rf "$example/.devenv"
-      }
-      # coreutils-full provides timeout on darwin
-      echo "{ pkgs, ... }: { packages = [ pkgs.coreutils-full ]; }" > devenv.local.nix
-      devenv shell ./.test.sh
-    else
-      devenv shell ls
-    fi
-    popd
   '';
   scripts."devenv-generate-doc-options".exec = ''
     set -e
@@ -150,7 +122,9 @@
 
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
-    shellcheck.enable = true;
+    #shellcheck.enable = true;
+    #clippy.enable = true;
+    rustfmt.enable = true;
     #markdownlint.enable = true;
   };
   pre-commit.settings.markdownlint.config = {

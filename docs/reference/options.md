@@ -430,6 +430,21 @@ signed integer
 
 
 
+## containers.\<name>.maxLayers
+
+The maximum number of layers created when the container is created.
+
+*Type:*
+int
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
 ## containers.\<name>.name
 
 Name of the container.

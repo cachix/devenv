@@ -8,7 +8,7 @@ that live in separate folders.
 ```yaml title="devenv.yaml"
 inputs:
   nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
+    url: github:cachix/devenv-nixpkgs/rolling
   devenv:
     url: github:cachix/devenv
 imports:
