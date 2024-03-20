@@ -151,55 +151,63 @@ impl App {
                 .map(|arg| arg == &"build" || arg == &"print-dev-env")
                 .unwrap_or(false)
             {
-                let cachix_caches = self.get_cachix_caches()?;
+                let cachix_caches = self.get_cachix_caches();
 
-                // handle cachix.pull
-                let pull_caches = cachix_caches
-                    .caches
-                    .pull
-                    .iter()
-                    .map(|cache| format!("https://{}.cachix.org", cache))
-                    .collect::<Vec<String>>()
-                    .join(" ");
-                cmd.arg("--option");
-                cmd.arg("extra-substituters");
-                cmd.arg(pull_caches);
-                cmd.arg("--option");
-                cmd.arg("extra-trusted-public-keys");
-                cmd.arg(
-                    cachix_caches
-                        .known_keys
-                        .values()
-                        .cloned()
-                        .collect::<Vec<String>>()
-                        .join(" "),
-                );
+                match cachix_caches {
+                    Err(e) => {
+                        self.logger
+                            .warn("Failed to get cachix caches due to evaluation error");
+                    }
+                    Ok(cachix_caches) => {
+                        // handle cachix.pull
+                        let pull_caches = cachix_caches
+                            .caches
+                            .pull
+                            .iter()
+                            .map(|cache| format!("https://{}.cachix.org", cache))
+                            .collect::<Vec<String>>()
+                            .join(" ");
+                        cmd.arg("--option");
+                        cmd.arg("extra-substituters");
+                        cmd.arg(pull_caches);
+                        cmd.arg("--option");
+                        cmd.arg("extra-trusted-public-keys");
+                        cmd.arg(
+                            cachix_caches
+                                .known_keys
+                                .values()
+                                .cloned()
+                                .collect::<Vec<String>>()
+                                .join(" "),
+                        );
 
-                // handle cachix.push
-                if let Some(push_cache) = &cachix_caches.caches.push {
-                    if let Ok(_) = env::var("CACHIX_AUTH_TOKEN") {
-                        let args = cmd
-                            .get_args()
-                            .map(|arg| arg.to_str().unwrap())
-                            .collect::<Vec<_>>();
-                        let envs = cmd.get_envs().collect::<Vec<_>>();
-                        let command_name = cmd.get_program().to_string_lossy();
-                        let mut newcmd = std::process::Command::new(format!(
-                            "cachix watch-exec {} {}",
-                            push_cache, command_name
-                        ));
-                        newcmd.args(args);
-                        for (key, value) in envs {
-                            if let Some(value) = value {
-                                newcmd.env(key, value);
+                        // handle cachix.push
+                        if let Some(push_cache) = &cachix_caches.caches.push {
+                            if let Ok(_) = env::var("CACHIX_AUTH_TOKEN") {
+                                let args = cmd
+                                    .get_args()
+                                    .map(|arg| arg.to_str().unwrap())
+                                    .collect::<Vec<_>>();
+                                let envs = cmd.get_envs().collect::<Vec<_>>();
+                                let command_name = cmd.get_program().to_string_lossy();
+                                let mut newcmd = std::process::Command::new(format!(
+                                    "cachix watch-exec {} {}",
+                                    push_cache, command_name
+                                ));
+                                newcmd.args(args);
+                                for (key, value) in envs {
+                                    if let Some(value) = value {
+                                        newcmd.env(key, value);
+                                    }
+                                }
+                                cmd = newcmd;
+                            } else {
+                                self.logger.warn(&format!(
+                                    "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
+                                    push_cache
+                                ));
                             }
                         }
-                        cmd = newcmd;
-                    } else {
-                        self.logger.warn(&format!(
-                            "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
-                            push_cache
-                        ));
                     }
                 }
             }
