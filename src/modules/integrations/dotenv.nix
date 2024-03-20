@@ -1,11 +1,11 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, lib, self, ... }:
 
 let
   cfg = config.dotenv;
 
   normalizeFilenames = filenames: if lib.isList filenames then filenames else [ filenames ];
   dotenvFiles = normalizeFilenames cfg.filename;
-  dotenvPaths = map (filename: config.devenv.root + "/" + filename) dotenvFiles;
+  dotenvPaths = map (filename: (self + ("/" + filename))) dotenvFiles;
 
   parseLine = line:
     let
@@ -22,16 +22,19 @@ let
 
   createMissingFileMessage = file:
     let
-      exampleExists = builtins.pathExists (file + ".example");
+      exampleExists = lib.pathExists (file + ".example");
+      filename = builtins.baseNameOf (toString file);
     in
     lib.optionalString (!lib.pathExists file) ''
-      echo "💡 The dotenv file '${file}' was not found."
+      echo "💡 The dotenv file '${filename}' was not found."
       ${lib.optionalString exampleExists ''
+        echo
         echo "   To create this file, you can copy the example file:"
-        echo "   $ cp ${file}.example ${file}"
+        echo
+        echo "   $ cp ${filename}.example ${filename}"
+        echo
       ''}
     '';
-
 in
 {
   options.dotenv = {
@@ -58,15 +61,17 @@ in
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
       env = lib.mapAttrs (name: value: lib.mkDefault value) config.dotenv.resolved;
-      dotenv.resolved = mergeEnvFiles dotenvPaths;
-    })
-    (lib.mkIf (cfg.enable) {
       enterShell = lib.concatStringsSep "\n" (map createMissingFileMessage dotenvPaths);
+      dotenv.resolved = mergeEnvFiles dotenvPaths;
+      assertions = [{
+        assertion = builtins.all (lib.hasPrefix ".env") dotenvFiles;
+        message = "The dotenv filename must start with '.env'.";
+      }];
     })
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell =
         let
-          dotenvFound = lib.any (file: lib.pathExists file) dotenvPaths;
+          dotenvFound = lib.any lib.pathExists dotenvPaths;
         in
         lib.optionalString dotenvFound ''
           echo "💡 A dotenv file was found, while dotenv integration is currently not enabled."

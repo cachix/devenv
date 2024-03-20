@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -ex
-rails new blog -d=postgresql
-devenv up&
-timeout 20 bash -c 'until echo > /dev/tcp/localhost/5100; do sleep 0.5; done'
-(cd blog && rails db:create)
-curl -s http://localhost:5100/ | grep "version"
+
+pushd blog
+    wait_for_port 3000
+    rails db:create
+    curl -s http://localhost:3000/ | grep "version"
+popd
+
+# make sure puma was compiled with ssl
+ruby -rpuma -e 'exit 1 unless Puma.ssl?'

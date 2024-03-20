@@ -6,7 +6,7 @@
     extra-substituters = "https://devenv.cachix.org";
   };
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs.nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
   inputs.pre-commit-hooks = {
     url = "github:cachix/pre-commit-hooks.nix";
     inputs = {
@@ -19,17 +19,20 @@
     flake = false;
   };
   inputs.nix = {
-    url = "github:domenkozar/nix/relaxed-flakes";
+    url = "github:domenkozar/nix/devenv-2.21";
     inputs.nixpkgs.follows = "nixpkgs";
   };
+  inputs.cachix = {
+    url = "github:cachix/cachix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
+
 
   outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }@inputs:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
-      mkPackage = pkgs: import ./src/devenv.nix {
-        inherit pkgs nix;
-      };
+      mkPackage = pkgs: import ./package.nix { inherit pkgs inputs; };
       mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions = pkgs:
         let

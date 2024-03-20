@@ -7,6 +7,7 @@
     cmake --version
   '';
 
+  pre-commit.excludes = [ ".devenv" ];
   pre-commit.hooks = {
     clang-tidy.enable = true;
   };

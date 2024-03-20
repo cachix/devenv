@@ -1,17 +1,14 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   cfg = config.languages.rust;
-  setup = ''
-    inputs:
-      fenix:
-        url: github:nix-community/fenix
-        inputs:
-          nixpkgs:
-            follows: nixpkgs
-  '';
 
-  error = dbg: "To use languages.rust.${dbg}, you need to add the following to your devenv.yaml:\n\n${setup}";
+  fenix = config.lib.getInput {
+    name = "fenix";
+    url = "github:nix-community/fenix";
+    attribute = "languages.rust.version";
+    follows = [ "nixpkgs" ];
+  };
 in
 {
   imports = [
@@ -79,7 +76,7 @@ in
           export PATH="$PATH:$CARGO_INSTALL_ROOT/bin"
         '';
 
-        packages = (builtins.map (c: cfg.toolchain.${c} or (throw (error "toolchain.${c}"))) cfg.components)
+        packages = (builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components)
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
         # enable compiler tooling by default to expose things like cc
@@ -104,9 +101,7 @@ in
     })
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        err = error "channel";
-        fenix = inputs.fenix or (throw err);
-        rustPackages = fenix.packages.${pkgs.stdenv.system} or (throw err);
+        rustPackages = fenix.packages.${pkgs.stdenv.system};
       in
       {
         languages.rust.toolchain =
