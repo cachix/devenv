@@ -1,18 +1,14 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   cfg = config.languages.ruby;
 
-  nixpkgs-ruby = inputs.nixpkgs-ruby or (throw ''
-    To use languages.ruby.version or languages.ruby.versionFile, you need to add the following to your devenv.yaml:
-    
-      inputs:
-        nixpkgs-ruby:
-          url: github:bobvanderlinden/nixpkgs-ruby
-          inputs:
-            nixpkgs:
-              follows: nixpkgs
-  '');
+  nixpkgs-ruby = config.lib.getInput {
+    name = "nixpkgs-ruby";
+    url = "github:bobvanderlinden/nixpkgs-ruby";
+    attribute = "languages.ruby.version or languages.ruby.versionFile";
+    follows = [ "nixpkgs" ];
+  };
 in
 {
   options.languages.ruby = {

@@ -41,6 +41,12 @@ Points to `$DEVENV_ROOT/.devenv`.
 
 Points to `$DEVENV_DOTFILE/state`.
 
+### $DEVENV_RUNTIME
+
+Points to a temporary directory with a path that's unique to each `$DEVENV_ROOT`.
+It's used for storing sockets and other runtime files.
+Defaults to `$XDG_RUNTIME_DIR` and falls back to `$TMPDIR` and finally `/tmp`.
+
 ### $DEVENV_PROFILE
 
 Points to the Nix store path that has final profile of packages/scripts provided by devenv.

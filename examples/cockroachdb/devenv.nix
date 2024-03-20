@@ -1,7 +1,7 @@
-{ ... }:
+{ pkgs, ... }:
 
 {
   services.cockroachdb = {
-    enable = true;
+    enable = pkgs.stdenv.isLinux;
   };
 }

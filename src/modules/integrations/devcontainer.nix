@@ -31,7 +31,7 @@ in
 
         options.updateContentCommand = lib.mkOption {
           type = lib.types.anything;
-          default = "devenv ci";
+          default = "devenv test";
           description = lib.mdDoc ''
             Command to run after container creation.
           '';

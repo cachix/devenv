@@ -1,0 +1,5 @@
+{
+  enterTest = ''
+    echo ${builtins.currentSystem};
+  '';
+}

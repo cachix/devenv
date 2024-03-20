@@ -1,22 +1,18 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 with lib;
 
 let
-  inherit (lib.attrsets) attrValues genAttrs;
+  inherit (lib.attrsets) attrValues;
 
   cfg = config.languages.php;
 
-  setup = ''
-    inputs:
-      phps:
-        url: github:fossar/nix-phps
-        inputs:
-          nixpkgs:
-            follows: nixpkgs
-  '';
-
-  phps = inputs.phps or (throw "To use languages.php.version, you need to add the following to your devenv.yaml:\n\n${setup}");
+  phps = config.lib.getInput {
+    name = "phps";
+    url = "github:fossar/nix-phps";
+    attribute = "languages.php.version";
+    follows = [ "nixpkgs" ];
+  };
 
   filterDefaultExtensions = ext: builtins.length (builtins.filter (inner: inner == ext.extensionName) cfg.disableExtensions) == 0;
 

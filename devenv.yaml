@@ -1,15 +1,8 @@
 inputs:
-  nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
-  nix:
-    url: github:domenkozar/nix/relaxed-flakes
-    inputs:
-      nixpkgs:
-        follows: "nixpkgs"
   devenv:
-    url: path:./src/modules
-  pre-commit-hooks:
-    url: github:cachix/pre-commit-hooks.nix
+    url: path:.?dir=src/modules
+  nix:
+    url: github:domenkozar/nix/devenv-2.21
     inputs:
       nixpkgs:
-        follows: "nixpkgs"
+        follows: nixpkgs

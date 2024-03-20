@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -ex
-[ "$(command -v python)" = "$PWD/.devenv/state/venv/bin/python" ]
-[ "$VIRTUAL_ENV" = "$PWD/.devenv/state/venv" ]
+[ "$(command -v python)" = "$DEVENV_STATE/venv/bin/python" ]
+[ "$VIRTUAL_ENV" = "$DEVENV_STATE/venv" ]
 python --version

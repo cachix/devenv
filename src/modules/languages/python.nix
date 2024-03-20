@@ -1,7 +1,30 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   cfg = config.languages.python;
+  libraries = lib.makeLibraryPath (
+    cfg.libraries
+    ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
+    # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
+    ++ [ pkgs.stdenv.cc.cc.lib ]
+  );
+
+  readlink = "${pkgs.coreutils}/bin/readlink -f ";
+  package = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
+    python = cfg.package;
+    requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
+    makeWrapperArgs = [
+      "--prefix"
+      "LD_LIBRARY_PATH"
+      ":"
+      libraries
+    ] ++ lib.optionals pkgs.stdenv.isDarwin [
+      "--prefix"
+      "DYLD_LIBRARY_PATH"
+      ":"
+      libraries
+    ];
+  };
 
   requirements = pkgs.writeText "requirements.txt" (
     if lib.isPath cfg.venv.requirements
@@ -9,13 +32,11 @@ let
     else cfg.venv.requirements
   );
 
-  nixpkgs-python = inputs.nixpkgs-python or (throw ''
-    To use languages.python.version, you need to add the following to your devenv.yaml:
-
-      inputs:
-        nixpkgs-python:
-          url: github:cachix/nixpkgs-python
-  '');
+  nixpkgs-python = config.lib.getInput {
+    name = "nixpkgs-python";
+    url = "github:cachix/nixpkgs-python";
+    attribute = "languages.python.version";
+  };
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
     # Make sure any tools are not attempting to use the python interpreter from any
@@ -24,46 +45,58 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    if [ ! -L "$VENV_PATH"/devenv-profile ] \
-    || [ "$(${pkgs.coreutils}/bin/readlink "$VENV_PATH"/devenv-profile)" != "${config.devenv.profile}" ]
+    profile_python="$(${readlink} ${package.interpreter})"
+    devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
+    venv_python="$(${readlink} "$devenv_interpreter_path")"
+    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+
+    # recreate venv if necessary
+    if [ -z $venv_python ] || [ $profile_python != $venv_python ]
     then
-      if [ -d "$VENV_PATH" ]
-      then
-        echo "Rebuilding Python venv..."
-        ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
-      fi
+      echo "Python interpreter changed, rebuilding Python venv..."
+      ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      ${cfg.package.interpreter} -m venv "$VENV_PATH"
-      ${pkgs.coreutils}/bin/ln -sf ${config.devenv.profile} "$VENV_PATH"/devenv-profile
+      echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+      ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
+
     source "$VENV_PATH"/bin/activate
-    ${lib.optionalString (cfg.venv.requirements != null) ''
-      "$VENV_PATH"/bin/pip install -r ${requirements} ${lib.optionalString cfg.venv.quiet ''
-        --quiet
-      ''}
-    ''}
+
+    # reinstall requirements if necessary
+    if [ -n "$requirements" ]
+      then
+        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| echo false )"
+        devenv_requirements="$(${readlink} "$devenv_requirements_path")"
+        if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
+          then
+            echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
+            echo "Requirements changed, running pip install -r ${requirements}..."
+           "$VENV_PATH"/bin/pip install -r ${requirements}
+       fi
+    fi
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
-    function _devenv-init-poetry-venv()
+    function _devenv_init_poetry_venv
     {
       # Make sure any tools are not attempting to use the python interpreter from any
       # existing virtual environment. For instance if devenv was started within an venv.
       unset VIRTUAL_ENV
 
       # Make sure poetry's venv uses the configured python executable.
-      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
     }
 
-    function _devenv-poetry-install()
+    function _devenv_poetry_install
     {
       local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments})
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
       local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/.venv/poetry.lock.checksum
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
@@ -87,9 +120,9 @@ let
     then
       echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
     else
-      _devenv-init-poetry-venv
+      _devenv_init_poetry_venv
       ${lib.optionalString cfg.poetry.install.enable ''
-        _devenv-poetry-install
+        _devenv_poetry_install
       ''}
       ${lib.optionalString cfg.poetry.activate.enable ''
         source "$DEVENV_ROOT"/.venv/bin/activate
@@ -106,6 +139,28 @@ in
       default = pkgs.python3;
       defaultText = lib.literalExpression "pkgs.python3";
       description = "The Python package to use.";
+    };
+
+    manylinux.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = pkgs.stdenv.isLinux;
+      description = ''
+        Whether to install manylinux2014 libraries.
+
+        Enabled by default on linux;
+
+        This is useful when you want to use Python wheels that depend on manylinux2014 libraries.
+      '';
+    };
+
+    libraries = lib.mkOption {
+      type = lib.types.listOf lib.types.path;
+      default = [ "${config.devenv.dotfile}/profile" ];
+      description = ''
+        Additional libraries to make available to the Python interpreter.
+
+        This is useful when you want to use Python wheels that depend on native libraries.
+      '';
     };
 
     version = lib.mkOption {
@@ -194,11 +249,14 @@ in
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
     languages.python.package = lib.mkMerge [
-      (lib.mkIf (cfg.version != null) (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
+      (lib.mkIf (cfg.version != null)
+        (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
     ];
 
+    cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
+
     packages = [
-      cfg.package
+      package
     ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
 
     env = lib.optionalAttrs cfg.poetry.enable {
@@ -212,7 +270,7 @@ in
 
     enterShell = lib.concatStringsSep "\n" ([
       ''
-        export PYTHONPATH="$DEVENV_PROFILE/${cfg.package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+        export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
       ''
     ] ++
     (lib.optional cfg.venv.enable ''

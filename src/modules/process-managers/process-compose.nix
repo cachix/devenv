@@ -50,6 +50,7 @@ in
       configFile = settingsFormat.generate "process-compose.yaml" cfg.settings;
       settings = {
         version = "0.5";
+        is_strict = true;
         port = lib.mkDefault 9999;
         tui = lib.mkDefault true;
         environment = lib.mapAttrsToList

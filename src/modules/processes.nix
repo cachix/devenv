@@ -53,7 +53,7 @@ in
       implementation = lib.mkOption {
         type = types.enum [ "honcho" "overmind" "process-compose" "hivemind" ];
         description = "The implementation used when performing ``devenv up``.";
-        default = "honcho";
+        default = "process-compose";
         example = "overmind";
       };
 

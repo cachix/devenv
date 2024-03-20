@@ -15,7 +15,7 @@ in
       description = "TeX Live package set to use";
     };
     packages = lib.mkOption {
-      type = lib.types.nonEmptyListOf lib.types.string;
+      type = lib.types.nonEmptyListOf lib.types.str;
       default = [ "collection-basic" ];
       description = "Packages available to TeX Live";
     };
