@@ -786,7 +786,7 @@ impl App {
 
         // collect tests
         let test_script = {
-            let _logprogress = log::LogProgress::new("Building tests", false);
+            let _logprogress = log::LogProgress::new("Building tests", true);
             self.run_nix(
                 "nix",
                 &["build", ".#devenv.test", "--no-link", "--print-out-paths"],
