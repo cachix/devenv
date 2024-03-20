@@ -42,8 +42,15 @@ The new `enterTest` attribute in `devenv.nix` allows you to define testing logic
 { pkgs, ... }: {
   packages = [ pkgs.ncdu ];
 
+  services.postgres = {
+    enable = true;
+    listen_addresses = "127.0.0.1";
+    initialDatabases = [{ name = "mydb"; }];
+  };
+
   enterTest = ''
-    ncdu --version | grep "ncdu 2.2"
+    wait_for_port 5432
+    ncdu --version | grep "ncdu 2.2" 
   '';
 }
 ```
