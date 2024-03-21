@@ -63,12 +63,14 @@
                 devenv.cliVersion = version;
                 devenv.root = devenv_root;
                 devenv.dotfile = pkgs.lib.mkForce (devenv_root + "/" + devenv_dotfile_string);
-                devenv.tmpdir = tmpdir;
               }
-              (if container_name != null then {
+              (pkgs.lib.optionalAttrs (inputs.devenv.isTmpDir or false) {
+                devenv.tmpdir = tmpdir;
+              })
+              (pkgs.lib.optionalAttrs (container_name != null) {
                 container.isBuilding = pkgs.lib.mkForce true;
                 containers.${container_name}.isBuilding = true;
-              } else { })
+              })
             ] ++ (map importModule (devenv.imports or [ ])) ++ [
               ./devenv.nix
               (devenv.devenv or { })
