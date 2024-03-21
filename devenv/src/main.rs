@@ -8,6 +8,7 @@ use include_dir::{include_dir, Dir};
 use miette::{bail, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -20,6 +21,7 @@ use std::{
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
+const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 // project vars
 const DEVENV_FLAKE: &str = ".devenv.flake.nix";
@@ -390,7 +392,7 @@ impl App {
         // fails if any of the required files already exists
         for filename in REQUIRED_FILES {
             let file_path = target.join(filename);
-            if file_path.exists() {
+            if file_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
                 bail!("File already exists {}", file_path.display());
             }
         }
@@ -404,7 +406,17 @@ impl App {
 
             // write path.contents to target/filename
             let target_path = target.join(filename);
-            std::fs::write(target_path, path.contents()).expect("Failed to write file");
+
+            // add a check for files like .gitignore to append buffer instead of bailing out
+            if target_path.exists() && EXISTING_REQUIRED_FILES.contains(&filename) {
+                std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&target_path)
+                    .and_then(|mut file| file.write_all(path.contents()))
+                    .expect("Failed to append to existing file");
+            } else {
+                std::fs::write(&target_path, path.contents()).expect("Failed to write file");
+            }
         }
 
         // check if direnv executable is available
