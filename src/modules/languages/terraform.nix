@@ -1,15 +1,13 @@
-{ pkgs, config, lib, inputs, ... }:
+{ pkgs, config, lib, ... }:
 
 let
   cfg = config.languages.terraform;
 
-  nixpkgs-terraform = inputs.nixpkgs-terraform or (throw ''
-    To use languages.terraform.version, you need to add the following to your devenv.yaml:
-
-      inputs:
-        nixpkgs-terraform:
-          url: github:stackbuilders/nixpkgs-terraform
-  '');
+  nixpkgs-terraform = config.lib.getInput {
+    name = "nixpkgs-terraform";
+    url = "github:stackbuilders/nixpkgs-terraform";
+    attribute = "languages.terraform.version";
+  };
 in
 {
   options.languages.terraform = {
