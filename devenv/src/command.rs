@@ -287,12 +287,10 @@ impl App {
                 }
 
                 if !caches.caches.pull.is_empty() {
-                    // parse trusted from store and assert it's 1
-                    if serde_json::from_slice::<StorePing>(&store.stdout)
+                    let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
                         .expect("Failed to parse JSON")
-                        .trusted
-                        != 1
-                    {
+                        .trusted;
+                    if trusted == Some(0) {
                         bail!(indoc::formatdoc!(
                             "You're not a trusted user of the Nix store. You have the following options:
 
@@ -360,5 +358,5 @@ struct CachixResponse {
 
 #[derive(Deserialize, Clone)]
 struct StorePing {
-    trusted: u8,
+    trusted: Option<u8>,
 }
