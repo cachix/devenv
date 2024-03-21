@@ -290,6 +290,10 @@ impl App {
                     let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
                         .expect("Failed to parse JSON")
                         .trusted;
+                    if trusted == None {
+                        self.logger
+                            .warn("You're using very old version of Nix, please upgrade.");
+                    }
                     if trusted == Some(0) {
                         bail!(indoc::formatdoc!(
                             "You're not a trusted user of the Nix store. You have the following options:
