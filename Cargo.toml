@@ -4,3 +4,7 @@ members = [
     "devenv",
     "devenv-run-tests",
 ]
+
+[profile.release]
+strip = "debuginfo"
+lto = true
