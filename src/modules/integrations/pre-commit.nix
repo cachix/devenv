@@ -23,7 +23,7 @@
     enterTest = ''
       pre-commit run -a
     '';
-    packages = [ config.pre-commit.package ] ++ config.pre-commit.enabledPackages;
+    packages = [ config.pre-commit.package ] ++ (config.pre-commit.enabledPackages or [ ]);
     enterShell = config.pre-commit.installationScript;
   };
 }
