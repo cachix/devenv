@@ -1,4 +1,5 @@
 use clap::Parser;
+use devenv;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -66,6 +67,9 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                         .current_dir(&path)
                         .status()?;
                 }
+
+                devenv::main();
+
                 // TODO: use as a library
                 let status = std::process::Command::new("devenv")
                     .args([

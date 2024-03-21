@@ -4,6 +4,14 @@ version = "1.0.0"
 edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "devenv"
+path = "src/lib.rs"
+
+[[bin]]
+name = "devenv"
+path = "src/main.rs"
+
 [dependencies]
 ansiterm = "0.12.2"
 clap = { version = "4.5.1", features = ["derive", "cargo"] }

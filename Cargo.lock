@@ -414,6 +414,7 @@ name = "devenv-run-tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
+ "devenv",
 ]
 
 [[package]]

@@ -1,7 +1,4 @@
-mod command;
-mod config;
-mod log;
-
+use crate::{command, config, log};
 use clap::{crate_version, Parser, Subcommand};
 use cli_table::{print_stderr, Table, WithTitle};
 use include_dir::{include_dir, Dir};
@@ -230,7 +227,7 @@ enum InputsCommand {
     },
 }
 
-struct App {
+pub struct App {
     cli: Cli,
     config: config::Config,
     logger: log::Logger,
