@@ -135,18 +135,17 @@ in
         mkdir -p "$DEVENV_STATE"
       fi
 
+      backgroundPID=$!
+
       stop_up() {
         echo "Stopping processes..."
-        kill -TERM $(cat "$DEVENV_STATE/devenv.pid")
-        rm "$DEVENV_STATE/devenv.pid"
-        wait
+        kill -TERM $backgroundPID
+        wait $backgroundPID
         ${config.process.after}
         echo "Processes stopped."
       }
 
       trap stop_up SIGINT SIGTERM
-
-      echo $! > "$DEVENV_STATE/devenv.pid"
 
       wait
     '';
