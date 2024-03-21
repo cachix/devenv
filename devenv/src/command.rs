@@ -1,4 +1,4 @@
-use crate::main::App;
+use crate::app::App;
 use miette::{bail, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
