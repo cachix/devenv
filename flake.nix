@@ -79,6 +79,7 @@
         });
 
       modules = ./src/modules;
+      hasTmpDir = true;
 
       templates =
         let
