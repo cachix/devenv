@@ -51,10 +51,10 @@
                 input = inputs.${name} or (throw "Unknown input ${name}");
                 subpath = "/${lib.concatStringsSep "/" (builtins.tail paths)}";
                 devenvpath = "${input}" + subpath;
-                devenvdefaultpath = filepath + "/devenv.nix";
+                devenvdefaultpath = devenvpath + "/devenv.nix";
               in
               if lib.hasSuffix ".nix" devenvpath
-              then filepath
+              then devenvpath
               else if builtins.pathExists devenvdefaultpath
               then devenvdefaultpath
               else throw (devenvdefaultpath + " file does not exist for input ${name}.");
