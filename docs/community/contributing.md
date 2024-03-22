@@ -16,13 +16,13 @@ We have a rule that new features need to come with documentation and tests (`dev
 
 ## Repository structure
 
-- The `devenv` CLI is in `src/devenv/cli.py`.
-- The `flake.nix` auto-generation logic lies in `src/modules/flake.tmpl.nix`.
+- The `devenv` CLI is in `devenv/src/main.rs`.
+- The `flake.nix` auto-generation logic lies in `devenv/src/flake.tmpl.nix`.
 - All modules related to `devenv.nix` are in `src/modules/`.
 - Examples are automatically tested on CI and are the best way to work on developing new modules, see `examples/` and `tests/`
 - Documentation is in `docs/`.
 - To run a development server, run `devenv up`.
-- To run a test, run `devnenv test <example-name>`.
+- To run a test, run `devenv-run-tests --only <example-name> examples`.
 
 ## Contributing language improvements
 
