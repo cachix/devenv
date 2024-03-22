@@ -37,7 +37,7 @@
 
 ### 2. Install [Cachix](https://cachix.org)
 
-Recommended, speeds up the installation by providing binaries.
+Speeds up the installation by providing binaries.
 
 === "Newcomers"
 
