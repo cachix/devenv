@@ -2,8 +2,6 @@
 
 ## packages
 
-
-
 A list of packages to expose inside the developer environment. Search available packages using ` devenv search NAME `.
 
 
@@ -4451,6 +4449,33 @@ package
 
 
 
+## languages.terraform.version
+
+
+
+The Terraform version to use.
+This automatically sets the ` languages.terraform.package ` using [nixpkgs-terraform](https://github.com/stackbuilders/nixpkgs-terraform).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "1.5.0 or 1.6.2" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/terraform.nix)
+
+
+
 ## languages.texlive.enable
 
 
@@ -4765,6 +4790,8 @@ null or string
 
 
 ## pre-commit
+
+
 
 Integration of https://github.com/cachix/pre-commit-hooks.nix
 
@@ -7364,8 +7391,6 @@ path
 
 ## pre-commit.settings.mkdocs-linkcheck.extension
 
-
-
 File extension to scan for.
 
 
@@ -7384,6 +7409,8 @@ string
 
 
 ## pre-commit.settings.mkdocs-linkcheck.local-only
+
+
 
 Whether to only check local links.
 
