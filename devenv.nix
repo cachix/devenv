@@ -13,7 +13,7 @@
     frameworks.SystemConfiguration
   ]);
 
-  #languages.nix.enable = true;
+  languages.nix.enable = true;
   # for cli
   languages.rust.enable = true;
   # for docs
