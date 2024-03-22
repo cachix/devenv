@@ -12394,6 +12394,58 @@ list of strings concatenated with “\\n”
 
 
 
+## services.mongodb.initDatabasePassword
+
+
+
+This used in conjunction with initDatabaseUsername, create a new user and set that user’s password. This user is created in the admin authentication database and given the role of root, which is a “superuser” role.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "secret" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
+
+
+## services.mongodb.initDatabaseUsername
+
+
+
+This used in conjunction with initDatabasePassword, create a new user and set that user’s password. This user is created in the admin authentication database and given the role of root, which is a “superuser” role.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "mongoadmin" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
+
+
 ## services.mysql.enable
 
 
