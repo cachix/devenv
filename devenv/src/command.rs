@@ -294,6 +294,11 @@ impl App {
                         self.logger
                             .warn("You're using very old version of Nix, please upgrade.");
                     }
+                    let restart_command = if cfg!(target_os = "linux") {
+                        "sudo systemctl restart nix-daemon"
+                    } else {
+                        "sudo launchctl kickstart system/org.nixos.nix-daemon"
+                    };
                     if trusted == Some(0) {
                         bail!(indoc::formatdoc!(
                             "You're not a trusted user of the Nix store. You have the following options:
@@ -301,6 +306,10 @@ impl App {
                             1. Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
 
                             trusted-users = root {}
+
+                            Restart nix-daemon with:
+                            
+                              $ {restart_command}
 
                             2. Add binary caches to /etc/nix/nix.conf yourself:
 
