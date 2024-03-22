@@ -50,11 +50,14 @@
                 name = builtins.head paths;
                 input = inputs.${name} or (throw "Unknown input ${name}");
                 subpath = "/${lib.concatStringsSep "/" (builtins.tail paths)}";
-                devenvpath = "${input}" + subpath + "/devenv.nix";
+                devenvpath = "${input}" + subpath;
+                devenvdefaultpath = filepath + "/devenv.nix";
               in
-              if builtins.pathExists devenvpath
-              then devenvpath
-              else throw (devenvpath + " file does not exist for input ${name}.");
+              if lib.hasSuffix ".nix" devenvpath
+              then filepath
+              else if builtins.pathExists devenvdefaultpath
+              then devenvdefaultpath
+              else throw (devenvdefaultpath + " file does not exist for input ${name}.");
           project = pkgs.lib.evalModules {
             specialArgs = inputs // { inherit inputs pkgs; };
             modules = [
