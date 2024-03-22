@@ -2,6 +2,8 @@
 
 ## packages
 
+
+
 A list of packages to expose inside the developer environment. Search available packages using ` devenv search NAME `.
 
 
@@ -1517,6 +1519,53 @@ package
 
 
 
+## languages.fortran.enable
+
+
+
+Whether to enable tools for Fortran Development…
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
+
+
+
+## languages.fortran.package
+
+
+
+The Fortran package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gfortran `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
+
+
+
 ## languages.gawk.enable
 
 
@@ -2274,8 +2323,6 @@ boolean
 
 ## languages.javascript.yarn.package
 
-
-
 The yarn package to use.
 
 
@@ -2346,6 +2393,8 @@ boolean
 
 
 ## languages.julia.enable
+
+
 
 Whether to enable tools for Julia development.
 
@@ -4748,8 +4797,6 @@ boolean
 
 
 ## languages.zig.package
-
-
 
 Which package of Zig to use.
 
@@ -7345,8 +7392,6 @@ boolean
 
 ## pre-commit.settings.mdl.warnings
 
-
-
 Show Kramdown warnings.
 
 
@@ -7390,6 +7435,8 @@ path
 
 
 ## pre-commit.settings.mkdocs-linkcheck.extension
+
+
 
 File extension to scan for.
 
