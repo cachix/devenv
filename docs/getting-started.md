@@ -29,7 +29,7 @@
 
 !!! note
 
-    We recommended to use experimental installer on macOS to avoid issues with Apple Scilicon chips:
+    We recommended that you use the experimental installer on macOS to avoid issues with Apple Silicon chips:
 
     ```
     curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
