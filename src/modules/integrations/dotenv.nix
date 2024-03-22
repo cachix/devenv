@@ -9,7 +9,7 @@ let
 
   parseLine = line:
     let
-      parts = builtins.match "(.+) *= *(.+)" line;
+      parts = builtins.match "([^[:space:]=#]+)[[:space:]]*=[[:space:]]*(.*)" line;
     in
     if (!builtins.isNull parts) && (builtins.length parts) == 2 then
       { name = builtins.elemAt parts 0; value = builtins.elemAt parts 1; }
