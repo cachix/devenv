@@ -3412,6 +3412,33 @@ package
 
 
 
+## languages.python.directory
+
+
+
+The Python project’s root directory. Defaults to the root of the devenv project.
+Can be an absolute path or one relative to the root of the devenv project.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` config.devenv.root `
+
+
+
+*Example:*
+` "./directory" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.libraries
 
 
@@ -3516,7 +3543,7 @@ package
 
 
 
-Whether to enable activate the poetry virtual environment automatically.
+Whether to activate the poetry virtual environment automatically.
 
 
 
@@ -3527,11 +3554,6 @@ boolean
 
 *Default:*
 ` false `
-
-
-
-*Example:*
-` true `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
@@ -3585,6 +3607,27 @@ boolean
 
 
 
+## languages.python.poetry.install.compile
+
+
+
+Whether ` poetry install ` should compile Python source files to bytecode.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.poetry.install.extras
 
 
@@ -3610,7 +3653,28 @@ list of string
 
 
 
-Which dependency-groups to install. See ` --with `.
+Which dependency groups to install. See ` --with `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.ignoredGroups
+
+
+
+Which dependency groups to ignore. See ` --without `.
 
 
 
@@ -3648,6 +3712,48 @@ boolean
 
 
 
+## languages.python.poetry.install.onlyGroups
+
+
+
+Which dependency groups to exclusively install. See ` --only `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.onlyInstallRootPackage
+
+
+
+Whether to only install the root package (your project) should be installed, but no dependencies. See ` --only-root `
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.poetry.install.quiet
 
 
@@ -3663,6 +3769,27 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.poetry.install.verbosity
+
+
+
+What level of verbosity the output of ` poetry install ` should have.
+
+
+
+*Type:*
+one of “no”, “little”, “more”, “debug”
+
+
+
+*Default:*
+` "no" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
@@ -4652,8 +4779,6 @@ boolean
 
 ## languages.unison.package
 
-
-
 Which package of Unison to use
 
 
@@ -4797,6 +4922,8 @@ boolean
 
 
 ## languages.zig.package
+
+
 
 Which package of Zig to use.
 
@@ -7266,8 +7393,6 @@ list of string
 
 ## pre-commit.settings.mdl.rulesets
 
-
-
 Specify additional ruleset files to load.
 
 
@@ -7391,6 +7516,8 @@ boolean
 
 
 ## pre-commit.settings.mdl.warnings
+
+
 
 Show Kramdown warnings.
 
