@@ -22,7 +22,12 @@ Running ``devenv init`` generates ``devenv.nix``:
 
   enterShell = ''
     hello
-    git --version
+  '';
+
+  # https://devenv.sh/tests/
+  enterTest = ''
+    echo "Running tests"
+    git --version | grep "2.42.0"
   '';
 
   # https://devenv.sh/languages/
