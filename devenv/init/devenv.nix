@@ -15,6 +15,9 @@
     git --version
   '';
 
+  # https://devenv.sh/services/
+  # services.postgre.enable = true;
+
   # https://devenv.sh/languages/
   # languages.nix.enable = true;
 
