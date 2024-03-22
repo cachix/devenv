@@ -39,11 +39,11 @@ let
   };
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
-    # Make sure any tools are not attempting to use the python interpreter from any
+    # Make sure any tools are not attempting to use the Python interpreter from any
     # existing virtual environment. For instance if devenv was started within an venv.
     unset VIRTUAL_ENV
 
-    VENV_PATH="${config.env.DEVENV_STATE}/venv"
+    VENV_PATH="${config.env.DEVENV_STATE}/${lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''}venv"
 
     profile_python="$(${readlink} ${package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
@@ -82,22 +82,22 @@ let
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     function _devenv_init_poetry_venv
     {
-      # Make sure any tools are not attempting to use the python interpreter from any
+      # Make sure any tools are not attempting to use the Python interpreter from any
       # existing virtual environment. For instance if devenv was started within an venv.
       unset VIRTUAL_ENV
 
-      # Make sure poetry's venv uses the configured python executable.
+      # Make sure poetry's venv uses the configured Python executable.
       ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
     }
 
     function _devenv_poetry_install
     {
-      local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments})
+      local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments} ${lib.optionalString (cfg.directory != config.devenv.root) ''--directory=${cfg.directory}''})
       # Avoid running "poetry install" for every shell.
-      # Only run it when the "poetry.lock" file or python interpreter has changed.
+      # Only run it when the "poetry.lock" file or Python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
-      local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/.venv/poetry.lock.checksum
+      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}.venv/poetry.lock.checksum
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
         read -r EXPECTED_POETRY_CHECKSUM < "$POETRY_CHECKSUM_FILE"
@@ -116,7 +116,7 @@ let
       fi
     }
 
-    if [ ! -f pyproject.toml ]
+    if [ ! -f "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}pyproject.toml ]
     then
       echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
     else
@@ -125,7 +125,7 @@ let
         _devenv_poetry_install
       ''}
       ${lib.optionalString cfg.poetry.activate.enable ''
-        source "$DEVENV_ROOT"/.venv/bin/activate
+        source "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}.venv/bin/activate
       ''}
     fi
   '';
@@ -173,6 +173,17 @@ in
       example = "3.11 or 3.11.2";
     };
 
+    directory = lib.mkOption {
+      type = lib.types.str;
+      default = config.devenv.root;
+      defaultText = lib.literalExpression "config.devenv.root";
+      description = ''
+        The Python project's root directory. Defaults to the root of the devenv project.
+        Can be an absolute path or one relative to the root of the devenv project.
+      '';
+      example = "./directory";
+    };
+
     venv.enable = lib.mkEnableOption "Python virtual environment";
 
     venv.requirements = lib.mkOption {
@@ -205,6 +216,16 @@ in
           default = false;
           description = "Whether the root package (your project) should be installed. See `--no-root`";
         };
+        onlyInstallRootPackage = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether to only install the root package (your project) should be installed, but no dependencies. See `--only-root`";
+        };
+        compile = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether `poetry install` should compile Python source files to bytecode.";
+        };
         quiet = lib.mkOption {
           type = lib.types.bool;
           default = false;
@@ -213,7 +234,17 @@ in
         groups = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
-          description = "Which dependency-groups to install. See `--with`.";
+          description = "Which dependency groups to install. See `--with`.";
+        };
+        ignoredGroups = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Which dependency groups to ignore. See `--without`.";
+        };
+        onlyGroups = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Which dependency groups to exclusively install. See `--only`.";
         };
         extras = lib.mkOption {
           type = lib.types.listOf lib.types.str;
@@ -225,9 +256,17 @@ in
           default = false;
           description = "Whether to install all extras. See `--all-extras`.";
         };
+        verbosity = lib.mkOption {
+          type = lib.types.enum [ "no" "little" "more" "debug" ];
+          default = "no";
+          description = "What level of verbosity the output of `poetry install` should have.";
+        };
       };
-      activate.enable = lib.mkEnableOption "activate the poetry virtual environment automatically";
-
+      activate.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether to activate the poetry virtual environment automatically.";
+      };
       package = lib.mkOption {
         type = lib.types.package;
         default = pkgs.poetry;
@@ -240,11 +279,18 @@ in
   config = lib.mkIf cfg.enable {
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
-      lib.optional (!cfg.poetry.install.installRootPackage) "--no-root" ++
+      lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root" ++
+      lib.optional (!cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage) "--no-root" ++
+      lib.optional cfg.poetry.install.compile "--compile" ++
       lib.optional cfg.poetry.install.quiet "--quiet" ++
       lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"'' ] ++
+      lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [ "--without" ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"'' ] ++
+      lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [ "--only" ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"'' ] ++
       lib.optionals (cfg.poetry.install.extras != [ ]) [ "--extras" ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"'' ] ++
-      lib.optional cfg.poetry.install.allExtras "--all-extras";
+      lib.optional cfg.poetry.install.allExtras "--all-extras" ++
+      lib.optional (cfg.poetry.install.verbosity == "little") "-v" ++
+      lib.optional (cfg.poetry.install.verbosity == "more") "-vv" ++
+      lib.optional (cfg.poetry.install.verbosity == "debug") "-vvv";
 
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
