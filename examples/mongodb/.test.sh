@@ -4,11 +4,6 @@ set -x
 mongosh --version
 mongod --version
 
-# Start service in the background and store the PID
-echo "Starting mongo service..."
-devenv up&
-DEVENV_PID=$!
-
 check_mongo_status() {
     echo "Waiting for service to become available..."
     MONGO_OUTPUT=$(mongosh --quiet --eval "{ ping: 1 }" 2>&1)
@@ -51,10 +46,6 @@ for i in $(seq 1 10); do
         sleep 1
     fi
 done
-
-echo 'Killing service...'
-pkill -P $DEVENV_PID
-wait $DEVENV_PID 2>&1 >/dev/null
 
 # Exit the script
 exit $MONGO_EXIT_STATUS
