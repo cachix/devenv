@@ -13,6 +13,7 @@
   languages.elixir.enable = true;
   languages.elm.enable = true;
   languages.erlang.enable = true;
+  languages.fortran.enable = true;
   languages.gawk.enable = true;
   languages.gleam.enable = true;
   languages.go.enable = true;
