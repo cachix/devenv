@@ -35,47 +35,26 @@
     curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
     ```
 
-### 2. Install [Cachix](https://cachix.org)
-
-Speeds up the installation by providing binaries.
-
-=== "Newcomers"
-
-    ```
-    nix-env -iA cachix -f https://cachix.org/api/v1/install
-    cachix use devenv
-    ```
-
-=== "Flake profiles"
-
-    ```
-    nix profile install nixpkgs#cachix
-    cachix use devenv
-    ```
-
-### 3. Install [devenv](https://github.com/cachix/devenv)
+### 2. Install [devenv](https://github.com/cachix/devenv)
 
 
 === "Newcomers"
 
     ```
-    nix-env -if https://install.devenv.sh/latest
+    nix-env -iA devenv -f https://github.com/NixOS/nixpkgs/tarball/476a33c53da66a2a77a89bb9bcf54d5e3c232c3d
     ```
 
-=== "Flake profiles"
+=== "Nix profiles (requires experimental flags)"
 
     ```
-    nix profile install --accept-flake-config tarball+https://install.devenv.sh/latest
+    nix profile install --accept-flake-config nixpkgs#devenv
     ```
-=== "Declaratively using flakes"
 
-    See [Using flakes](../guides/using-with-flakes)
-
-=== "Declaratively without flakes"
+=== "NixOS/nix-darwin/home-manager"
 
     ```nix title="configuration.nix"
     environment.systemPackages = [ 
-      (import (fetchTarball https://install.devenv.sh/latest)).default
+      pkgs.devenv
     ];
     ```
 
