@@ -9,6 +9,7 @@
     ```
     sh <(curl -L https://nixos.org/nix/install) --daemon
     ```
+
 === "macOS"
 
     ```
@@ -16,7 +17,7 @@
     ```
 
 === "Windows (WSL2)"
-   
+
     ```
     sh <(curl -L https://nixos.org/nix/install) --no-daemon
     ```
@@ -70,7 +71,7 @@ Given a Git repository, create the initial structure:
 ```shell-session
 $ devenv init
 • Creating .envrc
-• reating devenv.nix
+• Creating devenv.nix
 • Creating devenv.yaml
 • Creating .gitignore
 ```
