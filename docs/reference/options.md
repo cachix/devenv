@@ -829,7 +829,7 @@ string
 
 
 *Default:*
-` "1.0" `
+` "1.0.1" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
