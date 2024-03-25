@@ -536,6 +536,10 @@ impl App {
     }
 
     fn container_build(&mut self, name: &str) -> Result<String> {
+        if cfg!(target_os = "macos") {
+            bail!("Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430");
+        }
+
         let _logprogress = log::LogProgress::new(&format!("Building {name} container"), true);
 
         self.assemble()?;
