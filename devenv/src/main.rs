@@ -1219,6 +1219,10 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut to_gc = Vec::new();
     let mut removed_symlinks = Vec::new();
 
+    if !root.exists() {
+        std::fs::create_dir_all(root).expect("Failed to create gc directory");
+    }
+
     for entry in fs::read_dir(root).expect("Failed to read directory") {
         let entry = entry.expect("Failed to read entry");
         let path = entry.path();
