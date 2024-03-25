@@ -263,7 +263,7 @@ in
         echo "Please install direnv: https://direnv.net/docs/installation.html"
       fi
 
-      mkdir -p .devenv
+      mkdir -p $DEVENV_STATE
       if [ ! -L .devenv/profile ] || [ "$(${pkgs.coreutils}/bin/readlink .devenv/profile)" != "${profile}" ]
       then
         ln -nsf ${profile} .devenv/profile
