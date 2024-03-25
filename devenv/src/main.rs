@@ -659,7 +659,7 @@ impl App {
         let (to_gc, removed_symlinks) = {
             let _logprogress = log::LogProgress::new(
                 &format!(
-                    "Removing non-existings symlinks in {} ...",
+                    "Removing non-existing symlinks in {} ...",
                     &self.devenv_home_gc.display()
                 ),
                 false,
