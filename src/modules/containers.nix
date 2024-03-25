@@ -224,7 +224,7 @@ let
       registry = lib.mkOption {
         type = types.nullOr types.str;
         description = "Registry to push the container to.";
-        default = "docker://";
+        default = "docker-daemon:";
       };
 
       maxLayers = lib.mkOption {
