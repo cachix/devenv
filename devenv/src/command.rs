@@ -301,7 +301,7 @@ impl App {
                         "sudo launchctl kickstart system/org.nixos.nix-daemon"
                     };
                     if trusted == Some(0) {
-                        bail!(indoc::formatdoc!(
+                        self.logger.error(&indoc::formatdoc!(
                             "You're not a trusted user of the Nix store. You have the following options:
 
                             1. Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
@@ -326,6 +326,7 @@ impl App {
                         , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                         , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
                         ));
+                        bail!("You're not a trusted user of the Nix store.")
                     }
 
                     self.logger
