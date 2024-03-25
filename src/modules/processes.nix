@@ -131,10 +131,6 @@ in
 
       ${config.processManagerCommand}
 
-      if [[ ! -d "$DEVENV_STATE" ]]; then
-        mkdir -p "$DEVENV_STATE"
-      fi
-
       backgroundPID=$!
 
       stop_up() {
