@@ -241,7 +241,6 @@ impl App {
                     logging: false,
                     ..Default::default()
                 };
-                let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
 
                 let caches_raw =
                     self.run_nix("nix", &["eval", ".#devenv.cachix", "--json"], &no_logging)?;
@@ -288,12 +287,13 @@ impl App {
                 }
 
                 if !caches.caches.pull.is_empty() {
+                    let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
                     let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
                         .expect("Failed to parse JSON")
                         .trusted;
-                    if trusted == None {
+                    if trusted.is_none() {
                         self.logger
-                            .warn("You're using very old version of Nix, please upgrade.");
+                            .warn("You're using very old version of Nix, please upgrade and restart nix-daemon.");
                     }
                     let restart_command = if cfg!(target_os = "linux") {
                         "sudo systemctl restart nix-daemon"
