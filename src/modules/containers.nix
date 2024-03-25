@@ -297,6 +297,7 @@ in
     })
     (lib.mkIf config.container.isBuilding {
       devenv.root = lib.mkForce "${homeDir}";
+      devenv.dotfile = lib.mkOverride 49 "${homeDir}/.devenv";
     })
   ];
 }
