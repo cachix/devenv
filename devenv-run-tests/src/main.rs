@@ -11,6 +11,15 @@ struct Args {
     #[clap(long, value_parser, help = "Only run these tests.")]
     only: Vec<PathBuf>,
 
+    #[clap(
+        short,
+        long,
+        number_of_values = 2,
+        value_delimiter = ' ',
+        help = "Override inputs in devenv.yaml."
+    )]
+    override_input: Vec<String>,
+
     #[clap(value_parser, required = true)]
     directories: Vec<PathBuf>,
 }
@@ -66,14 +75,22 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                         .current_dir(&path)
                         .status()?;
                 }
+                let overrides = args.override_input.iter().enumerate().flat_map(|(i, arg)| {
+                    if i % 2 == 0 {
+                        vec!["--override-input", arg.as_str()]
+                    } else {
+                        vec![arg.as_str()]
+                    }
+                });
                 // TODO: use as a library
                 let status = std::process::Command::new("devenv")
                     .args([
                         "--override-input",
                         "devenv",
                         &format!("path:{cwd}?dir=src/modules"),
-                        "test",
                     ])
+                    .args(overrides)
+                    .arg("test")
                     .current_dir(&path)
                     .status()?;
 
