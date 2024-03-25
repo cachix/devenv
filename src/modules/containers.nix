@@ -254,9 +254,7 @@ let
       dockerRun = lib.mkOption {
         type = types.package;
         internal = true;
-        default = pkgs.writeScript "docker-run" ''
-          #!${bash}
-
+        default = pkgs.writeShellScript "docker-run" ''
           docker run -it ${config.name}:${config.version} "$@"
         '';
       };
