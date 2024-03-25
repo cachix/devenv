@@ -150,6 +150,8 @@ let
 
   # <registry> <args>
   mkCopyScript = cfg: pkgs.writeShellScript "copy-container" ''
+    set -e -o pipefail
+
     container=$1
     shift
 
@@ -163,7 +165,7 @@ let
     dest="''${registry}${cfg.name}:${cfg.version}"
 
     if [[ $# == 0 ]]; then
-      args=(${toString cfg.defaultCopyArgs})
+      args=(${if cfg.defaultCopyArgs == [] then "" else toString cfg.defaultCopyArgs})
     else
       args=("$@")
     fi
@@ -172,7 +174,7 @@ let
     echo "Copying container $container to $dest"
     echo
 
-    ${nix2container.skopeo-nix2container}/bin/skopeo --insecure-policy copy "nix:$container" "$dest" "''${args[@]}"
+    ${nix2container.skopeo-nix2container}/bin/skopeo --insecure-policy copy "nix:$container" "$dest" ''${args[@]}
   '';
   containerOptions = types.submodule ({ name, config, ... }: {
     options = {
