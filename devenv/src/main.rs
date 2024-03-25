@@ -600,6 +600,8 @@ impl App {
 
         let status = std::process::Command::new(copy_script)
             .args(copy_args)
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
             .status()
             .expect("Failed to run copy script");
 

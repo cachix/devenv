@@ -149,7 +149,7 @@ let
   };
 
   # <registry> <args>
-  mkCopyScript = cfg: pkgs.writeScript "copy-container" ''
+  mkCopyScript = cfg: pkgs.writeShellScript "copy-container" ''
     container=$1
     shift
 
