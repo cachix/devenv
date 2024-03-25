@@ -157,6 +157,7 @@ impl App {
                     Err(e) => {
                         self.logger
                             .warn("Failed to get cachix caches due to evaluation error");
+                        self.logger.debug(&format!("{}", e));
                     }
                     Ok(cachix_caches) => {
                         // handle cachix.pull
@@ -372,4 +373,30 @@ struct CachixResponse {
 #[derive(Deserialize, Clone)]
 struct StorePing {
     trusted: Option<u8>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_trusted() {
+        let store_ping = r#"{"trusted":1,"url":"daemon","version":"2.18.1"}"#;
+        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
+        assert_eq!(store_ping.trusted, Some(1));
+    }
+
+    #[test]
+    fn test_no_trusted() {
+        let store_ping = r#"{"url":"daemon","version":"2.18.1"}"#;
+        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
+        assert_eq!(store_ping.trusted, None);
+    }
+
+    #[test]
+    fn test_not_trusted() {
+        let store_ping = r#"{"trusted":0,"url":"daemon","version":"2.18.1"}"#;
+        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
+        assert_eq!(store_ping.trusted, Some(0));
+    }
 }
