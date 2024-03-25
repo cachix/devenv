@@ -65,7 +65,7 @@
               {
                 devenv.cliVersion = version;
                 devenv.root = devenv_root;
-                devenv.dotfile = pkgs.lib.mkForce (devenv_root + "/" + devenv_dotfile_string);
+                devenv.dotfile = devenv_root + "/" + devenv_dotfile_string;
               }
               (pkgs.lib.optionalAttrs (inputs.devenv.isTmpDir or false) {
                 devenv.tmpdir = tmpdir;
