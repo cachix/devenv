@@ -562,7 +562,7 @@ null or string
 
 
 *Default:*
-` "docker://" `
+` "docker-daemon:" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
