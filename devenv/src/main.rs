@@ -207,7 +207,7 @@ enum ContainerCommand {
     #[command(about = "Build a container.")]
     Build { name: String },
 
-    #[command(about = "Copy a container.")]
+    #[command(about = "Copy a container to registry.")]
     Copy { name: String },
 
     #[command(about = "Run a container.")]
