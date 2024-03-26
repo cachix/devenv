@@ -202,7 +202,10 @@ enum ProcessesCommand {
 }
 
 #[derive(Subcommand, Clone)]
-#[clap(about = "Build, copy, or run a container. https://devenv.sh/containers/")]
+#[clap(
+    about = "Build, copy, or run a container. https://devenv.sh/containers/",
+    arg_required_else_help(true)
+)]
 enum ContainerCommand {
     #[command(about = "Build a container.")]
     Build { name: String },
