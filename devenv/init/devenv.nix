@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, lib, config, inputs, ... }:
 
 {
   # https://devenv.sh/basics/
