@@ -116,12 +116,7 @@ let
 
     maxLayers = cfg.maxLayers;
 
-    layers = [
-      (nix2container.nix2container.buildLayer {
-        perms = map mkPerm (mkMultiHome (homeRoots cfg));
-        copyToRoot = mkMultiHome (homeRoots cfg);
-      })
-    ];
+    layers = cfg.layers;
 
     perms = [
       {
@@ -233,6 +228,12 @@ let
         default = 1;
       };
 
+      layers = lib.mkOption {
+        type = types.listOf types.anything;
+        description = "the layers to create.";
+        default = [ ];
+      };
+
       isBuilding = lib.mkOption {
         type = types.bool;
         default = false;
@@ -259,6 +260,13 @@ let
         '';
       };
     };
+    config.layers = [
+      (nix2container.nix2container.buildLayer {
+        perms = map mkPerm (mkMultiHome (homeRoots config));
+        copyToRoot = mkMultiHome (homeRoots config);
+      })
+    ];
+
   });
 in
 {
