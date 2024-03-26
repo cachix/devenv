@@ -141,7 +141,7 @@ let
       WorkingDir = "${homeDir}";
       Env = lib.mapAttrsToList
         (name: value:
-          "${name}=${lib.escapeShellArg (toString value)}"
+          "${name}=${toString value}"
         )
         config.env ++ [ "HOME=${homeDir}" "USER=${user}" ];
       Cmd = [ cfg.startupCommand ];
