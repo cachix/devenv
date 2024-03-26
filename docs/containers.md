@@ -6,16 +6,16 @@
 
     The easiest way is to [set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
 
-Use `devenv container <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
+Use `devenv container build <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
 
 By default, `shell` and `processes` containers are predefined. You can also [craft your own](#running-artifacts)!
 
 Examples of what `devenv container` can do:
 
-- `devenv container shell`: Generate a container and [start the environment](#entering-the-development-environment), equivalent of using `devenv shell`.
-- `devenv container processes`: Generate a container and [start processes](#running-processes), equivalent of using `devenv up`.
-- `devenv container <name> --registry docker://ghcr.io/ --copy`: [Copy the container](#copying-container-to-a-registry) `<name>` into the **GitHub package registry**.
-- `devenv container <name> --docker-run`: Run the container `<name>` using **Docker**.
+- `devenv container build shell`: Generate a container and [start the environment](#entering-the-development-environment), equivalent of using `devenv shell`.
+- `devenv container build processes`: Generate a container and [start processes](#running-processes), equivalent of using `devenv up`.
+- `devenv container --registry docker://ghcr.io/ copy <name>`: [Copy the container](#copying-container-to-a-registry) `<name>` into the **GitHub package registry**.
+- `devenv container run <name>`: Run the container `<name>` using **Docker**.
 
 ## Entering the development environment
 
@@ -32,14 +32,14 @@ Given a simple environment, using Python:
 Generate a container specification that enters the environment:
 
 ```shell-session
-$ devenv container shell
+$ devenv container build shell
 /nix/store/...-image-devenv.json
 ```
 
 Let's test it locally using Docker:
 
 ```shell-session
-$ devenv container shell --docker-run
+$ devenv container run shell
 ...
 (devenv) bash-5.2# python
 Python 3.10.9 (main, Dec  6 2022, 18:44:57) [GCC 12.2.0] on linux
@@ -68,7 +68,7 @@ A common deployment strategy is to run each [process](./processes.md) as an entr
 You can now copy the newly created image and start the container:
 
 ```shell-session
-$ devenv container processes --docker-run
+$ devenv container run processes
 ...
 06:30:06 system         | hello-docker.1 started (pid=15)
 06:30:06 hello-docker.1 | Hello Docker!
@@ -94,8 +94,8 @@ You can specify the command to run when the container starts (instead of enterin
 }
 ```
 
-```
-$ devenv container serve --docker-run
+```shell-session
+$ devenv container run serve
 ```
 
 ## Running artifacts
@@ -113,7 +113,7 @@ If you're building binaries as part of the development environment, you can choo
 ```
 
 ```shell-session
-$ devenv container prod --docker-run 
+$ devenv container run prod
 ...
 ```
 
@@ -121,10 +121,10 @@ $ devenv container prod --docker-run
 
 ## Copying a container to a registry
 
-To copy a container into a registry, pass it a `--copy` operation:
+To copy a container into a registry use `copy` subcommand:
 
 ```shell-session
-$ devenv container processes --copy --registry docker:// 
+$ devenv container --registry docker:// copy processes
 ```
 
 Another common example is deploying to [fly.io](https://fly.io). 
@@ -132,7 +132,7 @@ Any arguments passed to `--copy-args` are forwarded to [skopeo copy](https://git
 
 
 ```shell-session
-$ devenv container processes --copy --registry docker://registry.fly.io/ --copy-args="--dest-creds x:$(flyctl auth token)"
+$ devenv container --registry docker://registry.fly.io/ --copy-args="--dest-creds x:$(flyctl auth token)" copy processes
 ```
 
 You can also specify these options declaratively:

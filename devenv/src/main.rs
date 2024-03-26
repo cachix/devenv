@@ -207,7 +207,7 @@ enum ContainerCommand {
     #[clap(about = "Build a container.")]
     Build { name: String },
 
-    #[clap(about = "Copy a container.")]
+    #[clap(about = "Copy a container to registry.")]
     Copy { name: String },
 
     #[clap(about = "Run a container.")]
@@ -945,7 +945,7 @@ impl App {
         }
 
         {
-            let _logprogress = log::LogProgress::new("Starting processes", false);
+            let _logprogress = log::LogProgress::new("Starting processes", true);
 
             let process = process.unwrap_or("");
 
