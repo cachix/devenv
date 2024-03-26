@@ -945,7 +945,7 @@ impl App {
         }
 
         {
-            let _logprogress = log::LogProgress::new("Starting processes", false);
+            let _logprogress = log::LogProgress::new("Starting processes", true);
 
             let process = process.unwrap_or("");
 
