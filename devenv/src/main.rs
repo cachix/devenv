@@ -40,7 +40,7 @@ struct Cli {
     max_jobs: u8,
 
     #[arg(
-        short = 'j',
+        short = 'u',
         long,
         help = "Maximum number CPU cores being used by a single build..",
         default_value = "2"
