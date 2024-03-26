@@ -186,7 +186,7 @@ enum Commands {
 }
 
 #[derive(Subcommand, Clone)]
-#[clap(about = "Start or stop processes.")]
+#[clap(about = "Start or stop processes. https://devenv.sh/processes/")]
 enum ProcessesCommand {
     #[command(alias = "start")]
     Up {
