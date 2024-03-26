@@ -188,15 +188,15 @@ enum Commands {
 #[derive(Subcommand, Clone)]
 #[clap(about = "Start or stop processes. https://devenv.sh/processes/")]
 enum ProcessesCommand {
-    #[command(alias = "start")]
+    #[command(alias = "start", about = "Start processes in the foreground.")]
     Up {
         process: Option<String>,
 
-        #[arg(short, long)]
+        #[arg(short, long, help = "Start processes in the background.")]
         detach: bool,
     },
 
-    #[command(alias = "stop")]
+    #[command(alias = "stop", about = "Stop processes running in the background.")]
     Down {},
     // TODO: Status/Attach
 }
@@ -204,20 +204,20 @@ enum ProcessesCommand {
 #[derive(Subcommand, Clone)]
 #[clap(about = "Build, copy, or run a container. https://devenv.sh/containers/")]
 enum ContainerCommand {
-    #[clap(about = "Build a container.")]
+    #[command(about = "Build a container.")]
     Build { name: String },
 
-    #[clap(about = "Copy a container.")]
+    #[command(about = "Copy a container.")]
     Copy { name: String },
 
-    #[clap(about = "Run a container.")]
+    #[command(about = "Run a container.")]
     Run { name: String },
 }
 
 #[derive(Subcommand, Clone)]
 #[clap(about = "Add an input to devenv.yaml. https://devenv.sh/inputs/")]
 enum InputsCommand {
-    #[clap(about = "Add an input to devenv.yaml.")]
+    #[command(about = "Add an input to devenv.yaml.")]
     Add {
         #[arg(help = "The name of the input.")]
         name: String,
