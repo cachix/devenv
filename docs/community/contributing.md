@@ -12,7 +12,23 @@ We have a rule that new features need to come with documentation and tests (`dev
 
 3. `cd devenv`
 
-4. To build the project, run `direnv allow .`.
+4. To build the project, run `direnv allow .` or build devenv manually using
+`nix build .#devenv` which allows to run development version of devenv outside
+of source code directory by calling `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv`.
+
+## Creating development project
+
+1. `mkdir devenv-project && cd devenv-project`
+
+2. `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv init`
+
+3. Add devenv input pointing to local source directory to `devenv.yaml`
+  ```
+  devenv:
+    url: path:<PATH-TO-DEVENV-SOURCE-CODE>?dir=src/modules
+  ```
+
+4. `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv update`
 
 ## Repository structure
 
