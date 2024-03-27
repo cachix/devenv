@@ -304,7 +304,7 @@ impl App {
                         self.logger.error(&indoc::formatdoc!(
                             "You're not a trusted user of the Nix store. You have the following options:
 
-                            1. Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
+                            a) Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
 
                             trusted-users = root {}
 
@@ -312,12 +312,12 @@ impl App {
                             
                               $ {restart_command}
 
-                            2. Add binary caches to /etc/nix/nix.conf yourself:
+                            b) Add binary caches to /etc/nix/nix.conf yourself:
 
                             extra-substituters = {}
                             extra-trusted-public-keys = {}
 
-                            3. Disable Cachix in `devenv.nix`:
+                            c) Disable Cachix in `devenv.nix`:
 
                             {{
                                 cachix.enable = false;
