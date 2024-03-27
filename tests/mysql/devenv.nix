@@ -16,4 +16,8 @@
       };
     };
   };
+
+  scripts.ping-mysql.exec = ''
+    $DEVENV_PROFILE/bin/mysqladmin ping
+  '';
 }
