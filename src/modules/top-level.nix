@@ -70,15 +70,17 @@ in
 
     unsetEnvVars = lib.mkOption {
       type = types.listOf types.str;
-      description = "Remove these list of env vars from being exported to keep the shell/direnv more lean.";
+      description = "A list of removed environment variables to make the shell/direnv more lean.";
       # manually determined with knowledge from https://nixos.wiki/wiki/C
       default = [
         "HOST_PATH"
         "NIX_BUILD_CORES"
         "__structuredAttrs"
+        "builder"
         "buildInputs"
         "buildPhase"
-        "builder"
+        "cmakeFlags"
+        "configureFlags"
         "depsBuildBuild"
         "depsBuildBuildPropagated"
         "depsBuildTarget"
@@ -89,6 +91,8 @@ in
         "depsTargetTargetPropagated"
         "doCheck"
         "doInstallCheck"
+        "dontAddDisableDepTrack"
+        "mesonFlags"
         "nativeBuildInputs"
         "out"
         "outputs"
