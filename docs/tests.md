@@ -79,3 +79,6 @@ ncdu 2.2
 ## Provided functions for enterTest
 
 - `wait_for_port <port> <timeout>`: waits for a port to be open
+
+If you'd like more functions to be added, take a look at [NixOS tests](https://nixos.org/manual/nixos/stable/#sec-nixos-tests)
+and open an issue for what you need.
