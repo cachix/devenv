@@ -66,16 +66,20 @@
             );
           };
         in
-        options.optionsCommonMark;
+        options;
+
     in
     {
       packages = forAllSystems (system:
-        let pkgs = nixpkgs.legacyPackages.${system};
-        in {
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          options = mkDocOptions pkgs;
+        in
+        {
           default = self.packages.${system}.devenv;
-
           devenv = mkPackage pkgs;
-          devenv-docs-options = mkDocOptions pkgs;
+          devenv-docs-options = options.optionsCommonMark;
+          devenv-docs-options-json = options.optionsJSON;
         });
 
       modules = ./src/modules;
