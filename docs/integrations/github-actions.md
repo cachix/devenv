@@ -37,12 +37,12 @@ Let's first prepare the job environment for devenv.
 ```yaml
 steps:
 - uses: actions/checkout@v4
-- uses: cachix/install-nix-action@v23
-- uses: cachix/cachix-action@v12
+- uses: cachix/install-nix-action@v26
+- uses: cachix/cachix-action@v14
   with:
     name: devenv
 - name: Install devenv.sh
-  run: nix profile install tarball+https://install.devenv.sh/latest
+  run: nix profile install nixpkgs#devenv
 ```
 
 The above snippet does the following:
@@ -131,12 +131,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v23
-    - uses: cachix/cachix-action@v12
+    - uses: cachix/install-nix-action@v26
+    - uses: cachix/cachix-action@v14
       with:
         name: devenv
     - name: Install devenv.sh
-      run: nix profile install --accept-flake-config tarball+https://install.devenv.sh/latest
+      run: nix profile install nixpkgs#devenv
 
     - name: Build the devenv shell and run any pre-commit hooks
       run: devenv test
