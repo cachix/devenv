@@ -293,11 +293,17 @@ in
         MYSQL_TCP_PORT = toString cfg.settings.mysqld.port;
       });
 
-    scripts.mysql.exec = "${mysqlWrapped}/bin/mysql";
+    scripts.mysql.exec = ''
+      ${mysqlWrapped}/bin/mysql "$@"
+    '';
 
-    scripts.mysqladmin.exec = "${mysqladminWrapped}/bin/mysqladmin";
+    scripts.mysqladmin.exec = ''
+      ${mysqladminWrapped}/bin/mysqladmin "$@"
+    '';
 
-    scripts.mysqldump.exec = "${mysqldumpWrapped}/bin/mysqldump";
+    scripts.mysqldump.exec = ''
+      ${mysqldumpWrapped}/bin/mysqldump "$@"
+    '';
 
     processes.mysql.exec = "${startScript}/bin/start-mysql";
     processes.mysql-configure.exec = "${configureScript}/bin/configure-mysql";
