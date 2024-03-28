@@ -41,10 +41,10 @@ in
     enable = lib.mkEnableOption ".env integration, doesn't support comments or multiline values.";
 
     files = lib.mkOption {
-      type = lib.types.either lib.types.str (lib.types.listOf lib.types.str);
+      type = lib.types.either lib.types.path (lib.types.listOf lib.types.path);
       apply = lib.toList;
       default = config.devenv.root + "/.env";
-      description = "The name of the dotenv file to load, or a list of dotenv files to load in order of precedence.";
+      description = "The path of the dotenv file to load, or a list of dotenv files to load in order of precedence.";
     };
 
     resolved = lib.mkOption {
