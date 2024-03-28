@@ -298,7 +298,7 @@ impl App {
                     let restart_command = if cfg!(target_os = "linux") {
                         "sudo systemctl restart nix-daemon"
                     } else {
-                        "sudo launchctl kickstart system/org.nixos.nix-daemon"
+                        "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
                     };
                     if trusted == Some(0) {
                         self.logger.error(&indoc::formatdoc!(
