@@ -67,6 +67,9 @@ struct Cli {
     #[arg(short = 'd', long, help = "Enter Nix debugger on failure.")]
     nix_debugger: bool,
 
+    #[arg(long = "no-cache", help = "Don't use the cache.")]
+    no_cache: bool,
+
     #[arg(
         short,
         long,
@@ -1127,12 +1130,20 @@ impl App {
 
     fn get_environment_variables(&mut self) -> Result<HashMap<String, String>>
     {
-        self.assemble()?;
+        let project_cache_hash = self.get_project_cache_hash().expect("Failed to get project cache hash");
+        let env_json = self.devenv_root.join(".devenv").join("cache").join(project_cache_hash).join("env.json");
+
+        if env_json.exists() && !self.cli.no_cache {
+            let env = std::fs::read_to_string(env_json).expect("Failed to read environment variables");
+            let map: HashMap<String, String> = serde_json::from_str(&env).expect("Failed to parse environment variables");
+            return Ok(map);
+        }
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
 
-        let env = self.run_cached_nix("env", "nix", &vec!["print-dev-env", "--profile", gc_root_str], &command::Options::default())?;
+        let env_process = self.run_nix("nix", &vec!["print-dev-env", "--profile", gc_root_str], &command::Options::default())?;
+        let env = String::from_utf8(env_process.stdout).expect("Failed to convert env to utf-8");
 
         let options = command::Options {
             logging: false,
@@ -1186,6 +1197,12 @@ impl App {
 
         map.remove("TMPDIR");
         map.remove("SHELL");
+
+        if !env_json.parent().unwrap().exists() {
+            std::fs::create_dir_all(env_json.parent().unwrap()).expect("Failed to create cache directory");
+        }
+
+        std::fs::write(env_json, serde_json::to_string(&map).expect("Failed to serialize environment variables")).expect("Failed to write environment variables");
 
         Ok(map)
     }

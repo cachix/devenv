@@ -48,7 +48,7 @@ impl App {
         let hash = self.get_project_cache_hash().expect("Failed to get project hash");
         let cache_path = self.devenv_root.join(".devenv").join("cache").join(hash).join(cache_key);
 
-        if cache_path.exists() {
+        if cache_path.exists() && !self.cli.no_cache {
             let output = std::fs::read(&cache_path).expect("Failed to read cache");
 
             return Ok(String::from_utf8_lossy(&output).to_string());
