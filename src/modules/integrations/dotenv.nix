@@ -3,10 +3,6 @@
 let
   cfg = config.dotenv;
 
-  normalizeFilenames = filenames: if lib.isList filenames then filenames else [ filenames ];
-  dotenvFiles = normalizeFilenames cfg.filename;
-  dotenvPaths = map (filename: (self + ("/" + filename))) dotenvFiles;
-
   parseLine = line:
     let
       parts = builtins.match "([^[:space:]=#]+)[[:space:]]*=[[:space:]]*(.*)" line;
@@ -37,12 +33,17 @@ let
     '';
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "dotenv" "filename" ] [ "dotenv" "files" ])
+  ];
+
   options.dotenv = {
     enable = lib.mkEnableOption ".env integration, doesn't support comments or multiline values.";
 
-    filename = lib.mkOption {
+    files = lib.mkOption {
       type = lib.types.either lib.types.str (lib.types.listOf lib.types.str);
-      default = ".env";
+      apply = lib.toList;
+      default = config.devenv.root + "/.env";
       description = "The name of the dotenv file to load, or a list of dotenv files to load in order of precedence.";
     };
 
@@ -61,17 +62,17 @@ in
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
       env = lib.mapAttrs (name: value: lib.mkDefault value) config.dotenv.resolved;
-      enterShell = lib.concatStringsSep "\n" (map createMissingFileMessage dotenvPaths);
-      dotenv.resolved = mergeEnvFiles dotenvPaths;
+      enterShell = lib.concatStringsSep "\n" (map createMissingFileMessage cfg.files);
+      dotenv.resolved = mergeEnvFiles cfg.files;
       assertions = [{
-        assertion = builtins.all (lib.hasPrefix ".env") dotenvFiles;
+        assertion = builtins.all (file: lib.hasPrefix ".env" (builtins.baseNameOf (toString file))) cfg.files;
         message = "The dotenv filename must start with '.env'.";
       }];
     })
     (lib.mkIf (!cfg.enable && !cfg.disableHint) {
       enterShell =
         let
-          dotenvFound = lib.any lib.pathExists dotenvPaths;
+          dotenvFound = lib.any lib.pathExists cfg.files;
         in
         lib.optionalString dotenvFound ''
           echo "💡 A dotenv file was found, while dotenv integration is currently not enabled."
