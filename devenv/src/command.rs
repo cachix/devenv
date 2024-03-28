@@ -38,6 +38,29 @@ impl Default for Options {
 }
 
 impl App {
+    pub fn run_cached_nix(&mut self,
+        cache_key: &str,
+        command: &str,
+        args: &[&str],
+        options: &Options)
+        -> Result<String>
+    {
+        let hash = self.get_project_cache_hash().expect("Failed to get project hash");
+        let cache_path = self.devenv_root.join(".devenv").join("cache").join(hash).join(cache_key);
+
+        if cache_path.exists() {
+            let output = std::fs::read(&cache_path).expect("Failed to read cache");
+
+            return Ok(String::from_utf8_lossy(&output).to_string());
+        } else {
+            let output = self.run_nix(command, args, options).expect("Failed to run nix");
+            std::fs::create_dir_all(cache_path.parent().unwrap()).expect("Failed to create cache directory");
+            std::fs::write(&cache_path, &output.stdout.clone()).expect("Failed to write cache");
+
+            return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+        }
+    }
+
     pub fn run_nix(
         &mut self,
         command: &str,
@@ -281,7 +304,7 @@ impl App {
                                 serde_json::from_slice::<CachixResponse>(&resp.bytes().unwrap())
                                     .expect("Failed to parse JSON");
                             new_known_keys
-                                .insert(name.clone(), resp_json.publicSigningKeys[0].clone());
+                                .insert(name.clone(), resp_json.public_signing_keys[0].clone());
                         }
                     }
                 }
@@ -368,7 +391,8 @@ pub struct CachixCaches {
 
 #[derive(Deserialize, Clone)]
 struct CachixResponse {
-    publicSigningKeys: Vec<String>,
+    #[serde(rename = "publicSigningKeys")]
+    public_signing_keys: Vec<String>,
 }
 
 #[derive(Deserialize, Clone)]

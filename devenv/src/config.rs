@@ -54,6 +54,7 @@ impl From<&Input> for FlakeInput {
 fn true_default() -> bool {
     true
 }
+#[allow(dead_code)]
 fn false_default() -> bool {
     false
 }

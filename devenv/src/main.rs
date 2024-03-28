@@ -8,6 +8,7 @@ use include_dir::{include_dir, Dir};
 use miette::{bail, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::env::temp_dir;
 use std::io::Write;
 use std::os::unix::fs::symlink;
 use std::str::FromStr;
@@ -239,6 +240,7 @@ struct App {
     cli: Cli,
     config: config::Config,
     logger: log::Logger,
+    project_cache_hash: Option<String>,
     has_processes: Option<bool>,
     container_name: Option<String>,
     // all kinds of paths
@@ -280,6 +282,7 @@ fn main() -> Result<()> {
         cli,
         config,
         has_processes: None,
+        project_cache_hash: None,
         logger,
         container_name: None,
         devenv_root,
@@ -451,19 +454,27 @@ impl App {
     }
 
     fn shell(&mut self, cmd: &Option<String>, args: &[String], replace_shell: bool) -> Result<()> {
-        let develop_args = self.prepare_shell(cmd, args)?;
+        let mut shell = std::process::Command::new(std::env::var("SHELL").expect("SHELL env not set"));
+        
+        for (key, value) in self.get_environment_variables().expect("Failed to get environment variables") {
+            shell.env(key, value);
+        }
 
-        let options = command::Options {
-            replace_shell,
-            ..command::Options::default()
-        };
+        if cmd.is_some() {
+            shell.arg("-c").arg(format!("{} {}", cmd.clone().unwrap(), args.join(" ")));
+        }
 
-        let develop_args = develop_args
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<&str>>();
+        if replace_shell {
+            shell.exec();
+        } else {
+            shell
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .spawn()
+            .expect("Failed to run the shell command");
+        }
 
-        self.run_nix("nix", &develop_args, &options)?;
         Ok(())
     }
 
@@ -778,15 +789,40 @@ impl App {
         Ok(())
     }
 
+    fn get_project_cache_hash(&mut self) -> Result<String> {
+        if self.project_cache_hash.is_none() {
+            let hash_files = [
+                "devenv.nix",
+                "devenv.lock",
+                "devenv.local.nix",
+                "devenv.yaml",
+            ];
+
+            let mut hasher = blake3::Hasher::new();
+            for file in hash_files.iter() {
+                let path = self.devenv_root.join(file);
+                if path.exists() {
+                    let contents = fs::read(&path).expect("Failed to read file");
+                    hasher.update(&contents);
+                }
+            }
+
+            let hash = hasher.finalize();
+            self.project_cache_hash = Some(hex::encode(hash.as_bytes()));
+        }
+
+        Ok(self.project_cache_hash.clone().unwrap())
+    }
+
     fn has_processes(&mut self) -> Result<bool> {
         if self.has_processes.is_none() {
-            let result = self.run_nix(
+            let result = self.run_cached_nix(
+                "processes",
                 "nix",
                 &["eval", ".#devenv.processes", "--json"],
                 &command::Options::default(),
             )?;
-            let processes = String::from_utf8_lossy(&result.stdout).to_string();
-            self.has_processes = Some(processes.trim() != "{}");
+            self.has_processes = Some(result.trim() != "{}");
         }
         Ok(self.has_processes.unwrap())
     }
@@ -929,7 +965,8 @@ impl App {
         {
             let _logprogress = log::LogProgress::new("Building processes", true);
 
-            let proc_script = self.run_nix(
+            let proc_script = self.run_cached_nix(
+                "procfilescript",
                 "nix",
                 &[
                     "build",
@@ -940,10 +977,7 @@ impl App {
                 &command::Options::default(),
             )?;
 
-            proc_script_string = String::from_utf8_lossy(&proc_script.stdout)
-                .to_string()
-                .trim()
-                .to_string();
+            proc_script_string = proc_script.trim().to_string();
             self.add_gc("procfilescript", Path::new(&proc_script_string))?;
         }
 
@@ -967,10 +1001,11 @@ impl App {
             std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
                 .expect("Failed to set permissions");
 
-            let args =
-                self.prepare_shell(&Some(processes_script.to_str().unwrap().to_string()), &[])?;
-            let args = args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            let mut cmd = self.prepare_command("nix", &args)?;
+            let mut cmd = std::process::Command::new(&processes_script);
+            
+            for (key, value) in self.get_environment_variables().expect("Could not get environment variables").iter() {
+                cmd.env(key, value);
+            }
 
             if *detach {
                 let log_file = std::fs::File::create(self.processes_log())
@@ -1088,6 +1123,71 @@ impl App {
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         std::fs::write(DEVENV_FLAKE, flake).expect("Failed to write flake.nix");
         Ok(())
+    }
+
+    fn get_environment_variables(&mut self) -> Result<HashMap<String, String>>
+    {
+        self.assemble()?;
+
+        let gc_root = self.devenv_dot_gc.join("shell");
+        let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
+
+        let env = self.run_cached_nix("env", "nix", &vec!["print-dev-env", "--profile", gc_root_str], &command::Options::default())?;
+
+        let options = command::Options {
+            logging: false,
+            ..command::Options::default()
+        };
+
+        let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
+        self.run_nix("nix-env", &args, &options)?;
+        let now_ns = get_now_with_nanoseconds();
+        let target = format!("{}-shell", now_ns);
+        symlink_force(
+            &self.logger,
+            &fs::canonicalize(&gc_root).expect("to resolve gc_root"),
+            &self.devenv_home_gc.join(target),
+        );
+
+        let temp_dir = temp_dir();
+        
+        let dumper_script_path = temp_dir.join("dumper.sh");
+        let result_script_path = temp_dir.join("result.sh");
+        let dumper_script = env + "\n" + "declare -p -x > " + result_script_path.to_str().unwrap();
+
+        std::fs::write(dumper_script_path.clone(), dumper_script).expect("Failed to write environment variables dumper");
+
+        std::process::Command::new("bash")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .arg("-c")
+            .arg(format!("source {}", dumper_script_path.to_string_lossy())) 
+            .spawn()
+            .expect("Failed to run environment variables dumper");
+
+        let env = std::fs::read_to_string(result_script_path).expect("Failed to read environment variables");
+
+        let mut map: HashMap<String, String> = env.split("\n")
+        .map(|f| f.replace("declare -x", "").trim().to_owned())
+        .filter(|f| f.len() > 0)
+        .filter(|f| !f.starts_with("DIRENV_"))
+        .map(|line| {
+            let mut parts = line.split("=");
+
+            let key = parts.next().unwrap().to_string();
+            let mut value = parts.next().unwrap().to_string();
+
+            if value.starts_with("\"") && value.ends_with("\"") {
+                value = value[1..value.len()-1].to_string();
+            }
+
+            (key, value)
+        }).collect();
+
+        map.remove("TMPDIR");
+        map.remove("SHELL");
+
+        Ok(map)
     }
 
     fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<(Vec<u8>, PathBuf)> {
