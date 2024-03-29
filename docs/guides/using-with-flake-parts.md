@@ -35,7 +35,7 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
     devenv.url = "github:cachix/devenv";
   };
 
-  outputs = inputs@{ flake-parts, ... }:
+  outputs = inputs@{ flake-parts, nixpkgs, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.devenv.flakeModule
