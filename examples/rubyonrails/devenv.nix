@@ -15,12 +15,12 @@
 
   enterShell = ''
     if [ ! -d "blog" ]; then
-      gem install rails
-      rails new blog --database=postgresql --force
+      gem install rails || exit 1
+      rails new blog --database=postgresql --force || exit 1
     fi
     export PATH="$DEVENV_ROOT/blog/bin:$PATH"
     pushd blog
-      bundle
+      bundle || exit 1
     popd
   '';
 }
