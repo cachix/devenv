@@ -7,6 +7,8 @@
   packages = [
     pkgs.openssl
     pkgs.libyaml
+    pkgs.git
+    pkgs.curl
   ];
 
   services.postgres.enable = true;
