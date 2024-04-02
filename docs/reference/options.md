@@ -14933,6 +14933,27 @@ path
 
 
 
+## stdenv
+
+
+
+The stdenv to use for the developer environment.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` <derivation stdenv-linux> `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## unsetEnvVars
 
 
