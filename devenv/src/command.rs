@@ -300,6 +300,25 @@ impl App {
                     } else {
                         "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
                     };
+
+                    self.logger
+                        .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
+                    if !new_known_keys.is_empty() {
+                        for (name, pubkey) in new_known_keys.iter() {
+                            self.logger.info(&format!(
+                                "Trusting {}.cachix.org on first use with the public key {}",
+                                name, pubkey
+                            ));
+                        }
+                        caches.known_keys.extend(new_known_keys);
+                    }
+
+                    std::fs::write(
+                        &self.cachix_trusted_keys,
+                        serde_json::to_string(&caches.known_keys).unwrap(),
+                    )
+                    .expect("Failed to write cachix caches to file");
+
                     if trusted == Some(0) {
                         self.logger.error(&indoc::formatdoc!(
                             "You're not a trusted user of the Nix store. You have the following options:
@@ -328,23 +347,6 @@ impl App {
                         ));
                         bail!("You're not a trusted user of the Nix store.")
                     }
-
-                    self.logger
-                        .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
-                    if !new_known_keys.is_empty() {
-                        for (name, pubkey) in new_known_keys.iter() {
-                            self.logger.info(&format!(
-                                "Trusting {}.cachix.org on first use with the public key {}",
-                                name, pubkey
-                            ));
-                        }
-                        caches.known_keys.extend(new_known_keys);
-                    }
-                    std::fs::write(
-                        &self.cachix_trusted_keys,
-                        serde_json::to_string(&caches.known_keys).unwrap(),
-                    )
-                    .expect("Failed to write cachix caches to file")
                 }
 
                 self.cachix_caches = Some(caches.clone());
