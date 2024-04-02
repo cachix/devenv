@@ -45,7 +45,7 @@ let
       # Avoid running "pnpm install" for every shell.
       # Only run it when the "package-lock.json" file or nodejs version has changed.
       # We do this by storing the nodejs version and a hash of "package-lock.json" in node_modules.
-      local ACTUAL_PNPM_CHECKSUM="${cfg.npm.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''}pnpm-lock.yaml)"
+      local ACTUAL_PNPM_CHECKSUM="${cfg.pnpm.package.version}:$(${pkgs.nix}/bin/nix-hash --type sha256 ${lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''}pnpm-lock.yaml)"
       local PNPM_CHECKSUM_FILE="${nodeModulesPath}/pnpm-lock.yaml.checksum"
       if [ -f "$PNPM_CHECKSUM_FILE" ]
         then
@@ -56,7 +56,7 @@ let
 
       if [ "$ACTUAL_PNPM_CHECKSUM" != "$EXPECTED_PNPM_CHECKSUM" ]
       then
-        if ${cfg.npm.package}/bin/npm install ${lib.optionalString (cfg.directory != config.devenv.root) "--dir ${cfg.directory}"}
+        if ${cfg.pnpm.package}/bin/pnpm install ${lib.optionalString (cfg.directory != config.devenv.root) "--dir ${cfg.directory}"}
         then
           echo "$ACTUAL_PNPM_CHECKSUM" > "$PNPM_CHECKSUM_FILE"
         else
