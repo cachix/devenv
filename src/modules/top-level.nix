@@ -68,6 +68,12 @@ in
       default = [ ];
     };
 
+    stdenv = lib.mkOption {
+      type = types.package;
+      description = "The stdenv to use for the developer environment.";
+      default = pkgs.stdenv;
+    };
+
     unsetEnvVars = lib.mkOption {
       type = types.listOf types.str;
       description = "Remove these list of env vars from being exported to keep the shell/direnv more lean.";
@@ -275,7 +281,7 @@ in
     '';
 
     shell = performAssertions (
-      pkgs.mkShell ({
+      (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
         name = "devenv-shell";
         packages = config.packages;
         shellHook = ''
