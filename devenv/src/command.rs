@@ -336,7 +336,7 @@ impl App {
                             extra-substituters = {}
                             extra-trusted-public-keys = {}
 
-                            c) Disable Cachix in `devenv.nix`:
+                            And disable automatic cache configuration in `devenv.nix`:
 
                             {{
                                 cachix.enable = false;
