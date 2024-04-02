@@ -36,6 +36,7 @@ let
     name = "nixpkgs-python";
     url = "github:cachix/nixpkgs-python";
     attribute = "languages.python.version";
+    follows = [ "nixpkgs" ];
   };
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
