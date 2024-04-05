@@ -126,12 +126,12 @@
     #clippy.enable = true;
     rustfmt.enable = true;
     #markdownlint.enable = true;
-  };
-  pre-commit.settings.markdownlint.config = {
-    MD013 = {
-      line_length = 120;
+    markdownlint.settings.configuration = {
+      MD013 = {
+        line_length = 120;
+      };
+      MD033 = false;
+      MD034 = false;
     };
-    MD033 = false;
-    MD034 = false;
   };
 }
