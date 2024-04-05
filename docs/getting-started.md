@@ -42,7 +42,7 @@
 === "Newcomers"
 
     ```
-    nix-env -iA devenv -f https://github.com/NixOS/nixpkgs/tarball/2b8521c464b0f0c587839545b9d70b2d0b7574d0
+    nix-env -iA devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
     ```
 
 === "Nix profiles (requires experimental flags)"
