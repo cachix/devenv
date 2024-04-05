@@ -1,4 +1,3 @@
-allowUnfree: true
 inputs:
   nixpkgs-terraform:
     url: github:stackbuilders/nixpkgs-terraform
