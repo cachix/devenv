@@ -144,7 +144,7 @@ in
 
       trap down SIGINT SIGTERM
 
-      wait
+      wait $backgroundPID
     '';
 
     ci = [ config.procfileScript ];

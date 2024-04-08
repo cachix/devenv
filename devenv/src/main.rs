@@ -9,7 +9,7 @@ use miette::{bail, Result};
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::fs::symlink;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -814,6 +814,68 @@ impl App {
         Ok(self.has_processes.unwrap())
     }
 
+    fn wait_for_processes(&mut self) -> Result<()> {
+        let pid = fs::read_to_string(self.processes_pid()).expect("Failed to read processes pid");
+        let pid = process_alive::Pid::from(pid.trim().parse::<u32>().expect("Failed to parse pid"));
+
+        // if process-compose socket exists, use it to wait for processes
+        let process_compose_socket = self.devenv_runtime.join("pc.sock");
+        let start_time = SystemTime::now();
+
+        {
+            let _logprogress = log::LogProgress::new("Waiting for process-compose to start", true);
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+
+                if process_compose_socket.exists() {
+                    break;
+                }
+
+                let state = process_alive::state(pid);
+                println!("{:?}", state);
+
+                if process_alive::state(pid) != process_alive::State::Alive {
+                    bail!("process-compose crashed");
+                }
+
+                if start_time.elapsed().unwrap().as_secs() > 60 {
+                    bail!("Failed to start process-compose in 60s");
+                }
+            }
+        }
+
+        let _logprogress = log::LogProgress::new("Waiting for processes to start", true);
+
+        loop {
+            // connect to socket and send http request
+            let body =
+                reqwest::blocking::get(format!("unix://{}", process_compose_socket.display()))
+                    .expect("getting process compose response")
+                    .bytes()
+                    .expect("Failed to get process compose response")
+                    .to_vec();
+
+            // parse body into ProcessCompose
+            let process_compose: ProcessCompose = serde_json::from_slice(&body)
+                .expect("Failed to parse process-compose socket response");
+
+            if process_compose
+                .data
+                .iter()
+                .all(|process| process.is_running)
+            {
+                break;
+            }
+
+            if start_time.elapsed().unwrap().as_secs() > 60 {
+                bail!("Failed to start processes in 60s");
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        Ok(())
+    }
+
     fn test(&mut self, dont_override_dotfile: bool) -> Result<()> {
         let tmpdir = tempdir::TempDir::new_in(&self.devenv_root, ".devenv")
             .expect("Failed to create temporary directory");
@@ -849,6 +911,7 @@ impl App {
 
         if self.has_processes()? {
             self.up(None, &true, &false)?;
+            self.wait_for_processes()?;
         }
 
         let result = {
@@ -1274,4 +1337,15 @@ fn max_jobs() -> u8 {
         std::num::NonZeroUsize::new(1).unwrap()
     });
     (num_cpus.get() / 2).try_into().unwrap()
+}
+
+#[derive(Deserialize)]
+struct ProcessComposeProcesses {
+    #[serde(rename = "IsRunning")]
+    is_running: bool,
+}
+
+#[derive(Deserialize)]
+struct ProcessCompose {
+    data: Vec<ProcessComposeProcesses>,
 }
