@@ -1230,10 +1230,10 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
         let entry = entry.expect("Failed to read entry");
         let path = entry.path();
         if path.is_symlink() {
-            let target = fs::canonicalize(&path).expect("Failed to read link");
-            if !target.exists() {
+            if !path.exists() {
                 removed_symlinks.push(path.clone());
             } else {
+                let target = fs::canonicalize(&path).expect("Failed to read link");
                 to_gc.push(target);
             }
         }
