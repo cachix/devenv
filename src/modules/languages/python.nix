@@ -59,8 +59,17 @@ let
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
-      ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+      ${lib.optionalString cfg.uv.enable ''
+        echo uv venv "$VENV_PATH"
+        uv venv "$VENV_PATH"
+      ''}
+      ${
+        lib.optionalString (!cfg.uv.enable) ''
+          echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+          ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+
+        ''
+      }
       echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
 
@@ -74,8 +83,16 @@ let
         if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
           then
             echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
-            echo "Requirements changed, running pip install -r ${requirements}..."
-           "$VENV_PATH"/bin/pip install -r ${requirements}
+            ${lib.optionalString cfg.uv.enable ''
+              echo "Requirements changed, running uv pip install -r ${requirements}..."
+              uv pip install -r ${requirements}
+            ''}
+            ${
+              lib.optionalString (!cfg.uv.enable) ''
+                echo "Requirements changed, running pip install -r ${requirements}..."
+                "$VENV_PATH"/bin/pip install -r ${requirements}
+              ''
+            }
        fi
     fi
   '';
@@ -202,6 +219,16 @@ in
       description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
     };
 
+    uv = {
+      enable = lib.mkEnableOption "uv";
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.uv;
+        defaultText = lib.literalExpression "pkgs.uv";
+        description = "The uv package to use.";
+      };
+    };
+
     poetry = {
       enable = lib.mkEnableOption "poetry";
       install = {
@@ -302,9 +329,9 @@ in
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
-    packages = [
-      package
-    ] ++ (lib.optional cfg.poetry.enable cfg.poetry.package);
+    packages = [ package ]
+      ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
+      ++ (lib.optional cfg.uv.enable cfg.uv.package);
 
     env = lib.optionalAttrs cfg.poetry.enable {
       # Make poetry use DEVENV_ROOT/.venv
