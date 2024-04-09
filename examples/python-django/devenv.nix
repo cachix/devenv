@@ -31,7 +31,7 @@ in
 
   processes = {
     runserver.exec = ''
-      devenv shell python manage.py runserver
+      python manage.py runserver
     '';
   };
 
