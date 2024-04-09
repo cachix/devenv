@@ -954,7 +954,11 @@ impl App {
 
             let processes_script = self.devenv_dotfile.join("processes");
             // we force disable process compose tui if detach is enabled
-            let tui = if *detach { "PC_TUI_ENABLED=0" } else { "" };
+            let tui = if *detach {
+                "export PC_TUI_ENABLED=0"
+            } else {
+                ""
+            };
             fs::write(
                 &processes_script,
                 indoc::formatdoc! {"
