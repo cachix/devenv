@@ -7,11 +7,9 @@ let
   db_name = "db";
 in
 {
-  packages = [ pkgs.git pkgs.postgresql_14 ];
-
   languages.python = {
     enable = true;
-    package = pkgs.python310;
+    version = "3.11";
     poetry.enable = true;
   };
 
@@ -29,15 +27,11 @@ in
     listen_addresses = db_host;
   };
 
-  processes = {
-    runserver.exec = ''
-      python manage.py runserver
-    '';
-  };
+  processes.runserver.exec = "python manage.py runserver";
+  processes.runserver.process-compose.depends_on.postgres.condition = "process_ready";
 
   enterTest = ''
     wait_for_port ${db_port}
     python manage.py test
   '';
-
 }
