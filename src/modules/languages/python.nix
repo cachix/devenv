@@ -59,18 +59,15 @@ let
       ${lib.optionalString cfg.poetry.enable ''
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
-      ${lib.optionalString cfg.uv.enable ''
+      ${if cfg.uv.enable then ''
         echo uv venv "$VENV_PATH"
         uv venv "$VENV_PATH"
-      ''}
-      ${
-        lib.optionalString (!cfg.uv.enable) ''
+      ''
+      else ''
           echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
           ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
-
         ''
       }
-      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
 
     source "$VENV_PATH"/bin/activate
@@ -83,12 +80,11 @@ let
         if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
           then
             echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
-            ${lib.optionalString cfg.uv.enable ''
+            ${if cfg.uv.enable then ''
               echo "Requirements changed, running uv pip install -r ${requirements}..."
               uv pip install -r ${requirements}
-            ''}
-            ${
-              lib.optionalString (!cfg.uv.enable) ''
+            ''
+            else ''
                 echo "Requirements changed, running pip install -r ${requirements}..."
                 "$VENV_PATH"/bin/pip install -r ${requirements}
               ''
