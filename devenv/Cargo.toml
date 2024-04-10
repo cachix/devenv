@@ -6,10 +6,12 @@ edition = "2021"
 
 [dependencies]
 ansiterm = "0.12.2"
+blake3 = "1.5.1"
 clap = { version = "4.5.1", features = ["derive", "cargo"] }
 cli-table = "0.4.7"
 dotlock = "0.5.0"
 fs2 = "0.4.3"
+hex = "0.4.3"
 include_dir = "0.7.3"
 indoc = "2.0.4"
 miette = { version = "7.1.0", features = ["fancy"] }
