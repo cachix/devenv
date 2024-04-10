@@ -3796,6 +3796,53 @@ one of “no”, “little”, “more”, “debug”
 
 
 
+## languages.python.uv.enable
+
+
+
+Whether to enable uv.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.uv.package
+
+
+
+The uv package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.uv `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.venv.enable
 
 
@@ -4727,8 +4774,6 @@ unspecified value
 
 ## languages.typescript.enable
 
-
-
 Whether to enable tools for TypeScript development.
 
 
@@ -4778,6 +4823,8 @@ boolean
 
 
 ## languages.unison.package
+
+
 
 Which package of Unison to use
 
@@ -7477,6 +7524,8 @@ submodule
 
 ## pre-commit.hooks.black.enable
 
+
+
 Whether to enable this pre-commit hook.
 
 
@@ -7546,8 +7595,6 @@ attribute set of package
 
 
 ## pre-commit.hooks.black.always_run
-
-
 
 if true this hook will run even if there are no matching files.
 
