@@ -21,6 +21,7 @@ theme:
     - instant
     - search.share
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.expand
     - navigation.instant
     - navigation.tracking
