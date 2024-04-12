@@ -8,6 +8,7 @@
     pkgs.xorg.libxcb
     pkgs.yaml2json
     pkgs.tesh
+    pkgs.watchexec
     pkgs.openssl
   ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
     frameworks.SystemConfiguration
@@ -18,9 +19,12 @@
   languages.rust.enable = true;
   # for docs
   languages.python.enable = true;
+  # speed it up
   languages.python.uv.enable = true;
   languages.python.venv.enable = true;
   languages.python.venv.requirements = ./requirements.txt;
+  languages.javascript.enable = true;
+  languages.javascript.npm.enable = true;
 
   devcontainer.enable = true;
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
@@ -28,11 +32,14 @@
 
   dotenv.enable = true;
 
-  processes.docs.exec = "mkdocs serve";
+  processes = {
+    docs.exec = "mkdocs serve";
+    tailwind.exec = "watchexec -e html,css,js npx tailwindcss build docs/assets/extra.css -o docs/assets/output.css";
+  };
 
   scripts.devenv-bump-version.exec = ''
     # TODO: ask for the new version
-    # TODO: update the version in the mkdocs.yml
+    # TODO: update the version in thep mkdocs.yml
     echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
     cat mkdocs.yml | yaml2json | jq -r '.extra.devenv.version' > src/modules/latest-version
   '';
@@ -133,6 +140,11 @@
       };
       MD033 = false;
       MD034 = false;
+    };
+    generate-css = {
+      enable = true;
+      name = "generate-css";
+      entry = "npx tailwindcss build docs/assets/extra.css -o docs/assets/output.css";
     };
   };
 }
