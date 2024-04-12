@@ -836,9 +836,6 @@ impl App {
             .to_string();
         if test_script_string.is_empty() {
             self.logger.error("No tests found.");
-            tmpdir
-                .close()
-                .expect("Failed to remove temporary directory");
             bail!("No tests found");
         }
 
