@@ -92,6 +92,9 @@ If you'd like to define your own hook you can do:
     # Set this to false to not pass the changed files
     # to the command (default: true):
     pass_filenames = false;
+
+    # The tool that is required in env
+    package = pkgs.cmake;
   };
 }
 ```
