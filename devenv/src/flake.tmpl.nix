@@ -68,7 +68,8 @@
                 devenv.dotfile = devenv_root + "/" + devenv_dotfile_string;
               }
               (pkgs.lib.optionalAttrs (inputs.devenv.isTmpDir or false) {
-                devenv.tmpdir = tmpdir;
+                devenv.tmpdir = devenv_tmpdir;
+                devenv.runtime = devenv_runtime;
               })
               (pkgs.lib.optionalAttrs (container_name != null) {
                 container.isBuilding = pkgs.lib.mkForce true;
