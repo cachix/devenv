@@ -33,8 +33,6 @@ let
         ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
     else lib.trivial.showWarnings config.warnings;
-
-  q = lib.escapeShellArg;
 in
 {
   options = {
@@ -169,6 +167,19 @@ in
       runtime = lib.mkOption {
         type = types.str;
         internal = true;
+        # The path has to be
+        # - unique to each DEVENV_STATE to let multiple devenv environments coexist
+        # - deterministic so that it won't change constantly
+        # - short so that unix domain sockets won't hit the path length limit
+        # - free to create as an unprivileged user across OSes
+        default =
+          let
+            hashedRoot = builtins.hashString "sha256" config.devenv.state;
+
+            # same length as git's abbreviated commit hashes
+            shortHash = builtins.substring 0 7 hashedRoot;
+          in
+          "${config.devenv.tmpdir}/devenv-${shortHash}";
       };
 
       tmpdir = lib.mkOption {
@@ -223,20 +234,6 @@ in
     devenv.dotfile = lib.mkDefault (builtins.toPath (config.devenv.root + "/.devenv"));
     devenv.profile = profile;
 
-    # The path has to be
-    # - unique to each DEVENV_STATE to let multiple devenv environments coexist
-    # - deterministic so that it won't change constantly
-    # - short so that unix domain sockets won't hit the path length limit
-    # - free to create as an unprivileged user across OSes
-    devenv.runtime =
-      let
-        hashedRoot = builtins.hashString "sha256" config.devenv.state;
-
-        # same length as git's abbreviated commit hashes
-        shortHash = builtins.substring 0 7 hashedRoot;
-      in
-      "${config.devenv.tmpdir}/devenv-${shortHash}";
-
     env.DEVENV_PROFILE = config.devenv.profile;
     env.DEVENV_STATE = config.devenv.state;
     env.DEVENV_RUNTIME = config.devenv.runtime;
@@ -269,15 +266,15 @@ in
         echo "Please install direnv: https://direnv.net/docs/installation.html"
       fi
 
-      mkdir -p $DEVENV_STATE
-      if [ ! -L .devenv/profile ] || [ "$(${pkgs.coreutils}/bin/readlink .devenv/profile)" != "${profile}" ]
+      mkdir -p "$DEVENV_STATE"
+      if [ ! -L "$DEVENV_DOTFILE/profile" ] || [ "$(${pkgs.coreutils}/bin/readlink $DEVENV_DOTFILE/profile)" != "${profile}" ]
       then
-        ln -nsf ${profile} .devenv/profile
+        ln -nsf ${profile} "$DEVENV_DOTFILE/profile"
       fi
       unset ${lib.concatStringsSep " " config.unsetEnvVars}
 
-      mkdir -p ${q config.devenv.runtime}
-      ln -fs ${q config.devenv.runtime} ${q config.devenv.dotfile}/run
+      mkdir -p ${lib.escapeShellArg config.devenv.runtime}
+      ln -fs ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 
     shell = performAssertions (

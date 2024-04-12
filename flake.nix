@@ -83,7 +83,7 @@
         });
 
       modules = ./src/modules;
-      hasTmpDir = true;
+      isTmpDir = true;
 
       templates =
         let
