@@ -5454,6 +5454,10 @@ A Python utility / library to sort imports.
 
 Run JuliaFormatter.jl against Julia source files
 
+**` lacheck `**
+
+A consistency checker for LaTeX documents.
+
 **` latexindent `**
 
 Perl script to add indentation to LaTeX files.
@@ -5765,6 +5769,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -6166,6 +6175,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -6678,6 +6692,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -7120,6 +7139,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -7568,6 +7592,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -7992,6 +8021,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -8490,6 +8524,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -8917,6 +8956,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -9338,6 +9382,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -9887,6 +9936,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -10329,6 +10383,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -10773,6 +10832,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -11215,6 +11279,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -11722,6 +11791,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -12164,6 +12238,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -12642,6 +12721,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -13275,6 +13359,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -13696,6 +13785,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -14119,6 +14213,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -14541,6 +14640,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -14922,6 +15026,412 @@ boolean
 
 
 
+## pre-commit.hooks.lacheck
+
+
+
+lacheck hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.lacheck.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.package
+
+
+
+An optional package that provides the hook.
+
+For most hooks, the package name matches the name of the hook and can be overridden directly.
+
+```
+hooks.nixfmt.package = pkgs.nixfmt;
+```
+
+Some hooks may require multiple packages or a wrapper script to function correctly.
+Such hooks can expose additional named packages as ` packageOverrides `.
+
+```
+hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
+hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
+```
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.packageOverrides
+
+
+
+Additional packages required to construct the hook package.
+
+
+
+*Type:*
+attribute set of package
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+internal name, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.latexindent
 
 
@@ -14983,6 +15493,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -15405,6 +15920,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -15849,6 +16369,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -16292,6 +16817,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -16713,6 +17243,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -17367,6 +17902,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -17898,6 +18438,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -18324,6 +18869,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -18745,6 +19295,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -19215,6 +19770,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -19658,6 +20218,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -20083,6 +20648,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -20510,6 +21080,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -20936,6 +21511,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -21361,6 +21941,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -22572,6 +23157,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -22997,6 +23587,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -23466,6 +24061,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -23891,6 +24491,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -24318,6 +24923,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -24740,6 +25350,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -25161,6 +25776,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -25633,6 +26253,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -26066,6 +26691,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -26509,6 +27139,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -26979,6 +27614,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -27417,6 +28057,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -28193,6 +28838,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 *Type:*
 null or package
 
+
+
+*Default:*
+` null `
+
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
 
@@ -28668,6 +29318,11 @@ hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
 
 *Type:*
 null or package
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
