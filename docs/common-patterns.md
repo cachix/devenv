@@ -40,7 +40,7 @@ in {
 { pkgs, ... }: {
   packages = [
     pkgs.git
-  ] ++ lib.optionals !config.container.isBuilding [
+  ] ++ lib.optionals (!config.container.isBuilding) [
     pkgs.haskell-language-server
   ];
 }
