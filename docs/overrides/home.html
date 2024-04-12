@@ -1,13 +1,20 @@
 {% extends "main.html" %}
 
+{% block scripts %}
+  {{ super() }}
+  <link rel="stylesheet" href="/assets/github-dark.min.css">
+  <script src="/assets/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+{% endblock %}
+
 <!-- Render hero under tabs -->
 {% block tabs %}
-{{ super() }}
+{% endblock %}
 
-<link rel="stylesheet" href="/assets/github-dark.min.css">
-<script src="/assets/highlight.min.js"></script>
-<script>hljs.highlightAll();</script>
+{% block site_nav %}
+{% endblock %}
 
+{% block hero %}
 
 <div class="relative isolate overflow-hidden pt-14">
   <div class="mx-auto max-w-3xl py-8 px-4">
@@ -702,7 +709,7 @@ imports:
 
 {% endblock %}
 
-<!-- Content -->
+<!-- Override content -->
 {% block content %}
 {% endblock %}
 
