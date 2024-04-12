@@ -139,6 +139,7 @@ in
         wait $backgroundPID
         ${config.process.after}
         echo "Processes stopped."
+        rm -rf ${config.devenv.runtime}
       }
 
       trap stop_up SIGINT SIGTERM

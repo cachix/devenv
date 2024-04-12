@@ -7,6 +7,7 @@ use cli_table::{print_stderr, Table, WithTitle};
 use include_dir::{include_dir, Dir};
 use miette::{bail, Result};
 use serde::Deserialize;
+use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::fs::symlink;
@@ -246,6 +247,8 @@ struct App {
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
+    devenv_tmp: String,
+    devenv_runtime: PathBuf,
     cachix_trusted_keys: PathBuf,
     cachix_caches: Option<command::CachixCaches>,
 }
@@ -270,6 +273,16 @@ fn main() -> Result<()> {
     let devenv_dot_gc = devenv_root.join(".devenv").join("gc");
     std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
     let devenv_dotfile = devenv_root.join(".devenv");
+    let devenv_tmp = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
+    // first 7 chars of sha256 hash of devenv_state
+    let devenv_state_hash = {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
+        let result = hasher.finalize();
+        hex::encode(result)
+    };
+    let devenv_runtime = Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
     let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
     let logger = log::Logger::new(level);
     let mut config = config::Config::load()?;
@@ -286,6 +299,8 @@ fn main() -> Result<()> {
         devenv_dotfile,
         devenv_dot_gc,
         devenv_home_gc,
+        devenv_tmp,
+        devenv_runtime,
         cachix_trusted_keys,
         cachix_caches: None,
     };
@@ -821,9 +836,6 @@ impl App {
             .to_string();
         if test_script_string.is_empty() {
             self.logger.error("No tests found.");
-            tmpdir
-                .close()
-                .expect("Failed to remove temporary directory");
             bail!("No tests found");
         }
 
@@ -1076,7 +1088,8 @@ impl App {
             devenv_dotfile = ./{};
             devenv_dotfile_string = \"{}\";
             container_name = {};
-            tmpdir = \"{}\";
+            devenv_tmpdir = \"{}\";
+            devenv_runtime = \"{}\";
             ",
             crate_version!(),
             self.cli.system,
@@ -1087,8 +1100,8 @@ impl App {
                 .as_deref()
                 .map(|s| format!("\"{}\"", s))
                 .unwrap_or_else(|| "null".to_string()),
-            std::env::var("XDG_RUNTIME_DIR")
-                .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())),
+            self.devenv_tmp,
+            self.devenv_runtime.display(),
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         std::fs::write(DEVENV_FLAKE, flake).expect("Failed to write flake.nix");
