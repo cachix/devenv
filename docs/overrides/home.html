@@ -2,609 +2,711 @@
 
 <!-- Render hero under tabs -->
 {% block tabs %}
-  {{ super() }}
+{{ super() }}
 
-<link rel="stylesheet"
-      href="{{config.site_url}}assets/stackoverflow-light.min.css">
-<script src="{{config.site_url}}assets/highlight.min.js"></script>
+<link rel="stylesheet" href="/assets/github-dark.min.css">
+<script src="/assets/highlight.min.js"></script>
 <script>hljs.highlightAll();</script>
 
-<style>
 
-/* Apply box shadow on smaller screens that don't display tabs */
-@media only screen and (max-width: 1220px) {
-  .md-header {
-    box-shadow: 0 0 .2rem rgba(0,0,0,.1),0 .2rem .4rem rgba(0,0,0,.2);
-    transition: color 250ms,background-color 250ms,box-shadow 250ms;
-  }
-}
-
-/* Hide main content for now */
-.md-content {
-  display: none;
-}
-
-/* Hide table of contents */
-@media screen and (min-width: 60em) {
-  .md-sidebar--secondary {
-    display: none;
-  }
-}
-
-/* Hide navigation */
-@media screen and (min-width: 76.25em) {
-  .md-sidebar--primary {
-    display: none;
-  }
-}
-
-/* Get started button */
-.md-typeset .md-button--primary {
-    color: var(--md-primary-fg-color);
-    background-color: var(--md-primary-bg-color);
-    border-color: var(--md-primary-bg-color);
-}
-.md-typeset .md-button--primary:hover {
-  color: var(--md-primary-bg-color);
-  background-color: var(--md-primary-fg-color);
-  border-color: var(--md-primary-bg-color);
-}
-
-.tx-hero {
-  max-width: 700px;
-  display: flex;
-  padding: .4rem;
-  margin: 0 auto;
-  text-align: center;
-}
-.tx-hero h1 {
-  font-weight: 700;
-  font-size: 38px;
-  line-height: 46px;
-  color: rgb(38, 38, 38);
-}
-.tx-hero p {
-  color: rgb(92, 92, 92);
-  font-weight: 400;
-  font-size: 20px;
-  line-height: 32px;
-}
-.tx-hero__image {
-  max-width: 1000px;
-  min-width: 600px;
-  width: 100%;
-  height: auto;
-  margin: 0 auto;
-  display: flex;
-  align-items: stretch;
-}
-
-.tx-hero__image img {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-}
-
-/* Secondary content styles */
-.secondary-section {
-  background: rgb(245, 245, 245) none repeat scroll 0% 0%;
-  border-top: 1px solid rgb(222, 222, 222);
-  border-bottom: 1px solid rgb(222, 222, 222)
-}
-@media screen and (max-width: 1012px) {
-  .secondary-section {
-    display: block;
-  }
-}
-
-.secondary-section .g {
-  position: relative;
-  margin-left: auto;
-  margin-right: auto;
-  padding: 0px 40px;
-  max-width: 1280px;
-}
-
-.secondary-section .g .section {
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 30px;
-  letter-spacing: normal;
-  padding: 88px 0px 116px;
-}
-
-.secondary-section .g .section.follow {
-  padding-top: 0px;
-}
-
-
-.secondary-section .g .section .component-wrapper {
-  display: flex;
-  -moz-box-align: center;
-  align-items: center;
-}
-
-@media screen and (max-width: 1012px) {
-  .secondary-section .g .section .component-wrapper {
-    display: block;
-  }
-}
-
-.secondary-section .g .section .component-wrapper h3 {
-  color: rgb(38, 38, 38);
-  font-size: 36px;
-  font-weight: 700;
-  line-height: 46px;
-  letter-spacing: normal;
-  margin-bottom: 12px;
-}
-
-.secondary-section .g .section .component-wrapper h4 {
-  color: rgb(38, 38, 38);
-}
-
-.secondary-section .g .section .component-wrapper p {
-  color: rgb(92, 92, 92);
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 30px;
-  letter-spacing: normal;
-  margin-bottom: 16px;
-}
-
-.secondary-section .g .section .component-wrapper .image-wrapper {
-  margin-bottom: 12px;
-  overflow: hidden;
-  border-radius: 8px;
-  margin-top: 48px;
-  border: 1px solid rgb(222, 222, 222);
-  box-shadow: rgba(202, 202, 202, 0.15) 0px 0px 0px 6px;
-  max-width: 600px;
-  width: 100%;
-  height: auto;
-  margin: 0 auto;
-  display: flex;
-  align-items: stretch;
-}
-
-.image-wrapper img {
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-}
-
-.secondary-section .g .section .component-wrapper .first-column {
-  padding-right: 100px;
-  flex: 0 1 auto;
-  height: auto;
-  width: 50%;
-}
-
-@media screen and (max-width: 1012px) {
-  .secondary-section .g .section .component-wrapper .first-column {
-    padding-right: 0px;
-    width: 100%;
-    margin-bottom: 32px;
-  }
-}
-
-.secondary-section .g .section .component-wrapper .second-column {
-  flex: 0 1 auto;
-  height: auto;
-  width: 50%;
-}
-@media screen and (max-width: 1012px) {
-  .secondary-section .g .section .component-wrapper .second-column {
-    width: 100%;
-    margin-bottom: 32px;
-  }
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid {
-  display: grid;
-  width: 100%;
-  grid-template-columns: repeat(1, 1fr);
-  gap: 2rem;
-}
-@media screen and (min-width: 64rem) {
-  .secondary-section .g .section .component-wrapper .responsive-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid a.card-wrapper {
-  text-decoration: none;
-  transition: none;
-  background: none;
-  padding: 0;
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid .card {
-  position: relative;
-  background-color:  #fff none repeat scroll 0% 0%;
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: row;
-  -moz-box-align: center;
-  align-items: center;
-  height: 100%;
-  -moz-box-pack: start;
-  justify-content: flex-start;
-  box-shadow: rgba(0, 0, 0, 0.09) 0.3125rem 0.3125rem 0px -0.0625rem, rgba(0, 0, 0, 0.15) 0px 0.25rem 0.5rem 0px;
-  transition: all 0.6s cubic-bezier(0.165, 0.84, 0.44, 1) 0s;
-}
-.secondary-section .g .section .component-wrapper .responsive-grid .card:hover {
-  box-shadow: rgba(0, 0, 0, 0.2) 0.3125rem 0.3125rem 0px -0.0625rem, rgba(0, 0, 0, 0.26) 0px 0.25rem 0.5rem 0px;
-}
-
-@media screen and (min-width: 75rem) {
-  .secondary-section .g .section .component-wrapper .responsive-grid .card {
-    padding: 2rem 2.5rem;
-  }
-}
-@media screen and (min-width: 36rem) {
-  .secondary-section .g .section .component-wrapper .responsive-grid .card {
-    padding: 1rem 1.5rem;
-  }
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid .card .logo {
-  margin-right: 0.75rem;
-  width: 1.2rem;
-  min-width: 1.2rem;
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid .card .card-content {
-  display: flex;
-  flex: 1 1 0%;
-  flex-direction: column;
-  width: 100%;
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid .card .card-content h5 {
-  color: rgb(61, 61, 61);
-  margin: 0;
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid .card .card-content p {
-  margin-top: 0.25em;
-  margin-bottom: 0;
-  color: rgb(92, 92, 92);
-  font-size: 0.65rem;
-  font-weight: 300;
-  line-height: normal;
-}
-
-.secondary-section .g .section .component-wrapper .responsive-grid .card .card-content code {
-  background: rgba(0, 0, 0, 0.05) none repeat scroll 0% 0%;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-
-.component-wrapper span.em {
-  color: rgb(61, 61, 61);
-}
-
-.component-wrapper a {
-  transition: color 125ms;
-  color: rgb(61, 61, 61);
-  background: rgba(0, 0, 0, 0.05) none repeat scroll 0% 0%;
-  padding: 2px 6px;
-  margin: 0px 1px;
-  border-radius: 4px;
-  display: inline;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.component-wrapper a:hover {
-  color: var(--md-typeset-a-color);
-  background: var(--md-accent-fg-color--transparent);
-}
-
-</style>
-
-  <!-- Hero for landing page -->
-  <div class="md-container tx-hero">
-    <div class="md-grid md-typeset">
-      <div class="md-main__inner">
-        <div>
-          <h1>Fast, Declarative, Reproducible, and Composable Developer Environments using Nix</h1>
-          <h3>Develop <a href="/basics/">in your shell</a>. Deploy <a href="/containers/">containers</a>.</h3>
-          <h2>Use a simple unified configuration to configure 
-              <a href="/packages/">packages</a>,
-              <a href="/processes/">processes</a>,
-              <a href="/services/">services</a>,
-              <a href="/scripts/">scripts</a>,
-              <a href="/pre-commit-hooks/">git hooks</a>,
-              <a href="/integrations/difftastic/">integrations</a>.
-          </h2>
-          
-
-        </p>
-          <a
-            href="/getting-started/"
-            title="Get Started"
-            class="md-button md-button--primary"
-          >
-            Get Started 
-            
-          </a>
-        </div>
+<div class="relative isolate overflow-hidden pt-14">
+  <div class="mx-auto max-w-2xl py-8 px-4">
+    <div class="text-center">
+      <h1 class="text-2xl font-bold tracking-tight text-black sm:text-4xl">Fast, Declarative, Reproduble and Composable
+        Developer Environments using Nix</h1>
+      <p class="mt-6 text-lg leading-8 text-gray-800">
+        Develop <a href="/basics" class="text-[#425C82] font-medium">natively</a>
+        • Deploy <a href="/containers" class="text-[#425C82] font-medium">containers</a>
+        • 80.000+ <a href="/packages" class="text-[#425C82] font-medium">packages</a>
+        • Write <a href="/scripts" class="text-[#425C82] font-medium">scripts</a>
+        • 50+ <a href="/languages" class="text-[#425C82] font-medium">supported languages</a>
+        • Define <a href="/processes" class="text-[#425C82] font-medium">processes</a>
+        • Reuse <a href="/services" class="text-[#425C82] font-medium">services</a>
+        • Run <a href="/tests" class="text-[#425C82] font-medium">tests</a>
+        • Enforce <a href="/pre-commit-hooks" class="text-[#425C82] font-medium">git hooks</a>
+      </p>
+      <div class="mt-10 flex items-center justify-center gap-x-6">
+        <a href="/getting-started/"
+          class="rounded-md bg-black px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:to-[#425C82] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400">Get
+          started</a>
       </div>
     </div>
   </div>
+</div>
 
-<div class="md-container secondary-section">
-    <div class="g">
-      <!-- packages -->
-      <div class="section">
-        <div class="component-wrapper">
-          <div class="first-column">
-            <h3>Pick from 80000+ prebuilt packages</h3>
-            <p>
-              Any <strong>language or tool</strong> widely adopted in the industry, prebuilt for <strong>Linux/macOS and X64/Arm64</strong>. Works with WSL.
-              </p>
-            <p>
-              <a href="https://devenv.sh/packages/#searching">Search packages</a> and <a href="/packages/">load them</a> in your developer environment.
-            </p>
 
-            <p>
-              Learn more about <a href="/basics/">the basic features</a>.
-            </p>
-          </div>
-          <div class="second-column">
-            <div class="image-wrapper">
-              <pre><code class="language-nix">
-$ cat devenv.nix 
-{ pkgs, ... }: {
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Simple JSON-like language</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            Declaratively define your development environment by <a href="/basics/"
+              class="text-[#425C82] font-semibold">toggling basic options</a>.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Environment variables.
+              </dt>
+              <dd class="inline">
+                Use <code class="bg-gray-100 p-1">env</code> attribute set to define environment variables.
+
+                <p class="mt-2">If you'd like to also include secrets from <code class="bg-gray-100 p-1">.env</code>
+                  file, set <code class="bg-gray-100 p-1">dotenv.enable = true;</code>.</p>
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Packages.
+              </dt>
+              <dd class="inline">
+                Pick from <strong>80000+ prebuilt packages</strong> for
+                <strong>Linux/macOS</strong> and <strong>X64/Arm64</strong>. Works with <strong>WSL2</strong>.
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Run script(s) when entering the environment.
+              </dt>
+              <dd class="inline">
+                Prepare your environment when entering the shell that has environment already loaded.
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Automatically load the environment when entering the project.
+              </dt>
+              <dd class="inline">
+                Using <code class="bg-gray-100 p-1">direnv</code> will <a class="text-[#425C82] font-semibold"
+                  href="/automatic-shell-activation">automatically load the environment when you enter the project
+                  directory</a>.
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-2 text-gray-200">
+                    devenv.nix</div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
   env.GREET = "determinism";
 
-  packages = [ pkgs.git ];
+  packages = [ 
+    pkgs.ncdu
+  ];
 
-  enterShell = "echo hello $GREET";
+  enterShell = ''
+    echo hello ${config.env.GREET}
+    ncdu --version
+  '';
 }
+                </code></pre>
+            </div>
+          </div>
 
-$ git --version 
-git: command not found
-
-$ devenv shell
+          <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+            <pre class="text-white text-sm"><code class="language-nix">$ devenv shell
 hello determinism
+ncdu 2.3
 
-(devenv) $ git --version
-git version 2.38.1
-</code><pre>
-            </div>
+(devenv) $
+            </code></pre>
           </div>
         </div>
       </div>
-
-      <!-- processes -->
-      <div class="section follow">
-        <div class="component-wrapper">
-          <div class="first-column">
-            <h3>Start development processes</h3>
-            <p>
-            Define your <a href="/processes/">development processes in a declarative way</a> and start them with <code>devenv up</code>.
-            </p>
-            <p>
-            Pick from a number of community maintained modules like PostgreSQL, Redis, MySQL, 
-            RabbitMQ, WireMock, MinIO, Caddy, ElasticSearch, and <a href="/reference/options/#servicesadminerenable">more are being added</a> each day.
-            </p>
-          </div>
-          <div class="second-column">
-            <div class="image-wrapper">
-              <pre><code class="language-nix">
-$ cat devenv.nix
-{ pkgs, ... }: {
-  processes.ping.exec = "ping example.com";
-
-  services.postgres.enable = true;
-}
-
-$ devenv up
-Starting processes ...
-
-20:37:44 system | ping.1 started (pid=94686)
-20:37:44 system | postgres.1 started (pid=94688)
-...
-              </code><pre>
-            </div>
-          </div>
-        </div>
-      </div>
-    
-        <!-- compose -->
-        <div class="section follow">
-            <div class="component-wrapper">
-                <div class="first-column">
-                <h3>Compose environments</h3>
-                <p>
-                  Use <a href="/inputs/">inputs</a> to manage dependencies and <a href="/composing-using-imports/">imports</a> to combine
-                  environments from local directories or download them using git/mercurial/tarball.
-                </p>
-                </div>
-                <div class="second-column">
-                <div class="image-wrapper" >
-                  <pre><code class="language-yaml">
-  $ cat devenv.yaml
-  inputs:
-    myproject:
-      url: github:myorg/myproject
-  imports:
-    - ./frontend
-    - ./backend
-    - myproject
-                  </code><pre>
-                </div>
-                </div>
-            </div>
-            </div>
-        
-      <!-- languages -->
-      <div class="section follow">
-        <div class="component-wrapper">
-          <div class="first-column">
-            <h3>Supports tooling for your favorite languages</h3>
-            <p>
-              A single toggle to load the compiler/tools/language server
-              for <a href="/languages">your favorite language</a>, currently 
-              <a href="https://github.com/cachix/devenv/blob/main/examples/supported-languages/devenv.nix">supporting over 32 languages</a>.
-            </p>
-          </div>
-          <div class="second-column">
-            <div class="image-wrapper">
-              <code class="language-nix"><pre>
-  $ cat devenv.nix
-  { pkgs, ... }:
-
-  {
-    languages.rust = {
-      enable = true;
-      # https://devenv.sh/reference/options/#languagesrustversion
-      version = "nightly";
-    };
-
-    pre-commit.hooks = {
-      clippy.enable = true;
-      rustfmt.enable = true;
-    };
-  }
-            <pre></code>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- direnv -->
-      <div class="section follow">
-        <div class="component-wrapper">
-          <div class="first-column">
-            <h3>Automatically load your environment</h3>
-            <p>
-             Combined with <a href="https://direnv.net/">direnv</a>,
-             your shell will automatically load your environment when you enter the project directory.
-            </p>
-          </div>
-          <div class="second-column">
-            <div class="image-wrapper">
-              <code class="language-shellsession"><pre>
-
-$ cd myproject
-direnv: loading ~/myproject/.envrc
-Building shell ...
-Entering shell ...
-
-(devenv) $ cd ..
-direnv: unloading
-
-$
-<pre></code>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- scripts -->
-      <div class="section follow">
-        <div class="component-wrapper">
-          <div class="first-column">
-            <h3>Scripts and pre-commit hooks</h3>
-            <p>
-             Define <a href="/scripts/">scripts</a>
-             and <a href="/pre-commit-hooks/">git pre-commit hooks</a>
-             to automate your development workflow.
-            </p>
-          </div>
-          <div class="second-column">
-            <div class="image-wrapper">
-              <code class="language-nix"><pre>
-  $ cat devenv.nix
-  { pkgs, ... }: {
-    # format Python code on git commit and CI
-    pre-commit.hooks.black.enable = true;
-    
-    # aliases
-    scripts.gd.exec = "git diff --stat";
-  }
-
-  $ devenv shell gd
-  pre-commit installed at .git/hooks/pre-commit
-  devenv.lock     | 74 ++++++
-  1 file changed, 71 insertions(+), 0 deletions(-)
-              <pre></code>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      <!-- containers -->
-      <div class="section follow">
-        <div class="component-wrapper">
-          <div class="first-column">
-            <h3>Deploy using containers</h3>
-            <p>
-             While developing a project locally without containers is a relief,
-             you might want to deploy it using containers.
-            </p>
-          </p>
-             Read more how to <a href="/containers/">configure and deploy containers</a>.
-            </p>
-          </div>
-          <div class="second-column">
-            <div class="image-wrapper">
-              <code class="shell-session"><pre>
-  $ devenv container processes --copy
-  Copying container /nix/store/... to docker://myproject:latest
-              <pre></code>
-            </div>
-          </div>
-        </div>
-      </div>
-    
-        <!-- nix -->
-        <div class="section follow">
-            <div class="component-wrapper">
-                <div class="first-column">
-                <h3>Open Source, built on top of Nix</h3>
-                <p>
-                    After 10 years of experience with the <a href="https://nixos.org">Nix ecosystem</a>, we've built an interface that's intuitive to use.
-                </p>
-                <p>
-                    We're leveraging the power of Nix to build a new generation of developer tools: 
-                    <a href="https://cachix.org">cachix.org</a> (2018), <a href="https://nix.dev">nix.dev</a> (2020), <a href="/">devenv.sh</a> (2022).
-                </p>
-                </div>
-                <div class="second-column">
-                <div class="image-wrapper">
-                    <img
-                    src="{{config.site_url}}assets/images/nixcon.webp"
-                    alt=""
-                    draggable="false"
-                    >
-                </div>
-                </div>
-            
-            </div>
-        </div>
-
-        <div class="section follow">
-            <div style="text-align:center">
-                <h2 style="text-align:center">Built by</h2>
-                <a href="https://cachix.org"><img src="{{config.site_url}}assets/images/cachix.webp" width="150px"/></a>
-            </div>
-        </div>
-
     </div>
   </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-4 text-gray-200">
+                    devenv.nix
+                  </div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+  scripts.build.exec = "parcel build";
+
+  # Runs on git commit and CI
+  pre-commit.hooks = {
+    black.enable = true;
+    # Your custom hooks
+    generate-css = {
+      enable = true;
+      name = "generate-css";
+      entry = "build";
+    };
+  };
+}
+            </code></pre>
+            </div>
+          </div>
+
+          <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+            <pre class="text-white text-sm"><code class="language-nix">$ devenv shell build
+...
+          </code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Scripts and Git hooks</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            Define <a href="/scripts/" class="text-[#425C82] font-semibold">scripts</a> and
+            <a href="/pre-commit-hooks/" class="text-[#425C82] font-semibold">git hooks</a>
+            to automate your development workflow.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Scripts.
+              </dt>
+              <dd class="inline">
+                Define scripts that can be invoked inside the environment, using all the packages and environment
+                variables.
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                git hooks.
+              </dt>
+              <dd class="inline">
+                Pick from builtin and language specific linters and formatters using <a
+                  href="https://github.com/cachix/git-hooks.nix?tab=readme-ov-file#hooks"
+                  class="text-[#425C82] font-semibold">git-hooks.nix</a>.
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Invoke commands inside the environment.
+              </dt>
+              <dd class="inline">
+                Particularly useful in CI/CD and scripting.
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 lg:items-start">
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Search packages and options</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            Explore <a href="/packages/" class="text-[#425C82] font-semibold">packages</a> and <a
+              href="/reference/options/" class="text-[#425C82] font-semibold">options</a> to customize your
+            environment.
+        </div>
+      </div>
+
+      <div class="px-4 lg:px-0">
+        <div class="mt-4 relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="bg-gray-900">
+            <pre class="text-white text-sm"><code class="language-nix">$ devenv search devenv
++--------------+---------------+------------------------------------------------------------------------+
+| Package      | Version       | Description                                                            |
++--------------+---------------+------------------------------------------------------------------------+
+| pkgs.devenv  | 1.0.3         | Fast, Declarative, Reproducible, and Composable Developer Environments |
++--------------+---------------+------------------------------------------------------------------------+
++--------------------------+---------+-----------+------------------------------------------------------------+
+| Option                   | Type    | Default   | Description                                                |
++--------------------------+---------+-----------+------------------------------------------------------------+
+| devenv.debug             | boolean | false     | Whether to enable debug mode of devenv enterShell script.  |
++--------------------------+---------+-----------+------------------------------------------------------------+
+| devenv.warnOnNewVersion  | boolean | true      | Whether to warn when a new version of devenv is available. |
++--------------------------+---------+-----------+------------------------------------------------------------+
+| devenv.latestVersion     | string  | "1.0.3"   | The latest version of devenv.                              |
++--------------------------+---------+-----------+------------------------------------------------------------+
+• Found 1 package and 3 options for 'devenv'.
+            </code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Languages</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            Supports over 50 <a href="/languages/" class="text-[#425C82] font-semibold">programming languages</a>.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Packed with tooling.
+              </dt>
+              <dd class="inline">
+                Comes with commonly used tooling for each language. Including LSP servers, formatters, linters, and
+                compilers.
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Version support.
+              </dt>
+              <dd class="inline">
+                Languages like Python, Terraform, Rust, PHP and Ruby all have version support.
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Examples
+              </dt>
+              <dd class="inline">
+                Checkout <a class="text-[#425C82] font-semibold" href="https://github.com/cachix/devenv/tree/main/examples">examples collection</a> 
+                to get started.
+            </div>
+          </dl>
+        </div>
+      </div>
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden rounded-b-xl bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-4 text-gray-200">
+                    devenv.nix</div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
+  languages.python = {
+    enable = true;
+    version = "3.11";
+    venv.enable = true;
+    venv.requirements = ''
+      requests
+      torch
+    '';
+    uv.enable = true;
+  };
+
+  languages.rust = {
+    enable = true;
+    channel = "nightly";
+  };
+
+  languages.php = {
+    enable = true;
+    version = "8.1";
+    ini = ''
+      memory_limit = 256M
+    '';
+    fpm.pools.web = {
+      settings = {
+        "pm" = "dynamic";
+      };
+    };
+  };
+}
+              </code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-4 text-gray-200">
+                    devenv.nix</div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+  packages = [ 
+    pkgs.mkdocs
+    pkgs.watchexec
+  ];
+
+  processes = {
+    docs.exec = "mkdocs serve";
+    tailwind.exec = "watchexec -e html,css,js npx tailwindcss build extra.css -o output.css";
+  };
+}
+              </code></pre>
+            </div>
+          </div>
+
+          <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+            <pre class="text-white text-sm"><code class="language-nix">$ devenv up
+• Building processes ...
+• Starting processes ...
+...
+            </code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Run processes</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            Define your <a class="text-[#425C82] font-semibold" href="/processes/">processes in a declarative way</a>
+            and start them with <code class="bg-gray-100 p-1">devenv up</code>.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Processes
+              </dt>
+              <dd class="inline">
+                Inspired by <code class="bg-gray-100 p-1">Procfile</code>, declare development processes that have
+                access to your environment.
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                process-compose
+              </dt>
+              <dd class="inline">
+                By default <a class="text-[#425C82] font-semibold"
+                  href="https://github.com/F1bonacc1/process-compose">process-compose</a> is used to manage processes,
+                giving you a
+                simple interface to inspect logs and restart processes (ctrl-r).
+                <img class="mt-4" src="/assets/images/process-compose.png">
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8" f>
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Run services</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            <a class="text-[#425C82] font-semibold" href="/services">Pick from a number of community maintained
+              services</a> like <strong>PostgreSQL, Redis, MySQL,
+              RabbitMQ, WireMock, MinIO, Caddy, ElasticSearch</strong>, and <a class="text-[#425C82] font-semibold"
+              href="/services/#supported-services">more are being added</a> each day.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Pre-configured processes
+              </dt>
+              <dd class="inline">
+                Services define processes that are started when the service is enabled as part of <code
+                  class="bg-gray-100 p-1">devenv up</code>.
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Configuration
+              </dt>
+              <dd class="inline">
+                Each service provides a number of options how to configure it and a hook to pass extra configuration,
+                whatever the format.
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Extendable
+              </dt>
+              <dd class="inline">
+                Define your development processes as a service, allowing reuse and simplicity of a few lines of
+                configuration.
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-4 text-gray-200">
+                    devenv.nix</div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+  services.postgres = {
+    enable = true;
+    package = pkgs.postgresql_15;
+    initialDatabases = [{ name = "mydb"; }];
+    extensions = extensions: [
+      extensions.postgis
+      extensions.timescaledb
+    ];
+    settings.shared_preload_libraries = "timescaledb";
+    initialScript = "CREATE EXTENSION IF NOT EXISTS timescaledb;";
+  };
+}
+              </code></pre>
+            </div>
+          </div>
+
+          <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+            <pre class="text-white text-sm"><code class="language-nix">$ devenv up
+...
+            </code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-4 text-gray-200">
+                    devenv.nix</div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+  packages = [ 
+    pkgs.mkdocs
+    pkgs.curl
+  ];
+
+  processes = {
+    docs.exec = "mkdocs serve";
+  };
+
+  enterTest = ''
+    wait_for_port 8000
+    curl http://localhost:8000 | grep "Hello, world!"
+  '';
+}
+              </code></pre>
+            </div>
+          </div>
+
+          <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+            <pre class="text-white text-sm"><code class="language-nix">$ devenv test
+...
+            </code></pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Run tests</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            Running <a class="text-[#425C82] font-semibold" href="/tests">a script inside your development environment
+              with all processes running</a> should be as simple as <code class="bg-gray-100 p-1">devenv test</code>.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                enterTest
+              </dt>
+              <dd class="inline">
+                Execute your favorite language test runner or a simple script to verify your environment.
+
+                <p class="mt-2">All process management is taken care for you.</p>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Container interoperability</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            <a href="/containers/" class="text-[#425C82] font-semibold">Generate containers</a> from your development
+            environment and build/copy/run them.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Containerize your environment.
+              </dt>
+              <dd class="inline">
+                <code class="bg-gray-100 p-1">shell</code> container allows you to run your environment in a container.
+
+                <p class="mt-2">Use <code class="bg-gray-100 p-1">devenv container run shell</code> to enter your
+                  environment in a container.</p>
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Containerize your processes.
+              </dt>
+              <dd class="inline">
+                <code class="bg-gray-100 p-1">processes</code> container allows you to run your processes in a
+                container.
+
+                <p class="mt-2">Use <code class="bg-gray-100 p-1">devenv container run processes</code> to run your
+                  processes in a container.</p>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Custom containers.
+              </dt>
+              <dd class="inline">
+                Define <code class="bg-gray-100 p-1">containers.mycontainer.*</code> to <a href="/containers/#running-artifacts"
+                  class="text-[#425C82] font-semibold">customize your container</a>.
+              </dd>
+            </div>
+
+          </dl>
+        </div>
+      </div>
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-4 text-gray-200">
+                    devenv.nix</div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+  packages = [ 
+    pkgs.mkdocs
+    pkgs.curl
+  ];
+
+  processes = {
+    docs.exec = "mkdocs serve";
+  };
+}
+              </code></pre>
+            </div>
+          </div>
+
+          <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+            <pre class="text-white text-sm"><code class="language-nix">$ devenv container build processes
+...
+
+$ devenv container copy processes
+...
+
+$ devenv container run processes
+...
+            </code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overflow-hidden bg-white py-14">
+  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+    <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+      <div class="px-4 lg:px-0">
+        <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+          <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+            <div class="overflow-hidden bg-gray-900">
+              <div class="flex bg-gray-800/40">
+                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                  <div class="px-4 text-gray-200">
+                    devenv.nix</div>
+                </div>
+              </div>
+              <pre class="text-white text-sm"><code class="language-yaml">inputs:
+  myorg-devenv:
+    url: github:myorg/myorg-devenv
+imports:
+  - ./frontend
+  - ./backend
+  - myorg-devenv/service1
+  - myorg-devenv/service2
+              </code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4">
+        <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Poly/Mono repo composability</p>
+          <p class="mt-6 text-lg leading-8 text-gray-600">
+            <a class="text-[#425C82] font-semibold" href="/composing-using-imports/">Compose multiple environments</a>
+            into a single environment.
+          <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Local imports
+              </dt>
+              <dd class="inline">
+                If you're working on a monorepo, define environment per folder and import them to merge them into a
+                single environment.
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Remote imports
+              </dt>
+              <dd class="inline">
+                If you're working on a polyrepo, define environment per repository and import them to merge them into a
+                single environment.
+
+                <p class="mt-2">A great way to get started is to use central repository with all the shared
+                  configuration until your team is comfortable
+                  maintaining their own environments.</p>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mx-auto text-center max-w-5xl md:px-6 lg:px-8">
+  <h2 class="text-2xl mb-6">Built by</h2>
+  <a href="https://cachix.org"><img src="/assets/images/cachix.webp" width="250px" /></a>
+</div>
+
 {% endblock %}
 
 <!-- Content -->
-{% block content %}{% endblock %}
+{% block content %}
+{% endblock %}
 
 <!-- Application footer -->
 {% block footer %}
-  {{ super() }}
+{{ super() }}
 {% endblock %}
