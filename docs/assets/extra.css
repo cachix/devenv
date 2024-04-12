@@ -2,6 +2,11 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
+body {
+    /* Override the mkdocs default of 0.5rem */
+    font-size: 0.8rem; /* 16px */
+}
+
 /* hide site name */
 .md-header__topic {
     visibility: hidden;
