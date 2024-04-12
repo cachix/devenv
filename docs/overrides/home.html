@@ -1,16 +1,17 @@
 {% extends "main.html" %}
 
+{% block styles %}
+{{ super () }}
+<link rel="stylesheet" href="/assets/github-dark.min.css">
+{% endblock %}
+
 {% block scripts %}
-  {{ super() }}
-  <link rel="stylesheet" href="/assets/github-dark.min.css">
-  <script src="/assets/highlight.min.js"></script>
-  <script>hljs.highlightAll();</script>
+{{ super() }}
+<script src="/assets/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
 {% endblock %}
 
-<!-- Render hero under tabs -->
-{% block tabs %}
-{% endblock %}
-
+<!-- Disable site nav on the home page -->
 {% block site_nav %}
 {% endblock %}
 
