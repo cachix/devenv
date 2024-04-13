@@ -54,6 +54,13 @@ struct Cli {
     #[arg(short, long, help = "Relax the hermeticity of the environment.")]
     impure: bool,
 
+    #[arg(
+        short,
+        long,
+        help = "Disable substituters and consider all previously downloaded files up-to-date."
+    )]
+    offline: bool,
+
     // TODO: --no-clean?
     #[arg(
         short,
