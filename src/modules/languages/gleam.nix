@@ -16,6 +16,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    languages.erlang.enable = true;
+
     packages = [
       cfg.package
     ];
