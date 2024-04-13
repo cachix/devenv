@@ -592,6 +592,13 @@ html {
   }
 }
 
+.language-shell::before {
+  content: attr(data-shell-prefix);
+  margin-inline-end: 0.4rem;
+  --tw-text-opacity: 1;
+  color: rgb(147 197 253 / var(--tw-text-opacity));
+}
+
 .static {
   position: static;
 }
