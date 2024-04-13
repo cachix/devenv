@@ -99,7 +99,7 @@ extra:
     - icon: fontawesome/brands/discord
       link: https://discord.gg/naMgvexb6q
   devenv:
-    version: 1.0.3
+    version: 1.0.4
 
 markdown_extensions:
   - tables
