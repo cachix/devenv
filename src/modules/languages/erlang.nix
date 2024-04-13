@@ -17,9 +17,10 @@ in
 
   config = lib.mkIf cfg.enable
     {
-      packages = with pkgs; [
+      packages = [
         cfg.package
-        erlang-ls
+        pkgs.erlang-ls
+        pkgs.rebar3
       ];
     };
 }
