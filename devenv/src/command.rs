@@ -139,6 +139,10 @@ impl App {
                 }
             };
 
+            if self.cli.offline && command == "nix" {
+                flags.push("--offline");
+            }
+
             if self.cli.impure || self.config.impure {
                 // only pass the impure option to the nix command that supports it.
                 // avoid passing it to the older utilities, e.g. like `nix-store` when creating GC roots.
@@ -154,6 +158,7 @@ impl App {
                 .first()
                 .map(|arg| arg == &"build" || arg == &"print-dev-env")
                 .unwrap_or(false)
+                && !self.cli.offline
             {
                 let cachix_caches = self.get_cachix_caches();
 
