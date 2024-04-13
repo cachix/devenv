@@ -25,3 +25,10 @@ body {
 .md-main__inner {
     padding-bottom: 1rem;
 }
+
+@layer components {
+    .language-shell::before {
+        content: attr(data-shell-prefix);
+        @apply me-2 text-blue-300;
+    }
+}
