@@ -25,6 +25,7 @@
   languages.python.venv.requirements = ./requirements.txt;
   languages.javascript.enable = true;
   languages.javascript.npm.enable = true;
+  languages.javascript.npm.install.enable = true;
 
   devcontainer.enable = true;
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
