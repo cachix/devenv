@@ -1,16 +1,24 @@
 {% extends "main.html" %}
 
-<!-- Render hero under tabs -->
-{% block tabs %}
-{{ super() }}
-
+{% block styles %}
+{{ super () }}
 <link rel="stylesheet" href="/assets/github-dark.min.css">
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
 <script src="/assets/highlight.min.js"></script>
 <script>hljs.highlightAll();</script>
+{% endblock %}
 
+<!-- Disable site nav on the home page -->
+{% block site_nav %}
+{% endblock %}
+
+{% block hero %}
 
 <div class="relative isolate overflow-hidden pt-14">
-  <div class="mx-auto max-w-2xl py-8 px-4">
+  <div class="mx-auto max-w-3xl py-8 px-4">
     <div class="text-center">
       <h1 class="text-2xl font-bold tracking-tight text-black sm:text-4xl">Fast, Declarative, Reproducible and Composable
         Developer Environments using Nix</h1>
@@ -27,7 +35,7 @@
       </p>
       <div class="mt-10 flex items-center justify-center gap-x-6">
         <a href="/getting-started/"
-          class="rounded-md bg-black px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:to-[#425C82] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400">Get
+          class="rounded-md bg-black px-3.5 py-2.5 font-semibold text-white shadow-sm hover:to-[#425C82] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400">Get
           started</a>
       </div>
     </div>
@@ -36,7 +44,7 @@
 
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
@@ -95,7 +103,7 @@
                     devenv.nix</div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
+<pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
   env.GREET = "determinism";
 
   packages = [ 
@@ -107,17 +115,16 @@
     ncdu --version
   '';
 }
-                </code></pre>
+</code></pre>
             </div>
           </div>
 
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-            <pre class="text-white text-sm"><code class="language-nix">$ devenv shell
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv shell
 hello determinism
 ncdu 2.3
-
-(devenv) $
-            </code></pre>
+</code><code class="language-shell" data-shell-prefix="(devenv) $">
+</code></pre>
           </div>
         </div>
       </div>
@@ -126,7 +133,7 @@ ncdu 2.3
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
       <div class="px-4 lg:px-0">
         <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
@@ -139,7 +146,7 @@ ncdu 2.3
                   </div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+<pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   scripts.build.exec = "parcel build";
 
   # Runs on git commit and CI
@@ -153,14 +160,15 @@ ncdu 2.3
     };
   };
 }
-            </code></pre>
+</code></pre>
             </div>
           </div>
 
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-            <pre class="text-white text-sm"><code class="language-nix">$ devenv shell build
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv shell build
 ...
-          </code></pre>
+
+</code></pre>
           </div>
         </div>
       </div>
@@ -168,7 +176,7 @@ ncdu 2.3
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Scripts and Git hooks</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             Define <a href="/scripts/" class="text-[#425C82] font-semibold">scripts</a> and
             <a href="/pre-commit-hooks/" class="text-[#425C82] font-semibold">git hooks</a>
             to automate your development workflow.
@@ -207,12 +215,12 @@ ncdu 2.3
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 lg:items-start">
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Search packages and options</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             Explore <a href="/packages/" class="text-[#425C82] font-semibold">packages</a> and <a
               href="/reference/options/" class="text-[#425C82] font-semibold">options</a> to customize your
             environment.
@@ -222,7 +230,7 @@ ncdu 2.3
       <div class="px-4 lg:px-0">
         <div class="mt-4 relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
           <div class="bg-gray-900">
-            <pre class="text-white text-sm"><code class="language-nix">$ devenv search devenv
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv search devenv
 +--------------+---------------+------------------------------------------------------------------------+
 | Package      | Version       | Description                                                            |
 +--------------+---------------+------------------------------------------------------------------------+
@@ -238,7 +246,7 @@ ncdu 2.3
 | devenv.latestVersion     | string  | "1.0.3"   | The latest version of devenv.                              |
 +--------------------------+---------+-----------+------------------------------------------------------------+
 • Found 1 package and 3 options for 'devenv'.
-            </code></pre>
+</code></pre>
           </div>
         </div>
       </div>
@@ -247,12 +255,12 @@ ncdu 2.3
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Languages</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             Supports over 50 <a href="/languages/" class="text-[#425C82] font-semibold">programming languages</a>.
           <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
             <div class="relative lg:pl-3">
@@ -292,7 +300,7 @@ ncdu 2.3
                     devenv.nix</div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
+<pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
   languages.python = {
     enable = true;
     version = "3.11";
@@ -322,7 +330,7 @@ ncdu 2.3
     };
   };
 }
-              </code></pre>
+</code></pre>
             </div>
           </div>
         </div>
@@ -332,7 +340,7 @@ ncdu 2.3
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
 
       <div class="px-4 lg:px-0">
@@ -345,7 +353,7 @@ ncdu 2.3
                     devenv.nix</div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+<pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   packages = [ 
     pkgs.mkdocs
     pkgs.watchexec
@@ -356,16 +364,17 @@ ncdu 2.3
     tailwind.exec = "watchexec -e html,css,js npx tailwindcss build extra.css -o output.css";
   };
 }
-              </code></pre>
+</code></pre>
             </div>
           </div>
 
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-            <pre class="text-white text-sm"><code class="language-nix">$ devenv up
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv up
 • Building processes ...
 • Starting processes ...
 ...
-            </code></pre>
+
+</code></pre>
           </div>
         </div>
       </div>
@@ -373,7 +382,7 @@ ncdu 2.3
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Run processes</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             Define your <a class="text-[#425C82] font-semibold" href="/processes/">processes in a declarative way</a>
             and start them with <code class="bg-gray-100 p-1">devenv up</code>.
           <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
@@ -405,12 +414,12 @@ ncdu 2.3
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8" f>
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Run services</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             <a class="text-[#425C82] font-semibold" href="/services">Pick from a number of community maintained
               services</a> like <strong>PostgreSQL, Redis, MySQL,
               RabbitMQ, WireMock, MinIO, Caddy, ElasticSearch</strong>, and <a class="text-[#425C82] font-semibold"
@@ -455,7 +464,7 @@ ncdu 2.3
                     devenv.nix</div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+<pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   services.postgres = {
     enable = true;
     package = pkgs.postgresql_15;
@@ -468,14 +477,15 @@ ncdu 2.3
     initialScript = "CREATE EXTENSION IF NOT EXISTS timescaledb;";
   };
 }
-              </code></pre>
+</code></pre>
             </div>
           </div>
 
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-            <pre class="text-white text-sm"><code class="language-nix">$ devenv up
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv up
 ...
-            </code></pre>
+
+</code></pre>
           </div>
         </div>
       </div>
@@ -484,7 +494,7 @@ ncdu 2.3
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
       <div class="px-4 lg:px-0">
         <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
@@ -496,7 +506,7 @@ ncdu 2.3
                     devenv.nix</div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+<pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   packages = [ 
     pkgs.mkdocs
     pkgs.curl
@@ -511,14 +521,16 @@ ncdu 2.3
     curl http://localhost:8000 | grep "Hello, world!"
   '';
 }
-              </code></pre>
+
+</code></pre>
             </div>
           </div>
 
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-            <pre class="text-white text-sm"><code class="language-nix">$ devenv test
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv test
 ...
-            </code></pre>
+
+</code></pre>
           </div>
         </div>
       </div>
@@ -526,7 +538,7 @@ ncdu 2.3
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Run tests</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             Running <a class="text-[#425C82] font-semibold" href="/tests">a script inside your development environment
               with all processes running</a> should be as simple as <code class="bg-gray-100 p-1">devenv test</code>.
           <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
@@ -548,12 +560,12 @@ ncdu 2.3
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Container interoperability</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             <a href="/containers/" class="text-[#425C82] font-semibold">Generate containers</a> from your development
             environment and build/copy/run them.
           <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
@@ -602,7 +614,7 @@ ncdu 2.3
                     devenv.nix</div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
+<pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   packages = [ 
     pkgs.mkdocs
     pkgs.curl
@@ -612,20 +624,20 @@ ncdu 2.3
     docs.exec = "mkdocs serve";
   };
 }
-              </code></pre>
+
+</code></pre>
             </div>
           </div>
 
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-            <pre class="text-white text-sm"><code class="language-nix">$ devenv container build processes
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv container build processes
+...
+</code><code class="language-shell" data-shell-prefix="$">devenv container copy processes
+...
+</code><code class="language-shell" data-shell-prefix="$"> devenv container run processes
 ...
 
-$ devenv container copy processes
-...
-
-$ devenv container run processes
-...
-            </code></pre>
+</code></pre>
           </div>
         </div>
       </div>
@@ -634,7 +646,7 @@ $ devenv container run processes
 </div>
 
 <div class="overflow-hidden bg-white py-14">
-  <div class="mx-auto max-w-5xl md:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
     <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
       <div class="px-4 lg:px-0">
         <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
@@ -643,10 +655,10 @@ $ devenv container run processes
               <div class="flex bg-gray-800/40">
                 <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
                   <div class="px-4 text-gray-200">
-                    devenv.nix</div>
+                    devenv.yaml</div>
                 </div>
               </div>
-              <pre class="text-white text-sm"><code class="language-yaml">inputs:
+<pre class="text-white text-sm"><code class="language-yaml">inputs:
   myorg-devenv:
     url: github:myorg/myorg-devenv
 imports:
@@ -654,7 +666,7 @@ imports:
   - ./backend
   - myorg-devenv/service1
   - myorg-devenv/service2
-              </code></pre>
+</code></pre>
             </div>
           </div>
         </div>
@@ -663,7 +675,7 @@ imports:
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
           <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Poly/Mono repo composability</p>
-          <p class="mt-6 text-lg leading-8 text-gray-600">
+          <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
             <a class="text-[#425C82] font-semibold" href="/composing-using-imports/">Compose multiple environments</a>
             into a single environment.
           <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
@@ -695,14 +707,14 @@ imports:
   </div>
 </div>
 
-<div class="mx-auto text-center max-w-5xl md:px-6 lg:px-8">
+<div class="mx-auto text-center max-w-7xl md:px-6 lg:px-8">
   <h2 class="text-2xl mb-6">Built by</h2>
   <a href="https://cachix.org"><img src="/assets/images/cachix.webp" width="250px" /></a>
 </div>
 
 {% endblock %}
 
-<!-- Content -->
+<!-- Override content -->
 {% block content %}
 {% endblock %}
 
