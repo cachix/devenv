@@ -68,6 +68,7 @@ let
           ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
         ''
       }
+      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
 
     source "$VENV_PATH"/bin/activate
