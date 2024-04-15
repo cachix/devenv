@@ -38,12 +38,6 @@
     tailwind.exec = "watchexec -e html,css,js npx tailwindcss build docs/assets/extra.css -o docs/assets/output.css";
   };
 
-  scripts.devenv-bump-version.exec = ''
-    # TODO: ask for the new version
-    # TODO: update the version in thep mkdocs.yml
-    echo assuming you bumped the version in mkdocs.yml, populating src/modules/latest-version
-    cat mkdocs.yml | yaml2json | jq -r '.extra.devenv.version' > src/modules/latest-version
-  '';
   scripts.devenv-test-cli.exec = ''
     set -xe
     set -o pipefail
