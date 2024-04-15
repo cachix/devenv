@@ -23,7 +23,8 @@
     enterTest = ''
       pre-commit run -a
     '';
-    packages = [ config.pre-commit.package ] ++ (config.pre-commit.enabledPackages or [ ]);
+    # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
+    packages = lib.mkAfter ([ config.pre-commit.package ] ++ (config.pre-commit.enabledPackages or [ ]));
     enterShell = config.pre-commit.installationScript;
   };
 }
