@@ -55,7 +55,6 @@ struct Cli {
     impure: bool,
 
     #[arg(
-        short,
         long,
         help = "Disable substituters and consider all previously downloaded files up-to-date."
     )]
