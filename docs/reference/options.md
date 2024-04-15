@@ -35363,7 +35363,7 @@ package
 
 
 
-Remove these list of env vars from being exported to keep the shell/direnv more lean.
+A list of removed environment variables to make the shell/direnv more lean.
 
 
 
@@ -35390,6 +35390,7 @@ list of string
   "depsHostHostPropagated"
   "depsTargetTarget"
   "depsTargetTargetPropagated"
+  "dontAddDisableDepTrack"
   "doCheck"
   "doInstallCheck"
   "nativeBuildInputs"
