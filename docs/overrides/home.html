@@ -21,12 +21,6 @@
 </style>
 {% endblock %}
 
-{% block scripts %}
-{{ super() }}
-<script src="/assets/highlight.min.js"></script>
-<script>hljs.highlightAll();</script>
-{% endblock %}
-
 {% block hero %}
 
 <div class="relative isolate overflow-hidden pt-14">
@@ -724,6 +718,9 @@ imports:
   <h2 class="text-2xl mb-6">Built by</h2>
   <a href="https://cachix.org"><img src="/assets/images/cachix.webp" width="250px" /></a>
 </div>
+
+<script src="/assets/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
 
 {% endblock %}
 
