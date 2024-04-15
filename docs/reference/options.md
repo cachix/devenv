@@ -4332,6 +4332,28 @@ list of string
 
 
 
+## languages.rust.targets
+
+
+
+List of extra [targets](https://github.com/nix-community/fenix\#supported-platforms-and-targets)
+to install. Defaults to only the native target.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.toolchain
 
 
@@ -4727,8 +4749,6 @@ boolean
 
 ## languages.texlive.packages
 
-
-
 Packages available to TeX Live
 
 
@@ -4773,6 +4793,8 @@ unspecified value
 
 
 ## languages.typescript.enable
+
+
 
 Whether to enable tools for TypeScript development.
 
@@ -7532,8 +7554,6 @@ boolean
 
 ## pre-commit.hooks.black
 
-
-
 black hook
 
 
@@ -7624,6 +7644,8 @@ attribute set of package
 
 
 ## pre-commit.hooks.black.always_run
+
+
 
 if true this hook will run even if there are no matching files.
 
