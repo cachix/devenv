@@ -20,11 +20,18 @@
   };
   inputs.nix = {
     url = "github:domenkozar/nix/devenv-2.21";
-    inputs.nixpkgs.follows = "nixpkgs";
+    inputs = {
+      nixpkgs.follows = "nixpkgs";
+      flake-compat.follows = "flake-compat";
+    };
   };
   inputs.cachix = {
     url = "github:cachix/cachix";
-    inputs.nixpkgs.follows = "nixpkgs";
+    inputs = {
+      nixpkgs.follows = "nixpkgs";
+      pre-commit-hooks.follows = "pre-commit-hooks";
+      flake-compat.follows = "flake-compat";
+    };
   };
 
 
