@@ -33,6 +33,15 @@ Starting processes ...
 
 Service states are persisted to directories in `$DEVENV_DOTFILE/state`. When you adjust options like the above used `initialScript`, you will have to delete the service's directory for changes to take effect on next `devenv up`.
 
+## Services in the background
+
+Services start in the foreground by default. If you want to start services up in the background, you can pass the `-d` flag:
+
+```shell-session
+
+$ devenv up -d
+```
+
 ## Supported services
 
 {%
