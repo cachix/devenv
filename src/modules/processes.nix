@@ -108,10 +108,16 @@ in
       type = types.package;
     };
 
+    procfileBin = lib.mkOption {
+      type = types.package;
+      internal = true;
+      default = pkgs.writeScriptBin "devenv-up" "echo No processes to run. Exiting.";
+    };
+
     procfileScript = lib.mkOption {
       type = types.package;
       internal = true;
-      default = pkgs.writeShellScript "no-processes" "";
+      default = "${config.procfileBin}/bin/devenv-up";
     };
   };
 
@@ -126,7 +132,7 @@ in
     procfileEnv =
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
-    procfileScript = pkgs.writeShellScript "devenv-up" ''
+    procfileBin = pkgs.writeScriptBin "devenv-up" ''
       ${config.process.before}
 
       ${config.processManagerCommand}

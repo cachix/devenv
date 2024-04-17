@@ -281,7 +281,7 @@ in
     shell = performAssertions (
       (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
         name = "devenv-shell";
-        packages = config.packages;
+        packages = config.packages ++ [config.procfileBin];
         shellHook = ''
           ${lib.optionalString config.devenv.debug "set -x"}
           ${config.enterShell}
