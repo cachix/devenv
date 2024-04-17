@@ -2,6 +2,7 @@
 
 {
   languages.javascript.enable = true;
+  languages.javascript.npm.enable = true;
 
   processes.remix.exec = "npm run dev";
 
