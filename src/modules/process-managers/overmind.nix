@@ -14,7 +14,10 @@ in
   };
   config = lib.mkIf cfg.enable {
     processManagerCommand = ''
-      OVERMIND_ENV=${config.procfileEnv} ${cfg.package}/bin/overmind start --root ${config.env.DEVENV_ROOT} --procfile ${config.procfile} "$@" &
+      OVERMIND_ENV=${config.procfileEnv} ${cfg.package}/bin/overmind start \
+        --root ${config.env.DEVENV_ROOT} \
+        --socket ${config.devenv.runtime}/overmind.sock \
+        --procfile ${config.procfile} "$@" &
     '';
 
     packages = [ cfg.package ];
