@@ -9,6 +9,7 @@ pkgs.rustPlatform.buildRustPackage {
     "Cargo.lock"
     "devenv(/\.*)?"
     "devenv-run-tests(/\.*)?"
+    "devenv_core(/\.*)?"
   ];
 
   cargoLock = {
