@@ -146,7 +146,12 @@ impl App {
             if self.cli.impure || self.config.impure {
                 // only pass the impure option to the nix command that supports it.
                 // avoid passing it to the older utilities, e.g. like `nix-store` when creating GC roots.
-                if command == "nix" {
+                if command == "nix"
+                    && args
+                        .first()
+                        .map(|arg| arg == &"build" || arg == &"eval" || arg == &"print-dev-env")
+                        .unwrap_or(false)
+                {
                     flags.push("--impure");
                 }
                 // set a dummy value to overcome https://github.com/NixOS/nix/issues/10247
