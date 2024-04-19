@@ -295,7 +295,7 @@ impl App {
                                 serde_json::from_slice::<CachixResponse>(&resp.bytes().unwrap())
                                     .expect("Failed to parse JSON");
                             new_known_keys
-                                .insert(name.clone(), resp_json.publicSigningKeys[0].clone());
+                                .insert(name.clone(), resp_json.public_signing_keys[0].clone());
                         }
                     }
                 }
@@ -384,7 +384,8 @@ pub struct CachixCaches {
 
 #[derive(Deserialize, Clone)]
 struct CachixResponse {
-    publicSigningKeys: Vec<String>,
+    #[serde(rename = "publicSigningKeys")]
+    public_signing_keys: Vec<String>,
 }
 
 #[derive(Deserialize, Clone)]
