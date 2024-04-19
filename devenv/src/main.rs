@@ -734,13 +734,7 @@ impl App {
 
         let options = self.run_nix(
             "nix",
-            &[
-                "--offline",
-                "build",
-                "--no-link",
-                "--print-out-paths",
-                ".#optionsJSON",
-            ],
+            &["build", "--no-link", "--print-out-paths", ".#optionsJSON"],
             &command::Options::default(),
         )?;
 
