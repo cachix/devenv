@@ -146,7 +146,12 @@ impl App {
             if self.cli.impure || self.config.impure {
                 // only pass the impure option to the nix command that supports it.
                 // avoid passing it to the older utilities, e.g. like `nix-store` when creating GC roots.
-                if command == "nix" {
+                if command == "nix"
+                    && args
+                        .first()
+                        .map(|arg| arg == &"build" || arg == &"eval" || arg == &"print-dev-env")
+                        .unwrap_or(false)
+                {
                     flags.push("--impure");
                 }
                 // set a dummy value to overcome https://github.com/NixOS/nix/issues/10247
@@ -156,7 +161,7 @@ impl App {
 
             if args
                 .first()
-                .map(|arg| arg == &"build" || arg == &"print-dev-env")
+                .map(|arg| arg == &"build" || arg == &"print-dev-env" || arg == &"search")
                 .unwrap_or(false)
                 && !self.cli.offline
             {
@@ -290,7 +295,7 @@ impl App {
                                 serde_json::from_slice::<CachixResponse>(&resp.bytes().unwrap())
                                     .expect("Failed to parse JSON");
                             new_known_keys
-                                .insert(name.clone(), resp_json.publicSigningKeys[0].clone());
+                                .insert(name.clone(), resp_json.public_signing_keys[0].clone());
                         }
                     }
                 }
@@ -379,7 +384,8 @@ pub struct CachixCaches {
 
 #[derive(Deserialize, Clone)]
 struct CachixResponse {
-    publicSigningKeys: Vec<String>,
+    #[serde(rename = "publicSigningKeys")]
+    public_signing_keys: Vec<String>,
 }
 
 #[derive(Deserialize, Clone)]

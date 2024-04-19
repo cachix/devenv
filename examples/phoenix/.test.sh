@@ -2,7 +2,7 @@
 set -ex
 
 pushd hello
-    wait_for_port 4000
+    wait_for_port 4000 60
     mix ecto.create
     curl -s http://localhost:4000/ | grep "Phoenix Framework"
 popd

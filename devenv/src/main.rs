@@ -30,6 +30,8 @@ const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 #[derive(Parser)]
 #[command(
     color = clap::ColorChoice::Auto,
+    // for --clean to work with subcommands
+    subcommand_precedence_over_arg = true,
     dont_delimit_trailing_values = true,
     about = format!("https://devenv.sh {}: Fast, Declarative, Reproducible, and Composable Developer Environments", crate_version!())
 )]
@@ -732,13 +734,7 @@ impl App {
 
         let options = self.run_nix(
             "nix",
-            &[
-                "--offline",
-                "build",
-                "--no-link",
-                "--print-out-paths",
-                ".#optionsJSON",
-            ],
+            &["build", "--no-link", "--print-out-paths", ".#optionsJSON"],
             &command::Options::default(),
         )?;
 

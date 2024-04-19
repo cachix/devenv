@@ -4,5 +4,3 @@ inputs:
     inputs:
       nixpkgs:
         follows: nixpkgs
-clean:
-  enabled: true

@@ -81,13 +81,13 @@
       nix flake init --template ''${DEVENV_ROOT}#flake-parts
       nix flake update \
         --override-input devenv ''${DEVENV_ROOT}
-      nix develop --accept-flake-config --impure --command echo nix-develop started succesfully |& tee ./console
+      nix develop --accept-flake-config --override-input devenv-root "file+file://"<(printf %s "$PWD") --command echo nix-develop started succesfully |& tee ./console
       grep -F 'nix-develop started succesfully' <./console
       grep -F "$(${lib.getExe pkgs.hello})" <./console
       # Test that a container can be built
       if $(uname) == "Linux"
       then
-        nix build --impure --accept-flake-config --show-trace .#container-processes
+        nix build --override-input devenv-root "file+file://"<(printf %s "$PWD") --accept-flake-config --show-trace .#container-processes
       fi
     popd
     rm -rf "$tmp"
