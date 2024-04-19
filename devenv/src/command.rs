@@ -161,7 +161,7 @@ impl App {
 
             if args
                 .first()
-                .map(|arg| arg == &"build" || arg == &"print-dev-env")
+                .map(|arg| arg == &"build" || arg == &"print-dev-env" || arg == &"search")
                 .unwrap_or(false)
                 && !self.cli.offline
             {
