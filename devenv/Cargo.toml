@@ -27,5 +27,3 @@ tracing = "0.1.40"
 which = "6.0.0"
 whoami = "1.5.1"
 xdg = "2.5.2"
-
-devenv_core = { path = "../devenv_core" }

@@ -3,5 +3,4 @@ resolver = "2"
 members = [
     "devenv",
     "devenv-run-tests",
-    "devenv_core",
 ]
