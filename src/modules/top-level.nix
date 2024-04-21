@@ -270,12 +270,12 @@ in
       mkdir -p "$DEVENV_STATE"
       if [ ! -L "$DEVENV_DOTFILE/profile" ] || [ "$(${pkgs.coreutils}/bin/readlink $DEVENV_DOTFILE/profile)" != "${profile}" ]
       then
-        ln -nsf ${profile} "$DEVENV_DOTFILE/profile"
+        ln -snf ${profile} "$DEVENV_DOTFILE/profile"
       fi
       unset ${lib.concatStringsSep " " config.unsetEnvVars}
 
       mkdir -p ${lib.escapeShellArg config.devenv.runtime}
-      ln -fs ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
+      ln -snf ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 
     shell = performAssertions (
