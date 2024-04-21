@@ -30,9 +30,6 @@
         # module parameters provide easy access to attributes of the same
         # system.
 
-        # needed for devenv up
-        packages.devenv-up = self'.devShells.default.config.procfileScript;
-
         # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
         packages.default = pkgs.hello;
 
@@ -57,6 +54,8 @@
           enterShell = ''
             hello
           '';
+
+          processes.hello.exec = "hello";
         };
 
       };
