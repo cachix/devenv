@@ -37,7 +37,7 @@
                     hello
                   '';
 
-                  processes.run.exec = "hello";
+                  processes.hello.exec = "hello";
                 }
               ];
             };
