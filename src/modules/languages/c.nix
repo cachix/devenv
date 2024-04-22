@@ -12,9 +12,7 @@ in
     packages = with pkgs; [
       stdenv
       gnumake
-      clang
       ccls
-      gcc
       pkg-config
     ];
   };
