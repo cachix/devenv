@@ -93,9 +93,10 @@ in
         '';
 
         packages =
+          lib.optional cfg.mold.enable pkgs.mold-wrapped
           # If there are targets we want to add the whole toolchain instead
           # TODO: It might always be fine to add the whole toolchain when not using `nixpkgs`
-          lib.optionals (cfg.targets == [ ]) (builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components)
+          ++ lib.optionals (cfg.targets == [ ]) (builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components)
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
         # enable compiler tooling by default to expose things like cc
@@ -105,7 +106,7 @@ in
         env =
           let
             darwinFlags = lib.optionalString pkgs.stdenv.isDarwin "-L framework=${config.devenv.profile}/Library/Frameworks";
-            moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=${pkgs.mold-wrapped}/bin/ld.mold";
+            moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
           in
           {
             # RUST_SRC_PATH is necessary when rust-src is not at the same location as
