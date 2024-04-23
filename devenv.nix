@@ -19,6 +19,8 @@
   languages.rust.enable = true;
   # for docs
   languages.python.enable = true;
+  # it breaks glibc
+  languages.python.manylinux.enable = false;
   # speed it up
   languages.python.uv.enable = true;
   languages.python.venv.enable = true;
