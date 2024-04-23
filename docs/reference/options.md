@@ -4332,6 +4332,27 @@ list of string
 
 
 
+## languages.rust.mold.enable
+
+
+
+Enable mold as the linker.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.targets
 
 
@@ -4723,8 +4744,6 @@ null or string
 
 ## languages.texlive.enable
 
-
-
 Whether to enable TeX Live.
 
 
@@ -4748,6 +4767,8 @@ boolean
 
 
 ## languages.texlive.packages
+
+
 
 Packages available to TeX Live
 
@@ -7533,8 +7554,6 @@ list of string
 
 ## pre-commit.hooks.autoflake.verbose
 
-
-
 forces the output of the hook to be printed even when the hook passes.
 
 
@@ -7553,6 +7572,8 @@ boolean
 
 
 ## pre-commit.hooks.black
+
+
 
 black hook
 
