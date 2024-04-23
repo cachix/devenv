@@ -286,6 +286,8 @@ in
           ${lib.optionalString config.devenv.debug "set -x"}
           ${config.enterShell}
         '';
+        # Use interactive bash
+        buildInputs = [ pkgs.bashInteractive ];
       } // config.env)
     );
 
