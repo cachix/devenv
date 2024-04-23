@@ -5421,6 +5421,10 @@ Remove UTF-8 byte order marker.
 
 Adds \# -*- coding: utf-8 -*- to the top of Python files.’
 
+**` flake-checker `**
+
+Run health checks on your flake-powered Nix projects.
+
 **` flake8 `**
 
 Check the style and quality of Python files.
@@ -5794,20 +5798,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -5817,27 +5807,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.\<name>.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -5912,6 +5881,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.\<name>.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -6200,20 +6193,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -6223,27 +6202,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.alejandra.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -6318,6 +6276,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.alejandra.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -6716,20 +6698,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -6739,27 +6707,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.ansible-lint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -6834,6 +6781,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.ansible-lint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -7164,20 +7135,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -7187,27 +7144,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.autoflake.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -7282,6 +7218,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.autoflake.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -7614,20 +7574,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -7637,27 +7583,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.black.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -7732,6 +7657,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.black.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -8046,20 +7995,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -8072,28 +8007,6 @@ null or package
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.clippy.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
@@ -8197,6 +8110,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.clippy.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -8548,20 +8485,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -8571,27 +8494,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.cmake-format.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -8666,6 +8568,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cmake-format.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -8980,20 +8906,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -9003,27 +8915,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.credo.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -9098,6 +8989,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.credo.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -9407,20 +9322,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -9430,27 +9331,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.deadnix.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -9525,6 +9405,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.deadnix.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -9960,20 +9864,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -9983,27 +9873,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.denofmt.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -10078,6 +9947,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.denofmt.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -10408,20 +10301,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -10431,27 +10310,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.denolint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -10526,6 +10384,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.denolint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -10856,20 +10738,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -10879,27 +10747,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.dune-fmt.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -10974,6 +10821,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.dune-fmt.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -11304,20 +11175,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -11327,27 +11184,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.eclint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -11422,6 +11258,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.eclint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -11815,20 +11675,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -11838,27 +11684,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.eslint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -11933,6 +11758,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.eslint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -12263,20 +12112,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -12286,27 +12121,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.flake8.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -12381,6 +12195,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.flake8.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -12746,20 +12584,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -12769,27 +12593,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.flynt.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -12864,6 +12667,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.flynt.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -13383,20 +13210,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -13406,27 +13219,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.headache.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -13501,6 +13293,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.headache.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -13810,20 +13626,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -13833,27 +13635,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.hlint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -13928,6 +13709,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.hlint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -14237,20 +14042,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -14260,27 +14051,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.hpack.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -14355,6 +14125,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.hpack.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -14664,20 +14458,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -14687,27 +14467,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.isort.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -14782,6 +14541,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.isort.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -15112,20 +14895,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -15135,27 +14904,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.lacheck.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -15230,6 +14978,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -15518,20 +15290,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -15541,27 +15299,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.latexindent.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -15636,6 +15373,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.latexindent.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -15945,20 +15706,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -15968,27 +15715,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.lua-ls.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -16063,6 +15789,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lua-ls.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -16393,20 +16143,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -16416,27 +16152,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.lychee.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -16511,6 +16226,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lychee.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -16841,20 +16580,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -16864,27 +16589,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.markdownlint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -16959,6 +16663,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.markdownlint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -17268,20 +16996,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -17291,27 +17005,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.mdl.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -17386,6 +17079,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.mdl.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -17926,20 +17643,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -17949,27 +17652,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.mkdocs-linkcheck.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -18044,6 +17726,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.mkdocs-linkcheck.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -18462,20 +18168,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -18485,27 +18177,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.mypy.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -18580,6 +18251,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.mypy.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -18893,20 +18588,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -18916,27 +18597,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.nixfmt.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -19011,6 +18671,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.nixfmt.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -19320,20 +19004,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -19343,27 +19013,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.no-commit-to-branch.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -19438,6 +19087,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.no-commit-to-branch.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -19794,20 +19467,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -19817,27 +19476,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.ormolu.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -19912,6 +19550,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.ormolu.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -20242,20 +19904,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -20265,27 +19913,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.php-cs-fixer.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -20360,6 +19987,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.php-cs-fixer.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -20673,20 +20324,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -20696,27 +20333,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.phpcbf.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -20791,6 +20407,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.phpcbf.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -21104,20 +20744,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -21127,27 +20753,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.phpcs.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -21222,6 +20827,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.phpcs.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -21535,20 +21164,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -21558,27 +21173,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.phpstan.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -21653,6 +21247,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.phpstan.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -21966,20 +21584,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -21989,27 +21593,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.prettier.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -22084,6 +21667,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.prettier.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -23181,20 +22788,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -23204,27 +22797,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.psalm.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -23299,6 +22871,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.psalm.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -23612,20 +23208,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -23635,27 +23217,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.pylint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -23730,6 +23291,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pylint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -24085,20 +23670,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -24108,27 +23679,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.pyright.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -24203,6 +23753,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pyright.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -24516,20 +24090,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -24539,27 +24099,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.pyupgrade.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -24634,6 +24173,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pyupgrade.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -24947,20 +24510,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -24970,27 +24519,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.revive.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -25065,6 +24593,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.revive.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -25374,20 +24926,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -25397,27 +24935,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.ripsecrets.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -25492,6 +25009,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.ripsecrets.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -25801,20 +25342,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -25824,27 +25351,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.rome.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -25919,6 +25425,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.rome.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -26277,20 +25807,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -26303,28 +25819,6 @@ null or package
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.rustfmt.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
@@ -26428,6 +25922,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.rustfmt.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -26716,20 +26234,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -26739,27 +26243,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.sort-file-contents.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -26834,6 +26317,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.sort-file-contents.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -27164,20 +26671,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -27187,27 +26680,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.statix.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -27282,6 +26754,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.statix.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -27638,20 +27134,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -27664,28 +27146,6 @@ null or package
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.treefmt.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hooks.nix)
 
 
 
@@ -27773,6 +27233,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.treefmt.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -28082,20 +27566,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -28105,27 +27575,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.typos.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -28200,6 +27649,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.typos.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -28862,20 +28335,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -28885,27 +28344,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.vale.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -28980,6 +28418,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.vale.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -29343,20 +28805,6 @@ boolean
 
 An optional package that provides the hook.
 
-For most hooks, the package name matches the name of the hook and can be overridden directly.
-
-```
-hooks.nixfmt.package = pkgs.nixfmt;
-```
-
-Some hooks may require multiple packages or a wrapper script to function correctly.
-Such hooks can expose additional named packages as ` packageOverrides `.
-
-```
-hooks.rustfmt.packageOverrides.cargo = pkgs.cargo;
-hooks.rustfmt.packageOverrides.rustfmt = pkgs.rustfmt;
-```
-
 
 
 *Type:*
@@ -29366,27 +28814,6 @@ null or package
 
 *Default:*
 ` null `
-
-*Declared by:*
- - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
-
-
-
-## pre-commit.hooks.yamllint.packageOverrides
-
-
-
-Additional packages required to construct the hook package.
-
-
-
-*Type:*
-attribute set of package
-
-
-
-*Default:*
-` { } `
 
 *Declared by:*
  - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
@@ -29461,6 +28888,30 @@ Exclude files that were matched by these patterns.
 
 *Type:*
 list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/pre-commit-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.yamllint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
 
 
 
@@ -33855,6 +33306,7 @@ Additional PostgreSQL extensions to install.
 The available extensions are:
 
  - age
+ - anonymizer
  - apache_datasketches
  - citus
  - cstore_fdw
@@ -33871,11 +33323,13 @@ The available extensions are:
  - pg_hint_plan
  - pg_hll
  - pg_ivm
+ - pg_libversion
  - pg_net
  - pg_partman
  - pg_rational
  - pg_relusage
  - pg_repack
+ - pg_roaringbitmap
  - pg_safeupdate
  - pg_similarity
  - pg_squeeze
