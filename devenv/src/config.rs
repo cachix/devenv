@@ -1,11 +1,12 @@
 use miette::{IntoDiagnostic, Result};
-use schematic::{schema::JsonSchemaRenderer, schema::SchemaGenerator, ConfigLoader};
+use schemars::{schema_for, JsonSchema};
+use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
 
 const YAML_CONFIG: &str = "devenv.yaml";
 
-#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct Input {
@@ -34,7 +35,7 @@ impl Input {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, JsonSchema)]
 pub struct FlakeInput {
     pub url: Option<String>,
     pub inputs: HashMap<String, Input>,
@@ -66,14 +67,14 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Clean {
     pub enabled: bool,
     pub keep: Vec<String>,
     // TODO: executables?
 }
 
-#[derive(schematic::Config, Clone, Serialize, Debug)]
+#[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
 #[config(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -88,19 +89,20 @@ pub struct Config {
     pub imports: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub permitted_insecure_packages: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default = "std::option::None")]
     #[setting(nested)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub clean: Option<Clean>,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub impure: bool,
 }
 
+// TODO: https://github.com/moonrepo/schematic/issues/105
 pub fn write_json_schema() {
-    let mut generator = SchemaGenerator::default();
-    generator.add::<Config>();
-    generator
-        .generate("devenv.schema.json", JsonSchemaRenderer::default())
-        .expect("can't generate schema");
+    let schema = schema_for!(Config);
+    let schema = serde_json::to_string_pretty(&schema).unwrap();
+    let path = Path::new("docs/devenv.schema.json");
+    std::fs::write(path, schema)
+        .unwrap_or_else(|_| panic!("Failed to write json schema to {}", path.display()));
 }
 
 impl Config {
