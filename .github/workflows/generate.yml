@@ -33,6 +33,8 @@ jobs:
       run: devenv shell devenv-generate-languages-example
     - name: Generate docs
       run: devenv shell devenv-generate-docs
+    - name: Generate JSON schema
+      run: devenv generate-json-schema
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
