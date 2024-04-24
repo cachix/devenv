@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Config",
+  "type": "object",
+  "properties": {
+    "allowBroken": {
+      "type": "boolean"
+    },
+    "allowUnfree": {
+      "type": "boolean"
+    },
+    "clean": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Clean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "imports": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "impure": {
+      "type": "boolean"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/Input"
+      }
+    },
+    "permittedInsecurePackages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "definitions": {
+    "Clean": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "keep"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "keep": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Input": {
+      "type": "object",
+      "properties": {
+        "flake": {
+          "type": "boolean"
+        },
+        "follows": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/Input"
+          }
+        },
+        "overlays": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
