@@ -46,6 +46,12 @@ in
       description = "The rustup toolchain to install.";
     };
 
+    rustflags = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "Extra flags to pass to the Rust compiler.";
+    };
+
     mold.enable = lib.mkOption {
       type = lib.types.bool;
       default = pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64 && cfg.targets == [ ];
@@ -115,7 +121,7 @@ in
               if cfg.toolchain ? rust-src
               then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
               else pkgs.rustPlatform.rustLibSrc;
-            RUSTFLAGS = "${darwinFlags} ${moldFlags}";
+            RUSTFLAGS = "${darwinFlags} ${moldFlags} ${cfg.rustflags}";
             RUSTDOCFLAGS = "${darwinFlags} ${moldFlags}";
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
