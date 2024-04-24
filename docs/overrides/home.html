@@ -321,6 +321,7 @@ ncdu 2.3
   languages.rust = {
     enable = true;
     channel = "nightly";
+    rustflags = "-Z threads=8";
     targets = [ "wasm32-unknown-unknown" ];
   };
 
