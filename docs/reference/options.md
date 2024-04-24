@@ -4353,6 +4353,27 @@ boolean
 
 
 
+## languages.rust.rustflags
+
+
+
+Extra flags to pass to the Rust compiler.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.targets
 
 
@@ -4744,6 +4765,8 @@ null or string
 
 ## languages.texlive.enable
 
+
+
 Whether to enable TeX Live.
 
 
@@ -4793,8 +4816,6 @@ non-empty (list of string)
 
 
 ## languages.texlive.base
-
-
 
 TeX Live package set to use
 
@@ -7493,8 +7514,6 @@ list of string
 
 ## pre-commit.hooks.autoflake.types_or
 
-
-
 List of file types to run on, where only a single type needs to match.
 
 
@@ -7513,6 +7532,8 @@ list of string
 
 
 ## pre-commit.hooks.autoflake.verbose
+
+
 
 forces the output of the hook to be printed even when the hook passes.
 
