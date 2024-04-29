@@ -25,6 +25,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        installCommand: nix profile install github:cachix/cachix -L --accept-flake-config
     - id: build
       run: |
         bin=$(nix build --print-out-paths)
@@ -48,6 +49,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        installCommand: nix profile install github:cachix/cachix -L --accept-flake-config
     - run: |
         nix build
         export PATH=$PWD/result/bin:$PATH
@@ -89,6 +91,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        installCommand: nix profile install github:cachix/cachix -L --accept-flake-config
     - run: |
         nix build
         PATH=$PWD/result/bin:$PATH devenv-run-tests --only ${{ matrix.example }} examples
@@ -109,6 +112,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        installCommand: nix profile install github:cachix/cachix -L --accept-flake-config
     - run: |
         mkdir -p ~/.config/direnv/
         cat > ~/.config/direnv/direnv.toml << 'EOF'
@@ -141,6 +145,7 @@ jobs:
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        installCommand: nix profile install github:cachix/cachix -L --accept-flake-config
     - run: nix build
     - run: |
         nix shell nixpkgs#zsh -c zsh -c "./result/bin/devenv version"
