@@ -170,6 +170,6 @@ use_devenv() {
   if [[ -f "$extra_files_watchlist" ]]; then
     for file in $(cat "$extra_files_watchlist"); do
       watch_file "$file"
-    done < "$filename"
+    done
   fi
 }
