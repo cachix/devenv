@@ -267,6 +267,8 @@ in
         echo "Please install direnv: https://direnv.net/docs/installation.html"
       fi
 
+      ln -snf ${config.direnv.watchfiles} ${lib.escapeShellArg config.devenv.dotfile}/watchfiles.txt
+
       mkdir -p "$DEVENV_STATE"
       if [ ! -L "$DEVENV_DOTFILE/profile" ] || [ "$(${pkgs.coreutils}/bin/readlink $DEVENV_DOTFILE/profile)" != "${profile}" ]
       then

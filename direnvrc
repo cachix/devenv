@@ -123,6 +123,14 @@ use_devenv() {
     fi
   fi
 
+  local extra_files_watchlist="$flake_dir/.devenv/watchfiles.txt"
+  # Watch extra files configured in devenv.nix
+  if [[ -f "$extra_files_watchlist" ]]; then
+    for file in $(cat "$extra_files_watchlist"); do
+      files_to_watch+=("$file")
+    done
+  fi
+
   nix_direnv_watch_file "${files_to_watch[@]}"
 
   local layout_dir profile_rc
@@ -154,5 +162,14 @@ use_devenv() {
   else
     log_status "using cached devenv shell"
     _nix_import_env "$profile_rc"
+  fi
+
+  # Watch extra files configured in devenv.nix
+  # This picks up new files and reloads the shell on initial run
+  # TODO: can compare files in files_to_watch with the files we have now
+  if [[ -f "$extra_files_watchlist" ]]; then
+    for file in $(cat "$extra_files_watchlist"); do
+      watch_file "$file"
+    done < "$filename"
   fi
 }
