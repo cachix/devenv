@@ -100,11 +100,9 @@ nix_direnv_watch_file() {
 
 _nix_direnv_watch_filelist() {
   if [[ -f "$@" ]]; then
-    local extra_files_to_watch
     while read -r file || [[ -n "$file" ]]; do
-      extra_files_to_watch+=("$file")
+      nix_direnv_watch_file "$file"
     done < "$@"
-    nix_direnv_watch_file "${extra_files_to_watch[@]}"
   fi
 }
 
