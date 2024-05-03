@@ -98,6 +98,16 @@ nix_direnv_watch_file() {
   nix_watches+=("$@")
 }
 
+_nix_direnv_watch_filelist() {
+  if [[ -f "$@" ]]; then
+    local extra_files_to_watch
+    while read -r file || [[ -n "$file" ]]; do
+      extra_files_to_watch+=("$file")
+    done < "$@"
+    nix_direnv_watch_file "${extra_files_to_watch[@]}"
+  fi
+}
+
 use_devenv() {
   _nix_direnv_preflight
 
@@ -125,13 +135,9 @@ use_devenv() {
 
   nix_direnv_watch_file "${files_to_watch[@]}"
 
-  # Check the extra watched files for changes
+  # Watch any extra files configured via `config.direnv.watchFiles` for changes
   local extra_files_watchlist="$flake_dir/.devenv/watchfiles.txt"
-  if [[ -f "$extra_files_watchlist" ]]; then
-    while read -r file || [[ -n "$file" ]]; do
-      nix_watches+=("$file")
-    done < "$extra_files_watchlist"
-  fi
+  _nix_direnv_watch_filelist "$extra_files_watchlist"
 
   local layout_dir profile_rc
   layout_dir=$(direnv_layout_dir)
@@ -164,11 +170,8 @@ use_devenv() {
     _nix_import_env "$profile_rc"
   fi
 
-  # Watch the extra files configured in devenv.nix
+  # Watch any extra files configured via `config.direnv.watchFiles` for changes
   # This picks up new files and reloads the shell on initial run
-  if [[ -f "$extra_files_watchlist" ]]; then
-    while read -r file || [[ -n "$file" ]]; do
-      watch_file "$file"
-    done < "$extra_files_watchlist"
-  fi
+  # TODO: deduplicate already watched file paths?
+  _nix_direnv_watch_filelist "$extra_files_watchlist"
 }
