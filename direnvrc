@@ -128,9 +128,9 @@ use_devenv() {
   # Check the extra watched files for changes
   local extra_files_watchlist="$flake_dir/.devenv/watchfiles.txt"
   if [[ -f "$extra_files_watchlist" ]]; then
-    for file in $(cat "$extra_files_watchlist"); do
+    while read -r file || [[ -n "$file" ]]; do
       nix_watches+=("$file")
-    done
+    done < "$extra_files_watchlist"
   fi
 
   local layout_dir profile_rc
@@ -167,8 +167,8 @@ use_devenv() {
   # Watch the extra files configured in devenv.nix
   # This picks up new files and reloads the shell on initial run
   if [[ -f "$extra_files_watchlist" ]]; then
-    for file in $(cat "$extra_files_watchlist"); do
+    while read -r file || [[ -n "$file" ]]; do
       watch_file "$file"
-    done
+    done < "$extra_files_watchlist"
   fi
 }
