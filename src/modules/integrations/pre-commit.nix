@@ -21,7 +21,7 @@
   config = lib.mkIf ((lib.filterAttrs (id: value: value.enable) config.pre-commit.hooks) != { }) {
     ci = [ config.pre-commit.run ];
     enterTest = ''
-      pre-commit run -a
+      pre-commit run
     '';
     # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
     packages = lib.mkAfter ([ config.pre-commit.package ] ++ (config.pre-commit.enabledPackages or [ ]));
