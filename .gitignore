@@ -12,3 +12,6 @@ examples/rust/app/target
 
 # Rust
 target
+
+# Node Modules
+node_modules
