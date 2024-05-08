@@ -32,7 +32,7 @@ in
       enable = mkEnableOption "gradle";
       package = mkOption {
         type = types.package;
-        defaultText = literalExpression "pkgs.gradle.override { jdk = cfg.jdk.package; }";
+        defaultText = literalExpression "pkgs.gradle.override { java = cfg.jdk.package; }";
         description = ''
           The Gradle package to use.
           The Gradle package by default inherits the JDK from `languages.java.jdk.package`.
