@@ -21,6 +21,12 @@ in
       default = 9000;
     };
 
+    httpPort = lib.mkOption {
+      type = types.int;
+      description = "Which http port to run clickhouse on";
+      default = 8123;
+    };
+
     config = lib.mkOption {
       type = types.lines;
       description = "ClickHouse configuration in YAML.";
@@ -34,6 +40,7 @@ in
         level: warning
         console: 1
       tcp_port: ${toString cfg.port}
+      http_port: ${toString cfg.httpPort}
       default_profile: default
       default_database: default
       path: ${config.env.DEVENV_STATE}/clickhouse
