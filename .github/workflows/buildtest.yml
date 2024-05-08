@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[self-hosted, linux, X64], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+        os: [[self-hosted, linux, X64], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[self-hosted, linux, X64], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+        os: [[self-hosted, linux, X64], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -79,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[self-hosted, linux, X64], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+        os: [[self-hosted, linux, X64], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -104,7 +104,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [self-hosted, Linux, ARM64]]
+        os: [[ubuntu-latest], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, Linux, ARM64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -138,7 +138,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+        os: [[ubuntu-latest], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
