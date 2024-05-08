@@ -1894,7 +1894,7 @@ package
 
 
 *Default:*
-` pkgs.gradle.override { jdk = cfg.jdk.package; } `
+` pkgs.gradle.override { java = cfg.jdk.package; } `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
