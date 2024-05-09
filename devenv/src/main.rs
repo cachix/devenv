@@ -36,10 +36,10 @@ const DEVENV_FLAKE: &str = ".devenv.flake.nix";
     about = format!("https://devenv.sh {}: Fast, Declarative, Reproducible, and Composable Developer Environments", crate_version!())
 )]
 struct Cli {
-    #[arg(short, long, help = "Enable debug log level.")]
+    #[arg(short, long, global = true, help = "Enable debug log level.")]
     verbose: bool,
 
-    #[arg(short = 'j', long, help = "Maximum number of Nix builds at any time.", default_value_t = max_jobs())]
+    #[arg(short = 'j', long, global = true, help = "Maximum number of Nix builds at any time.", default_value_t = max_jobs())]
     max_jobs: u8,
 
     #[arg(
@@ -50,14 +50,20 @@ struct Cli {
     )]
     cores: u8,
 
-    #[arg(short, long, default_value_t = default_system())]
+    #[arg(short, long, global = true, default_value_t = default_system())]
     system: String,
 
-    #[arg(short, long, help = "Relax the hermeticity of the environment.")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Relax the hermeticity of the environment."
+    )]
     impure: bool,
 
     #[arg(
         long,
+        global = true,
         help = "Disable substituters and consider all previously downloaded files up-to-date."
     )]
     offline: bool,
@@ -66,18 +72,25 @@ struct Cli {
     #[arg(
         short,
         long,
+        global = true,
         num_args = 0..,
         value_delimiter = ',',
         help = "Ignore existing environment variables when entering the shell. Pass a list of comma-separated environment variables to let through."
     )]
     clean: Option<Vec<String>>,
 
-    #[arg(short = 'd', long, help = "Enter Nix debugger on failure.")]
+    #[arg(
+        short = 'd',
+        long,
+        global = true,
+        help = "Enter Nix debugger on failure."
+    )]
     nix_debugger: bool,
 
     #[arg(
         short,
         long,
+        global = true,
         num_args = 2,
         value_delimiter = ' ',
         help = "Pass additional options to nix commands, see `man nix.conf` for full list."
@@ -87,6 +100,7 @@ struct Cli {
     #[arg(
         short,
         long,
+        global = true,
         num_args = 2,
         value_delimiter = ' ',
         help = "Override inputs in devenv.yaml."
