@@ -76,6 +76,14 @@ ncdu 2.2
 ✔ Tests passed. in 0.0s.
 ```
 
+## Changing environment only for tests
+
+```nix title="devenv.nix"
+{ pkgs, config, ... }: {
+  services.postgres.enable = config.devenv.isTesting;
+}
+```
+
 ## Provided functions for enterTest
 
 - `wait_for_port <port> <timeout>`: waits for a port to be open
