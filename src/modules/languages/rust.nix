@@ -80,8 +80,8 @@ in
     };
   };
 
-  config = lib.mkMerge [
-    (lib.mkIf cfg.enable (
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+    (
       let
         mkOverrideTools = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
       in
@@ -108,7 +108,6 @@ in
         # enable compiler tooling by default to expose things like cc
         languages.c.enable = lib.mkDefault true;
 
-
         env =
           let
             darwinFlags = lib.optionalString pkgs.stdenv.isDarwin "-L framework=${config.devenv.profile}/Library/Frameworks";
@@ -130,44 +129,28 @@ in
         pre-commit.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
         pre-commit.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
       }
-    ))
+    )
+
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
         rustPackages = fenix.packages.${pkgs.stdenv.system};
+        fenixChannel =
+          if cfg.channel == "nightly"
+          then "latest"
+          else cfg.channel;
+        toolchain = rustPackages.${fenixChannel};
       in
       {
         languages.rust.toolchain =
-          let
-            toolchain =
-              if cfg.channel == "nightly"
-              then
-                rustPackages.latest
-              else
-                rustPackages.${cfg.channel}
-            ;
-          in
           (builtins.mapAttrs (_: pkgs.lib.mkDefault) toolchain);
 
         packages = [
-          (rustPackages.combine
-            (
-              (map (c: config.languages.rust.toolchain.${c}) cfg.components) ++
-              (map
-                (t:
-                  let
-                    target_toolchain =
-                      if cfg.channel == "nightly"
-                      then
-                        rustPackages.targets.${t}.latest
-                      else
-                        rustPackages.targets.${t}.${cfg.channel}
-                    ;
-                  in
-                  target_toolchain.rust-std)
-                cfg.targets)
-            ))
+          (rustPackages.combine (
+            (map (c: toolchain.${c}) cfg.components) ++
+            (map (t: rustPackages.targets.${t}.${fenixChannel}.rust-std) cfg.targets)
+          ))
         ];
       }
     ))
-  ];
+  ]);
 }
