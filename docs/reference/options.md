@@ -30748,6 +30748,27 @@ strings concatenated with “\\n”
 
 
 
+## services.clickhouse.httpPort
+
+
+
+Which http port to run clickhouse on
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 8123 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/clickhouse.nix)
+
+
+
 ## services.clickhouse.port
 
 
