@@ -51,6 +51,21 @@ in
         users_xml:
           path: ${cfg.package}/etc//clickhouse-server/users.xml
     '';
-    processes.clickhouse-server.exec = "clickhouse-server --config-file=${pkgs.writeText "clickhouse-config.yaml" cfg.config}";
+    processes.clickhouse-server = {
+      exec = "clickhouse-server --config-file=${pkgs.writeText "clickhouse-config.yaml" cfg.config}";
+
+      process-compose = {
+        readiness_probe = {
+          exec.command = "${cfg.package}/bin/clickhouse-client --port ${toString cfg.port} -q 'SELECT 1'";
+          initial_delay_seconds = 2;
+          period_seconds = 10;
+          timeout_seconds = 4;
+          success_threshold = 1;
+          failure_threshold = 5;
+        };
+
+        availability.restart = "on_failure";
+      };
+    };
   };
 }
