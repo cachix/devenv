@@ -218,7 +218,7 @@ in
     ]
     ++ lib.optional cfg.npm.enable (cfg.npm.package)
     ++ lib.optional cfg.pnpm.enable (cfg.pnpm.package)
-    ++ lib.optional cfg.yarn.enable (cfg.yarn.package)
+    ++ lib.optional cfg.yarn.enable (cfg.yarn.package.override { nodejs = cfg.package; })
     ++ lib.optional cfg.bun.enable (cfg.bun.package)
     ++ lib.optional cfg.corepack.enable (pkgs.runCommand "corepack-enable" { } ''
       mkdir -p $out/bin
