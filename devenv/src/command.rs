@@ -278,10 +278,8 @@ impl App {
                 let client = reqwest::blocking::Client::new();
                 for name in caches.caches.pull.iter() {
                     if !caches.known_keys.contains_key(name) {
-                        let mut request = client.get(&format!(
-                            "https://cachix.org/api/v1/cache/{}", 
-                            name
-                        ));
+                        let mut request =
+                            client.get(&format!("https://cachix.org/api/v1/cache/{}", name));
                         if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
                             request = request.bearer_auth(ret);
                         }
