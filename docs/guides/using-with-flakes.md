@@ -56,10 +56,14 @@ Here's a minimal `flake.nix` file that includes:
 
   outputs = { self, nixpkgs, devenv, ... } @ inputs:
     let
-      pkgs = nixpkgs.legacyPackages."x86_64-linux";
+      system = "x86_64-linux";
+
+      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      devShell.x86_64-linux = devenv.lib.mkShell {
+      packages.${system}.devenv-up = self.devShells.${system}.default.config.procfileScript;
+
+      devShells.${system}.default = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [
           ({ pkgs, config, ... }: {
@@ -116,10 +120,11 @@ The `flake.nix` file contains multiple `devShells`. For example:
 
   outputs = { self, nixpkgs, devenv, ... } @ inputs:
     let
-      pkgs = nixpkgs.legacyPackages."x86_64-linux";
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      devShell.x86_64-linux.projectA = devenv.lib.mkShell {
+      devShells.${system}.projectA = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [
           {
@@ -129,7 +134,7 @@ The `flake.nix` file contains multiple `devShells`. For example:
           }
         ];
       };
-      devShell.x86_64-linux.projectB = devenv.lib.mkShell {
+      devShells.${system}.projectB = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [
           {
