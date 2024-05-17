@@ -45,7 +45,7 @@ Here's a minimal `flake.nix` file that includes:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     devenv.url = "github:cachix/devenv";
   };
 
@@ -114,7 +114,7 @@ The `flake.nix` file contains multiple `devShells`. For example:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     devenv.url = "github:cachix/devenv";
   };
 
@@ -124,25 +124,33 @@ The `flake.nix` file contains multiple `devShells`. For example:
       pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      devShells.${system}.projectA = devenv.lib.mkShell {
-        inherit inputs pkgs;
-        modules = [
-          {
-            enterShell = ''
-              echo this is project A
-            '';
-          }
-        ];
+      packages.${system} = {
+        projectA-devenv-up = self.devShells.${system}.projectA.config.procfileScript;
+        projectB-devenv-up = self.devShells.${system}.projectB.config.procfileScript;
       };
-      devShells.${system}.projectB = devenv.lib.mkShell {
-        inherit inputs pkgs;
-        modules = [
-          {
-            enterShell = ''
-              echo this is project B
-            '';
-          }
-        ];
+
+      devShells.${system} = {
+        projectA = devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [
+            {
+              enterShell = ''
+                echo this is project A
+              '';
+            }
+          ];
+        };
+
+        projectB = devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [
+            {
+              enterShell = ''
+                echo this is project B
+              '';
+            }
+          ];
+        };
       };
     };
 }
