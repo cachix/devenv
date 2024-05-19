@@ -24,6 +24,8 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
+      nasm
+      clang
       gnumake
       ols
       cfg.debugger
