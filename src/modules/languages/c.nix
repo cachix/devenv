@@ -10,6 +10,8 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
+      valgrind
+      gdb
       stdenv
       gnumake
       ccls
