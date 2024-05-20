@@ -2653,6 +2653,74 @@ attribute set
 
 
 
+## languages.odin.enable
+
+
+
+Whether to enable tools for Odin Language.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
+
+
+
+## languages.odin.package
+
+
+
+The odin package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.odin `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
+
+
+
+## languages.odin.debugger
+
+
+
+The debugger package to use with odin.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gdb `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
+
+
+
 ## languages.opentofu.enable
 
 
@@ -4691,8 +4759,6 @@ package
 
 ## languages.terraform.enable
 
-
-
 Whether to enable tools for Terraform development.
 
 
@@ -4816,6 +4882,8 @@ non-empty (list of string)
 
 
 ## languages.texlive.base
+
+
 
 TeX Live package set to use
 
@@ -7446,8 +7514,6 @@ null or string
 
 ## pre-commit.hooks.autoflake.settings.flags
 
-
-
 Flags passed to autoflake.
 
 
@@ -7513,6 +7579,8 @@ list of string
 
 
 ## pre-commit.hooks.autoflake.types_or
+
+
 
 List of file types to run on, where only a single type needs to match.
 
