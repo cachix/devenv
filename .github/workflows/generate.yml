@@ -15,7 +15,7 @@ jobs:
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@v14
+    - uses: cachix/cachix-action@v15
       with:
         name: devenv
     - run: nix profile install .
