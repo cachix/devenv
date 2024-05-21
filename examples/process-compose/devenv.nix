@@ -34,7 +34,7 @@
 
     process-compose = {
       depends_on.foo.condition = "process_completed_successfully";
-      depends_on.postgres.condition = "process_ready";
+      depends_on.postgres.condition = "process_healthy";
       environment = [ "BAR=BAZ" ];
     };
   };
