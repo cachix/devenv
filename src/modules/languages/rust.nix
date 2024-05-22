@@ -86,6 +86,20 @@ in
         mkOverrideTools = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
       in
       {
+        assertions = [
+          {
+            assertion = cfg.channel == "nixpkgs" -> (cfg.targets == [ ]);
+            message = ''
+              Cannot use `languages.rust.channel = "nixpkgs"` with `languages.rust.targets`.
+
+              The nixpkgs channel does not support cross-compiling with targets.
+              Use the stable, beta, or nightly channels instead. For example:
+
+              languages.rust.channel = "stable";
+            '';
+          }
+        ];
+
         # Set $CARGO_INSTALL_ROOT so that executables installed by `cargo install` can be found from $PATH
         enterShell = ''
           export CARGO_INSTALL_ROOT=$(${
@@ -100,9 +114,6 @@ in
 
         packages =
           lib.optional cfg.mold.enable pkgs.mold-wrapped
-          # If there are targets we want to add the whole toolchain instead
-          # TODO: It might always be fine to add the whole toolchain when not using `nixpkgs`
-          ++ lib.optionals (cfg.targets == [ ]) (builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components)
           ++ lib.optional pkgs.stdenv.isDarwin pkgs.libiconv;
 
         # enable compiler tooling by default to expose things like cc
@@ -130,6 +141,10 @@ in
         pre-commit.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
       }
     )
+
+    (lib.mkIf (cfg.channel == "nixpkgs") {
+      packages = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
+    })
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
