@@ -29606,7 +29606,7 @@ attribute set
 ```
 {
   tui = true;
-  unix-socket = "/run/user/1001/devenv-d9c1243/pc.sock";
+  unix-socket = "/run/user/1001/devenv-0957646/pc.sock";
   version = "0.5";
 }
 ```
