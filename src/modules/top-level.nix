@@ -175,12 +175,16 @@ in
         # - free to create as an unprivileged user across OSes
         default =
           let
+            runtimeEnv = builtins.getEnv "DEVENV_RUNTIME";
+
             hashedRoot = builtins.hashString "sha256" config.devenv.state;
 
             # same length as git's abbreviated commit hashes
             shortHash = builtins.substring 0 7 hashedRoot;
           in
-          "${config.devenv.tmpdir}/devenv-${shortHash}";
+          if runtimeEnv != ""
+          then runtimeEnv
+          else "${config.devenv.tmpdir}/devenv-${shortHash}";
       };
 
       tmpdir = lib.mkOption {
