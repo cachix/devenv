@@ -275,13 +275,15 @@ impl App {
                 };
 
                 let mut new_known_keys: HashMap<String, String> = HashMap::new();
+                let client = reqwest::blocking::Client::new();
                 for name in caches.caches.pull.iter() {
                     if !caches.known_keys.contains_key(name) {
-                        let resp = reqwest::blocking::get(&format!(
-                            "https://cachix.org/api/v1/cache/{}",
-                            name
-                        ))
-                        .expect("Failed to get cache");
+                        let mut request =
+                            client.get(&format!("https://cachix.org/api/v1/cache/{}", name));
+                        if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
+                            request = request.bearer_auth(ret);
+                        }
+                        let resp = request.send().expect("Failed to get cache");
                         if resp.status().is_client_error() {
                             self.logger.error(&format!(
                                 "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",

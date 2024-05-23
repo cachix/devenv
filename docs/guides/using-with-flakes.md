@@ -45,7 +45,7 @@ Here's a minimal `flake.nix` file that includes:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     devenv.url = "github:cachix/devenv";
   };
 
@@ -56,10 +56,14 @@ Here's a minimal `flake.nix` file that includes:
 
   outputs = { self, nixpkgs, devenv, ... } @ inputs:
     let
-      pkgs = nixpkgs.legacyPackages."x86_64-linux";
+      system = "x86_64-linux";
+
+      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      devShell.x86_64-linux = devenv.lib.mkShell {
+      packages.${system}.devenv-up = self.devShells.${system}.default.config.procfileScript;
+
+      devShells.${system}.default = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [
           ({ pkgs, config, ... }: {
@@ -110,34 +114,43 @@ The `flake.nix` file contains multiple `devShells`. For example:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     devenv.url = "github:cachix/devenv";
   };
 
   outputs = { self, nixpkgs, devenv, ... } @ inputs:
     let
-      pkgs = nixpkgs.legacyPackages."x86_64-linux";
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      devShell.x86_64-linux.projectA = devenv.lib.mkShell {
-        inherit inputs pkgs;
-        modules = [
-          {
-            enterShell = ''
-              echo this is project A
-            '';
-          }
-        ];
+      packages.${system} = {
+        projectA-devenv-up = self.devShells.${system}.projectA.config.procfileScript;
+        projectB-devenv-up = self.devShells.${system}.projectB.config.procfileScript;
       };
-      devShell.x86_64-linux.projectB = devenv.lib.mkShell {
-        inherit inputs pkgs;
-        modules = [
-          {
-            enterShell = ''
-              echo this is project B
-            '';
-          }
-        ];
+
+      devShells.${system} = {
+        projectA = devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [
+            {
+              enterShell = ''
+                echo this is project A
+              '';
+            }
+          ];
+        };
+
+        projectB = devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [
+            {
+              enterShell = ''
+                echo this is project B
+              '';
+            }
+          ];
+        };
       };
     };
 }
