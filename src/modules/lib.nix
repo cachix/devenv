@@ -19,7 +19,7 @@
 
             inputs.${name}.url = "${url}";
             ${if follows != [] 
-              then "inputs.${name}.inputs = { ${lib.concatStringsSep "; " (map (i: "${i}.follows = \"${i}\";") follows)}; };" 
+              then "inputs.${name}.inputs = { ${lib.concatStringsSep "; " (map (i: "${i}.follows = \"${i}\"") follows)}; };" 
               else ""}
           ''
           else if lib.versionAtLeast config.devenv.cliVersion "1.0"
