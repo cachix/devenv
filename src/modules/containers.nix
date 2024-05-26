@@ -296,6 +296,8 @@ in
       containers.${envContainerName}.isBuilding = true;
     })
     (lib.mkIf config.container.isBuilding {
+      devenv.tmpdir = lib.mkOverride (lib.modules.defaultOverridePriority - 1) "/tmp";
+      devenv.runtime = lib.mkOverride (lib.modules.defaultOverridePriority - 1) "${config.devenv.tmpdir}/devenv";
       devenv.root = lib.mkForce "${homeDir}";
       devenv.dotfile = lib.mkOverride 49 "${homeDir}/.devenv";
     })
