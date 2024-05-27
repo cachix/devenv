@@ -1,4 +1,6 @@
 use clap::Parser;
+use devenv::log::Level;
+use devenv::log::Logger;
 use std::fs;
 use std::path::PathBuf;
 
@@ -30,6 +32,10 @@ struct TestResult {
 }
 
 fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
+    let logger = Logger::new(Level::Info);
+
+    logger.info("Running Tests");
+
     let cwd = std::env::current_dir()?;
     let cwd = cwd.display();
 

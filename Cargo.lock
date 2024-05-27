@@ -418,7 +418,6 @@ dependencies = [
  "ansiterm",
  "clap 4.5.1",
  "cli-table",
- "devenv_core",
  "dotlock",
  "fs2",
  "hex",
@@ -446,12 +445,8 @@ name = "devenv-run-tests"
 version = "0.1.0"
 dependencies = [
  "clap 3.2.25",
- "devenv_core",
+ "devenv",
 ]
-
-[[package]]
-name = "devenv_core"
-version = "0.1.0"
 
 [[package]]
 name = "digest"
