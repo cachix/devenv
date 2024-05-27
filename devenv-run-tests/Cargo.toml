@@ -6,4 +6,4 @@ edition = "2018"
 [dependencies]
 clap = { version = "3", features = ["derive"] }
 
-devenv_core = { path = "../devenv_core" }
+devenv= { path = "../devenv" }
