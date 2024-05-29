@@ -4,6 +4,8 @@ let
   cfg = config.languages.elm;
 in
 {
+  meta.doc = "Hello from Elm!";
+
   options.languages.elm = {
     enable = lib.mkEnableOption "tools for Elm development";
   };

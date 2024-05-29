@@ -123,6 +123,13 @@
       ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
       \`\`\`
     EOF
+
+    mkdir -p docs/languages
+    docs='${builtins.toJSON (builtins.map (lang: { name = lib.removeSuffix ".nix" (builtins.baseNameOf lang.file); doc = lang.value; }) config.meta.doc)}'
+    echo $docs | jq -r '.[]|[.name, .doc] | @tsv' |
+      while IFS=$'\t' read -r name doc; do
+        echo $doc > "docs/languages/$name.md"
+      done
   '';
 
   pre-commit.hooks = {

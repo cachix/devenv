@@ -62,6 +62,7 @@
             specialArgs = inputs // { inherit inputs pkgs; };
             modules = [
               (inputs.devenv.modules + /top-level.nix)
+              (inputs.devenv.modules + /doc.nix)
               {
                 devenv.cliVersion = version;
                 devenv.root = devenv_root;
