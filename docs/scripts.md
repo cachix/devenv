@@ -31,6 +31,14 @@ Entering shell ...
 }
 ```
 
+### Aliases & args
+Here's an example that shows how to define an alias & forward arguments:
+```
+scripts.foo.exec = ''
+  npx @foo/cli "$@";
+'';
+```
+
 ## Pinning packages inside scripts
 
 Sometimes we don't want to expose the tools to the shell but still make sure they are pinned in a script:
