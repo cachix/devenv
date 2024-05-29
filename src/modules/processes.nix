@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 let
   types = lib.types;
+  processComposeSettingsFormat = pkgs.formats.yaml { };
   processType = types.submodule ({ config, ... }: {
     options = {
       exec = lib.mkOption {
@@ -57,9 +58,26 @@ in
         example = "overmind";
       };
 
-      process-compose = lib.mkOption {
+      process-compose = lib.mkOption rec {
         # NOTE: https://github.com/F1bonacc1/process-compose/blob/1c706e7c300df2455de7a9b259dd35dea845dcf3/src/app/config.go#L11-L16
-        type = types.attrs;
+        # NOTE: the `tui` and `unix-socket` options are devenv-specific and map to process-compose CLI options.
+        type = types.submodule {
+          freeformType = types.attrsOf processComposeSettingsFormat.type;
+          options = {
+            tui = lib.mkOption {
+              type = types.bool;
+              description = "Whether to enable the TUI.";
+              default = true;
+            };
+            unix-socket = lib.mkOption {
+              type = types.str; # TODO: should be path?
+              description = "The path to the Unix socket.";
+              default = "${config.devenv.runtime}/pc.sock";
+              defaultText = lib.literalExpression "\${config.devenv.runtime}/pc.sock";
+            };
+          };
+        };
+        apply = lib.recursiveUpdate default;
         description = ''
           Top-level process-compose.yaml options when that implementation is used.
         '';
@@ -68,6 +86,13 @@ in
           unix-socket = "${config.devenv.runtime}/pc.sock";
           tui = true;
         };
+        defaultText = lib.literalExpression ''
+          {
+            version = "0.5";
+            unix-socket = ''${config.devenv.runtime}/pc.sock;
+            tui = true;
+          }
+        '';
         example = {
           version = "0.5";
           log_location = "/path/to/combined/output/logfile.log";

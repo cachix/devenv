@@ -19,6 +19,7 @@ in
     settings = lib.mkOption {
       type = settingsFormat.type;
       default = { };
+      # TODO: the description and example are incorrect. AFAIKT this is the top-level config.
       description = ''
         process-compose.yaml specific process attributes.
 
@@ -37,10 +38,11 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    # TODO: PC_TUI_ENABLED doesn't exist? PC_DISABLE_TUI does
     processManagerCommand = ''
       ${cfg.package}/bin/process-compose --config ${cfg.configFile} \
         --unix-socket ''${PC_SOCKET_PATH:-${toString config.process.process-compose.unix-socket}} \
-        --tui=''${PC_TUI_ENABLED:-${toString config.process.process-compose.tui}} \
+        --tui=''${PC_TUI_ENABLED:-${lib.boolToString config.process.process-compose.tui}} \
         -U up "$@" &
     '';
 
@@ -51,7 +53,11 @@ in
       settings = {
         version = "0.5";
         is_strict = true;
+        # TODO: not a process-compose setting
+        # TODO: never used in command
         port = lib.mkDefault 9999;
+        # TODO: not a process-compose setting
+        # TODO: never used in command. process.process-compose.tui is.
         tui = lib.mkDefault true;
         environment = lib.mapAttrsToList
           (name: value: "${name}=${toString value}")
