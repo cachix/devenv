@@ -96,10 +96,13 @@
   '';
   scripts."devenv-generate-doc-options".exec = ''
     set -e
+    output_file=docs/reference/options.md
     options=$(nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
-    echo "# devenv.nix options" > docs/reference/options.md
-    echo >> docs/reference/options.md
-    cat $options >> docs/reference/options.md
+    echo "# devenv.nix options" > $output_file
+    echo >> $output_file
+    cat $options >> $output_file
+    # https://github.com/NixOS/nixpkgs/issues/224661
+    sed -i 's/\\\././g' $output_file
   '';
   scripts."devenv-generate-languages-example".exec = ''
     cat > examples/supported-languages/devenv.nix <<EOF
