@@ -171,6 +171,9 @@ in
     libraries = lib.mkOption {
       type = lib.types.listOf lib.types.path;
       default = [ "${config.devenv.dotfile}/profile" ];
+      defaultText = lib.literalExpression ''
+        [ "''${config.devenv.dotfile}/profile" ]
+      '';
       description = ''
         Additional libraries to make available to the Python interpreter.
 
