@@ -1053,7 +1053,7 @@ string
 
 
 *Default:*
-` "devenv-16a3de0b53062f3b6e6678a84f28e04344732e0002fcad6af20ffbeaa0491014" `
+` "devenv-<hash>" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/hostctl.nix)
@@ -3301,7 +3301,7 @@ string *(read only)*
 
 
 *Example:*
-` "/home/runner/work/devenv/devenv/.devenv/state/php-fpm/<name>.sock" `
+` config.env.DEVENV_STATE + "/php-fpm/<name>.sock" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
@@ -3335,8 +3335,9 @@ attribute set of (string or signed integer or boolean)
 
 ```
 {
-  error_log = "/home/runner/work/devenv/devenv/.devenv/state/php-fpm/php-fpm.log";
+  error_log = config.env.DEVENV_STATE + "/php-fpm/php-fpm.log";
 }
+
 ```
 
 *Declared by:*
@@ -3525,9 +3526,8 @@ list of path
 *Default:*
 
 ```
-[
-  "/home/runner/work/devenv/devenv/.devenv/profile"
-]
+[ "${config.devenv.dotfile}/profile" ]
+
 ```
 
 *Declared by:*
@@ -4406,6 +4406,8 @@ list of string
 
 Enable mold as the linker.
 
+Enabled by default on x86_64 Linux machines when no cross-compilation targets are specified.
+
 
 
 *Type:*
@@ -4414,7 +4416,7 @@ boolean
 
 
 *Default:*
-` true `
+` pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64 && languages.rust.targets == [ ] `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -29605,10 +29607,11 @@ attribute set
 
 ```
 {
-  tui = true;
-  unix-socket = "/run/user/1001/devenv-0957646/pc.sock";
   version = "0.5";
+  unix-socket = "${config.devenv.runtime}/pc.sock";
+  tui = true;
 }
+
 ```
 
 
@@ -30995,6 +30998,27 @@ package
 
 
 
+## services.couchdb.baseDir
+
+
+
+The directory where CouchDB will store its data.
+
+
+
+*Type:*
+string *(read only)*
+
+
+
+*Default:*
+` config.env.DEVENV_STATE + "/couchdb" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
+
+
+
 ## services.couchdb.settings
 
 
@@ -31025,7 +31049,7 @@ attribute set of section of an INI file (attrs of INI atom (null, bool, int, flo
     database_dir = baseDir;
     single_node = true;
     view_index_dir = baseDir;
-    uri_file = "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.uri";
+    uri_file = "${config.services.couchdb.baseDir}/couchdb.uri";
   };
   admins = {
     "admin_username" = "pass";
@@ -31101,7 +31125,7 @@ path
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/couchdb" `
+` config.env.DEVENV_STATE + "/couchdb" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -31149,7 +31173,7 @@ path
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/couchdb/couchdb.uri" `
+` config.env.DEVENV_STATE + "/couchdb"/couchdb.uri `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
@@ -31172,7 +31196,7 @@ path
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/couchdb" `
+` config.env.DEVENV_STATE + "/couchdb" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/couchdb.nix)
