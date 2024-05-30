@@ -1,25 +1,26 @@
 { pkgs
 , lib
 , config
+, options
 , ...
 }:
 let
   cfg = config.services.couchdb;
+  opts = options.services.couchdb;
 
   settingsFormat = pkgs.formats.ini { };
   configFile = settingsFormat.generate "couchdb.ini" cfg.settings;
 
-  baseDir = config.env.DEVENV_STATE + "/couchdb";
   startScript = pkgs.writeShellScriptBin "start-couchdb" ''
     set -euo pipefail
-    mkdir -p '${baseDir}'
-    touch '${baseDir}/couchdb.uri'
-    touch '${baseDir}/couchdb.ini'
+    mkdir -p '${cfg.baseDir}'
+    touch '${cfg.baseDir}/couchdb.uri'
+    touch '${cfg.baseDir}/couchdb.ini'
 
-    if [[ ! -e '${baseDir}/.erlang.cookie' ]]; then
-      touch '${baseDir}/.erlang.cookie'
-      chmod 600 '${baseDir}/.erlang.cookie'
-      dd if=/dev/random bs=16 count=1 status=none | base64 > ${baseDir}/.erlang.cookie
+    if [[ ! -e '${cfg.baseDir}/.erlang.cookie' ]]; then
+      touch '${cfg.baseDir}/.erlang.cookie'
+      chmod 600 '${cfg.baseDir}/.erlang.cookie'
+      dd if=/dev/random bs=16 count=1 status=none | base64 > ${cfg.baseDir}/.erlang.cookie
     fi
 
     exec ${cfg.package}/bin/couchdb
@@ -36,12 +37,23 @@ in
       defaultText = lib.literalExpression "pkgs.couchdb3";
     };
 
+    baseDir = lib.mkOption {
+      type = lib.types.str;
+      default = config.env.DEVENV_STATE + "/couchdb";
+      defaultText = lib.literalExpression ''config.env.DEVENV_STATE + "/couchdb"'';
+      readOnly = true;
+      description = ''
+        The directory where CouchDB will store its data.
+      '';
+    };
+
     settings = lib.mkOption {
       type = lib.types.submodule {
         freeformType = settingsFormat.type;
         options.couchdb.database_dir = lib.mkOption {
           type = lib.types.path;
-          default = baseDir;
+          default = cfg.baseDir;
+          defaultText = opts.baseDir.defaultText;
           description = ''
             Specifies location of CouchDB database files (*.couch named). This
             location should be writable and readable for the user the CouchDB
@@ -59,7 +71,8 @@ in
         };
         options.couchdb.view_index_dir = lib.mkOption {
           type = lib.types.path;
-          default = baseDir;
+          default = cfg.baseDir;
+          defaultText = opts.baseDir.defaultText;
           description = ''
             Specifies location of CouchDB view index files. This location should
             be writable and readable for the user that runs the CouchDB service
@@ -68,7 +81,8 @@ in
         };
         options.couchdb.uri_file = lib.mkOption {
           type = lib.types.path;
-          default = "${baseDir}/couchdb.uri";
+          default = "${cfg.baseDir}/couchdb.uri";
+          defaultText = lib.literalExpression (opts.baseDir.defaultText.text + "/couchdb.uri");
           description = ''
             This file contains the full URI that can be used to access this
             instance of CouchDB. It is used to help discover the port CouchDB is
@@ -108,7 +122,7 @@ in
             database_dir = baseDir;
             single_node = true;
             view_index_dir = baseDir;
-            uri_file = "${baseDir}/couchdb.uri";
+            uri_file = "''${config.services.couchdb.baseDir}/couchdb.uri";
           };
           admins = {
             "admin_username" = "pass";
@@ -126,10 +140,10 @@ in
     packages = [ cfg.package ];
     services.couchdb.settings = {
       couchdb = {
-        database_dir = baseDir;
+        database_dir = cfg.baseDir;
         single_node = true;
-        view_index_dir = baseDir;
-        uri_file = "${baseDir}/couchdb.uri";
+        view_index_dir = cfg.baseDir;
+        uri_file = "${cfg.baseDir}/couchdb.uri";
       };
       admins = {
         admin = "admin";
@@ -139,7 +153,7 @@ in
         port = 5984;
       };
     };
-    env.ERL_FLAGS = "-couch_ini ${cfg.package}/etc/default.ini ${configFile} '${baseDir}/couchdb.ini'";
+    env.ERL_FLAGS = "-couch_ini ${cfg.package}/etc/default.ini ${configFile} '${cfg.baseDir}/couchdb.ini'";
     processes.couchdb.exec = "${startScript}/bin/start-couchdb";
   };
 }
