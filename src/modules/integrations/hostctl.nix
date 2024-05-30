@@ -20,6 +20,7 @@ in
     hostsProfileName = lib.mkOption {
       type = lib.types.str;
       default = "devenv-${builtins.hashString "sha256" config.env.DEVENV_ROOT}";
+      defaultText = "devenv-<hash>";
       description = "Profile name to use.";
     };
 

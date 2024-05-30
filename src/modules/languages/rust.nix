@@ -55,7 +55,13 @@ in
     mold.enable = lib.mkOption {
       type = lib.types.bool;
       default = pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64 && cfg.targets == [ ];
-      description = "Enable mold as the linker.";
+      defaultText =
+        lib.literalExpression "pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64 && languages.rust.targets == [ ]";
+      description = ''
+        Enable mold as the linker.
+
+        Enabled by default on x86_64 Linux machines when no cross-compilation targets are specified.
+      '';
     };
 
     toolchain = lib.mkOption {

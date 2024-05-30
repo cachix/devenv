@@ -68,6 +68,13 @@ in
           unix-socket = "${config.devenv.runtime}/pc.sock";
           tui = true;
         };
+        defaultText = lib.literalExpression ''
+          {
+            version = "0.5";
+            unix-socket = "''${config.devenv.runtime}/pc.sock";
+            tui = true;
+          }
+        '';
         example = {
           version = "0.5";
           log_location = "/path/to/combined/output/logfile.log";

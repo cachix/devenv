@@ -74,7 +74,7 @@ let
 
             This option is read-only and managed by NixOS.
           '';
-          example = "${runtimeDir}/<name>.sock";
+          example = literalExpression ''config.env.DEVENV_STATE + "/php-fpm/<name>.sock"'';
         };
 
         listen = mkOption {
@@ -236,16 +236,21 @@ in
         default = {
           error_log = config.env.DEVENV_STATE + "/php-fpm/php-fpm.log";
         };
+        defaultText = literalExpression ''
+          {
+            error_log = config.env.DEVENV_STATE + "/php-fpm/php-fpm.log";
+          }
+        '';
         description = ''
           PHP-FPM global directives. 
-          
+
           Refer to the "List of global php-fpm.conf directives" section of
           <https://www.php.net/manual/en/install.fpm.configuration.php>
           for details. 
-          
+
           Note that settings names must be enclosed in
           quotes (e.g. `"pm.max_children"` instead of `pm.max_children`). 
-          
+
           You need not specify the options `error_log` or `daemonize` here, since
           they are already set.
         '';

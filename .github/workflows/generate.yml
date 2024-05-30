@@ -1,4 +1,5 @@
 name: "Generate docs/examples"
+
 on:
   push:
     branches:
@@ -6,8 +7,9 @@ on:
     tags:
       - v*
   pull_request:
+
 jobs:
-  build:
+  generate-docs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -19,25 +21,32 @@ jobs:
       with:
         name: devenv
     - run: nix profile install .
+
     - name: Generate doc options
       run: devenv shell devenv-generate-doc-options
-    # https://github.com/NixOS/nixpkgs/issues/224661
-    - run: sed -i 's/\\\././g' docs/reference/options.md
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs/reference/options.md
         message: 'Auto generate docs/reference/options.md'
-    - name: Generate supported-languages example
-      run: devenv shell devenv-generate-languages-example
-    - name: Generate docs
-      run: devenv shell devenv-generate-docs
+
+    - name: Generate docs and supported-languages example
+      run: |
+        devenv shell devenv-generate-docs
+        devenv shell devenv-generate-languages-example
+    - uses: EndBug/add-and-commit@v9
+      if: ${{ github.event_name == 'push' }}
+      with:
+        default_author: github_actions
+        add: docs examples/supported-languages/devenv.nix
+        message: 'Auto generate docs and examples'
+
     - name: Generate JSON schema
       run: devenv generate-json-schema
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
-        add: examples/supported-languages/devenv.nix
-        message: 'Auto generate examples/supported-languages/devenv.nix'
+        add: docs/devenv.schema.json
+        message: 'Auto generate docs/devenv.schema.json'
