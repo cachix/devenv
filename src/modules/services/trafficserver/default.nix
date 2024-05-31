@@ -297,7 +297,7 @@ in
 
     storage = lib.mkOption {
       type = types.lines;
-      default = "/var/cache/trafficserver 256M";
+      default = "${runroot.cachedir} 256M";
       example = "/dev/disk/by-id/XXXXX volume=1";
       description = ''
         List all the storage that make up the Traffic Server cache.
