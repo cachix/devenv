@@ -9,6 +9,7 @@
   services.dynamodb-local.enable = true;
   services.elasticmq.enable = true;
   services.elasticsearch.enable = true;
+  services.httpbin.enable = true;
   services.influxdb.enable = true;
   services.mailhog.enable = true;
   services.mailpit.enable = true;
