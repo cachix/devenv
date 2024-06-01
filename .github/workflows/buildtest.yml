@@ -21,12 +21,10 @@ jobs:
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@master
+    - uses: cachix/cachix-action@v15
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-        installCommand: nix profile install github:cachix/cachix/debug-daemon-stop -L --accept-flake-config
-        cachixArgs: '--verbose'
     - id: build
       run: |
         bin=$(nix build --print-out-paths)
@@ -46,12 +44,10 @@ jobs:
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@master
+    - uses: cachix/cachix-action@v15
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-        installCommand: nix profile install github:cachix/cachix/debug-daemon-stop -L --accept-flake-config
-        cachixArgs: '--verbose'
     - run: |
         nix build
         export PATH=$PWD/result/bin:$PATH
@@ -89,12 +85,10 @@ jobs:
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@master
+    - uses: cachix/cachix-action@v15
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-        installCommand: nix profile install github:cachix/cachix/debug-daemon-stop -L --accept-flake-config
-        cachixArgs: '--verbose'
     - run: |
         nix build
         PATH=$PWD/result/bin:$PATH devenv-run-tests --only ${{ matrix.example }} examples
@@ -111,12 +105,10 @@ jobs:
     - uses: cachix/install-nix-action@v26
       with:
         nix_path: nixpkgs=channel:nixos-unstable
-    - uses: cachix/cachix-action@master
+    - uses: cachix/cachix-action@v15
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-        installCommand: nix profile install github:cachix/cachix/debug-daemon-stop -L --accept-flake-config
-        cachixArgs: '--verbose'
     - run: |
         mkdir -p ~/.config/direnv/
         cat > ~/.config/direnv/direnv.toml << 'EOF'
@@ -145,12 +137,10 @@ jobs:
     - uses: cachix/install-nix-action@v26
       with:
         nix_path: nixpkgs=channel:nixos-unstable
-    - uses: cachix/cachix-action@master
+    - uses: cachix/cachix-action@v15
       with:
         name: devenv
         authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-        installCommand: nix profile install github:cachix/cachix/debug-daemon-stop -L --accept-flake-config
-        cachixArgs: '--verbose'
     - run: nix build
     - run: |
         nix shell nixpkgs#zsh -c zsh -c "./result/bin/devenv version"
