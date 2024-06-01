@@ -73,6 +73,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                 }
 
                 println!("  Running {}", dir_name);
+
                 // if .setup.sh exists, run it
                 let setup_script = path.join(".setup.sh");
                 if setup_script.exists() {
