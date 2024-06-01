@@ -15,6 +15,7 @@
     clippy = {
       enable = true;
       settings.offline = false;
+      extraPackages = [ pkgs.openssl ];
     };
     rustfmt.enable = true;
   };
