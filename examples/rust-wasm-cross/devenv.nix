@@ -12,7 +12,10 @@
   };
 
   pre-commit.hooks = {
-    clippy.enable = true;
+    clippy = {
+      enable = true;
+      settings.offline = false;
+    };
     rustfmt.enable = true;
   };
 
