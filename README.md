@@ -43,7 +43,7 @@ Running ``devenv init`` generates ``devenv.nix``:
   pre-commit.hooks.shellcheck.enable = true;
 
   # https://devenv.sh/processes/
-  processes.ping.exec = "ping example.com";
+  processes.ping.exec = "ping localhost";
 }
 
 ```
