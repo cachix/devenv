@@ -1,25 +1,38 @@
 {
   inputs = {
+    devenv.inputs.nixpkgs.follows = "nixpkgs";
     devenv.url = "github:cachix/devenv";
-    flake-utils.url = "github:numtide/flake-utils";
-    nixpkgs.url = "nixpkgs/nixos-23.05";
+    nixpkgs-terraform.url = "github:stackbuilders/nixpkgs-terraform";
+    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
+    systems.url = "github:nix-systems/default";
   };
 
-  outputs = { self, devenv, flake-utils, nixpkgs }@inputs:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-      in
-      {
-        devShells.default = devenv.lib.mkShell {
-          inherit inputs pkgs;
-          modules = [{
-            env.AWS_PROFILE = "<profile>";
+  nixConfig = {
+    extra-substituters = "https://devenv.cachix.org https://nixpkgs-terraform.cachix.org";
+    extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= nixpkgs-terraform.cachix.org-1:8Sit092rIdAVENA3ZVeH9hzSiqI/jng6JiCrQ1Dmusw=";
+  };
 
-            languages.terraform.enable = true;
+  outputs = { self, devenv, nixpkgs, systems, ... }@inputs:
+    let
+      forEachSystem = nixpkgs.lib.genAttrs (import systems);
+    in
+    {
+      devShells = forEachSystem (system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = devenv.lib.mkShell {
+            inherit inputs pkgs;
+            modules = [{
+              env.AWS_PROFILE = "<profile>";
 
-            pre-commit.hooks.terraform-format.enable = true;
-          }];
-        };
-      });
+              languages.terraform.enable = true;
+              languages.terraform.version = "1.8.4";
+
+              pre-commit.hooks.terraform-format.enable = true;
+            }];
+          };
+        });
+    };
 }
