@@ -6,5 +6,6 @@ echo "  languages.standardml.enable = lib.mkForce (!pkgs.stdenv.isAarch64);" >> 
 echo "  languages.purescript.enable = lib.mkForce (!pkgs.stdenv.isAarch64);" >> devenv.local.nix
 echo "  android.enable = lib.mkForce (pkgs.stdenv.isLinux && !pkgs.stdenv.isAarch64);" >> devenv.local.nix
 # Doesn't build on macOS. Check nixpkgs
-echo "  languages.odin.enable = lib.mkForce (!pkgs.stdenv.isDarwin);" >> devenv.local.nix
+# Doesn't support arm.
+echo "  languages.odin.enable = lib.mkForce (!(pkgs.stdenv.isDarwin || (pkgs.stdenv.isLinux && pkgs.stdenv.isAarch64)));" >> devenv.local.nix
 echo "}" >> devenv.local.nix
