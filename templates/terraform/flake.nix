@@ -25,8 +25,6 @@
           default = devenv.lib.mkShell {
             inherit inputs pkgs;
             modules = [{
-              env.AWS_PROFILE = "<profile>";
-
               languages.terraform.enable = true;
               languages.terraform.version = "1.8.4";
 
