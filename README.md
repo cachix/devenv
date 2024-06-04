@@ -27,7 +27,7 @@ Running ``devenv init`` generates ``devenv.nix``:
   # https://devenv.sh/tests/
   enterTest = ''
     echo "Running tests"
-    git --version | grep "git version"
+    git --version | grep --color=auto "${pkgs.git.version}"
   '';
 
   # https://devenv.sh/languages/
