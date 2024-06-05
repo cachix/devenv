@@ -12,9 +12,7 @@ let
     cmdLineToolsVersion = cfg.cmdLineTools.version;
     toolsVersion = cfg.tools.version;
     platformToolsVersion = cfg.platformTools.version;
-
-    # setting the build tools version throws error 
-    # buildToolsVersions = [ "30.0.3" ];
+    buildToolsVersions = cfg.buildTools.version;
     includeEmulator = cfg.includeEmulator.enable;
     emulatorVersion = cfg.emulator.version;
     platformVersions = cfg.platforms.version;
@@ -43,31 +41,28 @@ let
 in
 {
   options.android = {
-    enable = lib.mkEnableOption "tools for Android Development";
+    enable = lib.mkEnableOption "Enable tools for Android Development";
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "The android packages to use";
+      description = "The Android packages to use.";
     };
-  };
 
     platforms.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "34" ];
+      default = [ "32" "34" ];
       description = ''
         The Android platform versions to install.
-
-        By default, the version 34 is installed.
+        By default, versions 32 and 34 are installed.
       '';
     };
 
     systemImageTypes = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "google_apis" ];
+      default = [ "google_apis_playstore" ];
       description = ''
         The Android system image types to install.
-
-        By default, the google_apis system image is installed.
+        By default, the google_apis_playstore system image is installed.
       '';
     };
 
@@ -76,7 +71,6 @@ in
       default = [ "arm64-v8a" "x86_64" ];
       description = ''
         The Android ABIs to install.
-
         By default, the arm64-v8a and x86_64 ABIs are installed.
       '';
     };
@@ -85,19 +79,17 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ "3.22.1" ];
       description = ''
-        The Android CMake versions to install.
-
-        By default, the version 3.22.1 is installed.
+        The CMake versions to install for Android.
+        By default, version 3.22.1 is installed.
       '';
     };
 
     cmdLineTools.version = lib.mkOption {
       type = lib.types.str;
-      default = "8.0";
+      default = "11.0";
       description = ''
         The version of the Android command line tools to install.
-
-        By default, the version 8.0 is installed.
+        By default, version 11.0 is installed.
       '';
     };
 
@@ -105,9 +97,8 @@ in
       type = lib.types.str;
       default = "26.1.1";
       description = ''
-        The version of the Android command line tools to install.
-
-        By default, the version 8.0 is installed.
+        The version of the Android SDK tools to install.
+        By default, version 26.1.1 is installed.
       '';
     };
 
@@ -115,9 +106,17 @@ in
       type = lib.types.str;
       default = "34.0.5";
       description = ''
-        The version of the Android command line tools to install.
+        The version of the Android platform tools to install.
+        By default, version 34.0.5 is installed.
+      '';
+    };
 
-        By default, the version 8.0 is installed.
+    buildTools.version = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "30.0.3" ];
+      description = ''
+        The version of the Android build tools to install.
+        By default, version 30.0.3 is installed.
       '';
     };
 
@@ -126,18 +125,16 @@ in
       default = true;
       description = ''
         Whether to include the Android Emulator.
-
         By default, the emulator is included.
       '';
     };
 
     emulator.version = lib.mkOption {
       type = lib.types.str;
-      default = "33.1.6";
+      default = "34.1.9";
       description = ''
         The version of the Android Emulator to install.
-
-        By default, the version 33.1.6 is installed.
+        By default, version 34.1.9 is installed.
       '';
     };
 
@@ -146,7 +143,6 @@ in
       default = false;
       description = ''
         Whether to include the Android sources.
-
         By default, the sources are not included.
       '';
     };
@@ -156,7 +152,6 @@ in
       default = true;
       description = ''
         Whether to include the Android system images.
-
         By default, the system images are included.
       '';
     };
@@ -165,29 +160,26 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Whether to include the Android NDK.
-
+        Whether to include the Android NDK (Native Development Kit).
         By default, the NDK is included.
       '';
     };
 
     useGoogleAPIs.enable = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = true;
       description = ''
         Whether to use the Google APIs.
-
-        By default, the Google APIs are not used.
+        By default, the Google APIs are used.
       '';
     };
 
     useGoogleTVAddOns.enable = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = true;
       description = ''
         Whether to use the Google TV Add-Ons.
-
-        By default, the Google TV Add-Ons are not used.
+        By default, the Google TV Add-Ons are used.
       '';
     };
 
@@ -196,8 +188,7 @@ in
       default = [ "extras;google;gcm" ];
       description = ''
         The Android extras to install.
-
-        By default, no extras are installed.
+        By default, the Google Cloud Messaging (GCM) extra is installed.
       '';
     };
 
@@ -213,9 +204,8 @@ in
         "mips-android-sysimage-license"
       ];
       description = ''
-        The Android extra licenses to accept.
-
-        By default, the android-sdk-preview-license, android-googletv-license, android-sdk-arm-dbt-license, google-gdk-license, intel-android-extra-license, intel-android-sysimage-license, and mips-android-sysimage-license are accepted.
+        The additional Android licenses to accept.
+        By default, several standard licenses are accepted.
       '';
     };
 
@@ -224,9 +214,21 @@ in
       default = pkgs.jdk;
       defaultText = "pkgs.jdk";
       description = ''
-        The jdk package to use.
+        The JDK package to use.
+        By default, the JDK package from nixpkgs is used.
       '';
       example = "pkgs.jdk";
+    };
+
+    android-studio = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.android-studio;
+      defaultText = "pkgs.android-studio";
+      description = ''
+        The Android Studio package to use.
+        By default, the Android Studio package from nixpkgs is used.
+      '';
+      example = "pkgs.android-studio";
     };
   };
 
@@ -236,26 +238,33 @@ in
       platformTools
       androidEmulator
       cfg.jdk
-      pkgs.android-studio
-      pkgs.glibc
+      cfg.android-studio
     ];
 
     env.ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
-    env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk-bundle";
-    env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/34.0.0/aapt2";
+    env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk/";
+
     # override the aapt2 binary that gradle uses with the patched one from the sdk
+    env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${lib.head cfg.buildTools.version}/aapt2";
+
     enterShell = ''
-      set -v
-      export PATH $PATH:${config.env.ANDROID_HOME}/tools:${config.env.ANDROID_HOME}/tools/bin:${config.env.ANDROID_HOME}/platform-tools
-      # Write out local.properties for Android Studio.
+      set -e
+      export PATH="$PATH:${config.env.ANDROID_HOME}/tools:${config.env.ANDROID_HOME}/tools/bin:${config.env.ANDROID_HOME}/platform-tools"
       cat <<EOF > local.properties
       # This file was automatically generated by nix-shell.
       sdk.dir=$ANDROID_HOME
       ndk.dir=$ANDROID_NDK_ROOT
+      EOF
+
       ANDROID_USER_HOME=$(pwd)/.android
       ANDROID_AVD_HOME=$(pwd)/.android/avd
-      EOF
-      set +v
+
+      export ANDROID_USER_HOME
+      export ANDROID_AVD_HOME
+
+      test -e "$ANDROID_USER_HOME" || mkdir -p "$ANDROID_USER_HOME"
+      test -e "$ANDROID_AVD_HOME" || mkdir -p "$ANDROID_AVD_HOME"
+      set +e
     '';
   };
 }
