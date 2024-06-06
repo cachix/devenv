@@ -1078,7 +1078,16 @@ impl App {
 
         let mut flake_inputs = HashMap::new();
         for (input, attrs) in self.config.inputs.iter() {
-            flake_inputs.insert(input.clone(), config::FlakeInput::from(attrs));
+            match config::FlakeInput::try_from(attrs) {
+                Ok(flake_input) => {
+                    flake_inputs.insert(input.clone(), flake_input);
+                }
+                Err(e) => {
+                    self.logger
+                        .error(&format!("Failed to parse input {}: {}", input, e));
+                    bail!("Failed to parse inputs");
+                }
+            }
         }
         fs::write(
             self.devenv_dotfile.join("flake.json"),
