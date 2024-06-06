@@ -2,7 +2,7 @@ use miette::{IntoDiagnostic, Result};
 use schemars::{schema_for, JsonSchema};
 use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, fmt, path::Path};
 
 const YAML_CONFIG: &str = "devenv.yaml";
 
@@ -47,13 +47,35 @@ pub struct FlakeInput {
     pub flake: bool,
 }
 
-impl From<&Input> for FlakeInput {
-    fn from(input: &Input) -> Self {
-        FlakeInput {
+#[derive(Debug, Eq, PartialEq)]
+pub enum FlakeInputError {
+    UrlAndFollowsBothSet,
+}
+
+impl fmt::Display for FlakeInputError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FlakeInputError::UrlAndFollowsBothSet => {
+                write!(f, "url and follows cannot both be set for the same input")
+            }
+        }
+    }
+}
+
+impl TryFrom<&Input> for FlakeInput {
+    type Error = FlakeInputError;
+
+    fn try_from(input: &Input) -> Result<Self, Self::Error> {
+        if input.url.is_some() && input.follows.is_some() {
+            return Err(Self::Error::UrlAndFollowsBothSet);
+        }
+
+        Ok(FlakeInput {
             url: input.url.clone(),
+            follows: input.follows.clone(),
             inputs: input.inputs.clone(),
             flake: input.flake,
-        }
+        })
     }
 }
 
@@ -148,5 +170,22 @@ impl Config {
         input.url = Some(url.to_string());
         input.inputs = inputs;
         self.inputs.insert(name.to_string(), input);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_flake_input_from_input_with_url_and_follows() {
+        let input = Input {
+            url: Some("github:NixOS/nixpkgs".to_string()),
+            follows: Some("nixpkgs".to_string()),
+            ..Default::default()
+        };
+        let result = FlakeInput::try_from(&input);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), FlakeInputError::UrlAndFollowsBothSet);
     }
 }
