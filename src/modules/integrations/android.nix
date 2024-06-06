@@ -13,20 +13,18 @@ let
     toolsVersion = cfg.tools.version;
     platformToolsVersion = cfg.platformTools.version;
     buildToolsVersions = cfg.buildTools.version;
-    includeEmulator = cfg.includeEmulator.enable;
+    includeEmulator = cfg.emulator.enable;
     emulatorVersion = cfg.emulator.version;
     platformVersions = cfg.platforms.version;
-    includeSources = cfg.includeSources.enable;
-    includeSystemImages = cfg.includeSystemImages.enable;
+    includeSources = cfg.sources.enable;
+    includeSystemImages = cfg.systemImages.enable;
     systemImageTypes = cfg.systemImageTypes;
     abiVersions = cfg.abis;
     cmakeVersions = cfg.cmakeVersions;
-    includeNDK = cfg.includeNDK.enable;
-    useGoogleAPIs = cfg.useGoogleAPIs.enable;
-    useGoogleTVAddOns = cfg.useGoogleTVAddOns.enable;
-    includeExtras = cfg.includeExtras;
-
-    # Accepting more licenses declaratively:
+    includeNDK = cfg.ndk.enable;
+    useGoogleAPIs = cfg.googleAPIs.enable;
+    useGoogleTVAddOns = cfg.googleTVAddOns.enable;
+    includeExtras = cfg.extras;
     extraLicenses = cfg.extraLicenses;
   };
 
@@ -120,7 +118,7 @@ in
       '';
     };
 
-    includeEmulator.enable = lib.mkOption {
+    emulator.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
       description = ''
@@ -138,7 +136,7 @@ in
       '';
     };
 
-    includeSources.enable = lib.mkOption {
+    sources.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
       description = ''
@@ -147,7 +145,7 @@ in
       '';
     };
 
-    includeSystemImages.enable = lib.mkOption {
+    systemImages.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
       description = ''
@@ -156,7 +154,7 @@ in
       '';
     };
 
-    includeNDK.enable = lib.mkOption {
+    ndk.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
       description = ''
@@ -165,7 +163,7 @@ in
       '';
     };
 
-    useGoogleAPIs.enable = lib.mkOption {
+    googleAPIs.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
       description = ''
@@ -174,7 +172,7 @@ in
       '';
     };
 
-    useGoogleTVAddOns.enable = lib.mkOption {
+    googleTVAddOns.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
       description = ''
@@ -183,7 +181,7 @@ in
       '';
     };
 
-    includeExtras = lib.mkOption {
+    extras = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "extras;google;gcm" ];
       description = ''
