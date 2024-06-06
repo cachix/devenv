@@ -89,6 +89,12 @@ in
     config = mkOption {
       default = "";
       example = ''
+        # Global options block
+        {
+          debug
+        }
+
+        # Site block
         example.com {
           encode gzip
           log
@@ -98,6 +104,10 @@ in
       type = types.lines;
       description = ''
         Verbatim Caddyfile to use.
+
+        Refer to [https://caddyserver.com/docs/caddyfile](https://caddyserver.com/docs/caddyfile)
+        for more information.
+
         Caddy v2 supports multiple config formats via adapters (see [`services.caddy.adapter`](#servicescaddyconfig)).
       '';
     };
