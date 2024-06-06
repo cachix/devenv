@@ -37,8 +37,13 @@ impl Input {
 
 #[derive(Serialize, Deserialize, Debug, JsonSchema)]
 pub struct FlakeInput {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub follows: Option<String>,
+    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     pub inputs: HashMap<String, Input>,
+    #[serde(skip_serializing_if = "is_true", default = "true_default")]
     pub flake: bool,
 }
 
