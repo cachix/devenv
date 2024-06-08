@@ -29969,6 +29969,48 @@ attribute set of (submodule)
 
 
 
+## scripts.\<name>.package
+
+
+
+The package to use to run the script.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` <derivation bash-5.2p26> `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
+
+
+
+## scripts.\<name>.binary
+
+
+
+Override the binary name if it doesn’t match package name
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "bash" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
+
+
+
 ## scripts.\<name>.description
 
 
@@ -29994,7 +30036,7 @@ string
 
 
 
-Bash code to execute when the script is run.
+Shell code to execute when the script is run.
 
 
 
