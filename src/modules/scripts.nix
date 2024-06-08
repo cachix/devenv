@@ -27,7 +27,7 @@ let
         description = lib.mkOption {
           type = types.str;
           description = "Description of the script.";
-          default = pkgs.bash;
+          default = "";
         };
       };
     }
