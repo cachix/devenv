@@ -1,22 +1,48 @@
-{ pkgs, lib, config, ... }:
+{ lib
+, config
+, pkgs
+, ...
+}:
 
 let
   types = lib.types;
-  scriptType = types.submodule ({ config, ... }: {
-    options = {
-      exec = lib.mkOption {
-        type = types.str;
-        description = "Bash code to execute when the script is run.";
+  scriptType = types.submodule (
+    { config, ... }:
+    {
+      options = {
+        exec = lib.mkOption {
+          type = types.str;
+          description = "Shell code to execute when the script is run.";
+        };
+        package = lib.mkOption {
+          type = types.package;
+          description = "The package to use to run the script.";
+          default = pkgs.bash;
+        };
+        binary = lib.mkOption {
+          type = types.str;
+          description = "Override the binary name if it doesn't match package name";
+          default = config.package.pname;
+        };
+        description = lib.mkOption {
+          type = types.str;
+          description = "Description of the script.";
+          default = "";
+        };
       };
-      description = lib.mkOption {
-        type = types.str;
-        description = "Description of the script.";
-        default = "";
-      };
-    };
-  });
+    }
+  );
+
   # lib.hiPrioSet: prioritize scripts over plain packages
-  toPackage = name: script: lib.hiPrioSet (pkgs.writeShellScriptBin name script.exec);
+  toPackage =
+    name: script:
+    lib.hiPrioSet (
+      pkgs.writeScriptBin name ''
+        #!${pkgs.lib.getBin script.package}/bin/${script.binary}
+        ${script.exec}
+      ''
+
+    );
 in
 {
   options = {
