@@ -18,7 +18,7 @@ let
         package = lib.mkOption {
           type = types.package;
           description = "The package to use to run the script.";
-          default = "";
+          default = pkgs.bash;
         };
         binary = lib.mkOption {
           type = types.str;
