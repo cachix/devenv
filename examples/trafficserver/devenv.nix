@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 {
-  packages = [ pkgs.curl ];
+  packages = [ pkgs.curl pkgs.jq ];
 
   services.trafficserver = {
     enable = true;
