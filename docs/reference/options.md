@@ -34675,6 +34675,163 @@ Port for the Web UI.
 
 
 
+## services.typesense.enable
+
+
+
+Whether to enable typesense process.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
+
+
+## services.typesense.package
+
+
+
+Which package of typesense to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typesense `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
+
+
+## services.typesense.additionalArgs
+
+
+
+Additional arguments passed to ` typesense `.
+
+
+
+*Type:*
+list of strings concatenated with “\\n”
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
+
+
+## services.typesense.apiKey
+
+
+
+API Key.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "example" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
+
+
+## services.typesense.host
+
+
+
+The HTTP host to accept connections.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
+
+
+## services.typesense.port
+
+
+
+The HTTP port to accept connections.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 8108 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
+
+
+## services.typesense.searchOnlyKey
+
+
+
+Search Only Key.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
+
+
 ## services.varnish.enable
 
 
