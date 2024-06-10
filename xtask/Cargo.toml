@@ -1,0 +1,10 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+clap.workspace = true
+clap_mangen = "0.2.22"
+devenv = { path = "../devenv" }
+miette.workspace = true
