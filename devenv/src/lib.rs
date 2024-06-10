@@ -1,7 +1,8 @@
 mod cli;
 pub mod command;
 pub mod config;
-pub mod devenv;
+mod devenv;
 pub mod log;
 
 pub use cli::GlobalOptions;
+pub use devenv::Devenv;
