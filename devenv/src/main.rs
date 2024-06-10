@@ -70,6 +70,7 @@ struct Cli {
 
     // TODO: --no-clean?
     #[arg(
+        short,
         long,
         global = true,
         num_args = 0..,
@@ -160,7 +161,7 @@ enum Commands {
         #[arg(long, hide = true)]
         docker_run: bool,
 
-        #[arg(short, long)]
+        #[arg(long)]
         copy_args: Vec<String>,
 
         #[arg(hide = true)]
