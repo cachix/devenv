@@ -1,4 +1,4 @@
-use crate::App;
+use crate::devenv::Devenv;
 use miette::{bail, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ impl Default for Options {
     }
 }
 
-impl App {
+impl Devenv {
     pub fn run_nix(
         &mut self,
         command: &str,
@@ -52,7 +52,7 @@ impl App {
         let mut cmd = self.prepare_command(command, args)?;
 
         if options.replace_shell {
-            if self.cli.nix_debugger && command.ends_with("bin/nix") {
+            if self.global_options.nix_debugger && command.ends_with("bin/nix") {
                 cmd.arg("--debugger");
             }
             let error = cmd.exec();
@@ -87,7 +87,7 @@ impl App {
                         String::from_utf8_lossy(&result.stderr),
                     ));
                 }
-                if self.cli.nix_debugger && command.ends_with("bin/nix") {
+                if self.global_options.nix_debugger && command.ends_with("bin/nix") {
                     self.logger.info("Starting Nix debugger ...");
                     cmd.arg("--debugger").exec();
                 }
@@ -114,11 +114,11 @@ impl App {
         let cmd = if command.starts_with("nix") {
             let mut flags = NIX_FLAGS.to_vec();
             flags.push("--max-jobs");
-            let max_jobs = self.cli.max_jobs.to_string();
+            let max_jobs = self.global_options.max_jobs.to_string();
             flags.push(&max_jobs);
 
             // handle --nix-option key value
-            for chunk in self.cli.nix_option.chunks_exact(2) {
+            for chunk in self.global_options.nix_option.chunks_exact(2) {
                 flags.push("--option");
                 flags.push(&chunk[0]);
                 flags.push(&chunk[1]);
@@ -139,11 +139,11 @@ impl App {
                 }
             };
 
-            if self.cli.offline && command == "nix" {
+            if self.global_options.offline && command == "nix" {
                 flags.push("--offline");
             }
 
-            if self.cli.impure || self.config.impure {
+            if self.global_options.impure || self.config.impure {
                 // only pass the impure option to the nix command that supports it.
                 // avoid passing it to the older utilities, e.g. like `nix-store` when creating GC roots.
                 if command == "nix"
@@ -163,7 +163,7 @@ impl App {
                 .first()
                 .map(|arg| arg == &"build" || arg == &"print-dev-env" || arg == &"search")
                 .unwrap_or(false)
-                && !self.cli.offline
+                && !self.global_options.offline
             {
                 let cachix_caches = self.get_cachix_caches();
 
@@ -233,7 +233,7 @@ impl App {
             cmd
         };
 
-        if self.cli.verbose {
+        if self.global_options.verbose {
             self.logger.debug(&format!(
                 "Running command: {} {}",
                 command,
