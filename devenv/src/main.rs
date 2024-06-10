@@ -114,7 +114,9 @@ struct Cli {
 #[derive(Subcommand, Clone)]
 enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
-    Init { target: Option<PathBuf> },
+    Init {
+        target: Option<PathBuf>,
+    },
 
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]
     Shell {
@@ -123,12 +125,16 @@ enum Commands {
     },
 
     #[command(about = "Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/")]
-    Update { name: Option<String> },
+    Update {
+        name: Option<String>,
+    },
 
     #[command(
         about = "Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file"
     )]
-    Search { name: String },
+    Search {
+        name: String,
+    },
 
     #[command(
         alias = "show",
@@ -180,6 +186,8 @@ enum Commands {
         #[command(subcommand)]
         command: InputsCommand,
     },
+
+    Repl {},
 
     #[command(
         about = "Deletes previous shell generations. See http://devenv.sh/garbage-collection"
@@ -388,6 +396,7 @@ fn main() -> Result<()> {
         Commands::Search { name } => app.search(&name),
         Commands::Gc {} => app.gc(),
         Commands::Info {} => app.info(),
+        Commands::Repl {} => app.repl(),
         Commands::Build { attributes } => app.build(&attributes),
         Commands::Update { name } => app.update(&name),
         Commands::Up { process, detach } => app.up(process.as_deref(), &detach, &detach),
@@ -691,6 +700,14 @@ impl App {
         } else {
             Ok(())
         }
+    }
+
+    fn repl(&mut self) -> Result<()> {
+        self.assemble()?;
+
+        let mut cmd = self.prepare_command("nix", &["repl", "."])?;
+        cmd.exec();
+        Ok(())
     }
 
     fn gc(&mut self) -> Result<()> {
