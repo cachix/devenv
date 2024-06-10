@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "devenv",
     "devenv-run-tests",
+    "xtask",
 ]
 
 [workspace.package]

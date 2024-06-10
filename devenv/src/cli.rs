@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
+    name = "devenv",
     color = clap::ColorChoice::Auto,
     // for --clean to work with subcommands
     subcommand_precedence_over_arg = true,
