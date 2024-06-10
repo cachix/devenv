@@ -5,6 +5,7 @@ use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use serde::Deserialize;
+use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::fs::symlink;
@@ -31,6 +32,7 @@ pub struct Devenv {
     pub logger: log::Logger,
 
     // All kinds of paths
+    pub xdg_dirs: xdg::BaseDirectories,
     pub devenv_root: PathBuf,
     pub devenv_dotfile: PathBuf,
     pub devenv_dot_gc: PathBuf,
@@ -50,6 +52,53 @@ pub struct Devenv {
 }
 
 impl Devenv {
+    pub fn new(
+        config: config::Config,
+        global_options: cli::GlobalOptions,
+        logger: log::Logger,
+    ) -> Self {
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
+
+        let devenv_home = xdg_dirs.get_data_home();
+        let devenv_home_gc = devenv_home.join("gc");
+
+        let devenv_root = std::env::current_dir().expect("Failed to get current directory");
+        let devenv_dot_gc = devenv_root.join(".devenv").join("gc");
+
+        let devenv_dotfile = devenv_root.join(".devenv");
+        let devenv_tmp = std::env::var("XDG_RUNTIME_DIR")
+            .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
+        // first 7 chars of sha256 hash of devenv_state
+        let devenv_state_hash = {
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
+            let result = hasher.finalize();
+            hex::encode(result)
+        };
+        let devenv_runtime =
+            Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
+        let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
+
+        Self {
+            config,
+            global_options,
+            logger,
+            xdg_dirs,
+            devenv_root,
+            devenv_dotfile,
+            devenv_dot_gc,
+            devenv_home_gc,
+            devenv_tmp,
+            devenv_runtime,
+            cachix_caches: None,
+            cachix_trusted_keys,
+            assembled: false,
+            dirs_created: false,
+            has_processes: None,
+            container_name: None,
+        }
+    }
+
     pub fn processes_log(&self) -> PathBuf {
         self.devenv_dotfile.join("processes.log")
     }
@@ -719,10 +768,7 @@ impl Devenv {
 
     pub fn create_directories(&mut self) -> Result<()> {
         if !self.dirs_created {
-            let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv")
-                .into_diagnostic()
-                .wrap_err("Failed to get XDG directories")?;
-            xdg_dirs
+            self.xdg_dirs
                 .create_data_directory(Path::new("devenv"))
                 .into_diagnostic()
                 .wrap_err("Failed to create DEVENV_HOME directory")?;
