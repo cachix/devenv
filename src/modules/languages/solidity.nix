@@ -7,6 +7,7 @@ let
     name = "foundry";
     url = "github:shazow/foundry.nix";
     attribute = "languages.solidity.foundry.package";
+    follows = [ "nixpkgs" ];
   };
 in {
   options.languages.solidity = {
