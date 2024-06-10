@@ -9,7 +9,8 @@ let
     attribute = "languages.solidity.foundry.package";
     follows = [ "nixpkgs" ];
   };
-in {
+in
+{
   options.languages.solidity = {
     enable = lib.mkEnableOption "tools for Solidity development";
 
