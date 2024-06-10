@@ -1292,3 +1292,14 @@ fn max_jobs() -> u8 {
     });
     (num_cpus.get() / 2).try_into().unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+
+    #[test]
+    fn verify_cli() {
+        use clap::CommandFactory;
+        Cli::command().debug_assert()
+    }
+}
