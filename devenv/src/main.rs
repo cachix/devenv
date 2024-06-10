@@ -70,7 +70,6 @@ struct Cli {
 
     // TODO: --no-clean?
     #[arg(
-        short,
         long,
         global = true,
         num_args = 0..,
@@ -79,12 +78,7 @@ struct Cli {
     )]
     clean: Option<Vec<String>>,
 
-    #[arg(
-        short = 'd',
-        long,
-        global = true,
-        help = "Enter Nix debugger on failure."
-    )]
+    #[arg(long, global = true, help = "Enter the Nix debugger on failure.")]
     nix_debugger: bool,
 
     #[arg(
@@ -200,7 +194,7 @@ enum Commands {
 
     #[clap(hide = true)]
     PrintDevEnv {
-        #[arg(short, long)]
+        #[arg(long)]
         json: bool,
     },
 
