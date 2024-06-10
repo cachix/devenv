@@ -8,8 +8,6 @@ use clap::{crate_version, Parser};
 use cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand};
 use devenv::Devenv;
 use miette::Result;
-use sha2::Digest;
-use std::path::Path;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -22,46 +20,12 @@ fn main() -> Result<()> {
 
     let logger = log::Logger::new(level);
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
-    let devenv_home = xdg_dirs.get_data_home();
-    let devenv_home_gc = devenv_home.join("gc");
-    let devenv_root = std::env::current_dir().expect("Failed to get current directory");
-    let devenv_dot_gc = devenv_root.join(".devenv").join("gc");
-    let devenv_dotfile = devenv_root.join(".devenv");
-    let devenv_tmp = std::env::var("XDG_RUNTIME_DIR")
-        .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
-    // first 7 chars of sha256 hash of devenv_state
-    let devenv_state_hash = {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
-        let result = hasher.finalize();
-        hex::encode(result)
-    };
-    let devenv_runtime = Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
-    let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
-
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
         config.add_input(&input[0].clone(), &input[1].clone(), &[]);
     }
 
-    let mut devenv = Devenv {
-        config,
-        global_options: cli.global_options,
-        logger: logger.clone(),
-        assembled: false,
-        dirs_created: false,
-        has_processes: None,
-        container_name: None,
-        devenv_root,
-        devenv_dotfile,
-        devenv_dot_gc,
-        devenv_home_gc,
-        devenv_tmp,
-        devenv_runtime,
-        cachix_caches: None,
-        cachix_trusted_keys,
-    };
+    let mut devenv = Devenv::new(config, cli.global_options, logger.clone());
 
     if !matches!(cli.command, Commands::Version {} | Commands::Gc { .. }) {
         devenv.create_directories()?;
