@@ -1,0 +1,6 @@
+inputs:
+  foundry:
+    url: github:shazow/foundry.nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
