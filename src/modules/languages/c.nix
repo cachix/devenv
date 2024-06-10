@@ -28,6 +28,6 @@ in
       ccls
       pkg-config
     ] ++ lib.optional (cfg.debugger != null) cfg.debugger
-    ++ lib.optional (lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.valgrind) pkgs.valgrind;
+    ++ lib.optional (lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.valgrind && !pkgs.valgrind.meta.broken) pkgs.valgrind;
   };
 }
