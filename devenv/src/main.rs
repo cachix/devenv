@@ -25,7 +25,7 @@ fn main() -> Result<()> {
         config.add_input(&input[0].clone(), &input[1].clone(), &[]);
     }
 
-    let mut devenv = Devenv::new(config, cli.global_options, logger.clone());
+    let mut devenv = Devenv::new(config, cli.global_options, None, None, logger.clone());
 
     if !matches!(cli.command, Commands::Version {} | Commands::Gc { .. }) {
         devenv.create_directories()?;
@@ -35,7 +35,18 @@ fn main() -> Result<()> {
         Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true),
         Commands::Test {
             dont_override_dotfile,
-        } => devenv.test(dont_override_dotfile),
+        } => {
+            let tmpdir = tempdir::TempDir::new_in(devenv.devenv_root(), ".devenv")
+                .expect("Failed to create temporary directory");
+            if !dont_override_dotfile {
+                logger.info(&format!(
+                    "Overriding .devenv to {}",
+                    tmpdir.path().file_name().unwrap().to_str().unwrap()
+                ));
+                devenv.update_devenv_dotfile(tmpdir.as_ref());
+            }
+            devenv.test()
+        }
         Commands::Version {} => Ok(println!(
             "devenv {} ({})",
             crate_version!(),

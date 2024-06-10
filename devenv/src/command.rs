@@ -111,7 +111,7 @@ impl Devenv {
         command: &str,
         args: &[&str],
     ) -> Result<std::process::Command> {
-        let cmd = if command.starts_with("nix") {
+        let mut cmd = if command.starts_with("nix") {
             let mut flags = NIX_FLAGS.to_vec();
             flags.push("--max-jobs");
             let max_jobs = self.global_options.max_jobs.to_string();
@@ -232,6 +232,8 @@ impl Devenv {
             cmd.args(args);
             cmd
         };
+
+        cmd.current_dir(self.devenv_root());
 
         if self.global_options.verbose {
             self.logger.debug(&format!(

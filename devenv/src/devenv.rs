@@ -26,46 +26,51 @@ const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
 pub struct Devenv {
-    pub config: config::Config,
-    pub global_options: cli::GlobalOptions,
+    pub(crate) config: config::Config,
+    pub(crate) global_options: cli::GlobalOptions,
 
-    pub logger: log::Logger,
+    pub(crate) logger: log::Logger,
 
     // All kinds of paths
-    pub xdg_dirs: xdg::BaseDirectories,
-    pub devenv_root: PathBuf,
-    pub devenv_dotfile: PathBuf,
-    pub devenv_dot_gc: PathBuf,
-    pub devenv_home_gc: PathBuf,
-    pub devenv_tmp: String,
-    pub devenv_runtime: PathBuf,
+    xdg_dirs: xdg::BaseDirectories,
+    devenv_root: PathBuf,
+    devenv_dotfile: PathBuf,
+    devenv_dot_gc: PathBuf,
+    devenv_home_gc: PathBuf,
+    devenv_tmp: String,
+    devenv_runtime: PathBuf,
 
     // Caching
     pub cachix_caches: Option<command::CachixCaches>,
     pub cachix_trusted_keys: PathBuf,
 
-    pub assembled: bool,
-    pub dirs_created: bool,
-    pub has_processes: Option<bool>,
+    pub(crate) assembled: bool,
+    pub(crate) dirs_created: bool,
+    pub(crate) has_processes: Option<bool>,
 
-    pub container_name: Option<String>,
+    pub(crate) container_name: Option<String>,
 }
 
 impl Devenv {
     pub fn new(
         config: config::Config,
         global_options: cli::GlobalOptions,
+        devenv_root_dir_override: Option<&Path>,
+        devenv_dotfile_override: Option<&Path>,
         logger: log::Logger,
     ) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
-
         let devenv_home = xdg_dirs.get_data_home();
         let devenv_home_gc = devenv_home.join("gc");
 
-        let devenv_root = std::env::current_dir().expect("Failed to get current directory");
-        let devenv_dot_gc = devenv_root.join(".devenv").join("gc");
+        let devenv_root = devenv_root_dir_override
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
+        let devenv_dotfile = devenv_dotfile_override
+            .map(|p| p.to_path_buf())
+            .unwrap_or(devenv_root.join(".devenv"));
+        let devenv_dot_gc = devenv_dotfile.join("gc");
 
-        let devenv_dotfile = devenv_root.join(".devenv");
         let devenv_tmp = std::env::var("XDG_RUNTIME_DIR")
             .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
         // first 7 chars of sha256 hash of devenv_state
@@ -97,6 +102,19 @@ impl Devenv {
             has_processes: None,
             container_name: None,
         }
+    }
+
+    pub fn devenv_root(&self) -> &Path {
+        self.devenv_root.as_ref()
+    }
+
+    pub fn update_devenv_dotfile<P>(&mut self, devenv_dotfile: P)
+    where
+        P: AsRef<Path>,
+    {
+        let devenv_dotfile = devenv_dotfile.as_ref();
+        self.devenv_dotfile = devenv_dotfile.to_path_buf();
+        self.devenv_dot_gc = devenv_dotfile.join("gc");
     }
 
     pub fn processes_log(&self) -> PathBuf {
@@ -523,18 +541,7 @@ impl Devenv {
         Ok(self.has_processes.unwrap())
     }
 
-    pub fn test(&mut self, dont_override_dotfile: bool) -> Result<()> {
-        let tmpdir = tempdir::TempDir::new_in(&self.devenv_root, ".devenv")
-            .expect("Failed to create temporary directory");
-        if !dont_override_dotfile {
-            self.logger.info(&format!(
-                "Overriding .devenv to {}",
-                tmpdir.path().file_name().unwrap().to_str().unwrap()
-            ));
-            self.devenv_dotfile = tmpdir.as_ref().to_path_buf();
-            // TODO: don't add gc roots for tests
-            self.devenv_dot_gc = self.devenv_dotfile.join("gc");
-        }
+    pub fn test(&mut self) -> Result<()> {
         self.assemble(true)?;
 
         // collect tests
@@ -785,7 +792,7 @@ impl Devenv {
 
     pub fn assemble(&mut self, is_testing: bool) -> Result<()> {
         if !self.assembled {
-            if !PathBuf::from("devenv.nix").exists() {
+            if !self.devenv_root.join("devenv.nix").exists() {
                 bail!(indoc::indoc! {"
                 File devenv.nix does not exist. To get started, run:
 
@@ -850,7 +857,8 @@ impl Devenv {
                 is_testing
             );
             let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
-            std::fs::write(DEVENV_FLAKE, flake).expect("Failed to write flake.nix");
+            std::fs::write(self.devenv_root.join(DEVENV_FLAKE), flake)
+                .expect("Failed to write flake.nix");
         }
         self.assembled = true;
         Ok(())

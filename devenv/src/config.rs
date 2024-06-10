@@ -134,8 +134,15 @@ pub fn write_json_schema() {
 
 impl Config {
     pub fn load() -> Result<Self> {
+        Self::load_from("./")
+    }
+
+    pub fn load_from<P>(path: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let file = path.as_ref().join(YAML_CONFIG);
         let mut loader = ConfigLoader::<Config>::new();
-        let file = Path::new(YAML_CONFIG);
         let _ = loader.file_optional(file);
         let result = loader.load().into_diagnostic();
         Ok(result?.config)

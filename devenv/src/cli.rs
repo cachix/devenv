@@ -241,7 +241,7 @@ pub(crate) enum InputsCommand {
     },
 }
 
-fn default_system() -> String {
+pub fn default_system() -> String {
     let arch = if cfg!(target_arch = "aarch64") {
         "aarch64"
     } else if cfg!(target_arch = "x86_64") {
