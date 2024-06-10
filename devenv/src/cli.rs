@@ -10,6 +10,15 @@ use std::path::PathBuf;
     about = format!("https://devenv.sh {}: Fast, Declarative, Reproducible, and Composable Developer Environments", crate_version!())
 )]
 pub(crate) struct Cli {
+    #[command(subcommand)]
+    pub(crate) command: Commands,
+
+    #[command(flatten)]
+    pub(crate) global_options: GlobalOptions,
+}
+
+#[derive(Parser, Clone)]
+pub struct GlobalOptions {
     #[arg(short, long, global = true, help = "Enable debug log level.")]
     pub verbose: bool,
 
@@ -75,9 +84,6 @@ pub(crate) struct Cli {
         help = "Override inputs in devenv.yaml."
     )]
     pub override_input: Vec<String>,
-
-    #[command(subcommand)]
-    pub command: Commands,
 }
 
 #[derive(Subcommand, Clone)]
