@@ -4665,9 +4665,101 @@ boolean
 
 
 
+## languages.solidity.enable
+
+
+
+Whether to enable tools for Solidity development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
+
+
+
+## languages.solidity.package
+
+
+
+Which compiler of Solidity to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elixir `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
+
+
+
+## languages.solidity.foundry.enable
+
+
+
+Whether to enable install Foundry.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
+
+
+
+## languages.solidity.foundry.package
+
+
+
+Which Foundry package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` foundry.defaultPackage.$${pkgs.stdenv.system} `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
+
+
+
 ## languages.standardml.enable
-
-
 
 Whether to enable tools for Standard ML development.
 
@@ -4760,6 +4852,8 @@ package
 
 
 ## languages.terraform.enable
+
+
 
 Whether to enable tools for Terraform development.
 
@@ -7430,8 +7524,6 @@ internal name, same as ` id `
 
 ## pre-commit.hooks.autoflake.pass_filenames
 
-
-
 Whether to pass filenames as arguments to the entry point.
 
 
@@ -7515,6 +7607,8 @@ null or string
 
 
 ## pre-commit.hooks.autoflake.settings.flags
+
+
 
 Flags passed to autoflake.
 
