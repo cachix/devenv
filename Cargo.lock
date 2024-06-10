@@ -396,6 +396,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "devenv",
+ "tempdir",
 ]
 
 [[package]]
