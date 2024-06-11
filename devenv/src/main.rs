@@ -267,6 +267,7 @@ struct App {
     logger: log::Logger,
     has_processes: Option<bool>,
     container_name: Option<String>,
+    assembled: bool,
     // all kinds of paths
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
@@ -317,6 +318,7 @@ fn main() -> Result<()> {
     let mut app = App {
         cli,
         config,
+        assembled: false,
         has_processes: None,
         logger,
         container_name: None,
@@ -405,7 +407,7 @@ fn main() -> Result<()> {
             InputsCommand::Add { name, url, follows } => app.inputs_add(&name, &url, &follows),
         },
         // hidden
-        Commands::Assemble => app.assemble(),
+        Commands::Assemble => app.assemble(false),
         Commands::PrintDevEnv { json } => app.print_dev_env(json),
         Commands::GenerateJSONSchema => {
             config::write_json_schema();
@@ -509,7 +511,7 @@ impl App {
     }
 
     fn prepare_shell(&mut self, cmd: &Option<String>, args: &[String]) -> Result<Vec<String>> {
-        self.assemble()?;
+        self.assemble(false)?;
         let (_, gc_root) = self.get_dev_environment(false, true)?;
 
         let mut develop_args = vec![
@@ -562,7 +564,7 @@ impl App {
             None => "Updating devenv.lock".to_string(),
         };
         let _logprogress = log::LogProgress::new(&msg, true);
-        self.assemble()?;
+        self.assemble(false)?;
 
         match input_name {
             Some(input_name) => {
@@ -586,7 +588,7 @@ impl App {
 
         let _logprogress = log::LogProgress::new(&format!("Building {name} container"), true);
 
-        self.assemble()?;
+        self.assemble(false)?;
 
         let container_store_path = self.run_nix(
             "nix",
@@ -698,7 +700,7 @@ impl App {
     }
 
     fn repl(&mut self) -> Result<()> {
-        self.assemble()?;
+        self.assemble(false)?;
 
         let mut cmd = self.prepare_command("nix", &["repl", "."])?;
         cmd.exec();
@@ -756,7 +758,7 @@ impl App {
     }
 
     fn search(&mut self, name: &str) -> Result<()> {
-        self.assemble()?;
+        self.assemble(false)?;
 
         let options = self.run_nix(
             "nix",
@@ -846,7 +848,7 @@ impl App {
             // TODO: don't add gc roots for tests
             self.devenv_dot_gc = self.devenv_dotfile.join("gc");
         }
-        self.assemble()?;
+        self.assemble(true)?;
 
         // collect tests
         let test_script = {
@@ -903,7 +905,7 @@ impl App {
     }
 
     fn info(&mut self) -> Result<()> {
-        self.assemble()?;
+        self.assemble(false)?;
 
         // TODO: use --json
         let metadata = self.run_nix("nix", &["flake", "metadata"], &command::Options::default())?;
@@ -925,7 +927,7 @@ impl App {
     }
 
     fn build(&mut self, attributes: &[String]) -> Result<()> {
-        self.assemble()?;
+        self.assemble(false)?;
 
         let formatted_strings: Vec<String> = attributes
             .iter()
@@ -958,7 +960,7 @@ impl App {
     }
 
     fn up(&mut self, process: Option<&str>, detach: &bool, log_to_file: &bool) -> Result<()> {
-        self.assemble()?;
+        self.assemble(false)?;
         if !self.has_processes()? {
             self.logger
                 .error("No 'processes' option defined: https://devenv.sh/processes/");
@@ -1077,76 +1079,81 @@ impl App {
         Ok(())
     }
 
-    fn assemble(&mut self) -> Result<()> {
-        if !PathBuf::from("devenv.nix").exists() {
-            bail!(indoc::indoc! {"
-            File devenv.nix does not exist. To get started, run:
+    fn assemble(&mut self, is_testing: bool) -> Result<()> {
+        if !self.assembled {
+            if !PathBuf::from("devenv.nix").exists() {
+                bail!(indoc::indoc! {"
+                File devenv.nix does not exist. To get started, run:
 
-                $ devenv init
-            "});
-        }
-        std::fs::create_dir_all(&self.devenv_dot_gc)
-            .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_dot_gc.display()));
+                    $ devenv init
+                "});
+            }
+            std::fs::create_dir_all(&self.devenv_dot_gc)
+                .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_dot_gc.display()));
 
-        let mut flake_inputs = HashMap::new();
-        for (input, attrs) in self.config.inputs.iter() {
-            match config::FlakeInput::try_from(attrs) {
-                Ok(flake_input) => {
-                    flake_inputs.insert(input.clone(), flake_input);
-                }
-                Err(e) => {
-                    self.logger
-                        .error(&format!("Failed to parse input {}: {}", input, e));
-                    bail!("Failed to parse inputs");
+            let mut flake_inputs = HashMap::new();
+            for (input, attrs) in self.config.inputs.iter() {
+                match config::FlakeInput::try_from(attrs) {
+                    Ok(flake_input) => {
+                        flake_inputs.insert(input.clone(), flake_input);
+                    }
+                    Err(e) => {
+                        self.logger
+                            .error(&format!("Failed to parse input {}: {}", input, e));
+                        bail!("Failed to parse inputs");
+                    }
                 }
             }
-        }
-        fs::write(
-            self.devenv_dotfile.join("flake.json"),
-            serde_json::to_string(&flake_inputs).unwrap(),
-        )
-        .expect("Failed to write flake.json");
-        fs::write(
-            self.devenv_dotfile.join("devenv.json"),
-            serde_json::to_string(&self.config).unwrap(),
-        )
-        .expect("Failed to write devenv.json");
-        fs::write(
-            self.devenv_dotfile.join("imports.txt"),
-            self.config.imports.join("\n"),
-        )
-        .expect("Failed to write imports.txt");
+            fs::write(
+                self.devenv_dotfile.join("flake.json"),
+                serde_json::to_string(&flake_inputs).unwrap(),
+            )
+            .expect("Failed to write flake.json");
+            fs::write(
+                self.devenv_dotfile.join("devenv.json"),
+                serde_json::to_string(&self.config).unwrap(),
+            )
+            .expect("Failed to write devenv.json");
+            fs::write(
+                self.devenv_dotfile.join("imports.txt"),
+                self.config.imports.join("\n"),
+            )
+            .expect("Failed to write imports.txt");
 
-        // create flake.devenv.nix
-        let vars = indoc::formatdoc!(
-            "version = \"{}\";
-            system = \"{}\";
-            devenv_root = \"{}\";
-            devenv_dotfile = ./{};
-            devenv_dotfile_string = \"{}\";
-            container_name = {};
-            devenv_tmpdir = \"{}\";
-            devenv_runtime = \"{}\";
-            ",
-            crate_version!(),
-            self.cli.system,
-            self.devenv_root.display(),
-            self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
-            self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
-            self.container_name
-                .as_deref()
-                .map(|s| format!("\"{}\"", s))
-                .unwrap_or_else(|| "null".to_string()),
-            self.devenv_tmp,
-            self.devenv_runtime.display(),
-        );
-        let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
-        std::fs::write(DEVENV_FLAKE, flake).expect("Failed to write flake.nix");
+            // create flake.devenv.nix
+            let vars = indoc::formatdoc!(
+                "version = \"{}\";
+                system = \"{}\";
+                devenv_root = \"{}\";
+                devenv_dotfile = ./{};
+                devenv_dotfile_string = \"{}\";
+                container_name = {};
+                devenv_tmpdir = \"{}\";
+                devenv_runtime = \"{}\";
+                devenv_istesting = {};
+                ",
+                crate_version!(),
+                self.cli.system,
+                self.devenv_root.display(),
+                self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
+                self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
+                self.container_name
+                    .as_deref()
+                    .map(|s| format!("\"{}\"", s))
+                    .unwrap_or_else(|| "null".to_string()),
+                self.devenv_tmp,
+                self.devenv_runtime.display(),
+                is_testing
+            );
+            let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
+            std::fs::write(DEVENV_FLAKE, flake).expect("Failed to write flake.nix");
+        }
+        self.assembled = true;
         Ok(())
     }
 
     fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<(Vec<u8>, PathBuf)> {
-        self.assemble()?;
+        self.assemble(false)?;
         let _logprogress = if logging {
             Some(log::LogProgress::new("Building shell", true))
         } else {

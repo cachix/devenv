@@ -7,6 +7,11 @@
       description = "Bash code to execute to run the test.";
     };
 
+    devenv.isTesting = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+    };
+
     test = lib.mkOption {
       type = lib.types.package;
       internal = true;
