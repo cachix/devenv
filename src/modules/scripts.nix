@@ -7,7 +7,7 @@
 let
   types = lib.types;
   scriptType = types.submodule (
-    { config, ... }:
+    { config, name, ... }:
     {
       options = {
         exec = lib.mkOption {
@@ -29,20 +29,27 @@ let
           description = "Description of the script.";
           default = "";
         };
+        scriptPackage = lib.mkOption {
+          internal = true;
+          type = types.package;
+        };
       };
+
+      config.scriptPackage =
+        lib.hiPrioSet (
+          pkgs.writeScriptBin name ''
+            #!${pkgs.lib.getBin config.package}/bin/${config.binary}
+            ${config.exec}
+          ''
+        );
     }
   );
 
-  # lib.hiPrioSet: prioritize scripts over plain packages
-  toPackage =
-    name: script:
-    lib.hiPrioSet (
-      pkgs.writeScriptBin name ''
-        #!${pkgs.lib.getBin script.package}/bin/${script.binary}
-        ${script.exec}
-      ''
-
-    );
+  renderInfoSection = name: script:
+    ''
+      ${name}${lib.optionalString (script.description != "") ": ${script.description}"}
+        ${script.scriptPackage}
+    '';
 in
 {
   options = {
@@ -54,9 +61,8 @@ in
   };
 
   config = {
-    packages = lib.mapAttrsToList toPackage config.scripts;
+    packages = lib.mapAttrsToList (_: script: script.scriptPackage) config.scripts;
 
-    # TODO: show scripts path
-    infoSections."scripts" = lib.mapAttrsToList (name: script: name) config.scripts;
+    infoSections."scripts" = lib.mapAttrsToList renderInfoSection config.scripts;
   };
 }
