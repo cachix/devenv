@@ -815,6 +815,27 @@ boolean
 
 
 
+## devenv.isTesting
+
+
+
+This option has no description.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tests.nix](https://github.com/cachix/devenv/blob/main/src/modules/tests.nix)
+
+
+
 ## devenv.latestVersion
 
 
@@ -2323,6 +2344,8 @@ boolean
 
 ## languages.javascript.yarn.package
 
+
+
 The yarn package to use.
 
 
@@ -2341,8 +2364,6 @@ package
 
 
 ## languages.javascript.yarn.install.enable
-
-
 
 Whether to enable yarn install during devenv initialisation.
 
@@ -4693,8 +4714,6 @@ boolean
 
 ## languages.solidity.package
 
-
-
 Which compiler of Solidity to use.
 
 
@@ -4760,6 +4779,8 @@ package
 
 
 ## languages.standardml.enable
+
+
 
 Whether to enable tools for Standard ML development.
 
@@ -7316,8 +7337,6 @@ boolean
 
 ## pre-commit.hooks.autoflake.package
 
-
-
 An optional package that provides the hook.
 
 
@@ -7523,6 +7542,8 @@ internal name, same as ` id `
 
 
 ## pre-commit.hooks.autoflake.pass_filenames
+
+
 
 Whether to pass filenames as arguments to the entry point.
 
