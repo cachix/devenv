@@ -47,6 +47,7 @@
           eval = pkgs.lib.evalModules {
             modules = [
               ./src/modules/top-level.nix
+              ./src/modules/doc.nix
               { devenv.warnOnNewVersion = false; }
             ];
             specialArgs = { inherit pre-commit-hooks pkgs inputs; };
@@ -147,6 +148,7 @@
               };
               modules = [
                 (self.modules + /top-level.nix)
+                ./src/modules/doc.nix
                 ({ config, ... }: {
                   packages = [
                     (mkDevShellPackage config pkgs)

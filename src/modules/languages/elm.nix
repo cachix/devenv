@@ -1,9 +1,19 @@
-{ pkgs, config, lib, ... }:
+{ pkgs, config, options, lib, ... }:
 
 let
   cfg = config.languages.elm;
 in
 {
+  meta.doc = ''
+    ### Elm
+
+    Hello from Elm!
+
+    ### Options
+
+    ${lib.strings.concatStringsSep "\n" (lib.attrNames options.languages.elm)}
+  '';
+
   options.languages.elm = {
     enable = lib.mkEnableOption "tools for Elm development";
   };
