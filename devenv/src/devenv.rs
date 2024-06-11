@@ -791,75 +791,78 @@ impl Devenv {
     }
 
     pub fn assemble(&mut self, is_testing: bool) -> Result<()> {
-        if !self.assembled {
-            if !self.devenv_root.join("devenv.nix").exists() {
-                bail!(indoc::indoc! {"
-                File devenv.nix does not exist. To get started, run:
+        if self.assembled {
+            return Ok(());
+        }
 
-                    $ devenv init
-                "});
-            }
-            std::fs::create_dir_all(&self.devenv_dot_gc)
-                .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_dot_gc.display()));
+        if !self.devenv_root.join("devenv.nix").exists() {
+            bail!(indoc::indoc! {"
+            File devenv.nix does not exist. To get started, run:
 
-            let mut flake_inputs = HashMap::new();
-            for (input, attrs) in self.config.inputs.iter() {
-                match config::FlakeInput::try_from(attrs) {
-                    Ok(flake_input) => {
-                        flake_inputs.insert(input.clone(), flake_input);
-                    }
-                    Err(e) => {
-                        self.logger
-                            .error(&format!("Failed to parse input {}: {}", input, e));
-                        bail!("Failed to parse inputs");
-                    }
+                $ devenv init
+            "});
+        }
+        std::fs::create_dir_all(&self.devenv_dot_gc)
+            .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_dot_gc.display()));
+
+        let mut flake_inputs = HashMap::new();
+        for (input, attrs) in self.config.inputs.iter() {
+            match config::FlakeInput::try_from(attrs) {
+                Ok(flake_input) => {
+                    flake_inputs.insert(input.clone(), flake_input);
+                }
+                Err(e) => {
+                    self.logger
+                        .error(&format!("Failed to parse input {}: {}", input, e));
+                    bail!("Failed to parse inputs");
                 }
             }
-            fs::write(
-                self.devenv_dotfile.join("flake.json"),
-                serde_json::to_string(&flake_inputs).unwrap(),
-            )
-            .expect("Failed to write flake.json");
-            fs::write(
-                self.devenv_dotfile.join("devenv.json"),
-                serde_json::to_string(&self.config).unwrap(),
-            )
-            .expect("Failed to write devenv.json");
-            fs::write(
-                self.devenv_dotfile.join("imports.txt"),
-                self.config.imports.join("\n"),
-            )
-            .expect("Failed to write imports.txt");
-
-            // create flake.devenv.nix
-            let vars = indoc::formatdoc!(
-                "version = \"{}\";
-                system = \"{}\";
-                devenv_root = \"{}\";
-                devenv_dotfile = ./{};
-                devenv_dotfile_string = \"{}\";
-                container_name = {};
-                devenv_tmpdir = \"{}\";
-                devenv_runtime = \"{}\";
-                devenv_istesting = {};
-                ",
-                crate_version!(),
-                self.global_options.system,
-                self.devenv_root.display(),
-                self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
-                self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
-                self.container_name
-                    .as_deref()
-                    .map(|s| format!("\"{}\"", s))
-                    .unwrap_or_else(|| "null".to_string()),
-                self.devenv_tmp,
-                self.devenv_runtime.display(),
-                is_testing
-            );
-            let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
-            std::fs::write(self.devenv_root.join(DEVENV_FLAKE), flake)
-                .expect("Failed to write flake.nix");
         }
+        fs::write(
+            self.devenv_dotfile.join("flake.json"),
+            serde_json::to_string(&flake_inputs).unwrap(),
+        )
+        .expect("Failed to write flake.json");
+        fs::write(
+            self.devenv_dotfile.join("devenv.json"),
+            serde_json::to_string(&self.config).unwrap(),
+        )
+        .expect("Failed to write devenv.json");
+        fs::write(
+            self.devenv_dotfile.join("imports.txt"),
+            self.config.imports.join("\n"),
+        )
+        .expect("Failed to write imports.txt");
+
+        // create flake.devenv.nix
+        let vars = indoc::formatdoc!(
+            "version = \"{}\";
+            system = \"{}\";
+            devenv_root = \"{}\";
+            devenv_dotfile = ./{};
+            devenv_dotfile_string = \"{}\";
+            container_name = {};
+            devenv_tmpdir = \"{}\";
+            devenv_runtime = \"{}\";
+            devenv_istesting = {};
+            ",
+            crate_version!(),
+            self.global_options.system,
+            self.devenv_root.display(),
+            self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
+            self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
+            self.container_name
+                .as_deref()
+                .map(|s| format!("\"{}\"", s))
+                .unwrap_or_else(|| "null".to_string()),
+            self.devenv_tmp,
+            self.devenv_runtime.display(),
+            is_testing
+        );
+        let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
+        std::fs::write(self.devenv_root.join(DEVENV_FLAKE), flake)
+            .expect("Failed to write flake.nix");
+
         self.assembled = true;
         Ok(())
     }
