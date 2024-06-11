@@ -22,7 +22,9 @@ pub struct GlobalOptions {
     #[arg(short, long, global = true, help = "Enable debug log level.")]
     pub verbose: bool,
 
-    #[arg(short = 'j', long, global = true, help = "Maximum number of Nix builds at any time.", default_value_t = max_jobs())]
+    #[arg(short = 'j', long,
+        global = true, help = "Maximum number of Nix builds at any time.",
+        default_value_t = max_jobs())]
     pub max_jobs: u8,
 
     #[arg(
@@ -84,6 +86,23 @@ pub struct GlobalOptions {
         help = "Override inputs in devenv.yaml."
     )]
     pub override_input: Vec<String>,
+}
+
+impl Default for GlobalOptions {
+    fn default() -> Self {
+        Self {
+            verbose: false,
+            max_jobs: max_jobs(),
+            cores: 2,
+            system: default_system(),
+            impure: false,
+            offline: false,
+            clean: None,
+            nix_debugger: false,
+            nix_option: vec![],
+            override_input: vec![],
+        }
+    }
 }
 
 #[derive(Subcommand, Clone)]

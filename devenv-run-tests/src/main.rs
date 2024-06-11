@@ -1,7 +1,7 @@
 use clap::Parser;
 use devenv::log::Level;
 use devenv::log::Logger;
-use devenv::{Devenv, GlobalOptions};
+use devenv::{Devenv, DevenvOptions};
 use std::fs;
 use std::path::PathBuf;
 
@@ -91,21 +91,17 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                 let tmpdir = tempdir::TempDir::new_in(path, ".devenv")
                     .expect("Failed to create temporary directory");
 
-                // TODO: terrible!
-                let global_options = GlobalOptions::parse_from::<[_; 0], String>([]);
-
-                let mut devenv = Devenv::new(
+                let options = DevenvOptions {
                     config,
-                    global_options,
-                    Some(&cwd.join(path)),
-                    Some(tmpdir.as_ref()),
-                    logger.clone(),
-                );
+                    devenv_root: Some(cwd.join(path)),
+                    devenv_dotfile: Some(tmpdir.path().to_path_buf()),
+                    ..Default::default()
+                };
 
+                let mut devenv = Devenv::new(options);
                 devenv.create_directories();
 
                 let status = devenv.test();
-
                 let result = TestResult {
                     name: dir_name.to_string(),
                     passed: status.is_ok(),
