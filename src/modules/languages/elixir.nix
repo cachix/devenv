@@ -13,13 +13,34 @@ in
       default = pkgs.elixir;
       defaultText = lib.literalExpression "pkgs.elixir";
     };
+
+    languageServer = {
+      elixir_ls = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        defaultText = "true";
+        description = ''
+          Enable the ElixirLS language server (https://github.com/elixir-lsp/elixir-ls).
+        '';
+      };
+
+      lexical = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        defaultText = "true";
+        description = ''
+          Enable the Lexical language server (https://github.com/lexical-lsp/lexical).
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable
     {
       packages = with pkgs; [
         cfg.package
-        elixir_ls
-      ];
+      ]
+      ++ lib.optional cfg.languageServer.elixir_ls elixir-ls
+      ++ lib.optional cfg.languageServer.lexical lexical;
     };
 }
