@@ -430,7 +430,7 @@ Add a path to the container. Defaults to the whole git repo.
 
 
 *Type:*
-null or path or list of path
+path or list of path
 
 
 
