@@ -78,6 +78,8 @@ ncdu 2.2
 
 ## Changing environment only for tests
 
+!!! info "New in version 1.0.6"
+
 ```nix title="devenv.nix"
 { pkgs, config, ... }: {
   services.postgres.enable = config.devenv.isTesting;
