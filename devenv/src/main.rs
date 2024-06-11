@@ -79,12 +79,7 @@ struct Cli {
     )]
     clean: Option<Vec<String>>,
 
-    #[arg(
-        short = 'd',
-        long,
-        global = true,
-        help = "Enter Nix debugger on failure."
-    )]
+    #[arg(long, global = true, help = "Enter the Nix debugger on failure.")]
     nix_debugger: bool,
 
     #[arg(
@@ -172,7 +167,7 @@ enum Commands {
         #[arg(long, hide = true)]
         docker_run: bool,
 
-        #[arg(short, long)]
+        #[arg(long)]
         copy_args: Vec<String>,
 
         #[arg(hide = true)]
@@ -208,7 +203,7 @@ enum Commands {
 
     #[clap(hide = true)]
     PrintDevEnv {
-        #[arg(short, long)]
+        #[arg(long)]
         json: bool,
     },
 
@@ -1308,4 +1303,15 @@ fn max_jobs() -> u8 {
         std::num::NonZeroUsize::new(1).unwrap()
     });
     (num_cpus.get() / 2).try_into().unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Cli;
+
+    #[test]
+    fn verify_cli() {
+        use clap::CommandFactory;
+        Cli::command().debug_assert()
+    }
 }
