@@ -70,6 +70,7 @@
               (pkgs.lib.optionalAttrs (inputs.devenv.isTmpDir or false) {
                 devenv.tmpdir = devenv_tmpdir;
                 devenv.runtime = devenv_runtime;
+                devenv.isTesting = devenv_istesting;
               })
               (pkgs.lib.optionalAttrs (container_name != null) {
                 container.isBuilding = pkgs.lib.mkForce true;
