@@ -25,7 +25,14 @@ fn main() -> Result<()> {
         config.add_input(&input[0].clone(), &input[1].clone(), &[]);
     }
 
-    let mut devenv = Devenv::new(config, cli.global_options, None, None, logger.clone());
+    let options = devenv::DevenvOptions {
+        logger: Some(logger.clone()),
+        global_options: Some(cli.global_options),
+        config,
+        ..Default::default()
+    };
+
+    let mut devenv = Devenv::new(options);
 
     if !matches!(cli.command, Commands::Version {} | Commands::Gc { .. }) {
         devenv.create_directories()?;

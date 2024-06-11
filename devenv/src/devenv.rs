@@ -25,6 +25,15 @@ const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 // project vars
 const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
+#[derive(Default)]
+pub struct DevenvOptions {
+    pub config: config::Config,
+    pub global_options: Option<cli::GlobalOptions>,
+    pub logger: Option<log::Logger>,
+    pub devenv_root: Option<PathBuf>,
+    pub devenv_dotfile: Option<PathBuf>,
+}
+
 pub struct Devenv {
     pub(crate) config: config::Config,
     pub(crate) global_options: cli::GlobalOptions,
@@ -52,21 +61,17 @@ pub struct Devenv {
 }
 
 impl Devenv {
-    pub fn new(
-        config: config::Config,
-        global_options: cli::GlobalOptions,
-        devenv_root_dir_override: Option<&Path>,
-        devenv_dotfile_override: Option<&Path>,
-        logger: log::Logger,
-    ) -> Self {
+    pub fn new(options: DevenvOptions) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
         let devenv_home = xdg_dirs.get_data_home();
         let devenv_home_gc = devenv_home.join("gc");
 
-        let devenv_root = devenv_root_dir_override
+        let devenv_root = options
+            .devenv_root
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
-        let devenv_dotfile = devenv_dotfile_override
+        let devenv_dotfile = options
+            .devenv_dotfile
             .map(|p| p.to_path_buf())
             .unwrap_or(devenv_root.join(".devenv"));
         let devenv_dot_gc = devenv_dotfile.join("gc");
@@ -84,8 +89,17 @@ impl Devenv {
             Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
 
+        let global_options = options.global_options.unwrap_or_default();
+
+        let level = if global_options.verbose {
+            log::Level::Debug
+        } else {
+            log::Level::Info
+        };
+        let logger = options.logger.unwrap_or_else(|| log::Logger::new(level));
+
         Self {
-            config,
+            config: options.config,
             global_options,
             logger,
             xdg_dirs,
@@ -108,6 +122,7 @@ impl Devenv {
         self.devenv_root.as_ref()
     }
 
+    // TODO: refactor test to be able to remove this
     pub fn update_devenv_dotfile<P>(&mut self, devenv_dotfile: P)
     where
         P: AsRef<Path>,

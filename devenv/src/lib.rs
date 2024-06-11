@@ -5,4 +5,4 @@ mod devenv;
 pub mod log;
 
 pub use cli::{default_system, GlobalOptions};
-pub use devenv::Devenv;
+pub use devenv::{Devenv, DevenvOptions};
