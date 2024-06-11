@@ -192,7 +192,7 @@ let
       };
 
       copyToRoot = lib.mkOption {
-        type = types.nullOr (types.either types.path (types.listOf types.path));
+        type = types.either types.path (types.listOf types.path);
         description = "Add a path to the container. Defaults to the whole git repo.";
         default = self;
         defaultText = "self";
