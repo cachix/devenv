@@ -10,6 +10,7 @@
     devenv.isTesting = lib.mkOption {
       type = lib.types.bool;
       default = false;
+      description = "Whether the environment is being used for testing.";
     };
 
     test = lib.mkOption {
