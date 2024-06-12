@@ -60,6 +60,7 @@ nav:
       - GitHub Actions: integrations/github-actions.md
       - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
       - Difftastic: integrations/difftastic.md
+      - Android: integrations/android.md
     - Examples: examples.md
     - Editor Support:
       - VSCode: editor-support/vscode.md
