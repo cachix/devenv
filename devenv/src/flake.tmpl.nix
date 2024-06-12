@@ -70,6 +70,8 @@
               (pkgs.lib.optionalAttrs (inputs.devenv.isTmpDir or false) {
                 devenv.tmpdir = devenv_tmpdir;
                 devenv.runtime = devenv_runtime;
+              })
+              (pkgs.lib.optionalAttrs (inputs.devenv.hasIsTesting or false) {
                 devenv.isTesting = devenv_istesting;
               })
               (pkgs.lib.optionalAttrs (container_name != null) {

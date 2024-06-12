@@ -91,6 +91,7 @@
 
       modules = ./src/modules;
       isTmpDir = true;
+      hasIsTesting = true;
 
       templates =
         let
