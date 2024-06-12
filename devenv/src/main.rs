@@ -5,7 +5,7 @@ mod log;
 use clap::{crate_version, Parser, Subcommand};
 use cli_table::{print_stderr, Table, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, Result};
+use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
@@ -1082,14 +1082,19 @@ impl App {
 
     fn create_directories(&mut self) -> Result<()> {
         if !self.dirs_created {
-            let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
+            let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv")
+                .into_diagnostic()
+                .wrap_err("Failed to get XDG directories")?;
             xdg_dirs
                 .create_data_directory(Path::new("devenv"))
-                .expect("Failed to create DEVENV_HOME directory");
+                .into_diagnostic()
+                .wrap_err("Failed to create DEVENV_HOME directory")?;
             std::fs::create_dir_all(&self.devenv_home_gc)
-                .expect("Failed to create DEVENV_HOME_GC directory");
+                .into_diagnostic()
+                .wrap_err("Failed to create DEVENV_HOME_GC directory")?;
             std::fs::create_dir_all(&self.devenv_dot_gc)
-                .expect("Failed to create .devenv/gc directory");
+                .into_diagnostic()
+                .wrap_err("Failed to create .devenv/gc directory")?;
             self.dirs_created = true;
         }
         Ok(())
