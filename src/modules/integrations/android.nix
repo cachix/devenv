@@ -41,11 +41,6 @@ in
   options.android = {
     enable = lib.mkEnableOption "Enable tools for Android Development";
 
-    package = lib.mkOption {
-      type = lib.types.package;
-      description = "The Android packages to use.";
-    };
-
     platforms.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "32" "34" ];
