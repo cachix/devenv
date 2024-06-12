@@ -23,5 +23,7 @@ pkgs.rustPlatform.buildRustPackage {
 
   postInstall = ''
     wrapProgram $out/bin/devenv --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix} --prefix PATH ":" "$out/bin:${inputs.cachix.packages.${pkgs.stdenv.system}.cachix}/bin"
+    # TODO: problematic for our library...
+    wrapProgram $out/bin/devenv-run-tests --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix} --prefix PATH ":" "$out/bin:${inputs.cachix.packages.${pkgs.stdenv.system}.cachix}/bin"
   '';
 }
