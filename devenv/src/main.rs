@@ -202,9 +202,6 @@ enum Commands {
     Assemble,
 
     #[clap(hide = true)]
-    CreateDirectories,
-
-    #[clap(hide = true)]
     PrintDevEnv {
         #[arg(long)]
         json: bool,
@@ -271,7 +268,7 @@ struct App {
     has_processes: Option<bool>,
     container_name: Option<String>,
     assembled: bool,
-    dirs_created: Option<bool>,
+    dirs_created: bool,
     // all kinds of paths
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
@@ -292,26 +289,28 @@ fn main() -> Result<()> {
         log::Level::Info
     };
 
-    let logger = log::Logger::new(level);
-
-    let mut config = config::Config::load()?;
-
-    for input in cli.override_input.chunks_exact(2) {
-        config.add_input(&input[0].clone(), &input[1].clone(), &[]);
-    }
-
     let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
     let devenv_home = xdg_dirs.get_data_home();
     let devenv_home_gc = devenv_home.join("gc");
-
+    let devenv_root = std::env::current_dir().expect("Failed to get current directory");
+    let devenv_dot_gc = devenv_root.join(".devenv").join("gc");
+    let devenv_dotfile = devenv_root.join(".devenv");
     let devenv_tmp = std::env::var("XDG_RUNTIME_DIR")
         .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
-
-    // using dummy values for initialization
-    let devenv_root: PathBuf = "./".into();
-    let devenv_runtime = Path::new(&devenv_tmp).join(format!("devenv-{}", 1234.to_string()));
+    // first 7 chars of sha256 hash of devenv_state
+    let devenv_state_hash = {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(devenv_dotfile.to_string_lossy().as_bytes());
+        let result = hasher.finalize();
+        hex::encode(result)
+    };
+    let devenv_runtime = Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
     let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
-
+    let logger = log::Logger::new(level);
+    let mut config = config::Config::load()?;
+    for input in cli.override_input.chunks_exact(2) {
+        config.add_input(&input[0].clone(), &input[1].clone(), &[]);
+    }
     let mut app = App {
         cli,
         config,
@@ -319,10 +318,10 @@ fn main() -> Result<()> {
         has_processes: None,
         logger,
         container_name: None,
-        dirs_created: None,
-        devenv_root: devenv_root.clone(),
-        devenv_dotfile: devenv_root.join(".devenv"),
-        devenv_dot_gc: devenv_root.join(".devenv").join("gc"),
+        dirs_created: false,
+        devenv_root,
+        devenv_dotfile,
+        devenv_dot_gc,
         devenv_home_gc,
         devenv_tmp,
         devenv_runtime,
@@ -409,7 +408,6 @@ fn main() -> Result<()> {
             InputsCommand::Add { name, url, follows } => app.inputs_add(&name, &url, &follows),
         },
         // hidden
-        Commands::CreateDirectories => app.create_directories(),
         Commands::Assemble => app.assemble(false),
         Commands::PrintDevEnv { json } => app.print_dev_env(json),
         Commands::GenerateJSONSchema => {
@@ -1083,30 +1081,16 @@ impl App {
     }
 
     fn create_directories(&mut self) -> Result<()> {
-        if self.dirs_created != Some(true) {
+        if !self.dirs_created {
             let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
             xdg_dirs
                 .create_data_directory(Path::new("devenv"))
                 .expect("Failed to create DEVENV_HOME directory");
             std::fs::create_dir_all(&self.devenv_home_gc)
                 .expect("Failed to create DEVENV_HOME_GC directory");
-            self.devenv_root = std::env::current_dir().expect("Failed to get current directory");
-            self.devenv_dot_gc = self.devenv_root.join(".devenv").join("gc");
             std::fs::create_dir_all(&self.devenv_dot_gc)
                 .expect("Failed to create .devenv/gc directory");
-            self.devenv_dotfile = self.devenv_root.join(".devenv");
-
-            // first 7 chars of sha256 hash of devenv_state
-            let devenv_state_hash = {
-                let mut hasher = sha2::Sha256::new();
-                hasher.update(self.devenv_dotfile.to_string_lossy().as_bytes());
-                let result = hasher.finalize();
-                hex::encode(result)
-            };
-            self.devenv_runtime =
-                Path::new(&self.devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
-
-            self.dirs_created = Some(true);
+            self.dirs_created = true;
         }
         Ok(())
     }
