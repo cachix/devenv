@@ -5,7 +5,7 @@ mod log;
 use clap::{crate_version, Parser, Subcommand};
 use cli_table::{print_stderr, Table, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, Result};
+use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
@@ -268,6 +268,7 @@ struct App {
     has_processes: Option<bool>,
     container_name: Option<String>,
     assembled: bool,
+    dirs_created: bool,
     // all kinds of paths
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
@@ -289,15 +290,10 @@ fn main() -> Result<()> {
     };
 
     let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
-    xdg_dirs
-        .create_data_directory(Path::new("devenv"))
-        .expect("Failed to create DEVENV_HOME directory");
     let devenv_home = xdg_dirs.get_data_home();
     let devenv_home_gc = devenv_home.join("gc");
-    std::fs::create_dir_all(&devenv_home_gc).expect("Failed to create DEVENV_HOME_GC directory");
     let devenv_root = std::env::current_dir().expect("Failed to get current directory");
     let devenv_dot_gc = devenv_root.join(".devenv").join("gc");
-    std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
     let devenv_dotfile = devenv_root.join(".devenv");
     let devenv_tmp = std::env::var("XDG_RUNTIME_DIR")
         .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
@@ -322,6 +318,7 @@ fn main() -> Result<()> {
         has_processes: None,
         logger,
         container_name: None,
+        dirs_created: false,
         devenv_root,
         devenv_dotfile,
         devenv_dot_gc,
@@ -331,6 +328,10 @@ fn main() -> Result<()> {
         cachix_trusted_keys,
         cachix_caches: None,
     };
+
+    if !matches!(app.cli.command, Commands::Version {} | Commands::Gc { .. }) {
+        app.create_directories()?;
+    }
 
     match app.cli.command.clone() {
         Commands::Shell { cmd, args } => app.shell(&cmd, &args, true),
@@ -1076,6 +1077,26 @@ impl App {
         }
 
         std::fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
+        Ok(())
+    }
+
+    fn create_directories(&mut self) -> Result<()> {
+        if !self.dirs_created {
+            let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv")
+                .into_diagnostic()
+                .wrap_err("Failed to get XDG directories")?;
+            xdg_dirs
+                .create_data_directory(Path::new("devenv"))
+                .into_diagnostic()
+                .wrap_err("Failed to create DEVENV_HOME directory")?;
+            std::fs::create_dir_all(&self.devenv_home_gc)
+                .into_diagnostic()
+                .wrap_err("Failed to create DEVENV_HOME_GC directory")?;
+            std::fs::create_dir_all(&self.devenv_dot_gc)
+                .into_diagnostic()
+                .wrap_err("Failed to create .devenv/gc directory")?;
+            self.dirs_created = true;
+        }
         Ok(())
     }
 
