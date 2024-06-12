@@ -1175,6 +1175,28 @@ boolean
 
 
 
+## languages.c.debugger
+
+
+
+An optional debugger package to use with c.
+The default is ` gdb `, if supported on the current system.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` pkgs.gdb `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/c.nix)
+
+
+
 ## languages.clojure.enable
 
 
@@ -2318,8 +2340,6 @@ boolean
 
 ## languages.javascript.yarn.enable
 
-
-
 Whether to enable install yarn.
 
 
@@ -2364,6 +2384,8 @@ package
 
 
 ## languages.javascript.yarn.install.enable
+
+
 
 Whether to enable yarn install during devenv initialisation.
 
@@ -4714,6 +4736,8 @@ boolean
 
 ## languages.solidity.package
 
+
+
 Which compiler of Solidity to use.
 
 
@@ -4758,8 +4782,6 @@ boolean
 
 
 ## languages.solidity.foundry.package
-
-
 
 Which Foundry package to use.
 
@@ -7337,6 +7359,8 @@ boolean
 
 ## pre-commit.hooks.autoflake.package
 
+
+
 An optional package that provides the hook.
 
 
@@ -7521,8 +7545,6 @@ string
 
 
 ## pre-commit.hooks.autoflake.name
-
-
 
 The name of the hook. Shown during hook execution.
 
