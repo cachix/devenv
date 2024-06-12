@@ -819,7 +819,7 @@ boolean
 
 
 
-This option has no description.
+Whether the environment is being used for testing.
 
 
 
