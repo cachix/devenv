@@ -359,7 +359,23 @@ impl Devenv {
                             {{
                                 cachix.enable = false;
                             }}
+
+                            NOTE: NixOS users can add the following to your configuration.nix as an alternative to the above instructions:
+
+                            {{
+                                nix.extraOptions = ''
+                                    trusted-users = root {}
+                                    extra-substituters = {};
+                                    extra-trusted-public-keys = {};
+                                '';
+                            }}
+                            and rebuild your system  
+                            $ sudo nixos-rebuild switch
+
                         ", whoami::username()
+                        , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
+                        , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
+                        , whoami::username()
                         , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                         , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
                         ));
