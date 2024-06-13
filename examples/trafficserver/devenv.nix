@@ -9,8 +9,11 @@
     records.proxy.config = {
       proxy_name = "devenv.test";
       http.server_ports = "8080 8080:ipv6";
+
       diags.logfile.filename = "stdout";
       error.logfile.filename = "stderr";
+
+      admin.user_id = "#-1";
     };
   };
 }
