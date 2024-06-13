@@ -2,7 +2,7 @@
 
 pkgs.rustPlatform.buildRustPackage {
   pname = "devenv";
-  version = "1.0.6";
+  version = "1.0.7";
 
   src = pkgs.lib.sourceByRegex ./. [
     "Cargo.toml"
