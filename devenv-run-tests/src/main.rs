@@ -111,14 +111,14 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     println!("    Running {patch_script}");
                     let _ = std::process::Command::new("bash")
                         .arg("./.patch.sh")
-                        .current_dir(&path)
+                        .current_dir(path)
                         .status()?;
                 }
 
                 // Run .setup.sh if it exists
                 if setup_script_path.exists() {
                     println!("    Running {setup_script}");
-                    devenv.shell(&Some(format!("./{setup_script}")), &[], false);
+                    devenv.shell(&Some(format!("./{setup_script}")), &[], false)?;
                 }
 
                 // TODO: wait for processes to shut down before exiting
