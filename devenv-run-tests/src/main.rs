@@ -93,7 +93,6 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     devenv_dotfile: Some(tmpdir.path().to_path_buf()),
                     ..Default::default()
                 };
-
                 let mut devenv = Devenv::new(options);
                 devenv.create_directories()?;
 
@@ -122,6 +121,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     devenv.shell(&Some(format!("./{setup_script}")), &[], false);
                 }
 
+                // TODO: wait for processes to shut down before exiting
                 let status = devenv.test();
                 let result = TestResult {
                     name: dir_name.to_string(),
