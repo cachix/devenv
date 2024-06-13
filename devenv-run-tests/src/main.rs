@@ -1,6 +1,7 @@
 use clap::Parser;
 use devenv::log::Level;
 use devenv::log::Logger;
+use devenv::{Devenv, DevenvOptions};
 use std::fs;
 use std::path::PathBuf;
 
@@ -37,7 +38,6 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
     logger.info("Running Tests");
 
     let cwd = std::env::current_dir()?;
-    let cwd = cwd.display();
 
     let mut test_results = vec![];
 
@@ -47,6 +47,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
 
         for path in paths {
             let path = path?.path();
+            let path = path.as_path();
             if path.is_dir() {
                 let dir_name_path = path.file_name().unwrap();
                 let dir_name = dir_name_path.to_str().unwrap();
@@ -54,7 +55,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                 if !args.only.is_empty() {
                     let mut found = false;
                     for only in &args.only {
-                        if path.as_path().ends_with(only) {
+                        if path.ends_with(only) {
                             found = true;
                             break;
                         }
@@ -64,7 +65,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     }
                 } else {
                     for exclude in &args.exclude {
-                        if path.as_path().ends_with(exclude) {
+                        if path.ends_with(exclude) {
                             println!("Skipping {}", dir_name);
                             continue;
                         }
@@ -78,31 +79,32 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     println!("    Running .setup.sh");
                     let _ = std::process::Command::new("bash")
                         .arg(".setup.sh")
-                        .current_dir(&path)
+                        .current_dir(path)
                         .status()?;
                 }
-                let overrides = args.override_input.iter().enumerate().flat_map(|(i, arg)| {
-                    if i % 2 == 0 {
-                        vec!["--override-input", arg.as_str()]
-                    } else {
-                        vec![arg.as_str()]
-                    }
-                });
-                // TODO: use as a library
-                let status = std::process::Command::new("devenv")
-                    .args([
-                        "--override-input",
-                        "devenv",
-                        &format!("path:{cwd}?dir=src/modules"),
-                    ])
-                    .args(overrides)
-                    .arg("test")
-                    .current_dir(&path)
-                    .status()?;
 
+                let mut config = devenv::config::Config::load_from(path)?;
+                for input in args.override_input.chunks_exact(2) {
+                    config.add_input(&input[0].clone(), &input[1].clone(), &[]);
+                }
+
+                let tmpdir = tempdir::TempDir::new_in(path, ".devenv")
+                    .expect("Failed to create temporary directory");
+
+                let options = DevenvOptions {
+                    config,
+                    devenv_root: Some(cwd.join(path)),
+                    devenv_dotfile: Some(tmpdir.path().to_path_buf()),
+                    ..Default::default()
+                };
+
+                let mut devenv = Devenv::new(options);
+                devenv.create_directories();
+
+                let status = devenv.test();
                 let result = TestResult {
                     name: dir_name.to_string(),
-                    passed: status.success(),
+                    passed: status.is_ok(),
                 };
                 test_results.push(result);
             }

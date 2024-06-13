@@ -1,9 +1,10 @@
 [package]
 name = "devenv-run-tests"
 version = "0.1.0"
-edition = "2018"
+edition.workspace = true
 
 [dependencies]
-clap = { version = "3", features = ["derive"] }
+clap.workspace = true
+tempdir.workspace = true
 
 devenv= { path = "../devenv" }
