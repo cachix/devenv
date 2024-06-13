@@ -7,8 +7,19 @@
   # https://devenv.sh/packages/
   packages = [ pkgs.git ];
 
+  # https://devenv.sh/languages/
+  # languages.rust.enable = true;
+
+  # https://devenv.sh/processes/
+  # processes.cargo-watch.exec = "cargo-watch";
+
+  # https://devenv.sh/services/
+  # services.postgres.enable = true;
+
   # https://devenv.sh/scripts/
-  scripts.hello.exec = "echo hello from $GREET";
+  scripts.hello.exec = ''
+    echo hello from $GREET
+  '';
 
   enterShell = ''
     hello
@@ -21,17 +32,8 @@
     git --version | grep "2.42.0"
   '';
 
-  # https://devenv.sh/services/
-  # services.postgres.enable = true;
-
-  # https://devenv.sh/languages/
-  # languages.nix.enable = true;
-
   # https://devenv.sh/pre-commit-hooks/
   # pre-commit.hooks.shellcheck.enable = true;
-
-  # https://devenv.sh/processes/
-  # processes.ping.exec = "ping example.com";
 
   # See full reference at https://devenv.sh/reference/options/
 }
