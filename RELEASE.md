@@ -8,5 +8,4 @@
 
 # Once nixpkgs has been updated
 
-- bump version in mkdocs.yml
 - src/modules/latest-version
