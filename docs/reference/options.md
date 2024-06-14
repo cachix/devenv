@@ -850,7 +850,7 @@ string
 
 
 *Default:*
-` "1.0.5" `
+` "1.0.7" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
