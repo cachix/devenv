@@ -98,8 +98,6 @@ extra:
       link: https://github.com/cachix/devenv
     - icon: fontawesome/brands/discord
       link: https://discord.gg/naMgvexb6q
-  devenv:
-    version: 1.0.5
 
 markdown_extensions:
   - tables
