@@ -46,6 +46,9 @@ pub struct GlobalOptions {
     )]
     pub impure: bool,
 
+    #[arg(long, global = true, help = "Use flake cache for evaluation results.")]
+    pub eval_cache: bool,
+
     #[arg(
         long,
         global = true,
@@ -96,6 +99,7 @@ impl Default for GlobalOptions {
             cores: 2,
             system: default_system(),
             impure: false,
+            eval_cache: false,
             offline: false,
             clean: None,
             nix_debugger: false,
