@@ -20,7 +20,7 @@ let
     includeSystemImages = cfg.systemImages.enable;
     systemImageTypes = cfg.systemImageTypes;
     abiVersions = cfg.abis;
-    cmakeVersions = cfg.cmakeVersions;
+    cmakeVersions = cfg.cmake.version;
     includeNDK = cfg.ndk.enable;
     ndkVersions = cfg.ndk.version;
     useGoogleAPIs = cfg.googleAPIs.enable;
@@ -69,7 +69,7 @@ in
       '';
     };
 
-    cmakeVersions = lib.mkOption {
+    cmake.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "3.22.1" ];
       description = ''
