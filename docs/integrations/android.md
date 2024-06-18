@@ -103,9 +103,10 @@ The following config works with the flutter starter project.
 {pkgs, ... }:
 
 {
-  packages = [  pkgs.flutter pkgs.llvmPackages_18.libcxxClang ];
-  android.enable = true;
-  languages.dart.enable = true;
+  android = {
+    enable = true;
+    flutter.enable = true;
+  }
 }
 ```
 ```nix title="devenv.yaml"
