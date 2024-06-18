@@ -80,10 +80,10 @@ in
 
     cmdLineTools.version = lib.mkOption {
       type = lib.types.str;
-      default = "11.0";
+      default = if cfg.flutter.enable then "8.0" else "11.0";
       description = ''
         The version of the Android command line tools to install.
-        By default, version 11.0 is installed.
+        By default, version 11.0 is installed or 8.0 if flutter is enabled.
       '';
     };
 
@@ -98,19 +98,19 @@ in
 
     platformTools.version = lib.mkOption {
       type = lib.types.str;
-      default = "34.0.5";
+      default = if cfg.flutter.enable then "34.0.4" else "34.0.5";
       description = ''
         The version of the Android platform tools to install.
-        By default, version 34.0.5 is installed.
+        By default, version 34.0.5 is installed or 34.0.5 if flutter is enabled.
       '';
     };
 
     buildTools.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "30.0.3" ];
+      default = if cfg.flutter.enable then [ "33.0.2" "30.0.3" ] else [ "30.0.3" ];
       description = ''
         The version of the Android build tools to install.
-        By default, version 30.0.3 is installed.
+        By default, version 30.0.3 is installed or [ "33.0.2" "30.0.3" ] if flutter is enabled.
       '';
     };
 
@@ -152,7 +152,7 @@ in
 
     ndk.enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = !cfg.flutter.enable;
       description = ''
         Whether to include the Android NDK (Native Development Kit).
         By default, the NDK is included.
@@ -222,6 +222,14 @@ in
       '';
       example = "pkgs.android-studio";
     };
+
+    flutter.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether to include the Flutter tools.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -230,7 +238,17 @@ in
       platformTools
       androidEmulator
       cfg.android-studio
+    ] ++ (lib.optional cfg.flutter.enable pkgs.flutter);
+
+    # Nested conditional for flutter
+    languages = lib.mkMerge [
+      { java.enable = true; }
+      (lib.mkIf cfg.flutter.enable {
+        dart.enable = true;
+        java.jdk.package = pkgs.jdk11;
+      })
     ];
+
 
     env.ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
     env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk/";
@@ -238,10 +256,12 @@ in
     # override the aapt2 binary that gradle uses with the patched one from the sdk
     env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${lib.head cfg.buildTools.version}/aapt2";
 
+    env.FLUTTER_ROOT = if cfg.flutter.enable then pkgs.flutter else "";
+    env.DART_ROOT = if cfg.flutter.enable then "${pkgs.flutter}/bin/cache/dart-sdk" else "";
+
     enterShell = ''
       set -e
-      # handle libxml2.so.2 and libc++.so.1 linker error with react native
-      export LD_LIBRARY_PATH="${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/lib64/:${config.env.ANDROID_NDK_ROOT}/${lib.head cfg.ndk.version}/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
+      export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath [pkgs.vulkan-loader pkgs.libGL]}:${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/lib64/:${config.env.ANDROID_NDK_ROOT}/${lib.head cfg.ndk.version}/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
 
       export PATH="$PATH:${config.env.ANDROID_HOME}/tools:${config.env.ANDROID_HOME}/tools/bin:${config.env.ANDROID_HOME}/platform-tools"
       cat <<EOF > local.properties
