@@ -212,17 +212,6 @@ in
       '';
     };
 
-    jdk = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.jdk;
-      defaultText = "pkgs.jdk";
-      description = ''
-        The JDK package to use.
-        By default, the JDK package from nixpkgs is used.
-      '';
-      example = "pkgs.jdk";
-    };
-
     android-studio = lib.mkOption {
       type = lib.types.package;
       default = pkgs.android-studio;
@@ -240,7 +229,6 @@ in
       androidSdk
       platformTools
       androidEmulator
-      cfg.jdk
       cfg.android-studio
     ];
 
