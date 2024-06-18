@@ -249,7 +249,6 @@ in
       })
     ];
 
-
     env.ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
     env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk/";
 
