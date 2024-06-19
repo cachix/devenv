@@ -83,13 +83,12 @@ plugins:
     cards_layout_options:
       background_color: "#FBFBFB"
       color: "#425C82"
-  # Broken due to https://github.com/Guts/mkdocs-rss-plugin/issues/257
-  # rss:
-  #   use_git: false
-  #   match_path: blog/posts/.*
-  #   date_from_meta:
-  #     as_creation: date
-  #     as_update: date
+  rss:
+     use_git: false
+     match_path: blog/posts/.*
+     date_from_meta:
+       as_creation: date
+       as_update: date
 extra:
   social:
     - icon: fontawesome/brands/twitter
