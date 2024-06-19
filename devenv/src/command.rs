@@ -4,6 +4,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
 use std::os::unix::process::CommandExt;
+use std::path::Path;
 
 const NIX_FLAGS: [&str; 12] = [
     "--show-trace",
@@ -338,7 +339,8 @@ impl Devenv {
                     .expect("Failed to write cachix caches to file");
 
                     if trusted == Some(0) {
-                        self.logger.error(&indoc::formatdoc!(
+                        if !Path::new("/etc/NIXOS").exists() {
+                            self.logger.error(&indoc::formatdoc!(
                             "You're not a trusted user of the Nix store. You have the following options:
 
                             a) Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
@@ -363,6 +365,34 @@ impl Devenv {
                         , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                         , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
                         ));
+                        } else {
+                            self.logger.error(&indoc::formatdoc!(
+                            "You're not a trusted user of the Nix store. You have the following options: 
+
+                            a) Add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix for devenv to manage caches for you.
+
+                            {{
+                                nix.extraOptions = ''
+                                    trusted-users = root {}
+                                '';
+                            }}
+
+                            b) Add binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
+                            {{
+                                nix.extraOptions = ''
+                                    extra-substituters = {};
+                                    extra-trusted-public-keys = {};
+                                '';
+                            }}
+
+                            Lastly rebuild your system  
+
+                            $ sudo nixos-rebuild switch
+                        ", whoami::username()
+                        , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
+                        , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
+                        ));
+                        }
                         bail!("You're not a trusted user of the Nix store.")
                     }
                 }
