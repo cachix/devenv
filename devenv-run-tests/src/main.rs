@@ -88,6 +88,13 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     config.add_input(&input[0].clone(), &input[1].clone(), &[]);
                 }
 
+                // Override the input for the devenv module
+                config.add_input(
+                    "devenv",
+                    &format!("path:{:}?dir=src/modules", cwd.to_str().unwrap()),
+                    &[],
+                );
+
                 let tmpdir = tempdir::TempDir::new_in(path, ".devenv")
                     .expect("Failed to create temporary directory");
 
@@ -99,7 +106,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                 };
 
                 let mut devenv = Devenv::new(options);
-                devenv.create_directories();
+                devenv.create_directories()?;
 
                 let status = devenv.test();
                 let result = TestResult {
