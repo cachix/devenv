@@ -10,16 +10,7 @@ Getting a full working android development environment with devenv is as simple 
 }
 ```
 
-For a more tailored development environment, you can specify additional options:
-```nix title="env"
-env.ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
-env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk/";
-
-# override the aapt2 binary that gradle uses with the patched one from the sdk
-env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${lib.head cfg.buildTools.version}/aapt2";
-```
-
-For a more tailored development environment you can specify options:
+For a more tailored development environment you can specify specific options:
 
 ```nix title="devenv.nix"
 { pkgs, ... }:
@@ -54,7 +45,6 @@ For a more tailored development environment you can specify options:
       "intel-android-sysimage-license"
       "mips-android-sysimage-license"
     ];
-    jdk = pkgs.jdk;
     android-studio = pkgs.android-studio;
   };
 }
