@@ -107,7 +107,7 @@ in
 
     buildTools.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = if cfg.flutter.enable then [ "33.0.2" "30.0.3" ] else [ "30.0.3" ];
+      default = if cfg.flutter.enable then [ "33.0.2" "30.0.3" ] else [ "34.0.0" ];
       description = ''
         The version of the Android build tools to install.
         By default, version 30.0.3 is installed or [ "33.0.2" "30.0.3" ] if flutter is enabled.
@@ -230,6 +230,14 @@ in
         Whether to include the Flutter tools.
       '';
     };
+
+    reactNative.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether to include the Flutter tools.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -246,6 +254,10 @@ in
       (lib.mkIf cfg.flutter.enable {
         dart.enable = true;
         java.jdk.package = pkgs.jdk11;
+      })
+      (lib.mkIf cfg.reactNative.enable {
+        javascript.enable = true;
+        javascript.npm.enable = true;
       })
     ];
 

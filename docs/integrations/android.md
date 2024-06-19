@@ -73,13 +73,13 @@ The following config works with react native starter project.
 { ... }:
 
 {
-
-  languages.javascript.enable = true;
-  languages.javascript.npm.enable = true;
-  android.enable = true;
-  android.buildTools.version = [ "34.0.0" ];
+  android = {
+    enable = true;
+    reactNative.enable = true;
+  };
 }
 ```
+
 ```nix title="devenv.yaml"
 inputs:
   nixpkgs:
@@ -96,9 +96,10 @@ The following config works with the flutter starter project.
   android = {
     enable = true;
     flutter.enable = true;
-  }
+  };
 }
 ```
+
 ```nix title="devenv.yaml"
 inputs:
   nixpkgs:
