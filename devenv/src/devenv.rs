@@ -19,7 +19,13 @@ use std::{
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
-const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
+const REQUIRED_FILES: [&str; 5] = [
+    "devenv.nix",
+    "devenv.yaml",
+    ".envrc",
+    ".gitignore",
+    "justfile",
+];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 // project vars
