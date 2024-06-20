@@ -1,0 +1,5 @@
+{ pkgs, ... }:
+
+{
+  android.enable = true;
+}
