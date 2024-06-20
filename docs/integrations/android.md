@@ -1,6 +1,6 @@
 # Android
 
-Getting a full working android development environment with devenv is as simple as:
+Getting a full working Android development environment is as simple as:
 
 ```nix title="devenv.nix"
 { pkgs, ... }:
@@ -53,11 +53,11 @@ For a more tailored development environment you can specify specific options:
 Since Android contains many unfree packages, you need to set allowUnfree: true in devenv.yaml:
 
 ```nix title="devenv.yaml"
-# other inputs
 allowUnfree: true
 ```
 
 ## Emulators
+
 Creating emulators via the android-studio GUI may not work as expected due to conflicts between the immutable Nix store paths and Android Studio requiring a mutable path. Therefore, it's recommended to create an emulator via the CLI:
 
 ### Creating an emulator
@@ -70,7 +70,7 @@ After creating the emulator, you can use any text editor to develop for Android.
 ## React Native
 The following config works with react native starter project.
 ```nix title="devenv.nix"
-{ ... }:
+{ pkgs, ... }:
 
 {
   android = {
@@ -80,17 +80,13 @@ The following config works with react native starter project.
 }
 ```
 
-```nix title="devenv.yaml"
-inputs:
-  nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
-allowUnfree: true
 ```
 ## Flutter
+
 The following config works with the flutter starter project.
 
 ```nix title="devenv.nix"
-{pkgs, ... }:
+{ pkgs, ... }:
 
 {
   android = {
@@ -100,9 +96,3 @@ The following config works with the flutter starter project.
 }
 ```
 
-```nix title="devenv.yaml"
-inputs:
-  nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
-allowUnfree: true
-```
