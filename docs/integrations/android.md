@@ -80,7 +80,6 @@ The following config works with react native starter project.
 }
 ```
 
-```
 ## Flutter
 
 The following config works with the flutter starter project.
