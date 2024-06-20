@@ -107,7 +107,7 @@ impl Default for GlobalOptions {
 
 #[derive(Subcommand, Clone)]
 pub(crate) enum Commands {
-    #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
+    #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore .envrc and justfile.")]
     Init {
         target: Option<PathBuf>,
     },
