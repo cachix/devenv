@@ -1,6 +1,4 @@
-{ inputs, pkgs, lib, config, ... }:
-
-{
+{ inputs, pkgs, lib, config, ... }: {
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
 
   packages = [
@@ -156,7 +154,7 @@
     generate-css = {
       enable = true;
       name = "generate-css";
-      entry = "npx tailwindcss build docs/assets/extra.css -o docs/assets/output.css";
+      entry = "${lib.getExe pkgs.tailwindcss} build docs/assets/extra.css -o docs/assets/output.css";
     };
   };
 }
