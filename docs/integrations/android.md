@@ -65,7 +65,7 @@ Creating emulators via the android-studio GUI may not work as expected due to co
 avdmanager create avd --force --name my-android-emulator-name --package 'system-images;android-32;google_apis_playstore;x86_64'
 ```
 
-After creating the emulator, you can use any text editor to develop for Android. During testing, we successfully ran a React Native project inside Android Studio by first creating the Android emulator externally as described above and then running:
+After creating the emulator, you can use any text editor to develop for Android. During testing, we successfully ran a React Native project inside Android Studio by first creating the Android emulator externally as described above and then running the project inside the android-studio's terminal.
 
 ## React Native
 The following config works with react native starter project.
