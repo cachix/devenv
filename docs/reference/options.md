@@ -3286,12 +3286,13 @@ package
 
 
 
-The debugger package to use with odin.
+An optional debugger package to use with odin.
+The default is ` gdb `, if supported on the current system.
 
 
 
 *Type:*
-package
+null or package
 
 
 
