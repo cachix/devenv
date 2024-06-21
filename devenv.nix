@@ -31,6 +31,9 @@
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
   difftastic.enable = true;
 
+  #enable convco manually.
+  just.features.convco.enable = true;
+
   dotenv.enable = true;
 
   processes = {
