@@ -17,8 +17,8 @@
       receivers = {
         otlp = {
           protocols = {
-            grpc = { };
-            http = { };
+            grpc.endpoint = "localhost:4317";
+            http.endpoint = "localhost:4318";
           };
         };
       };

@@ -15,10 +15,16 @@ in
     };
 
     debugger = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.gdb;
+      type = lib.types.nullOr lib.types.package;
+      default =
+        if lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gdb
+        then pkgs.gdb
+        else null;
       defaultText = lib.literalExpression "pkgs.gdb";
-      description = "The debugger package to use with odin.";
+      description = ''
+        An optional debugger package to use with odin.
+        The default is `gdb`, if supported on the current system.
+      '';
     };
   };
 
@@ -27,9 +33,8 @@ in
       nasm
       clang
       gnumake
-      ols
-      cfg.debugger
       cfg.package
-    ];
+    ] ++ lib.optional (cfg.debugger != null) cfg.debugger
+    ++ lib.optional (lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.ols) pkgs.ols;
   };
 }

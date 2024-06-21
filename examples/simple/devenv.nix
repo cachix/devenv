@@ -22,7 +22,7 @@
   # pre-commit.hooks.shellcheck.enable = true;
 
   # https://devenv.sh/processes/
-  # processes.ping.exec = "ping example.com";
+  # processes.ping.exec = "ping localhost";
 
   # See full reference at https://devenv.sh/reference/options/
 }

@@ -1,14 +1,21 @@
-set -xe 
+set -xe
 
 rm devenv.yaml || true
 devenv build languages.python.package
-devenv shell ls -- -la | grep ".test.sh" 
+devenv shell ls -- -la | grep ".test.sh"
 devenv shell ls ../ | grep "cli"
 devenv info | grep "python3-"
 devenv show | grep "python3-"
-devenv search ncdu | grep "Found 3 packages and 0 options for 'ncdu'"
+devenv search ncdu |& grep "Found 3 packages and 0 options for 'ncdu'"
 # there should be no processes
 devenv up && exit 1
+
+# Skip container tests on macOS
+if [[ "$(uname)" == "Darwin" ]]; then
+  echo "Skipping container tests on macOS"
+  exit 0
+fi
+
 # containers
 devenv container build shell && exit 1
 devenv inputs add mk-shell-bin github:rrbutani/nix-mk-shell-bin --follows nixpkgs
