@@ -83,7 +83,9 @@ in
 
     packages = [
       config.just.package
-    ];
+    ] ++ lib.optionals config.just.features.convco.enable ([
+      pkgs.convco
+    ]);
 
     # NOTE: At somepoint, we may want to add `settings` options to some of these features.
     just.features = lib.recursiveUpdate
@@ -93,7 +95,7 @@ in
           justfile = ''
             # Generate CHANGELOG.md using recent commits
             changelog:
-              convco changelog -p ""
+              convco changelog -p "" > CHANGELOG.md
           '';
         };
         rust = {
