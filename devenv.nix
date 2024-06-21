@@ -3,6 +3,7 @@
 
   packages = [
     pkgs.cairo
+    pkgs.convco
     pkgs.xorg.libxcb
     pkgs.yaml2json
     pkgs.tesh
