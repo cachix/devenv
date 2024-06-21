@@ -29,6 +29,13 @@ let
           description = "Description of the script.";
           default = "";
         };
+        just = {
+          enable = lib.mkOption {
+            type = types.bool;
+            description = "Include this script in just runner.";
+            default = true;
+          };
+        };
         scriptPackage = lib.mkOption {
           internal = true;
           type = types.package;
