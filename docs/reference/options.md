@@ -21,6 +21,543 @@ list of package
 
 
 
+## android.enable
+
+
+
+Whether to enable Enable tools for Android Development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.abis
+
+The Android ABIs to install.
+By default, the arm64-v8a and x86_64 ABIs are installed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "arm64-v8a"
+  "x86_64"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.android-studio
+
+
+
+The Android Studio package to use.
+By default, the Android Studio package from nixpkgs is used.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.android-studio" `
+
+
+
+*Example:*
+` "pkgs.android-studio" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.buildTools.version
+
+
+
+The version of the Android build tools to install.
+By default, version 30.0.3 is installed or \[ “33.0.2” “30.0.3” ] if flutter is enabled.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "34.0.0"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.cmake.version
+
+
+
+The CMake versions to install for Android.
+By default, version 3.22.1 is installed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "3.22.1"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.cmdLineTools.version
+
+
+
+The version of the Android command line tools to install.
+By default, version 11.0 is installed or 8.0 if flutter is enabled.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "11.0" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.emulator.enable
+
+
+
+Whether to include the Android Emulator.
+By default, the emulator is included.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.emulator.version
+
+
+
+The version of the Android Emulator to install.
+By default, version 34.1.9 is installed.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "34.1.9" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.extraLicenses
+
+
+
+The additional Android licenses to accept.
+By default, several standard licenses are accepted.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "android-sdk-preview-license"
+  "android-googletv-license"
+  "android-sdk-arm-dbt-license"
+  "google-gdk-license"
+  "intel-android-extra-license"
+  "intel-android-sysimage-license"
+  "mips-android-sysimage-license"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.extras
+
+
+
+The Android extras to install.
+By default, the Google Cloud Messaging (GCM) extra is installed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "extras;google;gcm"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.flutter.enable
+
+
+
+Whether to include the Flutter tools.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.googleAPIs.enable
+
+
+
+Whether to use the Google APIs.
+By default, the Google APIs are used.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.googleTVAddOns.enable
+
+
+
+Whether to use the Google TV Add-Ons.
+By default, the Google TV Add-Ons are used.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.ndk.enable
+
+
+
+Whether to include the Android NDK (Native Development Kit).
+By default, the NDK is included.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.ndk.version
+
+
+
+The version of the Android NDK (Native Development Kit) to install.
+By default, version 26.1.10909125 is installed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "26.1.10909125"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.platformTools.version
+
+
+
+The version of the Android platform tools to install.
+By default, version 34.0.5 is installed or 34.0.5 if flutter is enabled.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "34.0.5" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.platforms.version
+
+
+
+The Android platform versions to install.
+By default, versions 32 and 34 are installed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "32"
+  "34"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.reactNative.enable
+
+
+
+Whether to include the Flutter tools.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.sources.enable
+
+
+
+Whether to include the Android sources.
+By default, the sources are not included.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.systemImageTypes
+
+
+
+The Android system image types to install.
+By default, the google_apis_playstore system image is installed.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "google_apis_playstore"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.systemImages.enable
+
+
+
+Whether to include the Android system images.
+By default, the system images are included.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.tools.version
+
+
+
+The version of the Android SDK tools to install.
+By default, version 26.1.1 is installed.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "26.1.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
 ## aws-vault.enable
 
 
@@ -69,6 +606,8 @@ package
 
 
 ## aws-vault.awscliWrapper
+
+
 
 Attribute set of packages including awscli2
 
@@ -2356,8 +2895,6 @@ null or package
 
 
 ## languages.haskell.stack
-
-
 
 Haskell stack to use.
 
@@ -4849,8 +5386,6 @@ boolean
 
 
 ## languages.ruby.bundler.package
-
-
 
 The bundler package to use.
 
@@ -7645,8 +8180,6 @@ string
 
 
 ## pre-commit.hooks.ansible-lint.language
-
-
 
 The language of the hook - tells pre-commit how to install the hook.
 

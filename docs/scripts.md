@@ -66,6 +66,8 @@ Entering shell ...
 }
 ```
 
+## Using your favourite language
+
 Scripts can also execute using a pacakage and have a description, which can be useful in your `enterShell`.
 
 ```nix title="devenv.nix"
