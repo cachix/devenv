@@ -72,17 +72,6 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     }
                 }
 
-                println!("  Running {}", dir_name);
-                // if .setup.sh exists, run it
-                let setup_script = path.join(".setup.sh");
-                if setup_script.exists() {
-                    println!("    Running .setup.sh");
-                    let _ = std::process::Command::new("bash")
-                        .arg(".setup.sh")
-                        .current_dir(path)
-                        .status()?;
-                }
-
                 let mut config = devenv::config::Config::load_from(path)?;
                 for input in args.override_input.chunks_exact(2) {
                     config.add_input(&input[0].clone(), &input[1].clone(), &[]);
@@ -104,10 +93,35 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     devenv_dotfile: Some(tmpdir.path().to_path_buf()),
                     ..Default::default()
                 };
-
                 let mut devenv = Devenv::new(options);
                 devenv.create_directories()?;
 
+                // A script to patch files in the working directory before the shell.
+                let patch_script = ".patch.sh";
+                let patch_script_path = path.join(patch_script);
+
+                // A script to run inside the shell before the test.
+                let setup_script = ".setup.sh";
+                let setup_script_path = path.join(setup_script);
+
+                println!("  Running {}", dir_name);
+
+                // Run .patch.sh if it exists
+                if patch_script_path.exists() {
+                    println!("    Running {patch_script}");
+                    let _ = std::process::Command::new("bash")
+                        .arg("./.patch.sh")
+                        .current_dir(path)
+                        .status()?;
+                }
+
+                // Run .setup.sh if it exists
+                if setup_script_path.exists() {
+                    println!("    Running {setup_script}");
+                    devenv.shell(&Some(format!("./{setup_script}")), &[], false)?;
+                }
+
+                // TODO: wait for processes to shut down before exiting
                 let status = devenv.test();
                 let result = TestResult {
                     name: dir_name.to_string(),

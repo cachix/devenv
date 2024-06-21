@@ -15,7 +15,7 @@ in
   # dotenv.enable = true;
 
   env = {
-    DATABASE_URL = "postgres://${db_user}@${config.env.PGHOST}/${db_name}";
+    DATABASE_URL = "postgres://${db_user}@/${db_name}?host=${config.env.PGHOST}";
     DEBUG = true;
     SECRET_KEY = "supersecret";
     STATIC_ROOT = config.devenv.state + "/static";
