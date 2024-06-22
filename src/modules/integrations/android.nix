@@ -278,8 +278,8 @@ in
     # override the aapt2 binary that gradle uses with the patched one from the sdk
     env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${lib.head cfg.buildTools.version}/aapt2";
 
-    env.FLUTTER_ROOT = if cfg.flutter.enable then pkgs.flutter else "";
-    env.DART_ROOT = if cfg.flutter.enable then "${pkgs.flutter}/bin/cache/dart-sdk" else "";
+    env.FLUTTER_ROOT = if cfg.flutter.enable then cfg.flutter.package else "";
+    env.DART_ROOT = if cfg.flutter.enable then "${cfg.flutter.package}/bin/cache/dart-sdk" else "";
 
     enterShell = ''
       set -e
