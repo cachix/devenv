@@ -301,6 +301,33 @@ boolean
 
 
 
+## android.flutter.package
+
+
+
+The Flutter package to use.
+By default, the Flutter package from nixpkgs is used.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.flutter" `
+
+
+
+*Example:*
+` "pkgs.flutter" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
 ## android.googleAPIs.enable
 
 
@@ -2296,8 +2323,6 @@ boolean
 
 ## languages.haskell.package
 
-
-
 Haskell compiler to use.
 
 
@@ -2337,6 +2362,8 @@ null or package
 
 
 ## languages.haskell.stack
+
+
 
 Haskell stack to use.
 
@@ -4806,8 +4833,6 @@ package
 
 ## languages.ruby.bundler.enable
 
-
-
 Whether to enable bundler.
 
 
@@ -4831,6 +4856,8 @@ boolean
 
 
 ## languages.ruby.bundler.package
+
+
 
 The bundler package to use.
 
@@ -7607,8 +7634,6 @@ boolean
 
 ## pre-commit.hooks.ansible-lint.files
 
-
-
 The pattern of files to run on.
 
 
@@ -7627,6 +7652,8 @@ string
 
 
 ## pre-commit.hooks.ansible-lint.language
+
+
 
 The language of the hook - tells pre-commit how to install the hook.
 
