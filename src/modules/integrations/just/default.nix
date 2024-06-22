@@ -28,7 +28,7 @@ in
 {
 
   imports = [{
-    options.just.features = mkOption {
+    options.just.recipes = mkOption {
       type = types.submoduleWith {
         modules = [{ freeformType = types.attrsOf recipeType; }];
         specialArgs = { inherit pkgs; };
@@ -99,7 +99,7 @@ in
       config.just.package
     ];
 
-    # NOTE: At somepoint, we may want to add `settings` options to some of these features.
+    # NOTE: At somepoint, we may want to add `settings` options to some of these recipes.
     just.recipes = lib.recursiveUpdate
       (lib.mapAttrs (_: lib.mapAttrs (_: lib.mkDefault)) {
         convco = {
@@ -172,14 +172,14 @@ in
           name = "justfile";
           text =
             lib.concatStringsSep "\n"
-              (lib.mapAttrsToList (name: feature: feature.outputs.justfile) config.just.recipes);
+              (lib.mapAttrsToList (name: recipe: recipe.outputs.justfile) config.just.recipes);
         };
       in
       ''
         ln -sf ${builtins.toString commonJustfile} ./${config.just.commonFileName}
 
         echo
-        echo "https://devenv.sh (version ${config.devenv.cliVersion}): Fast, Declarative, Reproducible, and Composable Developer Environments 💪💪"
+        echo "https://devenv.sh (version ${config.devenv.cliVersion}): Fast, Declarative, Reproducible, and Composable Developer Environments 🦾🦾"
         echo
         echo "Run 'just <recipe>' to get started"
         just --list
