@@ -33,8 +33,12 @@
   difftastic.enable = true;
 
   #enable just
-  just.enable = true;
-  just.recipes.convco.enable = true;
+  just = {
+    enable = true;
+    recipes = {
+      convco.enable = true;
+    };
+  };
 
   dotenv.enable = true;
 
