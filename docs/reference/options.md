@@ -1736,7 +1736,7 @@ string
 
 
 
-## just.features
+## just.recipes
 
 
 
@@ -1758,11 +1758,11 @@ attribute set of (submodule)
 
 
 
-## just.features.\<name>.enable
+## just.recipes.\<name>.enable
 
 
 
-Whether to enable Enable this feature.
+Whether to enable Enable this Recipe.
 
 
 
@@ -1780,15 +1780,36 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.\<name>.justfile
+## just.recipes.\<name>.package
 
 
 
-The justfile representing this feature.
+An optional package that provides the recipe.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.\<name>.justfile
+
+
+
+The justfile representing this recipe.
 
 
 
@@ -1796,15 +1817,15 @@ The justfile representing this feature.
 string or path
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.\<name>.outputs.justfile
+## just.recipes.\<name>.outputs.justfile
 
 
 
-The justfile code for importing this feature’s justfile.
+The justfile code for importing this recipe’s justfile.
 
 See https://just.systems/man/en/chapter_53.html
 
@@ -1819,11 +1840,11 @@ string *(read only)*
 ` "" `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.convco
+## just.recipes.convco
 
 
 
@@ -1839,11 +1860,11 @@ submodule
 
 
 
-## just.features.convco.enable
+## just.recipes.convco.enable
 
 
 
-Whether to enable Enable this feature.
+Whether to enable Enable this Recipe.
 
 
 
@@ -1861,15 +1882,36 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.convco.justfile
+## just.recipes.convco.package
 
 
 
-The justfile representing this feature.
+An optional package that provides the recipe.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.convco.justfile
+
+
+
+The justfile representing this recipe.
 
 
 
@@ -1877,15 +1919,15 @@ The justfile representing this feature.
 string or path
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.convco.outputs.justfile
+## just.recipes.convco.outputs.justfile
 
 
 
-The justfile code for importing this feature’s justfile.
+The justfile code for importing this recipe’s justfile.
 
 See https://just.systems/man/en/chapter_53.html
 
@@ -1900,11 +1942,32 @@ string *(read only)*
 ` "" `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.rust
+## just.recipes.convco.settings.file-name
+
+
+
+The name of the file to output the chaneglog to.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "CHANGELOG.md" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
+
+
+
+## just.recipes.rust
 
 
 
@@ -1920,11 +1983,11 @@ submodule
 
 
 
-## just.features.rust.enable
+## just.recipes.rust.enable
 
 
 
-Whether to enable Enable this feature.
+Whether to enable Enable this Recipe.
 
 
 
@@ -1942,15 +2005,36 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.rust.justfile
+## just.recipes.rust.package
 
 
 
-The justfile representing this feature.
+An optional package that provides the recipe.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.rust.justfile
+
+
+
+The justfile representing this recipe.
 
 
 
@@ -1958,15 +2042,15 @@ The justfile representing this feature.
 string or path
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.rust.outputs.justfile
+## just.recipes.rust.outputs.justfile
 
 
 
-The justfile code for importing this feature’s justfile.
+The justfile code for importing this recipe’s justfile.
 
 See https://just.systems/man/en/chapter_53.html
 
@@ -1981,11 +2065,11 @@ string *(read only)*
 ` "" `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.treefmt
+## just.recipes.treefmt
 
 
 
@@ -2001,11 +2085,11 @@ submodule
 
 
 
-## just.features.treefmt.enable
+## just.recipes.treefmt.enable
 
 
 
-Whether to enable Enable this feature.
+Whether to enable Enable this Recipe.
 
 
 
@@ -2023,15 +2107,36 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.treefmt.justfile
+## just.recipes.treefmt.package
 
 
 
-The justfile representing this feature.
+An optional package that provides the recipe.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.treefmt.justfile
+
+
+
+The justfile representing this recipe.
 
 
 
@@ -2039,15 +2144,15 @@ The justfile representing this feature.
 string or path
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.treefmt.outputs.justfile
+## just.recipes.treefmt.outputs.justfile
 
 
 
-The justfile code for importing this feature’s justfile.
+The justfile code for importing this recipe’s justfile.
 
 See https://just.systems/man/en/chapter_53.html
 
@@ -2062,11 +2167,11 @@ string *(read only)*
 ` "" `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.up
+## just.recipes.up
 
 
 
@@ -2082,11 +2187,11 @@ submodule
 
 
 
-## just.features.up.enable
+## just.recipes.up.enable
 
 
 
-Whether to enable Enable this feature.
+Whether to enable Enable this Recipe.
 
 
 
@@ -2104,15 +2209,34 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.up.justfile
+## just.recipes.up.package
+
+An optional package that provides the recipe.
 
 
 
-The justfile representing this feature.
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.up.justfile
+
+
+
+The justfile representing this recipe.
 
 
 
@@ -2120,15 +2244,15 @@ The justfile representing this feature.
 string or path
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.up.outputs.justfile
+## just.recipes.up.outputs.justfile
 
 
 
-The justfile code for importing this feature’s justfile.
+The justfile code for importing this recipe’s justfile.
 
 See https://just.systems/man/en/chapter_53.html
 
@@ -2143,11 +2267,11 @@ string *(read only)*
 ` "" `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.version
+## just.recipes.version
 
 
 
@@ -2163,11 +2287,11 @@ submodule
 
 
 
-## just.features.version.enable
+## just.recipes.version.enable
 
 
 
-Whether to enable Enable this feature.
+Whether to enable Enable this Recipe.
 
 
 
@@ -2185,15 +2309,36 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.version.justfile
+## just.recipes.version.package
 
 
 
-The justfile representing this feature.
+An optional package that provides the recipe.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.version.justfile
+
+
+
+The justfile representing this recipe.
 
 
 
@@ -2201,15 +2346,15 @@ The justfile representing this feature.
 string or path
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
-## just.features.version.outputs.justfile
+## just.recipes.version.outputs.justfile
 
 
 
-The justfile code for importing this feature’s justfile.
+The justfile code for importing this recipe’s justfile.
 
 See https://just.systems/man/en/chapter_53.html
 
@@ -2224,7 +2369,7 @@ string *(read only)*
 ` "" `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/feature.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
 
 
 
@@ -2810,6 +2955,8 @@ package
 
 ## languages.go.enable
 
+
+
 Whether to enable tools for Go development.
 
 
@@ -2880,6 +3027,8 @@ boolean
 
 
 ## languages.haskell.package
+
+
 
 Haskell compiler to use.
 
@@ -4557,8 +4706,6 @@ string
 
 ## languages.purescript.enable
 
-
-
 Whether to enable tools for PureScript development.
 
 
@@ -5250,6 +5397,8 @@ boolean
 
 ## languages.racket.package
 
+
+
 The Racket package to use.
 
 
@@ -5388,6 +5537,8 @@ package
 
 
 ## languages.ruby.bundler.enable
+
+
 
 Whether to enable bundler.
 
@@ -7435,8 +7586,6 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 ## pre-commit.hooks.\<name>.types
 
-
-
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
 
@@ -8108,6 +8257,8 @@ string
 
 ## pre-commit.hooks.ansible-lint.entry
 
+
+
 The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
 
 
@@ -8187,6 +8338,8 @@ boolean
 
 
 ## pre-commit.hooks.ansible-lint.files
+
+
 
 The pattern of files to run on.
 
@@ -10171,6 +10324,8 @@ list of string
 
 
 ## pre-commit.hooks.cmake-format.types_or
+
+
 
 List of file types to run on, where only a single type needs to match.
 
@@ -12268,6 +12423,8 @@ string
 
 ## pre-commit.hooks.dune-fmt.name
 
+
+
 The name of the hook. Shown during hook execution.
 
 
@@ -14341,6 +14498,8 @@ boolean
 
 ## pre-commit.hooks.flynt.settings.quiet
 
+
+
 Run without output.
 
 
@@ -16233,6 +16392,8 @@ boolean
 
 
 ## pre-commit.hooks.lacheck.package
+
+
 
 An optional package that provides the hook.
 
@@ -18520,6 +18681,8 @@ string
 
 ## pre-commit.hooks.mdl.name
 
+
+
 The name of the hook. Shown during hook execution.
 
 
@@ -20586,6 +20749,8 @@ attribute set of unspecified value
 
 
 ## pre-commit.hooks.no-commit-to-branch.require_serial
+
+
 
 if true this hook will execute using a single process instead of in parallel.
 
@@ -22705,6 +22870,8 @@ internal name, same as ` id `
 
 ## pre-commit.hooks.phpstan.pass_filenames
 
+
+
 Whether to pass filenames as arguments to the entry point.
 
 
@@ -24808,6 +24975,8 @@ boolean
 
 ## pre-commit.hooks.pylint.settings.binPath
 
+
+
 Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
 
 
@@ -26899,6 +27068,8 @@ boolean
 
 
 ## pre-commit.hooks.rome.raw
+
+
 
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
@@ -29016,6 +29187,8 @@ list of package
 
 
 ## pre-commit.hooks.typos.fail_fast
+
+
 
 if true pre-commit will stop running hooks if this hook fails.
 
@@ -31251,6 +31424,8 @@ string
 
 ## scripts.\<name>.description
 
+
+
 Description of the script.
 
 
@@ -31726,7 +31901,7 @@ path
 
 
 *Default:*
-` "/home/sincore/source/devenv/.devenv/state/caddy" `
+` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -33681,6 +33856,8 @@ package
 
 
 ## services.minio.accessKey
+
+
 
 Access key of 5 to 20 characters in length that clients use to access the server.
 
