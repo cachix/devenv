@@ -212,14 +212,7 @@ in
       '';
     };
 
-    android-studio.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      defaultText = "true";
-      description = ''
-        Weather to enable the installation of Android Studio package.
-      '';
-    };
+    android-studio.enable = lib.mkEnableOption "the installation of Android Studio";
 
     android-studio.package = lib.mkOption {
       type = lib.types.package;
