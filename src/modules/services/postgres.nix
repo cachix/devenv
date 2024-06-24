@@ -283,7 +283,7 @@ in
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
     env.PGHOST =
-      if cfg.listen_addresses == ""
+      if cfg.listen_addresses == "" || cfg.listen_addresses == "*"
       then runtimeDir
       else cfg.listen_addresses;
     env.PGPORT = cfg.port;
