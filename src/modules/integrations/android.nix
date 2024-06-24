@@ -40,7 +40,7 @@ let
 in
 {
   options.android = {
-    enable = lib.mkEnableOption "Enable tools for Android Development";
+    enable = lib.mkEnableOption "tools for Android Development";
 
     platforms.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;

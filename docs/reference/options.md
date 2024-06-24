@@ -25,7 +25,7 @@ list of package
 
 
 
-Whether to enable Enable tools for Android Development.
+Whether to enable tools for Android Development.
 
 
 
