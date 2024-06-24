@@ -40,7 +40,7 @@ let
 in
 {
   options.android = {
-    enable = lib.mkEnableOption "Enable tools for Android Development";
+    enable = lib.mkEnableOption "tools for Android Development";
 
     platforms.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -233,6 +233,17 @@ in
       '';
     };
 
+    flutter.package = lib.mkOption {
+      type = lib.types.package;
+      default = pkgs.flutter;
+      defaultText = "pkgs.flutter";
+      description = ''
+        The Flutter package to use.
+        By default, the Flutter package from nixpkgs is used.
+      '';
+      example = "pkgs.flutter";
+    };
+
     reactNative.enable = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -247,7 +258,7 @@ in
       androidSdk
       platformTools
       androidEmulator
-    ] ++ (lib.optional cfg.flutter.enable pkgs.flutter) ++ (lib.optional cfg.android-studio.enable cfg.android-studio.package);
+    ] ++ (lib.optional cfg.flutter.enable cfg.flutter.package) ++ (lib.optional cfg.android-studio.enable cfg.android-studio.package);
 
     # Nested conditional for flutter
     languages = lib.mkMerge [
@@ -268,8 +279,8 @@ in
     # override the aapt2 binary that gradle uses with the patched one from the sdk
     env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${lib.head cfg.buildTools.version}/aapt2";
 
-    env.FLUTTER_ROOT = if cfg.flutter.enable then pkgs.flutter else "";
-    env.DART_ROOT = if cfg.flutter.enable then "${pkgs.flutter}/bin/cache/dart-sdk" else "";
+    env.FLUTTER_ROOT = if cfg.flutter.enable then cfg.flutter.package else "";
+    env.DART_ROOT = if cfg.flutter.enable then "${cfg.flutter.package}/bin/cache/dart-sdk" else "";
 
     enterShell = ''
       set -e
