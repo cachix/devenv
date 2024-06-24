@@ -2241,6 +2241,8 @@ boolean
 
 ## just.recipes.up.package
 
+
+
 An optional package that provides the recipe.
 
 
@@ -2275,8 +2277,6 @@ string or path
 
 
 ## just.recipes.up.outputs.justfile
-
-
 
 The justfile code for importing this recipe’s justfile.
 
@@ -3074,6 +3074,8 @@ package
 
 
 ## languages.haskell.languageServer
+
+
 
 Haskell language server to use.
 
@@ -4709,8 +4711,6 @@ null or strings concatenated with “\\n”
 
 ## languages.php.version
 
-
-
 The PHP version to use.
 
 
@@ -4729,6 +4729,8 @@ string
 
 
 ## languages.purescript.enable
+
+
 
 Whether to enable tools for PureScript development.
 
@@ -5493,6 +5495,8 @@ boolean
 
 
 ## languages.robotframework.python
+
+
 
 The Python package to use.
 
@@ -7587,8 +7591,6 @@ boolean
 
 ## pre-commit.hooks.\<name>.stages
 
-
-
 Confines the hook to run at a particular stage.
 
 
@@ -7607,6 +7609,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## pre-commit.hooks.\<name>.types
+
+
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -8339,6 +8343,8 @@ list of package
 
 
 ## pre-commit.hooks.ansible-lint.fail_fast
+
+
 
 if true pre-commit will stop running hooks if this hook fails.
 
@@ -9533,6 +9539,8 @@ null or package
 
 
 ## pre-commit.hooks.clippy.packageOverrides.cargo
+
+
 
 The cargo package to use
 
@@ -11838,6 +11846,8 @@ null or package
 
 ## pre-commit.hooks.denolint.always_run
 
+
+
 if true this hook will run even if there are no matching files.
 
 
@@ -13873,6 +13883,8 @@ attribute set of unspecified value
 
 
 ## pre-commit.hooks.flake8.require_serial
+
+
 
 if true this hook will execute using a single process instead of in parallel.
 
@@ -16012,6 +16024,8 @@ boolean
 
 ## pre-commit.hooks.isort.description
 
+
+
 Description of the hook. Used for metadata purposes only.
 
 
@@ -18052,6 +18066,8 @@ boolean
 
 
 ## pre-commit.hooks.markdownlint
+
+
 
 markdownlint hook
 
@@ -20158,6 +20174,8 @@ string
 
 
 ## pre-commit.hooks.nixfmt.entry
+
+
 
 The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
 
@@ -22292,6 +22310,8 @@ boolean
 
 ## pre-commit.hooks.phpcs.description
 
+
+
 Description of the hook. Used for metadata purposes only.
 
 
@@ -24371,6 +24391,8 @@ string
 
 ## pre-commit.hooks.psalm.excludes
 
+
+
 Exclude files that were matched by these patterns.
 
 
@@ -26406,6 +26428,8 @@ submodule
 
 
 ## pre-commit.hooks.ripsecrets.enable
+
+
 
 Whether to enable this pre-commit hook.
 
@@ -28539,6 +28563,8 @@ list of string
 
 
 ## pre-commit.hooks.statix.types_or
+
+
 
 List of file types to run on, where only a single type needs to match.
 
@@ -30696,6 +30722,8 @@ one of “default”, “relaxed”
 
 
 ## pre-commit.hooks.yamllint.settings.strict
+
+
 
 Return non-zero exit code on warnings as well as errors.
 
@@ -33092,6 +33120,8 @@ boolean
 
 
 ## services.elasticsearch.tcp_port
+
+
 
 Elasticsearch port for the node to node communication.
 
