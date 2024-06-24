@@ -140,15 +140,6 @@
     '';
   };
 
-  #enable just
-  just = {
-    enable = true;
-    recipes = {
-      convco.enable = true;
-      treefmt.enable = true;
-    };
-  };
-
   #enable tree fmt
   treefmt = {
     projectRootFile = "devenv.nix";
