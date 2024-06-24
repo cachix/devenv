@@ -73,7 +73,33 @@ list of string
 
 
 
-## android.android-studio
+## android.android-studio.enable
+
+
+
+Whether to enable the installation of Android Studio.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
+
+
+
+## android.android-studio.package
 
 
 
@@ -3049,8 +3075,6 @@ package
 
 ## languages.haskell.languageServer
 
-
-
 Haskell language server to use.
 
 
@@ -5469,8 +5493,6 @@ boolean
 
 
 ## languages.robotframework.python
-
-
 
 The Python package to use.
 
@@ -8317,8 +8339,6 @@ list of package
 
 
 ## pre-commit.hooks.ansible-lint.fail_fast
-
-
 
 if true pre-commit will stop running hooks if this hook fails.
 
