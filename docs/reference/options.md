@@ -25,7 +25,7 @@ list of package
 
 
 
-Whether to enable Enable tools for Android Development.
+Whether to enable tools for Android Development.
 
 
 
@@ -31879,7 +31879,7 @@ path
 
 
 *Default:*
-` "/home/sincore/source/devenv/.devenv/state/caddy" `
+` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
