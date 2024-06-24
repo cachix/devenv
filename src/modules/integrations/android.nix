@@ -212,7 +212,9 @@ in
       '';
     };
 
-    android-studio = lib.mkOption {
+    android-studio.enable = lib.mkEnableOption "the installation of Android Studio";
+
+    android-studio.package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.android-studio;
       defaultText = "pkgs.android-studio";
@@ -256,8 +258,7 @@ in
       androidSdk
       platformTools
       androidEmulator
-      cfg.android-studio
-    ] ++ (lib.optional cfg.flutter.enable cfg.flutter.package);
+    ] ++ (lib.optional cfg.flutter.enable cfg.flutter.package) ++ (lib.optional cfg.android-studio.enable cfg.android-studio.package);
 
     # Nested conditional for flutter
     languages = lib.mkMerge [
