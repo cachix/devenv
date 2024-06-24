@@ -5,6 +5,7 @@
         in {
         pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
       pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
+      treefmt-nix.url = "github:numtide/treefmt-nix";
       nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
       devenv.url = "github:cachix/devenv?dir=src/modules";
       } // (if builtins.pathExists (devenv_dotfile + "/flake.json")
