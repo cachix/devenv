@@ -25,6 +25,7 @@
   services.rabbitmq.enable = true;
   services.redis.enable = true;
   services.temporal.enable = true;
+  services.trafficserver.enable = true;
   services.typesense.enable = true;
   services.varnish.enable = true;
   services.vault.enable = true;
