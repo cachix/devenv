@@ -35405,6 +35405,590 @@ Port for the Web UI.
 
 
 
+## services.trafficserver.enable
+
+
+
+Whether to enable Apache Traffic Server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.package
+
+
+
+Apache Traffic Server package
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` <derivation trafficserver-9.2.3> `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.cache
+
+
+
+Caching rules that overrule the origin’s caching policy.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/cache.config.en.html)
+for more details.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "dest_domain=example.com suffix=js action=never-cache" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.hosting
+
+
+
+Partition the cache according to origin server or domain
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/hosting.config.en.html)
+for more details.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "domain=example.com volume=1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.ipAllow
+
+
+
+Control client access to Traffic Server and Traffic Server connections
+to upstream servers.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/ip_allow.yaml.en.html)
+for more details.
+
+
+
+*Type:*
+null or YAML value
+
+
+
+*Default:*
+upstream defaults
+
+
+
+*Example:*
+
+```
+{
+  ip_allow = [{
+    apply = "in";
+    ip_addrs = "127.0.0.1";
+    action = "allow";
+    methods = "ALL";
+  }];
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.logging
+
+
+
+Configure logs.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/logging.yaml.en.html)
+for more details.
+
+
+
+*Type:*
+null or YAML value
+
+
+
+*Default:*
+upstream defaults
+
+
+
+*Example:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.parent
+
+
+
+Identify the parent proxies used in an cache hierarchy.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/parent.config.en.html)
+for more details.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
+```
+''
+  dest_domain=. method=get parent="p1.example:8080; p2.example:8080" round_robin=true
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.plugins
+
+
+
+Controls run-time loadable plugins available to Traffic Server, as
+well as their configuration.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/plugin.config.en.html)
+for more details.
+
+
+
+*Type:*
+list of (submodule)
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.plugins.\*.arg
+
+
+
+arguments to pass to the plugin
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "--header=ATS-My-Debug" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.plugins.\*.path
+
+
+
+Path to plugin. The path can either be absolute, or relative to
+the plugin directory.
+
+
+
+*Type:*
+string
+
+
+
+*Example:*
+` "xdebug.so" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.records
+
+
+
+List of configurable variables used by Traffic Server.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/records.config.en.html)
+for more details.
+
+When defining the values for the option ` x.y `, a nested attribute should
+be used. Using a flat attribute set with the attribute name ` x.y ` will
+result in an error.
+
+If options for both ` x.y ` and ` x.y.z ` needs to be set, you can set
+` x.y._ ` as ` x.y `. This only applies to Traffic Server versions prior to
+10. Traffic Server 10 and onwards uses YAML configuration, which doesn’t
+have this kind of problem.
+
+
+
+*Type:*
+Traffic Server records value
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  proxy = {
+    config = {
+      proxy_name = "my_server";
+    };
+  };
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.remap
+
+
+
+URL remapping rules used by Traffic Server.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/remap.config.en.html)
+for more details.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "map http://from.example http://origin.example" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.runroot
+
+
+
+File layout used by Traffic Server
+
+
+
+*Type:*
+unspecified value *(read only)*
+
+
+
+*Default:*
+
+```
+{
+  bindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
+  cachedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache";
+  datadir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/share";
+  exec_prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
+  includedir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/include";
+  libdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/lib";
+  libexecdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/libexec";
+  localstatedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/state";
+  logdir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/log";
+  prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
+  runtimedir = "/run/user/1001/devenv-0957646/trafficserver";
+  sbindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
+  sysconfdir = <derivation trafficserver-config>;
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.sni
+
+
+
+Configure aspects of TLS connection handling for both inbound and
+outbound connections.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/sni.yaml.en.html)
+for more details.
+
+
+
+*Type:*
+null or YAML value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  sni = [{
+    fqdn = "no-http2.example.com";
+    https = "off";
+  }];
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.splitDns
+
+
+
+Specify the DNS server that Traffic Server should use under specific
+conditions.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/splitdns.config.en.html)
+for more details.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
+```
+''
+  dest_domain=internal.corp.example named="255.255.255.255:212 255.255.255.254" def_domain=corp.example search_list="corp.example corp1.example"
+  dest_domain=!internal.corp.example named=255.255.255.253
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.sslMulticert
+
+
+
+Configure SSL server certificates to terminate the SSL sessions.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/ssl_multicert.config.en.html)
+for more details.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "dest_ip=* ssl_cert_name=default.pem" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.storage
+
+
+
+List all the storage that make up the Traffic Server cache.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/storage.config.en.html)
+for more details.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+` "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache 256M" `
+
+
+
+*Example:*
+` "/dev/disk/by-id/XXXXX volume=1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.strategies
+
+
+
+Specify the next hop proxies used in an cache hierarchy and the
+algorithms used to select the next proxy.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/strategies.yaml.en.html)
+for more details.
+
+
+
+*Type:*
+null or YAML value
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
+## services.trafficserver.volume
+
+
+
+Manage cache space more efficiently and restrict disk usage by
+creating cache volumes of different sizes.
+
+Consult the [upstream documentation](https://docs.trafficserver.apache.org/en/latest/admin-guide/files/volume.config.en.html)
+for more details.
+
+
+
+*Type:*
+null or YAML value
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "volume=1 scheme=http size=20%" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
+
+
 ## services.typesense.enable
 
 
