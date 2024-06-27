@@ -19,7 +19,7 @@ Here's an example starting PostgreSQL with a few extensions:
     ];
     settings.shared_preload_libraries = "timescaledb";
     initialScript = ''
-      CREATE CREATE EXTENSION IF NOT EXISTS timescaledb;
+      CREATE EXTENSION IF NOT EXISTS timescaledb;
 
       CREATE DATABASE postgres;
       CREATE USER postgres WITH ENCRYPTED PASSWORD 'postgres';
