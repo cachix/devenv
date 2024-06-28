@@ -282,7 +282,7 @@ in
     packages = [ postgresPkg startScript ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
-    env.PGHOST = runtimeDir;
+    env.PGHOST = lib.mkDefault runtimeDir;
     env.PGPORT = cfg.port;
 
     services.postgres.settings = {
