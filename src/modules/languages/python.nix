@@ -64,8 +64,8 @@ let
         uv venv "$VENV_PATH"
       ''
       else ''
-          echo ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
-          ${package.interpreter} -m venv --upgrade-deps "$VENV_PATH"
+          echo ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
+          ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
         ''
       }
       echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
