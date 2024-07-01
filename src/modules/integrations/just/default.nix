@@ -7,6 +7,8 @@ let
   inherit (lib) types mkOption mkEnableOption;
   inherit (import ./utils.nix { inherit pkgs; }) mkCmdArgs;
 
+  version = lib.fileContents ./../../latest-version;
+
   recipeModule = {
     imports = [ ./recipe-module.nix ];
     config._module.args = { inherit pkgs; };
@@ -179,7 +181,7 @@ in
         ln -sf ${builtins.toString commonJustfile} ./${config.just.commonFileName}
 
         echo
-        echo "https://devenv.sh (version ${config.devenv.cliVersion}): Fast, Declarative, Reproducible, and Composable Developer Environments 🦾🦾"
+        echo "https://devenv.sh (version ${version}): Fast, Declarative, Reproducible, and Composable Developer Environments 🦾🦾"
         echo
         echo "Run 'just <recipe>' to get started"
         just --list
