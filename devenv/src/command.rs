@@ -199,18 +199,18 @@ impl Devenv {
 
                         // handle cachix.push
                         if let Some(push_cache) = &cachix_caches.caches.push {
-                            if let Ok(_) = env::var("CACHIX_AUTH_TOKEN") {
+                            if env::var("CACHIX_AUTH_TOKEN").is_ok() {
                                 let args = cmd
                                     .get_args()
                                     .map(|arg| arg.to_str().unwrap())
                                     .collect::<Vec<_>>();
                                 let envs = cmd.get_envs().collect::<Vec<_>>();
                                 let command_name = cmd.get_program().to_string_lossy();
-                                let mut newcmd = std::process::Command::new(format!(
-                                    "cachix watch-exec {} {}",
-                                    push_cache, command_name
-                                ));
-                                newcmd.args(args);
+                                let mut newcmd = std::process::Command::new("cachix");
+                                newcmd
+                                    .args(["watch-exec", &push_cache, "--"])
+                                    .arg(command_name.as_ref())
+                                    .args(args);
                                 for (key, value) in envs {
                                     if let Some(value) = value {
                                         newcmd.env(key, value);
