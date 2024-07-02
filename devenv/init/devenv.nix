@@ -35,5 +35,8 @@
   # https://devenv.sh/pre-commit-hooks/
   # pre-commit.hooks.shellcheck.enable = true;
 
+  # https://devenv.sh/treefmt/
+  # treefmt.programs.nixpkgs-fmt.enable = true;
+
   # See full reference at https://devenv.sh/reference/options/
 }
