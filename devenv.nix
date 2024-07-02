@@ -143,7 +143,7 @@
   just = {
     enable = true;
     recipes = {
-      convco.enable = true;
+      git-cliff.enable = true;
       treefmt.enable = true;
     };
   };

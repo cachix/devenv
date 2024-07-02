@@ -4,27 +4,15 @@
 { pkgs, lib, config, ... }:
 
 let
-  inherit (lib) types mkOption mkEnableOption;
-  inherit (import ./utils.nix { inherit pkgs; }) mkCmdArgs;
+  inherit (lib) types mkOption mkEnableOption attrsets;
+  inherit (import ./utils.nix { inherit pkgs; }) recipeModule recipeType;
 
   version = lib.fileContents ./../../latest-version;
 
-  recipeModule = {
-    imports = [ ./recipe-module.nix ];
-    config._module.args = { inherit pkgs; };
-  };
-  recipeType = types.submodule recipeModule;
+  # Returns a list of all the entries in a folder
+  listEntries = path:
+    map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
-  devenvScriptRecipes = lib.genAttrs (builtins.attrNames config.scripts) (name:
-    let
-      script = config.scripts.${name};
-    in
-    mkOption {
-      description = script.description;
-      type = types.submodule {
-        imports = [ recipeModule ];
-      };
-    });
 
 in
 {
@@ -37,7 +25,8 @@ in
       };
       default = { };
     };
-  }];
+  }]
+  ++ (listEntries ./recipes);
 
   options.just = {
     enable = mkEnableOption "the just command runner";
@@ -57,42 +46,6 @@ in
       '';
     };
 
-
-    recipes = lib.recursiveUpdate
-      devenvScriptRecipes
-      ({
-        # PLEASE keep this sorted alphabetically.
-        convco = mkOption {
-          description = "Add the 'changelog' target calling convco";
-          type = types.submodule {
-            imports = [ recipeModule ];
-            options.settings = {
-              file-name =
-                mkOption {
-                  type = types.str;
-                  description = lib.mdDoc "The name of the file to output the chaneglog to.";
-                  default = "CHANGELOG.md";
-                };
-            };
-          };
-        };
-        rust = mkOption {
-          description = "Add 'w' and 'test' targets for running cargo";
-          type = types.submodule { imports = [ recipeModule ]; };
-        };
-        treefmt = mkOption {
-          description = "Add the 'fmt' target to format source tree using treefmt";
-          type = types.submodule { imports = [ recipeModule ]; };
-        };
-        up = mkOption {
-          description = "Starts processes in foreground. See http://devenv.sh/processes";
-          type = types.submodule { imports = [ recipeModule ]; };
-        };
-        version = mkOption {
-          description = "Display devenv version";
-          type = types.submodule { imports = [ recipeModule ]; };
-        };
-      });
   };
 
   config = lib.mkIf config.just.enable {
@@ -100,73 +53,6 @@ in
     packages = [
       config.just.package
     ];
-
-    # NOTE: At somepoint, we may want to add `settings` options to some of these recipes.
-    just.recipes = lib.recursiveUpdate
-      (lib.mapAttrs (_: lib.mapAttrs (_: lib.mkDefault)) {
-        convco = {
-          package = pkgs.convco;
-          justfile =
-            let
-              binPath = lib.getExe config.just.recipes.convco.package;
-              fileName = config.just.recipes.convco.settings.file-name;
-            in
-            ''
-              # Generate ${fileName} using recent commits
-              changelog:
-                ${binPath} changelog -p "" > ${fileName}
-            '';
-        };
-        rust = {
-          justfile = ''
-            # Compile and watch the project
-            w:
-              cargo watch
-
-            # Run and watch 'cargo test'
-            test:
-              cargo watch -s "cargo test"
-          '';
-        };
-        treefmt = {
-          justfile = ''
-            # Auto-format the source tree using treefmt
-            fmt:
-              treefmt
-          '';
-        };
-        up = {
-          enable = true;
-          justfile = ''
-            # Starts processes in foreground. See http://devenv.sh/processes
-            up:
-              devenv up
-          '';
-        };
-        version = {
-          enable = true;
-          justfile = ''
-            # Display devenv version
-            version:
-              devenv version
-          '';
-        };
-      })
-
-      #this uses the devenv Scripts to create Just recipes.
-      (lib.genAttrs (builtins.attrNames config.scripts) (name:
-        let
-          script = config.scripts.${name};
-        in
-        {
-          enable = script.just.enable;
-          justfile = ''
-            #${script.description}
-            ${name}:
-              ${name}
-          '';
-        }));
-
 
     enterShell =
       let
