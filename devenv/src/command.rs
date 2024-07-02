@@ -1,5 +1,5 @@
 use crate::devenv::Devenv;
-use miette::{bail, Result};
+use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::env;
@@ -58,23 +58,21 @@ impl Devenv {
             }
             let error = cmd.exec();
             self.logger.error(&format!(
-                "Failed to replace shell with `{} {}`: {error}",
-                cmd.get_program().to_string_lossy(),
-                cmd.get_args()
-                    .map(|arg| arg.to_str().unwrap())
-                    .collect::<Vec<_>>()
-                    .join(" ")
+                "Failed to replace shell with `{}`: {error}",
+                display_command(&cmd),
             ));
             bail!("Failed to replace shell")
         } else {
-            let result = if options.logging {
+            if options.logging {
                 cmd.stdin(std::process::Stdio::inherit())
-                    .stderr(std::process::Stdio::inherit())
-                    .output()
-                    .expect("Failed to run command")
-            } else {
-                cmd.output().expect("Failed to run command")
-            };
+                    .stderr(std::process::Stdio::inherit());
+            }
+
+            let result = cmd
+                .output()
+                .into_diagnostic()
+                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+
             if !result.status.success() {
                 let code = match result.status.code() {
                     Some(code) => format!("with exit code {}", code),
@@ -93,12 +91,8 @@ impl Devenv {
                     cmd.arg("--debugger").exec();
                 }
                 bail!(format!(
-                    "Command `{} {}` failed with {code}",
-                    cmd.get_program().to_string_lossy(),
-                    cmd.get_args()
-                        .map(|arg| arg.to_str().unwrap())
-                        .collect::<Vec<_>>()
-                        .join(" ")
+                    "Command `{}` failed with {code}",
+                    display_command(&cmd)
                 ))
             } else {
                 self.logger = prev_logging;
@@ -237,14 +231,8 @@ impl Devenv {
         cmd.current_dir(self.devenv_root());
 
         if self.global_options.verbose {
-            self.logger.debug(&format!(
-                "Running command: {} {}",
-                command,
-                cmd.get_args()
-                    .map(|arg| arg.to_str().unwrap())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ));
+            self.logger
+                .debug(&format!("Running command: {}", display_command(&cmd)));
         }
 
         Ok(cmd)
@@ -402,6 +390,17 @@ impl Devenv {
             }
         }
     }
+}
+
+/// Display a command as a pretty string.
+fn display_command(cmd: &std::process::Command) -> String {
+    let command = cmd.get_program().to_string_lossy();
+    let args = cmd
+        .get_args()
+        .map(|arg| arg.to_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("{command} {args}")
 }
 
 #[derive(Deserialize, Clone)]
