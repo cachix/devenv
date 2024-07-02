@@ -2,6 +2,7 @@
 
 let
   inherit (lib) types mkOption mkEnableOption;
+  inherit (lib.lists) optionals;
   inherit (import ../utils.nix { inherit lib pkgs; }) recipeModule recipeType;
 
 in
@@ -13,11 +14,20 @@ in
     };
   };
 
-  config.just.recipes.treefmt = {
-    justfile = ''
-      # Auto-format the source tree using treefmt
-      fmt:
-        treefmt
-    '';
+  config = lib.mkIf config.just.enable {
+    warnings = optionals ((lib.filterAttrs (id: value: value.enable) config.treefmt.programs) == { }) [
+      ''
+        You have enabled the Just runner for treefmt but do not have any formatters enabled.
+      ''
+    ];
+
+    just.recipes.treefmt = {
+      package = config.treefmt.build.wrapper;
+      justfile = ''
+        # Auto-format the source tree using treefmt
+        fmt:
+          ${lib.getExe config.just.recipes.treefmt.package}
+      '';
+    };
   };
 }
