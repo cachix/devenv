@@ -5,7 +5,7 @@
 
 let
   inherit (lib) types mkOption mkEnableOption attrsets;
-  inherit (import ./utils.nix { inherit pkgs; }) recipeModule recipeType;
+  inherit (import ./utils.nix { inherit lib pkgs; }) recipeModule recipeType;
 
   version = lib.fileContents ./../../latest-version;
 
