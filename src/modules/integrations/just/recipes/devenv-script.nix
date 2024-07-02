@@ -30,8 +30,8 @@ in
           script = config.scripts.${name};
         in
         {
-          enable = script.just.enable;
-          justfile = ''
+          enable = lib.mkDefault script.just.enable;
+          justfile = lib.mkDefault ''
             #${script.description}
             ${name}:
               ${name}

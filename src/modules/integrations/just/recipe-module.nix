@@ -5,7 +5,7 @@ let
 in
 {
   options = {
-    enable = mkEnableOption "Enable this Recipe";
+    enable = mkEnableOption "this recipe";
     justfile = mkOption {
       type = types.either types.str types.path;
       description = ''

@@ -14,7 +14,7 @@ in
   };
 
   config.just.recipes.rust = lib.mkIf config.just.enable {
-    justfile = ''
+    justfile = lib.mkDefault ''
       # Compile and watch the project
       w:
         cargo watch

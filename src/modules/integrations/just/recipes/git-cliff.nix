@@ -121,8 +121,8 @@ in
   };
 
   config.just.recipes.git-cliff = lib.mkIf config.just.enable {
-    package = pkgs.git-cliff;
-    justfile =
+    package = lib.mkDefault pkgs.git-cliff;
+    justfile = lib.mkDefault
       ''
         # Generate ${fileName} using recent commits
         changelog:

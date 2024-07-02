@@ -22,13 +22,13 @@ in
   };
 
   config.just.recipes.convco = lib.mkIf config.just.enable {
-    package = pkgs.convco;
+    package = lib.mkDefault pkgs.convco;
     justfile =
       let
         binPath = lib.getExe config.just.recipes.convco.package;
         fileName = config.just.recipes.convco.settings.file-name;
       in
-      ''
+      lib.mkDefault ''
         # Generate ${fileName} using recent commits
         changelog:
           ${binPath} changelog -p "" > ${fileName}

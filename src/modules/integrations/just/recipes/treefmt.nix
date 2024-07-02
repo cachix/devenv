@@ -22,8 +22,8 @@ in
     ];
 
     just.recipes.treefmt = {
-      package = config.treefmt.build.wrapper;
-      justfile = ''
+      package = lib.mkDefault config.treefmt.build.wrapper;
+      justfile = lib.mkDefault ''
         # Auto-format the source tree using treefmt
         fmt:
           ${lib.getExe config.just.recipes.treefmt.package}
