@@ -1,5 +1,7 @@
 { pkgs, self, lib, pre-commit-hooks, config, ... }:
-
+let
+  inherit (lib.lists) optionals;
+in
 {
   options.pre-commit = lib.mkOption {
     type = lib.types.submoduleWith {
@@ -19,6 +21,11 @@
   };
 
   config = lib.mkIf ((lib.filterAttrs (id: value: value.enable) config.pre-commit.hooks) != { }) {
+    warnings = optionals ((lib.filterAttrs (id: value: value.enable) config.treefmt.programs) == { }) [
+      ''
+        You have enabled pre-commit for treefmt but do not have any formatters enabled.
+      ''
+    ];
     ci = [ config.pre-commit.run ];
     enterTest = ''
       pre-commit run -a
