@@ -1779,7 +1779,12 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/treefmt.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/treefmt.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/rust.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/devenv-up.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/devenv-up.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/devenv-script.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/devenv-script.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/convco.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/convco.nix)
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
 
 
@@ -1788,7 +1793,7 @@ attribute set of (submodule)
 
 
 
-Whether to enable Enable this Recipe.
+Whether to enable this recipe…
 
 
 
@@ -1882,7 +1887,7 @@ Add the ‘changelog’ target calling convco
 submodule
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/convco.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/convco.nix)
 
 
 
@@ -1890,7 +1895,7 @@ submodule
 
 
 
-Whether to enable Enable this Recipe.
+Whether to enable this recipe…
 
 
 
@@ -1989,7 +1994,234 @@ string
 ` "CHANGELOG.md" `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/convco.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/convco.nix)
+
+
+
+## just.recipes.git-cliff
+
+
+
+Add the ‘changelog’ target calling convco
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix)
+
+
+
+## just.recipes.git-cliff.enable
+
+
+
+Whether to enable this recipe…
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.git-cliff.package
+
+
+
+An optional package that provides the recipe.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.git-cliff.justfile
+
+
+
+The justfile representing this recipe.
+
+
+
+*Type:*
+string or path
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.git-cliff.outputs.justfile
+
+
+
+The justfile code for importing this recipe’s justfile.
+
+See https://just.systems/man/en/chapter_53.html
+
+
+
+*Type:*
+string *(read only)*
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
+
+
+
+## just.recipes.git-cliff.settings.config-file
+
+
+
+The git-cliff config to use.
+
+See https://git-cliff.org/docs/configuration/
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+
+```
+''
+  [changelog]
+  header = """
+  # Changelog\n
+  All notable changes to this project will be documented in this file.\n
+  """
+  body = """
+  {% if version %}\
+      ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+  {% else %}\
+      ## [unreleased]
+  {% endif %}\
+  {% for group, commits in commits | group_by(attribute="group") %}
+      ### {{ group | striptags | trim | upper_first }}
+      {% for commit in commits %}
+          - {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
+              {% if commit.breaking %}[**breaking**] {% endif %}\
+              {{ commit.message | upper_first }}\
+      {% endfor %}
+  {% endfor %}\n
+  """
+  # template for the changelog footer
+  footer = """
+  <!-- generated by git-cliff -->
+  """
+  # remove the leading and trailing s
+  trim = true
+  
+  [git]
+  conventional_commits = true
+  filter_unconventional = true
+  split_commits = false
+  commit_parsers = [
+    { message = "^feat", group = "<!-- 0 -->🚀 Features" },
+    { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+    { message = "^doc", group = "<!-- 3 -->📚 Documentation" },
+    { message = "^perf", group = "<!-- 4 -->⚡ Performance" },
+    { message = "^refactor", group = "<!-- 2 -->🚜 Refactor" },
+    { message = "^style", group = "<!-- 5 -->🎨 Styling" },
+    { message = "^test", group = "<!-- 6 -->🧪 Testing" },
+    { message = "^chore\\(release\\): prepare for", skip = true },
+    { message = "^chore\\(deps.*\\)", skip = true },
+    { message = "^chore\\(pr\\)", skip = true },
+    { message = "^chore\\(pull\\)", skip = true },
+    { message = "^chore|^ci", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
+    { body = ".*security", group = "<!-- 8 -->🛡️ Security" },
+    { message = "^revert", group = "<!-- 9 -->◀️ Revert" },
+  ]
+  protect_breaking_commits = false
+  filter_commits = false
+  topo_order = false
+  sort_commits = "oldest"
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix)
+
+
+
+## just.recipes.git-cliff.settings.file-name
+
+
+
+The name of the file to output the chaneglog to.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "CHANGELOG.md" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix)
+
+
+
+## just.recipes.git-cliff.settings.integrations.github.enable
+
+
+
+Whether to enable Enable the GitHub integration. See https://git-cliff.org/docs/integration/github.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/git-cliff.nix)
 
 
 
@@ -2005,7 +2237,7 @@ Add ‘w’ and ‘test’ targets for running cargo
 submodule
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/rust.nix)
 
 
 
@@ -2013,7 +2245,7 @@ submodule
 
 
 
-Whether to enable Enable this Recipe.
+Whether to enable this recipe…
 
 
 
@@ -2097,8 +2329,6 @@ string *(read only)*
 
 ## just.recipes.treefmt
 
-
-
 Add the ‘fmt’ target to format source tree using treefmt
 
 
@@ -2107,7 +2337,7 @@ Add the ‘fmt’ target to format source tree using treefmt
 submodule
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/treefmt.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/treefmt.nix)
 
 
 
@@ -2115,7 +2345,7 @@ submodule
 
 
 
-Whether to enable Enable this Recipe.
+Whether to enable this recipe…
 
 
 
@@ -2209,7 +2439,7 @@ Starts processes in foreground. See http://devenv.sh/processes
 submodule
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/devenv-up.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipes/devenv-up.nix)
 
 
 
@@ -2217,7 +2447,7 @@ submodule
 
 
 
-Whether to enable Enable this Recipe.
+Whether to enable this recipe…
 
 
 
@@ -2277,106 +2507,6 @@ string or path
 
 
 ## just.recipes.up.outputs.justfile
-
-The justfile code for importing this recipe’s justfile.
-
-See https://just.systems/man/en/chapter_53.html
-
-
-
-*Type:*
-string *(read only)*
-
-
-
-*Default:*
-` "" `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
-
-
-
-## just.recipes.version
-
-
-
-Display devenv version
-
-
-
-*Type:*
-submodule
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just)
-
-
-
-## just.recipes.version.enable
-
-
-
-Whether to enable Enable this Recipe.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
-*Example:*
-` true `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
-
-
-
-## just.recipes.version.package
-
-
-
-An optional package that provides the recipe.
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` null `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
-
-
-
-## just.recipes.version.justfile
-
-
-
-The justfile representing this recipe.
-
-
-
-*Type:*
-string or path
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/just/recipe-module.nix)
-
-
-
-## just.recipes.version.outputs.justfile
 
 
 
@@ -4248,8 +4378,6 @@ boolean
 
 ## languages.php.package
 
-
-
 Allows you to [override the default used package](https://nixos.org/manual/nixpkgs/stable/\#ssec-php-user-guide)
 to adjust the settings or add more extensions. You can find the
 extensions using ` devenv search 'php extensions' `
@@ -4710,6 +4838,8 @@ null or strings concatenated with “\\n”
 
 
 ## languages.php.version
+
+
 
 The PHP version to use.
 
@@ -7530,8 +7660,6 @@ internal name, same as ` id `
 
 ## pre-commit.hooks.\<name>.pass_filenames
 
-
-
 Whether to pass filenames as arguments to the entry point.
 
 
@@ -7590,6 +7718,8 @@ boolean
 
 
 ## pre-commit.hooks.\<name>.stages
+
+
 
 Confines the hook to run at a particular stage.
 
@@ -9696,8 +9826,6 @@ boolean
 
 ## pre-commit.hooks.clippy.files
 
-
-
 The pattern of files to run on.
 
 
@@ -11719,8 +11847,6 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## pre-commit.hooks.denofmt.types
-
-
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -13823,8 +13949,6 @@ string
 
 ## pre-commit.hooks.flake8.name
 
-
-
 The name of the hook. Shown during hook execution.
 
 
@@ -15903,8 +16027,6 @@ list of string
 
 ## pre-commit.hooks.hpack.types_or
 
-
-
 List of file types to run on, where only a single type needs to match.
 
 
@@ -17977,8 +18099,6 @@ string
 
 
 ## pre-commit.hooks.lychee.stages
-
-
 
 Confines the hook to run at a particular stage.
 
@@ -20074,8 +20194,6 @@ boolean
 
 
 ## pre-commit.hooks.nixfmt
-
-
 
 nixfmt hook
 
@@ -22188,8 +22306,6 @@ list of string
 
 
 ## pre-commit.hooks.phpcbf.types_or
-
-
 
 List of file types to run on, where only a single type needs to match.
 
@@ -24333,8 +24449,6 @@ null or package
 
 ## pre-commit.hooks.psalm.always_run
 
-
-
 if true this hook will run even if there are no matching files.
 
 
@@ -26391,8 +26505,6 @@ list of string
 
 
 ## pre-commit.hooks.revive.verbose
-
-
 
 forces the output of the hook to be printed even when the hook passes.
 
@@ -28463,8 +28575,6 @@ boolean
 
 
 ## pre-commit.hooks.statix.settings.format
-
-
 
 Error Output format.
 
@@ -30624,8 +30734,6 @@ string
 
 ## pre-commit.hooks.yamllint.settings.configPath
 
-
-
 Path to a custom configuration file.
 
 
@@ -31927,7 +32035,7 @@ path
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
+` "/home/sincore/source/devenv/.devenv/state/caddy" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -32871,8 +32979,6 @@ boolean
 
 
 ## services.elasticsearch.package
-
-
 
 Elasticsearch package to use.
 
@@ -36509,16 +36615,16 @@ unspecified value *(read only)*
 ```
 {
   bindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
-  cachedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache";
-  datadir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/share";
-  exec_prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
+  cachedir = "/home/sincore/source/devenv/.devenv/state/trafficserver/cache";
+  datadir = "/home/sincore/source/devenv/.devenv/state/trafficserver/share";
+  exec_prefix = "/home/sincore/source/devenv/.devenv/state/trafficserver";
   includedir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/include";
   libdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/lib";
   libexecdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/libexec";
-  localstatedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/state";
-  logdir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/log";
-  prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
-  runtimedir = "/run/user/1001/devenv-0957646/trafficserver";
+  localstatedir = "/home/sincore/source/devenv/.devenv/state/trafficserver/state";
+  logdir = "/home/sincore/source/devenv/.devenv/state/trafficserver/log";
+  prefix = "/home/sincore/source/devenv/.devenv/state/trafficserver";
+  runtimedir = "/run/user/1000/devenv-cdc0ceb/trafficserver";
   sbindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
   sysconfdir = <derivation trafficserver-config>;
 }
@@ -36650,7 +36756,7 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache 256M" `
+` "/home/sincore/source/devenv/.devenv/state/trafficserver/cache 256M" `
 
 
 
