@@ -1793,7 +1793,7 @@ attribute set of (submodule)
 
 
 
-Whether to enable this recipe…
+Whether to enable this recipe.
 
 
 
@@ -1895,7 +1895,7 @@ submodule
 
 
 
-Whether to enable this recipe…
+Whether to enable this recipe.
 
 
 
@@ -2018,7 +2018,7 @@ submodule
 
 
 
-Whether to enable this recipe…
+Whether to enable this recipe.
 
 
 
@@ -2245,7 +2245,7 @@ submodule
 
 
 
-Whether to enable this recipe…
+Whether to enable this recipe.
 
 
 
@@ -2345,7 +2345,7 @@ submodule
 
 
 
-Whether to enable this recipe…
+Whether to enable this recipe.
 
 
 
@@ -2447,7 +2447,7 @@ submodule
 
 
 
-Whether to enable this recipe…
+Whether to enable this recipe.
 
 
 
@@ -9826,6 +9826,8 @@ boolean
 
 ## pre-commit.hooks.clippy.files
 
+
+
 The pattern of files to run on.
 
 
@@ -11847,6 +11849,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## pre-commit.hooks.denofmt.types
+
+
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -13949,6 +13953,8 @@ string
 
 ## pre-commit.hooks.flake8.name
 
+
+
 The name of the hook. Shown during hook execution.
 
 
@@ -16027,6 +16033,8 @@ list of string
 
 ## pre-commit.hooks.hpack.types_or
 
+
+
 List of file types to run on, where only a single type needs to match.
 
 
@@ -18099,6 +18107,8 @@ string
 
 
 ## pre-commit.hooks.lychee.stages
+
+
 
 Confines the hook to run at a particular stage.
 
@@ -20194,6 +20204,8 @@ boolean
 
 
 ## pre-commit.hooks.nixfmt
+
+
 
 nixfmt hook
 
@@ -22306,6 +22318,8 @@ list of string
 
 
 ## pre-commit.hooks.phpcbf.types_or
+
+
 
 List of file types to run on, where only a single type needs to match.
 
@@ -24449,6 +24463,8 @@ null or package
 
 ## pre-commit.hooks.psalm.always_run
 
+
+
 if true this hook will run even if there are no matching files.
 
 
@@ -26505,6 +26521,8 @@ list of string
 
 
 ## pre-commit.hooks.revive.verbose
+
+
 
 forces the output of the hook to be printed even when the hook passes.
 
@@ -28575,6 +28593,8 @@ boolean
 
 
 ## pre-commit.hooks.statix.settings.format
+
+
 
 Error Output format.
 
@@ -30734,6 +30754,8 @@ string
 
 ## pre-commit.hooks.yamllint.settings.configPath
 
+
+
 Path to a custom configuration file.
 
 
@@ -32035,7 +32057,7 @@ path
 
 
 *Default:*
-` "/home/sincore/source/devenv/.devenv/state/caddy" `
+` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -32979,6 +33001,8 @@ boolean
 
 
 ## services.elasticsearch.package
+
+
 
 Elasticsearch package to use.
 
@@ -36615,16 +36639,16 @@ unspecified value *(read only)*
 ```
 {
   bindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
-  cachedir = "/home/sincore/source/devenv/.devenv/state/trafficserver/cache";
-  datadir = "/home/sincore/source/devenv/.devenv/state/trafficserver/share";
-  exec_prefix = "/home/sincore/source/devenv/.devenv/state/trafficserver";
+  cachedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache";
+  datadir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/share";
+  exec_prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
   includedir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/include";
   libdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/lib";
   libexecdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/libexec";
-  localstatedir = "/home/sincore/source/devenv/.devenv/state/trafficserver/state";
-  logdir = "/home/sincore/source/devenv/.devenv/state/trafficserver/log";
-  prefix = "/home/sincore/source/devenv/.devenv/state/trafficserver";
-  runtimedir = "/run/user/1000/devenv-cdc0ceb/trafficserver";
+  localstatedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/state";
+  logdir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/log";
+  prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
+  runtimedir = "/run/user/1001/devenv-0957646/trafficserver";
   sbindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
   sysconfdir = <derivation trafficserver-config>;
 }
@@ -36756,7 +36780,7 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "/home/sincore/source/devenv/.devenv/state/trafficserver/cache 256M" `
+` "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache 256M" `
 
 
 
