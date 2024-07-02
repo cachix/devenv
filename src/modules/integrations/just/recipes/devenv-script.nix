@@ -23,7 +23,7 @@ in
     };
   };
 
-  config = {
+  config = lib.mkIf config.just.enable {
     just = {
       recipes = lib.genAttrs (builtins.attrNames config.scripts) (name:
         let

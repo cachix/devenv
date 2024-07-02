@@ -13,7 +13,7 @@ in
     };
   };
 
-  config.just.recipes.rust = {
+  config.just.recipes.rust = lib.mkIf config.just.enable {
     justfile = ''
       # Compile and watch the project
       w:

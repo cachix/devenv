@@ -120,7 +120,7 @@ in
     };
   };
 
-  config.just.recipes.git-cliff = {
+  config.just.recipes.git-cliff = lib.mkIf config.just.enable {
     package = pkgs.git-cliff;
     justfile =
       ''

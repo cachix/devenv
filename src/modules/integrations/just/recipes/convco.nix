@@ -21,7 +21,7 @@ in
     };
   };
 
-  config.just.recipes.convco = {
+  config.just.recipes.convco = lib.mkIf config.just.enable {
     package = pkgs.convco;
     justfile =
       let

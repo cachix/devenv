@@ -13,7 +13,7 @@ in
     };
   };
 
-  config.just.recipes.up = {
+  config.just.recipes.up = lib.mkIf config.just.enable {
     enable = true;
     justfile = ''
       # Starts processes in foreground. See http://devenv.sh/processes
