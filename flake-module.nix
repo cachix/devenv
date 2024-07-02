@@ -47,9 +47,7 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
                 { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
               )
               devenv.containers
-            ) // {
-              "${shellPrefix shellName}devenv-up" = devenv.procfileScript;
-            }
+            )
           )
           config.devenv.shells;
     });

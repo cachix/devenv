@@ -10,8 +10,6 @@ pkgs.writeScriptBin "devenv" ''
   # we want subshells to fail the program
   set -e
 
-  NIX_FLAGS="--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes"
-
   command=$1
   if [[ ! -z $command ]]; then
     shift
@@ -19,13 +17,7 @@ pkgs.writeScriptBin "devenv" ''
 
   case $command in
     up)
-      procfilescript=$(nix build '.#${shellPrefix (config._module.args.name or "default")}devenv-up' --no-link --print-out-paths --impure)
-      if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
-        echo "No 'processes' option defined: https://devenv.sh/processes/"
-        exit 1
-      else
-        exec $procfilescript "$@"
-      fi
+      exec devenv-up "$@"
       ;;
     version)
       echo "devenv: ${version}"
