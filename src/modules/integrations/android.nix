@@ -270,6 +270,7 @@ in
       (lib.mkIf cfg.reactNative.enable {
         javascript.enable = true;
         javascript.npm.enable = true;
+        java.jdk.package = pkgs.jdk17;
       })
     ];
 
