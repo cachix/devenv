@@ -33,7 +33,7 @@ let
           enable = lib.mkOption {
             type = types.bool;
             description = "Include this script in just runner.";
-            default = true;
+            default = false;
           };
         };
         scriptPackage = lib.mkOption {
