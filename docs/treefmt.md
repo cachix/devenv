@@ -48,23 +48,6 @@ If you would like to enable `treefmt` in your pre-commit hooks, simply add:
 
 This will enable `treefmt` hooks and automatically change the default package to the one you have defined in your `devenv`.
 
-### Just
-
-You can also enable the `just` command `just fmt` to run `treefmt`. To do so, add the following to your `devenv.nix`:
-
-```nix
-{ inputs, ... }:
-
-{
-  just = {
-    enable = true;
-    recipes = {
-        treefmt.enable = true;
-    };
-  };
-}
-```
-
 ## Using a Custom Formatter
 
 It is also possible to use custom formatters with `treefmt-nix`. For example, the following custom formatter formats JSON files using `yq-go`:
