@@ -1,6 +1,4 @@
-{ inputs, pkgs, lib, config, ... }:
-
-{
+{ inputs, pkgs, lib, config, ... }: {
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
 
   packages = [
@@ -43,7 +41,7 @@
 
   processes = {
     docs.exec = "mkdocs serve";
-    tailwind.exec = "watchexec -e html,css,js npx tailwindcss build docs/assets/extra.css -o docs/assets/output.css";
+    tailwind.exec = "watchexec -e html,css,js ${lib.getExe pkgs.tailwindcss} build docs/assets/extra.css -o docs/assets/output.css";
   };
 
   scripts.devenv-test-cli = {
@@ -166,7 +164,7 @@
     generate-css = {
       enable = false;
       name = "generate-css";
-      entry = "npx tailwindcss build docs/assets/extra.css -o docs/assets/output.css";
+      entry = "${lib.getExe pkgs.tailwindcss} build docs/assets/extra.css -o docs/assets/output.css";
     };
   };
 }
