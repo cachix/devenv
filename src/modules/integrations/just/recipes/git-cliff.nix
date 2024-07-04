@@ -114,7 +114,7 @@ in
           '';
         };
         integrations = {
-          github.enable = mkEnableOption "Enable the GitHub integration. See https://git-cliff.org/docs/integration/github";
+          github.enable = mkEnableOption "GitHub integration. See https://git-cliff.org/docs/integration/github";
         };
       };
     };
