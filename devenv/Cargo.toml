@@ -18,6 +18,7 @@ miette.workspace = true
 nix.workspace = true
 regex.workspace = true
 reqwest.workspace = true
+schemars.workspace = true
 schematic.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -28,5 +29,3 @@ tracing.workspace = true
 which.workspace = true
 whoami.workspace = true
 xdg.workspace = true
-
-schemars.workspace = true

@@ -6,6 +6,7 @@ result
 .direnv*
 /.cache
 /.pre-commit-config.yaml
+man
 
 # examples
 examples/rust/app/target
