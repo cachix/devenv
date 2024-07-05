@@ -18,7 +18,7 @@
   # https://devenv.sh/languages/
   # languages.nix.enable = true;
 
-  # https://devenv.sh/pre-commit-hooks/
+  # https://devenv.sh/git-hooks/
   # pre-commit.hooks.shellcheck.enable = true;
 
   # https://devenv.sh/processes/

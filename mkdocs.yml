@@ -43,7 +43,7 @@ nav:
       - Services: services.md
       - Containers: containers.md
       - Binary Caching: binary-caching.md
-      - Pre-Commit Hooks: pre-commit-hooks.md
+      - Git Hooks: git-hooks.md
       - Tests: tests.md
       - Common Patterns: common-patterns.md
     - Writing devenv.yaml:
