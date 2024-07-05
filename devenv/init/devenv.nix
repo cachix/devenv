@@ -32,7 +32,7 @@
     git --version | grep --color=auto "${pkgs.git.version}"
   '';
 
-  # https://devenv.sh/git-hooks/
+  # https://devenv.sh/pre-commit/
   # pre-commit.hooks.shellcheck.enable = true;
 
   # See full reference at https://devenv.sh/reference/options/

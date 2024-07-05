@@ -29,7 +29,7 @@
     url = "github:cachix/cachix";
     inputs = {
       nixpkgs.follows = "nixpkgs";
-      git-hooks.follows = "git-hooks";
+      pre-commit-hooks.follows = "git-hooks";
       flake-compat.follows = "flake-compat";
     };
   };
