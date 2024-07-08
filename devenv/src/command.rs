@@ -6,7 +6,7 @@ use std::env;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 
-const NIX_FLAGS: [&str; 12] = [
+const NIX_FLAGS: [&str; 9] = [
     "--show-trace",
     "--extra-experimental-features",
     "nix-command",
@@ -15,10 +15,6 @@ const NIX_FLAGS: [&str; 12] = [
     // remove unnecessary warnings
     "--option",
     "warn-dirty",
-    "false",
-    // flake caching is too aggressive
-    "--option",
-    "eval-cache",
     "false",
     // always build all dependencies and report errors at the end
     "--keep-going",
@@ -111,6 +107,11 @@ impl Devenv {
             flags.push("--max-jobs");
             let max_jobs = self.global_options.max_jobs.to_string();
             flags.push(&max_jobs);
+
+            flags.push("--option");
+            flags.push("eval-cache");
+            let eval_cache = self.global_options.eval_cache.to_string();
+            flags.push(&eval_cache);
 
             // handle --nix-option key value
             for chunk in self.global_options.nix_option.chunks_exact(2) {
