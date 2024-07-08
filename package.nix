@@ -42,5 +42,16 @@ pkgs.rustPlatform.buildRustPackage {
     # Generate manpages
     cargo xtask generate-manpages --out-dir man
     installManPage man/*
+
+    # Generate shell completions
+    compdir=./completions
+    for shell in bash fish zsh; do
+      cargo xtask generate-shell-completion $shell --out-dir $compdir
+    done
+
+    installShellCompletion --cmd devenv \
+      --bash $compdir/devenv.bash \
+      --fish $compdir/devenv.fish \
+      --zsh $compdir/_devenv
   '';
 }
