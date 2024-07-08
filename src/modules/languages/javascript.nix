@@ -193,7 +193,9 @@ in
       enable = lib.mkEnableOption "install yarn";
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.yarn;
+        default = pkgs.yarn.override {
+          nodejs = package;
+        };
         defaultText = lib.literalExpression "pkgs.yarn";
         description = "The yarn package to use.";
       };
