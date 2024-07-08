@@ -1,16 +1,13 @@
+use super::cli::Cli;
 use clap::CommandFactory;
 use miette::{IntoDiagnostic, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-mod cli {
-    include!("../../devenv/src/cli.rs");
-}
-
-pub fn generate_manpages(out_dir: impl AsRef<Path>) -> Result<()> {
+pub fn generate(out_dir: impl AsRef<Path>) -> Result<()> {
     fs::create_dir_all(&out_dir).into_diagnostic()?;
-    clap_mangen::generate_to(cli::Cli::command(), &out_dir).into_diagnostic()?;
-    println!("Generated man pages to {}", out_dir.as_ref().display());
+    clap_mangen::generate_to(Cli::command(), &out_dir).into_diagnostic()?;
+    eprintln!("Generated man pages to {}", out_dir.as_ref().display());
     Ok(())
 }
 

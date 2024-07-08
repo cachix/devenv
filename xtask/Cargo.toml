@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 clap.workspace = true
+clap_complete = "4.5.7"
 clap_mangen = "0.2.22"
 devenv = { path = "../devenv" }
 miette.workspace = true
