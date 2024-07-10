@@ -184,7 +184,7 @@ in
         type = lib.types.package;
         default = pkgs.nodePackages.pnpm.override {
           nodejs = cfg.package;
-        }
+        };
         defaultText = lib.literalExpression "pkgs.nodePackages.pnpm";
         description = "The pnpm package to use.";
       };
