@@ -31,6 +31,12 @@
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
   difftastic.enable = true;
 
+  #enable just.
+  just = {
+    enable = true;
+    recipes.convco.enable = true;
+  };
+
   dotenv.enable = true;
 
   processes = {
@@ -40,6 +46,7 @@
 
   scripts.devenv-test-cli = {
     description = "Test devenv CLI.";
+    just.enable = true;
     exec = ''
       set -xe
       set -o pipefail
@@ -97,6 +104,7 @@
   };
   scripts."devenv-generate-doc-options" = {
     description = "Generate option docs.";
+    just.enable = true;
     exec = ''
       set -e
       output_file=docs/reference/options.md
@@ -110,6 +118,7 @@
   };
   scripts."devenv-generate-languages-example" = {
     description = "Generate an example enabling every supported language.";
+    just.enable = true;
     exec = ''
       cat > examples/supported-languages/devenv.nix <<EOF
       { pkgs, ... }: {
@@ -124,6 +133,7 @@
   };
   scripts."devenv-generate-docs" = {
     description = "Generate lists of all languages and services.";
+    just.enable = true;
     exec = ''
       cat > docs/services-all.md <<EOF
         \`\`\`nix
@@ -152,7 +162,7 @@
       MD034 = false;
     };
     generate-css = {
-      enable = true;
+      enable = false;
       name = "generate-css";
       entry = "${lib.getExe pkgs.tailwindcss} build docs/assets/extra.css -o docs/assets/output.css";
     };
