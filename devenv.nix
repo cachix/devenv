@@ -31,8 +31,6 @@
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
   difftastic.enable = true;
 
-  dotenv.enable = true;
-
   processes = {
     docs.exec = "mkdocs serve";
     tailwind.exec = "watchexec -e html,css,js ${lib.getExe pkgs.tailwindcss} build docs/assets/extra.css -o docs/assets/output.css";
