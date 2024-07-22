@@ -40,11 +40,13 @@ let
   };
 
   initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
+    pushd "${cfg.directory}"
+
     # Make sure any tools are not attempting to use the Python interpreter from any
     # existing virtual environment. For instance if devenv was started within an venv.
     unset VIRTUAL_ENV
 
-    VENV_PATH="${config.env.DEVENV_STATE}/${lib.optionalString (cfg.directory != config.devenv.root) ''"${cfg.directory}/"''}venv"
+    VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
     profile_python="$(${readlink} ${package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
@@ -92,9 +94,13 @@ let
             }
        fi
     fi
+
+    popd
   '';
 
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
+    pushd "${cfg.directory}"
+
     function _devenv_init_poetry_venv
     {
       # Make sure any tools are not attempting to use the Python interpreter from any
@@ -107,12 +113,12 @@ let
 
     function _devenv_poetry_install
     {
-      local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments} ${lib.optionalString (cfg.directory != config.devenv.root) ''--directory=${cfg.directory}''})
+      local POETRY_INSTALL_COMMAND=(${cfg.poetry.package}/bin/poetry install --no-interaction ${lib.concatStringsSep " " cfg.poetry.install.arguments})
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or Python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
-      local POETRY_CHECKSUM_FILE="$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}.venv/poetry.lock.checksum
+      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local POETRY_CHECKSUM_FILE=".venv/poetry.lock.checksum"
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
         read -r EXPECTED_POETRY_CHECKSUM < "$POETRY_CHECKSUM_FILE"
@@ -131,7 +137,7 @@ let
       fi
     }
 
-    if [ ! -f "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}pyproject.toml ]
+    if [ ! -f "pyproject.toml" ]
     then
       echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
     else
@@ -140,9 +146,11 @@ let
         _devenv_poetry_install
       ''}
       ${lib.optionalString cfg.poetry.activate.enable ''
-        source "$DEVENV_ROOT"/${lib.optionalString (cfg.directory != config.devenv.root) ''${cfg.directory}/''}.venv/bin/activate
+        source .venv/bin/activate
       ''}
     fi
+
+    popd
   '';
 in
 {
