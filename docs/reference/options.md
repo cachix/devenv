@@ -1987,6 +1987,27 @@ boolean
 
 
 
+## languages.deno.package
+
+
+
+Which package of Deno to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.deno `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)
+
+
+
 ## languages.dotnet.enable
 
 
@@ -2323,8 +2344,6 @@ package
 
 ## languages.haskell.enable
 
-
-
 Whether to enable tools for Haskell development.
 
 
@@ -2369,6 +2388,8 @@ package
 
 
 ## languages.haskell.languageServer
+
+
 
 Haskell language server to use.
 
@@ -4765,8 +4786,6 @@ boolean
 
 ## languages.robotframework.enable
 
-
-
 Whether to enable tools for Robot Framework development.
 
 
@@ -4790,6 +4809,8 @@ boolean
 
 
 ## languages.robotframework.python
+
+
 
 The Python package to use.
 
@@ -7615,8 +7636,6 @@ list of string
 
 ## pre-commit.hooks.ansible-lint.extraPackages
 
-
-
 Additional packages required to run the hook.
 
 These are propagated to ` enabledPackages ` for constructing developer
@@ -7638,6 +7657,8 @@ list of package
 
 
 ## pre-commit.hooks.ansible-lint.fail_fast
+
+
 
 if true pre-commit will stop running hooks if this hook fails.
 
