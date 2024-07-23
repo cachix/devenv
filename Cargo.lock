@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.0.7"
+version = "1.0.8"
 dependencies = [
  "ansiterm",
  "clap",
