@@ -6,26 +6,17 @@ in
 {
   options.languages.clojure = {
     enable = lib.mkEnableOption "tools for Clojure development";
-    jdk.package = lib.mkOption {
-      type = lib.types.package;
-      example = lib.literalExpression "pkgs.jdk8";
-      default = pkgs.jdk;
-      defaultText = lib.literalExpression "pkgs.jdk";
-      description = ''
-        The JDK package to use.
-        This will also become available as `JAVA_HOME`.
-      '';
-    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       (clojure.override {
-        jdk = cfg.jdk.package;
+        jdk = config.languages.java.jdk.package;
       })
       clojure-lsp
     ];
+    languages.java.enable = true;
 
-    env.JAVA_HOME = cfg.jdk.package.home;
+    env.JAVA_HOME = config.languages.java.jdk.package.home;
   };
 }
