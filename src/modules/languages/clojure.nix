@@ -16,7 +16,5 @@ in
       clojure-lsp
     ];
     languages.java.enable = true;
-
-    env.JAVA_HOME = config.languages.java.jdk.package.home;
   };
 }
