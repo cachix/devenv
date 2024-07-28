@@ -10,8 +10,11 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      clojure
+      (clojure.override {
+        jdk = config.languages.java.jdk.package;
+      })
       clojure-lsp
     ];
+    languages.java.enable = true;
   };
 }
