@@ -62,7 +62,7 @@
 
 !!! Updating
 
-    Follow the instructions for an installation above. 
+    To update, refer to the specific upgrade instructions provided in the documentation for the installer you used from the options above. 
 
 ## Initial set up
 
