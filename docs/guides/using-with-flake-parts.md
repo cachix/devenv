@@ -166,7 +166,7 @@ devenv.shells.projectB = {
   packages = [ config.packages.default ];
 
   enterShell = ''
-    echo this is project A
+    echo this is project B
     hello
   '';
 };
