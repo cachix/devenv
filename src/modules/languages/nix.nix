@@ -2,6 +2,7 @@
 
 let
   cfg = config.languages.nix;
+  cachix = "${lib.getBin config.cachix.package}";
 in
 {
   options.languages.nix = {
@@ -16,11 +17,10 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      cachix
       statix
       vulnix
       deadnix
       cfg.lsp.package
-    ];
+    ] ++ (lib.optional config.cachix.enable cachix);
   };
 }
