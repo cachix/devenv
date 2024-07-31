@@ -1,0 +1,5 @@
+  # Solidity
+  
+
+
+@AUTOGEN_OPTIONS@
