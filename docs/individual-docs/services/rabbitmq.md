@@ -1,0 +1,5 @@
+  # Rabbitmq
+  
+
+
+@AUTOGEN_OPTIONS@

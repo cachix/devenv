@@ -1,0 +1,5 @@
+  # Minio
+  
+
+
+@AUTOGEN_OPTIONS@
