@@ -35,6 +35,7 @@ jobs:
       run: |
         devenv shell devenv-generate-docs
         devenv shell devenv-generate-languages-example
+        devenv shell devenv-generate-individual-docs
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
       with:
