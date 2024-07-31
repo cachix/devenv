@@ -127,7 +127,6 @@ in
 
         env =
           let
-            darwinFlags = lib.optionalString pkgs.stdenv.isDarwin "-L framework=${config.devenv.profile}/Library/Frameworks";
             moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
           in
           {
@@ -137,8 +136,8 @@ in
               if cfg.toolchain ? rust-src
               then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
               else pkgs.rustPlatform.rustLibSrc;
-            RUSTFLAGS = "${darwinFlags} ${moldFlags} ${cfg.rustflags}";
-            RUSTDOCFLAGS = "${darwinFlags} ${moldFlags}";
+            RUSTFLAGS = "${moldFlags} ${cfg.rustflags}";
+            RUSTDOCFLAGS = "${moldFlags}";
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
 
