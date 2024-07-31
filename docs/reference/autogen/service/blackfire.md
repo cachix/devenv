@@ -1,0 +1,161 @@
+  # Blackfire
+  
+
+
+## services\.blackfire\.enable
+
+
+
+Whether to enable Blackfire profiler agent
+
+It automatically installs Blackfire PHP extension\.
+\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## services\.blackfire\.enableApm
+
+
+
+Whether to enable Enables application performance monitoring, requires special subscription\.
+\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## services\.blackfire\.package
+
+
+
+Which package of blackfire to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.blackfire `
+
+
+
+## services\.blackfire\.client-id
+
+Sets the client id used to authenticate with Blackfire\.
+You can find your personal client-id at [https://blackfire\.io/my/settings/credentials](https://blackfire\.io/my/settings/credentials)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+## services\.blackfire\.client-token
+
+
+
+Sets the client token used to authenticate with Blackfire\.
+You can find your personal client-token at [https://blackfire\.io/my/settings/credentials](https://blackfire\.io/my/settings/credentials)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+## services\.blackfire\.server-id
+
+
+
+Sets the server id used to authenticate with Blackfire\.
+You can find your personal server-id at [https://blackfire\.io/my/settings/credentials](https://blackfire\.io/my/settings/credentials)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+## services\.blackfire\.server-token
+
+
+
+Sets the server token used to authenticate with Blackfire\.
+You can find your personal server-token at [https://blackfire\.io/my/settings/credentials](https://blackfire\.io/my/settings/credentials)\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+## services\.blackfire\.socket
+
+
+
+Sets the server socket path
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "tcp://127.0.0.1:8307" `
