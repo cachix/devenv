@@ -79,14 +79,93 @@
     {
       packages = forAllSystems (system:
         let
+          inherit (pkgs) lib;
           pkgs = nixpkgs.legacyPackages.${system};
           options = mkDocOptions pkgs;
+          filterOptions = import ./filterOptions.nix lib;
+          evaluatedModules = pkgs.lib.evalModules {
+            modules = [
+              ./src/modules/top-level.nix
+            ];
+            specialArgs = { inherit pre-commit-hooks pkgs inputs; };
+          };
+          generate-key-options = key:
+            filterOptions
+              (path: option:
+                lib.any (lib.hasSuffix "${key}.nix") option.declarations)
+              evaluatedModules.options;
+
+          optionsDocs = optionParameter: pkgs.nixosOptionsDoc {
+            options = optionParameter;
+            variablelistId = "options";
+            transformOptions = options: removeAttrs options [ "declarations" ];
+          };
         in
         {
           default = self.packages.${system}.devenv;
           devenv = mkPackage pkgs;
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
+          devenv-generate-individual-docs =
+            let
+              inherit (pkgs) lib;
+              languageOptions = builtins.mapAttrs (key: _: generate-key-options key) evaluatedModules.config.languages;
+              serviceOptions = builtins.mapAttrs (key: _: generate-key-options key) evaluatedModules.config.services;
+              processManagersOptions = builtins.mapAttrs (key: _: generate-key-options key) evaluatedModules.config.process-managers;
+              processedOptions = option: builtins.mapAttrs (key: options: optionsDocs options) option;
+            in
+            pkgs.stdenv.mkDerivation {
+              name = "pr-tracker-nixos-modules-manual";
+              src = ./.;
+              buildPhase = ''
+                                languageDir=./docs/individual-docs/languages
+                                serviceDir=./docs/individual-docs/services
+                                processManagerDir=./docs/individual-docs/process-managers
+                                mkdir -p $out/docs/individual-docs/language
+                                mkdir -p $out/docs/individual-docs/service
+                                mkdir -p $out/docs/individual-docs/process-managers
+                                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (key: options:  ''
+                                    content=$(cat ${options.optionsCommonMark})
+                                    file=$languageDir/${key}.md
+
+                                    substituteInPlace $file \
+                                    --subst-var-by \
+                                    AUTOGEN_OPTIONS \
+                                    "$content"
+
+                                    cp $file $out/docs/individual-docs/language/${key}.md
+
+                                '') ( processedOptions languageOptions ))}
+
+                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (key: options:  ''
+                                    content=$(cat ${options.optionsCommonMark})
+
+                                    file=$serviceDir/${key}.md
+
+                                    substituteInPlace $file \
+                                    --subst-var-by \
+                                    AUTOGEN_OPTIONS \
+                                    "$content"
+
+                                    cp $file $out/docs/individual-docs/service/${key}.md
+
+                                '') ( processedOptions serviceOptions ))}
+
+                ${lib.concatStringsSep "\n" (lib.mapAttrsToList (key: options:  ''
+                                    content=$(cat ${options.optionsCommonMark})
+
+                                    file=$processManagerDir/${key}.md
+
+                                    substituteInPlace $file \
+                                    --subst-var-by \
+                                    AUTOGEN_OPTIONS \
+                                    "$content"
+
+                                    cp $file $out/docs/individual-docs/process-managers/${key}.md
+                                '') ( processedOptions  processManagersOptions))}
+
+              '';
+            };
         });
 
       modules = ./src/modules;
