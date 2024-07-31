@@ -1,0 +1,5 @@
+  # Elasticmq
+  
+
+
+@AUTOGEN_OPTIONS@

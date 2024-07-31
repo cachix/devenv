@@ -1,0 +1,5 @@
+  # Adminer
+  
+
+
+@AUTOGEN_OPTIONS@

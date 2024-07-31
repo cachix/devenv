@@ -1,0 +1,5 @@
+  # Typesense
+  
+
+
+@AUTOGEN_OPTIONS@
