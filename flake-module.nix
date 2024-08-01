@@ -21,7 +21,7 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
           Extra modules to import into every shell.
           Allows flakeModules to add options to devenv for example.
         '';
-        default = [];
+        default = [ ];
       };
       options.devenv.shells = lib.mkOption {
         type = lib.types.lazyAttrsOf devenvType;
