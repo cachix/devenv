@@ -21,9 +21,9 @@ in
       default = null;
     };
 
-    package = lib.mkPackageOption pkgs "Cachix" {
+    package = lib.mkPackageOption pkgs "cachix" {
       default = "cachix";
-      example = lib.literalExpression "inputs.devenv.inputs.cachix.packages.\${pkgs.stdenv.system}.cachix";
+      example = "inputs.devenv.inputs.cachix.packages.\${pkgs.stdenv.system}.cachix";
     };
   };
 
