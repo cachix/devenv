@@ -14,11 +14,11 @@ After that you'll need to set `cachix authtoken XXX` with either [a personal aut
 
 ## devenv.nix
 
-To specify `pre-commit-hooks` as a cache to pull from and `mycache` to pull from and push to:
+To specify `git-hooks` as a cache to pull from and `mycache` to pull from and push to:
 
 ```nix title="devenv.nix"
 {
-  cachix.pull = [ "pre-commit-hooks" ];
+  cachix.pull = [ "git-hooks" ];
   cachix.push = "mycache";
 }
 ```

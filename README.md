@@ -39,7 +39,7 @@ Running ``devenv init`` generates ``devenv.nix``:
   # https://devenv.sh/services/
   services.postgres.enable = true;
 
-  # https://devenv.sh/pre-commit-hooks/
+  # https://devenv.sh/git-hooks/
   pre-commit.hooks.shellcheck.enable = true;
 
   # https://devenv.sh/processes/
