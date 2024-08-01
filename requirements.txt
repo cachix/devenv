@@ -4,3 +4,4 @@ mkdocs-material[imaging]
 mkdocs-rss-plugin==1.13.1
 mkdocs-include-markdown-plugin
 mkdocs-markdownextradata-plugin
+mkdocs-awesome-pages-plugin
