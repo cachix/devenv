@@ -62,8 +62,8 @@ let
         [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
       ''}
       ${if cfg.uv.enable then ''
-        echo uv venv "$VENV_PATH"
-        uv venv "$VENV_PATH"
+        echo uv venv -p ${package.interpreter} "$VENV_PATH"
+        uv venv -p ${package.interpreter} "$VENV_PATH"
       ''
       else ''
           echo ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
