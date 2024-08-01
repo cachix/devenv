@@ -902,6 +902,32 @@ boolean
 
 
 
+## cachix.package
+
+
+
+The cachix package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cachix `
+
+
+
+*Example:*
+` inputs.devenv.inputs.cachix.packages.${pkgs.stdenv.system}.cachix `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
+
+
+
 ## cachix.pull
 
 
@@ -2323,8 +2349,6 @@ boolean
 
 ## languages.go.package
 
-
-
 The Go package to use.
 
 
@@ -2343,6 +2367,8 @@ package
 
 
 ## languages.haskell.enable
+
+
 
 Whether to enable tools for Haskell development.
 
@@ -4760,8 +4786,6 @@ package
 
 ## languages.raku.enable
 
-
-
 Whether to enable tools for Raku development.
 
 
@@ -4785,6 +4809,8 @@ boolean
 
 
 ## languages.robotframework.enable
+
+
 
 Whether to enable tools for Robot Framework development.
 
@@ -7615,8 +7641,6 @@ string
 
 ## pre-commit.hooks.ansible-lint.excludes
 
-
-
 Exclude files that were matched by these patterns.
 
 
@@ -7635,6 +7659,8 @@ list of string
 
 
 ## pre-commit.hooks.ansible-lint.extraPackages
+
+
 
 Additional packages required to run the hook.
 
@@ -33917,12 +33943,12 @@ path
 
 
 *Default:*
-` $''{pkgs.mailcap}/etc/nginx/mime.types `
+` ${pkgs.mailcap}/etc/nginx/mime.types `
 
 
 
 *Example:*
-` $''{pkgs.nginx}/conf/mime.types `
+` ${pkgs.nginx}/conf/mime.types `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
