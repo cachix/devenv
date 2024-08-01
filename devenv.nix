@@ -34,7 +34,7 @@
 
   processes = {
     docs.exec = "mkdocs serve";
-    tailwind.exec = "watchexec -e html,css,js ${lib.getExe pkgs.tailwindcss} build docs/assets/extra.css -o docs/assets/output.css";
+    tailwind.exec = "watchexec -e html,css,js devenv-generate-doc-css";
   };
 
   scripts.devenv-test-cli = {
@@ -94,6 +94,12 @@
       rm -rf "$tmp"
     '';
   };
+  scripts."devenv-generate-doc-css" = {
+    description = "Generate CSS for the docs.";
+    exec = ''
+      ${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css
+    '';
+  };
   scripts."devenv-generate-doc-options" = {
     description = "Generate option docs.";
     exec = ''
@@ -150,10 +156,10 @@
       MD033 = false;
       MD034 = false;
     };
-    generate-css = {
+    generate-doc-css = {
       enable = true;
-      name = "generate-css";
-      entry = "${lib.getExe pkgs.tailwindcss} build docs/assets/extra.css -o docs/assets/output.css";
+      name = "generate-doc-css";
+      entry = "devenv-generate-doc-css";
     };
   };
 }
