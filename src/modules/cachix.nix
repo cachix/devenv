@@ -1,4 +1,4 @@
-{ lib, config, ... }:
+{ pkgs, lib, config, ... }:
 let
   cfg = config.cachix;
 in
@@ -19,6 +19,11 @@ in
       type = lib.types.nullOr lib.types.str;
       description = "What cache to push to. Automatically also adds it to the list of caches to pull from.";
       default = null;
+    };
+
+    package = lib.mkPackageOption pkgs "Cachix" {
+      default = "cachix";
+      example = lib.literalExpression "inputs.devenv.inputs.cachix.packages.\${pkgs.stdenv.system}.cachix";
     };
   };
 
