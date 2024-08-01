@@ -159,7 +159,11 @@
     generate-doc-css = {
       enable = true;
       name = "generate-doc-css";
-      entry = "devenv-generate-doc-css";
+      # Copied from devenv-generate-doc-css
+      # In CI, the auto-commit action doesn't run in the shell, so it can't reuse our scripts.
+      # And the following command is curently too slow to be a pre-commit command.
+      # entry = "devenv shell devenv-generate-doc-css";
+      entry = "${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css";
     };
   };
 }
