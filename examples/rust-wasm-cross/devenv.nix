@@ -27,9 +27,4 @@
   ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
     frameworks.Security
   ]);
-
-  # macOS workaround:
-  # The linker on macOS doesn't like the frameworks option when compiling to wasm32.
-  # See https://github.com/rust-lang/rust/issues/122333
-  env.RUSTFLAGS = lib.mkIf pkgs.stdenv.isDarwin (lib.mkForce "");
 }
