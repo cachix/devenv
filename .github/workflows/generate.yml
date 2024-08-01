@@ -20,12 +20,13 @@ jobs:
     - uses: cachix/cachix-action@v15
       with:
         name: devenv
-    - run: nix profile install .
+    - run: nix profile install . -L --accept-flake-config
 
     - name: Generate doc options
       run: devenv shell devenv-generate-doc-options
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
+      shell: devenv shell {0}
       with:
         default_author: github_actions
         add: docs/reference/options.md
@@ -37,6 +38,7 @@ jobs:
         devenv shell devenv-generate-languages-example
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
+      shell: devenv shell {0}
       with:
         default_author: github_actions
         add: docs examples/supported-languages/devenv.nix
@@ -46,6 +48,7 @@ jobs:
       run: devenv generate-json-schema
     - uses: EndBug/add-and-commit@v9
       if: ${{ github.event_name == 'push' }}
+      shell: devenv shell {0}
       with:
         default_author: github_actions
         add: docs/devenv.schema.json

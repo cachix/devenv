@@ -105,7 +105,7 @@
     exec = ''
       set -e
       output_file=docs/reference/options.md
-      options=$(nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
+      options=$(nix build --accept-flake-config --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
       echo "# devenv.nix options" > $output_file
       echo >> $output_file
       cat $options >> $output_file
