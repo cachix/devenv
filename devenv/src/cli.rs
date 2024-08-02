@@ -23,6 +23,14 @@ pub struct GlobalOptions {
     #[arg(short, long, global = true, help = "Enable debug log level.")]
     pub verbose: bool,
 
+    #[arg(
+        short = 'C',
+        long,
+        global = true,
+        help = "Change directory before running the command."
+    )]
+    pub change_dir: Option<PathBuf>,
+
     #[arg(short = 'j', long,
         global = true, help = "Maximum number of Nix builds at any time.",
         default_value_t = max_jobs())]
@@ -96,6 +104,7 @@ impl Default for GlobalOptions {
     fn default() -> Self {
         Self {
             verbose: false,
+            change_dir: None,
             max_jobs: max_jobs(),
             cores: 2,
             system: default_system(),
