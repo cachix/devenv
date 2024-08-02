@@ -7,3 +7,5 @@ inputs:
     inputs:
       nixpkgs:
         follows: nixpkgs
+  cachix:
+    url: github:cachix/cachix
