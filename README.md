@@ -42,6 +42,9 @@ Running ``devenv init`` generates ``devenv.nix``:
   # https://devenv.sh/pre-commit-hooks/
   pre-commit.hooks.shellcheck.enable = true;
 
+  # https://devenv.sh/treefmt/
+  treefmt.programs.nixpkgs-fmt.enable = true;
+
   # https://devenv.sh/processes/
   processes.ping.exec = "ping localhost";
 }
