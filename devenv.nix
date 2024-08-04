@@ -62,7 +62,7 @@
         nix flake init --template ''${DEVENV_ROOT}#simple
         nix flake update \
           --override-input devenv ''${DEVENV_ROOT}
-        nix develop --accept-flake-config --impure --command echo nix-develop started succesfully |& tee ./console
+        nix develop --accept-flake-config --no-pure-eval --command echo nix-develop started succesfully |& tee ./console
         grep -F 'nix-develop started succesfully' <./console
         grep -F "$(${lib.getExe pkgs.hello})" <./console
 
@@ -105,7 +105,7 @@
     exec = ''
       set -e
       output_file=docs/reference/options.md
-      options=$(nix build --accept-flake-config --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
+      options=$(nix build --accept-flake-config --no-pure-eval --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
       echo "# devenv.nix options" > $output_file
       echo >> $output_file
       cat $options >> $output_file
