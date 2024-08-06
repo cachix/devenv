@@ -148,7 +148,7 @@ impl Devenv {
                         .map(|arg| arg == &"build" || arg == &"eval" || arg == &"print-dev-env")
                         .unwrap_or(false)
                 {
-                    flags.push("--impure");
+                    flags.push("--no-pure-eval");
                 }
                 // set a dummy value to overcome https://github.com/NixOS/nix/issues/10247
                 cmd.env("NIX_PATH", ":");
