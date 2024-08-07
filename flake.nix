@@ -92,7 +92,7 @@
           generate-key-options = key:
             filterOptions
               (path: option:
-                lib.any (lib.hasSuffix "${key}.nix") option.declarations)
+                lib.any (lib.hasSuffix "/${key}.nix") option.declarations)
               evaluatedModules.options;
 
           optionsDocs = optionParameter: pkgs.nixosOptionsDoc {

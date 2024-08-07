@@ -2,22 +2,6 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## difftastic\.enable
-
-Integrate difftastic into git: https://difftastic\.wilfred\.me\.uk/\.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
 ## languages\.c\.enable
 
 
@@ -42,8 +26,6 @@ boolean
 
 
 ## languages\.c\.debugger
-
-
 
 An optional debugger package to use with c\.
 The default is ` gdb `, if supported on the current system\.
