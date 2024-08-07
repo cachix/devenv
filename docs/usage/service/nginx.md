@@ -1,6 +1,6 @@
-  # Nginx
-  
 
+
+[comment]: # (Please add your documentation on top of this line)
 
 ## services\.nginx\.enable
 
@@ -57,12 +57,12 @@ path
 
 
 *Default:*
-` $''{pkgs.mailcap}/etc/nginx/mime.types `
+` ${pkgs.mailcap}/etc/nginx/mime.types `
 
 
 
 *Example:*
-` $''{pkgs.nginx}/conf/mime.types `
+` ${pkgs.nginx}/conf/mime.types `
 
 
 

@@ -1,6 +1,6 @@
-  # Vala
-  
 
+
+[comment]: # (Please add your documentation on top of this line)
 
 ## languages\.vala\.enable
 

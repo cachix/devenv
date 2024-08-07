@@ -115,7 +115,7 @@
               processedOptions = option: builtins.mapAttrs (key: options: optionsDocs options) option;
             in
             pkgs.stdenv.mkDerivation {
-              name = "pr-tracker-nixos-modules-manual";
+              name = "generate-individual-docs";
               src = ./.;
               buildPhase = ''
                                 languageDir=./docs/individual-docs/languages

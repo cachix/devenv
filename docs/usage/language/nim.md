@@ -1,6 +1,6 @@
-  # Nim
-  
 
+
+[comment]: # (Please add your documentation on top of this line)
 
 ## languages\.nim\.enable
 
