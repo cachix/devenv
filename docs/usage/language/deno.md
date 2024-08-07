@@ -1,6 +1,6 @@
-  # Deno
-  
 
+
+[comment]: # (Please add your documentation on top of this line)
 
 ## languages\.deno\.enable
 
@@ -20,3 +20,21 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.deno\.package
+
+
+
+Which package of Deno to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.deno `

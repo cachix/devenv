@@ -22,25 +22,25 @@ nav:
       - Automatic Shell Activation: automatic-shell-activation.md
       - Garbage Collection: garbage-collection.md
     - Guides:
-      - Using With Flakes: guides/using-with-flakes.md
-      - Using With flake.parts: guides/using-with-flake-parts.md
+      - Using With Flakes: guides/using-with-flakes
+      - Using With flake.parts: guides/using-with-flake-parts
     - Integrations:
-      - .env: integrations/dotenv.md
-      - GitHub Actions: integrations/github-actions.md
-      - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
-      - Difftastic: integrations/difftastic.md
-      - Android: integrations/android.md
-    - Examples: examples.md
+      - .env: integrations/dotenv
+      - GitHub Actions: integrations/github-actions
+      - Codespaces / devcontainer: integrations/codespaces-devcontainer
+      - Difftastic: integrations/difftastic
+      - Android: integrations/android
+    - Examples: examples
     - Editor Support:
-      - VSCode: editor-support/vscode.md
-      - PhpStorm: editor-support/phpstorm.md
-      - Zed: editor-support/zed.md
+      - VSCode: editor-support/vscode
+      - PhpStorm: editor-support/phpstorm
+      - Zed: editor-support/zed
     - Roadmap: roadmap.md
     - Reference:
-      - devenv.yaml: reference/yaml-options.md
-      - devenv.nix: reference/options.md
+      - devenv.yaml: reference/yaml-options
+      - devenv.nix: reference/options
   - Blog: blog
   - Usage: usage 
   - Community:
-      - Get Involved: community/get-involved.md
-      - Contributing: community/contributing.md
+      - Get Involved: community/get-involved
+      - Contributing: community/contributing

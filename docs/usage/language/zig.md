@@ -1,6 +1,6 @@
-  # Zig
-  
 
+
+[comment]: # (Please add your documentation on top of this line)
 
 ## languages\.zig\.enable
 

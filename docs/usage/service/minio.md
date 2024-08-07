@@ -1,6 +1,6 @@
-  # Minio
-  
 
+
+[comment]: # (Please add your documentation on top of this line)
 
 ## services\.minio\.enable
 
