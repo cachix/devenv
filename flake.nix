@@ -123,7 +123,7 @@
                                 processManagerDir=./docs/individual-docs/process-managers
                                 mkdir -p $out/docs/individual-docs/language
                                 mkdir -p $out/docs/individual-docs/service
-                                mkdir -p $out/docs/individual-docs/process-managers
+                                mkdir -p $out/docs/individual-docs/process-manager
                                 ${lib.concatStringsSep "\n" (lib.mapAttrsToList (key: options:  ''
                                     content=$(cat ${options.optionsCommonMark})
                                     file=$languageDir/${key}.md
@@ -161,7 +161,7 @@
                                     AUTOGEN_OPTIONS \
                                     "$content"
 
-                                    cp $file $out/docs/individual-docs/process-managers/${key}.md
+                                    cp $file $out/docs/individual-docs/process-manager/${key}.md
                                 '') ( processedOptions  processManagersOptions))}
 
               '';
