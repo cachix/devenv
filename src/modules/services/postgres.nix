@@ -85,6 +85,8 @@ let
 
   configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
     (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
+  setupPgHbaFileScript = if cfg.customPgHbaFile != null then
+    ''cp ${cfg.customPgHbaFile} "$PGDATA/pg_hba.conf"'' else "";
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
     export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
@@ -100,6 +102,9 @@ let
 
     # Setup config
     cp ${configFile} "$PGDATA/postgresql.conf"
+    
+    # Setup pg_hba.conf
+    ${setupPgHbaFileScript}
 
     if [[ "$POSTGRES_RUN_INITIAL_SCRIPT" = "true" ]]; then
       echo
@@ -274,6 +279,19 @@ in
       example = lib.literalExpression ''
         CREATE ROLE postgres SUPERUSER;
         CREATE ROLE bar;
+      '';
+    };
+
+    customPgHbaFile = lib.mkOption {
+      type = types.nullOr types.path;
+      default = null;
+      description = ''
+        The path to a custom pg_hba.conf file to copy into the postgres installation. This
+        allows for custom connection rules that you want to establish on the server. If
+        you're using flakes remember to add the file to version control!
+      '';
+      example = lib.literalExpression ''
+        ./my-custom/directory/to/pg_hba.conf
       '';
     };
   };
