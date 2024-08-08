@@ -20,6 +20,12 @@ theme:
     - content.action.edit
     - content.code.annotate
     - content.code.copy
+
+    # Lazily process components on the page, like code blocks.
+    # Mounting all of code blocks on the reference doc page takes several
+    # seconds, even on a powerful machine.
+    - content.lazy
+
     - content.tabs.link
     - instant
     - navigation.instant
