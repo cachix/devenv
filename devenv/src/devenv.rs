@@ -7,9 +7,10 @@ use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
+use std::env::temp_dir;
 use std::io::Write;
 use std::os::unix::fs::symlink;
-use std::os::unix::{fs::PermissionsExt, process::CommandExt};
+use std::os::unix::process::CommandExt;
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
@@ -48,6 +49,7 @@ pub struct Devenv {
     devenv_home_gc: PathBuf,
     devenv_tmp: String,
     devenv_runtime: PathBuf,
+    project_cache_hash: Option<String>,
 
     // Caching
     pub cachix_caches: Option<command::CachixCaches>,
@@ -109,6 +111,7 @@ impl Devenv {
             devenv_home_gc,
             devenv_tmp,
             devenv_runtime,
+            project_cache_hash: None,
             cachix_caches: None,
             cachix_trusted_keys,
             assembled: false,
@@ -214,19 +217,27 @@ impl Devenv {
         args: &[String],
         replace_shell: bool,
     ) -> Result<()> {
-        let develop_args = self.prepare_shell(cmd, args)?;
+        let mut shell = std::process::Command::new(std::env::var("SHELL").expect("SHELL env not set"));
 
-        let options = command::Options {
-            replace_shell,
-            ..command::Options::default()
-        };
+        for (key, value) in self.get_environment_variables().expect("Failed to get environment variables") {
+            shell.env(key, value);
+        }
 
-        let develop_args = develop_args
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<&str>>();
+        if cmd.is_some() {
+            shell.arg("-c").arg(format!("{} {}", cmd.clone().unwrap(), args.join(" ")));
+        }
 
-        self.run_nix("nix", &develop_args, &options)?;
+        if replace_shell {
+            shell.exec();
+        } else {
+            shell
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .spawn()
+            .expect("Failed to run the shell command");
+        }
+
         Ok(())
     }
 
@@ -545,13 +556,21 @@ impl Devenv {
 
     pub fn has_processes(&mut self) -> Result<bool> {
         if self.has_processes.is_none() {
-            let result = self.run_nix(
+            let proc_script = self.run_cached_nix(
+                "procfilescript",
                 "nix",
-                &["eval", ".#devenv.processes", "--json"],
+                &[
+                    "build",
+                    "--no-link",
+                    "--print-out-paths",
+                    ".#procfileScript",
+                ],
                 &command::Options::default(),
             )?;
-            let processes = String::from_utf8_lossy(&result.stdout).to_string();
-            self.has_processes = Some(processes.trim() != "{}");
+
+            let procfile_content = std::fs::read_to_string(&proc_script.trim()).expect("cannot read cached procfile script");
+
+            self.has_processes = Some(!procfile_content.trim().is_empty())
         }
         Ok(self.has_processes.unwrap())
     }
@@ -670,94 +689,96 @@ impl Devenv {
 
     pub fn up(&mut self, process: Option<&str>, detach: &bool, log_to_file: &bool) -> Result<()> {
         self.assemble(false)?;
-        if !self.has_processes()? {
-            self.logger
-                .error("No 'processes' option defined: https://devenv.sh/processes/");
-            bail!("No processes defined");
-        }
+
+        let environment_variables = {
+            let _logprogress = log::LogProgress::new("Building environment", true);
+
+            self.get_environment_variables().expect("Failed to get environment variables")
+        };
 
         let proc_script_string: String;
-        {
-            let _logprogress = log::LogProgress::new("Building processes", true);
 
-            let proc_script = self.run_nix(
-                "nix",
-                &[
-                    "build",
-                    "--no-link",
-                    "--print-out-paths",
-                    ".#procfileScript",
-                ],
-                &command::Options::default(),
-            )?;
-
-            proc_script_string = String::from_utf8_lossy(&proc_script.stdout)
-                .to_string()
-                .trim()
-                .to_string();
-            self.add_gc("procfilescript", Path::new(&proc_script_string))?;
-        }
-
-        {
-            let _logprogress = log::LogProgress::new("Starting processes", true);
-
-            let process = process.unwrap_or("");
-
-            let processes_script = self.devenv_dotfile.join("processes");
-            // we force disable process compose tui if detach is enabled
-            let tui = if *detach {
-                "export PC_TUI_ENABLED=0"
-            } else {
-                ""
-            };
-            fs::write(
-                &processes_script,
-                indoc::formatdoc! {"
-                #!/usr/bin/env bash
-                {tui}
-                exec {proc_script_string} {process}
-            "},
-            )
-            .expect("Failed to write PROCESSES_SCRIPT");
-
-            std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
-                .expect("Failed to set permissions");
-
-            let args =
-                self.prepare_shell(&Some(processes_script.to_str().unwrap().to_string()), &[])?;
-            let args = args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            let mut cmd = self.prepare_command("nix", &args)?;
-
-            if *detach {
-                let log_file = std::fs::File::create(self.processes_log())
-                    .expect("Failed to create PROCESSES_LOG");
-                let process = if !*log_to_file {
-                    cmd.stdout(std::process::Stdio::inherit())
-                        .stderr(std::process::Stdio::inherit())
-                        .spawn()
-                        .expect("Failed to spawn process")
-                } else {
-                    cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
-                        .stderr(log_file)
-                        .spawn()
-                        .expect("Failed to spawn process")
-                };
-
-                std::fs::write(self.processes_pid(), process.id().to_string())
-                    .expect("Failed to write PROCESSES_PID");
-                self.logger.info(&format!("PID is {}", process.id()));
-                if *log_to_file {
-                    self.logger.info(&format!(
-                        "See logs:  $ tail -f {}",
-                        self.processes_log().display()
-                    ));
-                }
-                self.logger.info("Stop:      $ devenv processes stop");
-            } else {
-                cmd.exec();
+        // project didn't updated yet to latest devenv module version, run the old way to get processes
+        if !environment_variables.contains_key("DEVENV_PROCFILE") {
+            if !self.has_processes()? {
+                self.logger
+                    .error("No 'processes' option defined: https://devenv.sh/processes/");
+                bail!("No processes defined");
             }
-            Ok(())
+
+            {
+                let _logprogress = log::LogProgress::new("Building processes", true);
+    
+                let proc_script = self.run_cached_nix(
+                    "procfilescript",
+                    "nix",
+                    &[
+                        "build",
+                        "--no-link",
+                        "--print-out-paths",
+                        ".#procfileScript",
+                    ],
+                    &command::Options::default(),
+                )?;
+    
+                proc_script_string = proc_script.trim().to_string();
+                self.add_gc("procfilescript", Path::new(&proc_script_string))?;
+            }    
+        } else if environment_variables.get("DEVENV_PROCFILE").unwrap().is_empty() {
+            self.logger.error("No 'processes' option defined: https://devenv.sh/processes/");
+            bail!("No processes defined");
+        } else {
+            proc_script_string = environment_variables.get("DEVENV_PROCFILE").unwrap().to_string();
         }
+
+        let mut cmd = std::process::Command::new(&proc_script_string);
+
+        if process.is_some() {
+            cmd.arg(process.unwrap());
+        }
+
+        for (key, value) in environment_variables.iter() {
+            if key == "DEVENV_RUNTIME" {
+                if !Path::new(value).exists() {
+                    // create folder recursively
+                    std::fs::create_dir_all(value).expect("Failed to create DEVENV_RUNTIME");
+                }
+            }
+
+            cmd.env(key, value);
+        }
+
+        if *detach {
+            cmd.env("PC_TUI_ENABLED", "0");
+
+            let log_file = std::fs::File::create(self.processes_log())
+                .expect("Failed to create PROCESSES_LOG");
+            let process = if !*log_to_file {
+                cmd.stdout(std::process::Stdio::inherit())
+                    .stderr(std::process::Stdio::inherit())
+                    .spawn()
+                    .expect("Failed to spawn process")
+            } else {
+                cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
+                    .stderr(log_file)
+                    .spawn()
+                    .expect("Failed to spawn process")
+            };
+
+            std::fs::write(self.processes_pid(), process.id().to_string())
+                .expect("Failed to write PROCESSES_PID");
+            self.logger.info(&format!("PID is {}", process.id()));
+            if *log_to_file {
+                self.logger.info(&format!(
+                    "See logs:  $ tail -f {}",
+                    self.processes_log().display()
+                ));
+            }
+            self.logger.info("Stop:      $ devenv processes stop");
+        } else {
+            cmd.exec();
+        }
+        Ok(())
     }
 
     pub fn down(&self) -> Result<()> {
@@ -915,6 +936,110 @@ impl Devenv {
         );
 
         Ok((env.stdout, gc_root))
+    }
+
+    pub fn get_project_cache_hash(&mut self) -> Result<String> {
+        if self.project_cache_hash.is_none() {
+            let hash_files = [
+                "devenv.nix",
+                "devenv.lock",
+                "devenv.local.nix",
+                "devenv.yaml",
+            ];
+
+            let mut hasher = blake3::Hasher::new();
+            for file in hash_files.iter() {
+                let path = self.devenv_root.join(file);
+                if path.exists() {
+                    let contents = fs::read(&path).expect("Failed to read file");
+                    hasher.update(&contents);
+                }
+            }
+
+            let hash = hasher.finalize();
+            self.project_cache_hash = Some(hex::encode(hash.as_bytes()));
+        }
+
+        Ok(self.project_cache_hash.clone().unwrap())
+    }
+
+    fn get_environment_variables(&mut self) -> Result<HashMap<String, String>>
+    {
+        let project_cache_hash = self.get_project_cache_hash().expect("Failed to get project cache hash");
+        let env_json = self.devenv_root.join(".devenv").join("cache").join(project_cache_hash).join("env.json");
+
+        if env_json.exists() && !self.global_options.no_cache {
+            let env = std::fs::read_to_string(env_json).expect("Failed to read environment variables");
+            let map: HashMap<String, String> = serde_json::from_str(&env).expect("Failed to parse environment variables");
+            return Ok(map);
+        }
+
+        let gc_root = self.devenv_dot_gc.join("shell");
+        let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
+
+        let env_process = self.run_nix("nix", &vec!["print-dev-env", "--profile", gc_root_str], &command::Options::default())?;
+        let env = String::from_utf8(env_process.stdout).expect("Failed to convert env to utf-8");
+
+        let options = command::Options {
+            logging: false,
+            ..command::Options::default()
+        };
+
+        let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
+        self.run_nix("nix-env", &args, &options)?;
+        let now_ns = get_now_with_nanoseconds();
+        let target = format!("{}-shell", now_ns);
+        symlink_force(
+            &self.logger,
+            &fs::canonicalize(&gc_root).expect("to resolve gc_root"),
+            &self.devenv_home_gc.join(target),
+        );
+
+        let temp_dir = temp_dir();
+
+        let dumper_script_path = temp_dir.join("dumper.sh");
+        let result_script_path = temp_dir.join("result.sh");
+        let dumper_script = env + "\n" + "declare -p -x > " + result_script_path.to_str().unwrap();
+
+        std::fs::write(dumper_script_path.clone(), dumper_script).expect("Failed to write environment variables dumper");
+
+        std::process::Command::new("bash")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .arg("-c")
+            .arg(format!("source {}", dumper_script_path.to_string_lossy())) 
+            .spawn()
+            .expect("Failed to run environment variables dumper");
+
+        let env = std::fs::read_to_string(result_script_path).expect("Failed to read environment variables");
+
+        let mut map: HashMap<String, String> = env.split("\n")
+        .map(|f| f.replace("declare -x", "").trim().to_owned())
+        .filter(|f| f.len() > 0)
+        .filter(|f| !f.starts_with("DIRENV_"))
+        .map(|line| {
+            let mut parts = line.split("=");
+
+            let key = parts.next().unwrap().to_string();
+            let mut value = parts.next().unwrap().to_string();
+
+            if value.starts_with("\"") && value.ends_with("\"") {
+                value = value[1..value.len()-1].to_string();
+            }
+
+            (key, value)
+        }).collect();
+
+        map.remove("TMPDIR");
+        map.remove("SHELL");
+
+        if !env_json.parent().unwrap().exists() {
+            std::fs::create_dir_all(env_json.parent().unwrap()).expect("Failed to create cache directory");
+        }
+
+        std::fs::write(env_json, serde_json::to_string(&map).expect("Failed to serialize environment variables")).expect("Failed to write environment variables");
+
+        Ok(map)
     }
 }
 

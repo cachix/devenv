@@ -90,6 +90,12 @@ pub struct GlobalOptions {
         help = "Override inputs in devenv.yaml."
     )]
     pub override_input: Vec<String>,
+
+    #[arg(
+        long = "no-cache", 
+        help = "Don't use the cache."
+    )]
+    pub no_cache: bool,
 }
 
 impl Default for GlobalOptions {
@@ -102,6 +108,7 @@ impl Default for GlobalOptions {
             impure: false,
             eval_cache: false,
             offline: false,
+            no_cache: false,
             clean: None,
             nix_debugger: false,
             nix_option: vec![],

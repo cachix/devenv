@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 ansiterm.workspace = true
+blake3.workspace = true
 clap.workspace = true
 cli-table.workspace = true
 dotlock.workspace = true
