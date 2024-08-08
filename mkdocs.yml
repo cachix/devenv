@@ -40,7 +40,7 @@ theme:
     - tabs
 nav:
   - Home: index.md
-  - Documentation:
+  - Guide:
     - Getting Started: getting-started.md
     - Files And Variables: files-and-variables.md
     - Writing devenv.nix:
@@ -76,9 +76,9 @@ nav:
       - PhpStorm: editor-support/phpstorm.md
       - Zed: editor-support/zed.md
     - Roadmap: roadmap.md
-    - Reference:
-      - devenv.yaml: reference/yaml-options.md
-      - devenv.nix: reference/options.md
+  - Reference:
+    - devenv.nix: reference/options.md
+    - devenv.yaml: reference/yaml-options.md
   - Blog:
       - blog/index.md
   - Community:
