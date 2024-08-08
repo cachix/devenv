@@ -17,18 +17,21 @@ theme:
     primary: white
     accent: '#FBFBFB'
   features:
-    - tabs
-    - instant
-    - search.share
-    - navigation.tabs
-    - navigation.tabs.sticky
-    - navigation.expand
-    - navigation.instant
-    - navigation.tracking
+    - content.action.edit
     - content.code.annotate
     - content.code.copy
     - content.tabs.link
-    - content.action.edit
+    - instant
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.tracking
+    - search.share
+    - tabs
 nav:
   - Home: index.md
   - Documentation:
