@@ -15,6 +15,7 @@ repository = "https://github.com/cachix/devenv/"
 
 [workspace.dependencies]
 ansiterm = "0.12.2"
+blake3 = "1.5.1"
 clap = { version = "4.5.1", features = ["derive", "cargo"] }
 cli-table = "0.4.7"
 dotlock = "0.5.0"

@@ -244,6 +244,7 @@ in
     env.DEVENV_RUNTIME = config.devenv.runtime;
     env.DEVENV_DOTFILE = config.devenv.dotfile;
     env.DEVENV_ROOT = config.devenv.root;
+    env.DEVENV_PROCFILE = lib.mkDefault "";
 
     packages = [
       # needed to make sure we can load libs

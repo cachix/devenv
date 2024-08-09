@@ -35,6 +35,29 @@ impl Default for Options {
 }
 
 impl Devenv {
+    pub fn run_cached_nix(&mut self,
+        cache_key: &str,
+        command: &str,
+        args: &[&str],
+        options: &Options)
+        -> Result<String>
+    {
+        let hash = self.get_project_cache_hash().expect("Failed to get project hash");
+        let cache_path = self.devenv_root().join(".devenv").join("cache").join(hash).join(cache_key);
+
+        if cache_path.exists() && !self.global_options.no_cache {
+            let output = std::fs::read(&cache_path).expect("Failed to read cache");
+
+            return Ok(String::from_utf8_lossy(&output).to_string());
+        } else {
+            let output = self.run_nix(command, args, options).expect("Failed to run nix");
+            std::fs::create_dir_all(cache_path.parent().unwrap()).expect("Failed to create cache directory");
+            std::fs::write(&cache_path, &output.stdout.clone()).expect("Failed to write cache");
+
+            return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+        }
+    }
+
     pub fn run_nix(
         &mut self,
         command: &str,

@@ -153,6 +153,8 @@ in
       wait
     '';
 
+    env.DEVENV_PROCFILE = config.procfileScript;
+
     ci = [ config.procfileScript ];
 
     infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") config.processes;
