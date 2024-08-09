@@ -51,3 +51,12 @@ jobs:
         default_author: github_actions
         add: docs/devenv.schema.json
         message: 'Auto generate docs/devenv.schema.json'
+
+    - name: Verify individual docs
+      run: devenv verify-individual-docs
+    - uses: EndBug/add-and-commit@v9
+      if: ${{ github.event_name == 'push' }}
+      with:
+        default_author: github_actions
+        add: docs/devenv.schema.json
+        message: 'Auto generate missing individual markdowns'
