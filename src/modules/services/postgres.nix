@@ -85,8 +85,8 @@ let
 
   configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
     (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
-  setupPgHbaFileScript = if cfg.customPgHbaFile != null then
-    ''cp ${cfg.customPgHbaFile} "$PGDATA/pg_hba.conf"'' else "";
+  setupPgHbaFileScript = if cfg.hbaConf != null then
+    ''cp ${cfg.hbaConf} "$PGDATA/pg_hba.conf"'' else "";
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
     export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
@@ -282,8 +282,8 @@ in
       '';
     };
 
-    customPgHbaFile = lib.mkOption {
-      type = types.nullOr types.path;
+    hbaConf = lib.mkOption {
+      type = types.nullOr types.str;
       default = null;
       description = ''
         The path to a custom pg_hba.conf file to copy into the postgres installation. This
@@ -291,7 +291,7 @@ in
         you're using flakes remember to add the file to version control!
       '';
       example = lib.literalExpression ''
-        ./my-custom/directory/to/pg_hba.conf
+        "${./my-custom/directory/to/pg_hba.conf}"
       '';
     };
   };
