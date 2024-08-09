@@ -7,9 +7,15 @@ nav:
       - Basics: basics.md
       - Packages: packages.md
       - Scripts: scripts.md
-      - Languages: languages.md
-      - Processes: processes.md
-      - Services: services.md
+      - Languages: 
+        - Overview: languages.md
+        - Supported Languages: autogen-language-docs
+      - Processes: 
+        - Overview: processes.md
+        - Supported Process Manager: autogen-process-manager-docs
+      - Services: 
+        - Overview: services.md
+        - Supported Services: autogen-service-docs
       - Containers: containers.md
       - Binary Caching: binary-caching.md
       - Pre-Commit Hooks: pre-commit-hooks.md
