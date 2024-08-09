@@ -12,7 +12,7 @@ nav:
         - Supported Languages: autogen-language-docs
       - Processes: 
         - Overview: processes.md
-        - Supported Process Manager: autogen-process-manager-docs
+        - Supported Process Managers: autogen-process-manager-docs
       - Services: 
         - Overview: services.md
         - Supported Services: autogen-service-docs
