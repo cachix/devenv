@@ -42,11 +42,6 @@ nav:
       - PhpStorm: editor-support/phpstorm
       - Zed: editor-support/zed
     - Roadmap: roadmap.md
-    - Reference:
-      - devenv.yaml: reference/yaml-options
-      - devenv.nix: reference/options
   - Blog: blog
-  - Usage: usage 
-  - Community:
-      - Get Involved: community/get-involved
-      - Contributing: community/contributing
+  - Reference: reference
+  - Community: community
