@@ -42,6 +42,6 @@ nav:
       - PhpStorm: editor-support/phpstorm
       - Zed: editor-support/zed
     - Roadmap: roadmap.md
-  - Blog: blog
   - Reference: reference
+  - Blog: blog
   - Community: community
