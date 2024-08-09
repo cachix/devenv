@@ -106,7 +106,7 @@
       set -e
       output_file=docs/reference/options.md
       options=$(nix build --accept-flake-config --no-pure-eval --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
-      echo "# devenv.nix options" > $output_file
+      echo "# devenv.nix" > $output_file
       echo >> $output_file
       cat $options >> $output_file
       # https://github.com/NixOS/nixpkgs/issues/224661
@@ -140,6 +140,17 @@
         ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
         \`\`\`
       EOF
+    '';
+  };
+  scripts."devenv-generate-individual-docs" = {
+    description = "Generate individual docs of all devenv modules";
+    exec = ''
+      mkdir -p docs/{autogen-language-docs,autogen-service-docs,autogen-process-manager-docs}
+
+      nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
+      cp -r result/docs/individual-docs/* docs/
+      chmod -R u+rwX docs/{autogen-language-docs,autogen-service-docs,autogen-process-manager-docs}
+
     '';
   };
 
