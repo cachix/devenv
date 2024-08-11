@@ -5,9 +5,13 @@ with lib;
 let
   cfg = config.services.redis;
 
+  REDIS_UNIX_SOCKET = "${config.env.DEVENV_RUNTIME}/redis.sock";
+
   redisConfig = pkgs.writeText "redis.conf" ''
     port ${toString cfg.port}
     ${optionalString (cfg.bind != null) "bind ${cfg.bind}"}
+    ${optionalString (cfg.port == 0) "unixsocket ${REDIS_UNIX_SOCKET}"}
+    ${optionalString (cfg.port == 0) "unixsocketperm 700"}
     ${cfg.extraConfig}
   '';
 
@@ -20,6 +24,9 @@ let
 
     exec ${cfg.package}/bin/redis-server ${redisConfig} --dir "$REDISDATA"
   '';
+
+  tcpPing = "${cfg.package}/bin/redis-cli -p ${toString cfg.port} ping";
+  unixSocketPing = "${cfg.package}/bin/redis-cli -s ${REDIS_UNIX_SOCKET} ping";
 in
 {
   imports = [
@@ -51,7 +58,7 @@ in
       default = 6379;
       description = ''
         The TCP port to accept connections.
-        If port 0 is specified Redis, will not listen on a TCP socket.
+        If port 0 is specified Redis, will not listen on a TCP socket and a unix socket file will be found at $REDIS_UNIX_SOCKET.
       '';
     };
 
@@ -67,14 +74,16 @@ in
       cfg.package
     ];
 
-    env.REDISDATA = config.env.DEVENV_STATE + "/redis";
+    env = {
+      REDISDATA = config.env.DEVENV_STATE + "/redis";
+    } // optionalAttrs (cfg.port == 0) { inherit REDIS_UNIX_SOCKET; };
 
     processes.redis = {
       exec = "${startScript}/bin/start-redis";
 
       process-compose = {
         readiness_probe = {
-          exec.command = "${cfg.package}/bin/redis-cli -p ${toString cfg.port} ping";
+          exec.command = if cfg.port == 0 then unixSocketPing else tcpPing;
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
