@@ -3147,6 +3147,53 @@ boolean
 
 
 
+## languages.lean4.enable
+
+
+
+Whether to enable tools for lean4 development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)
+
+
+
+## languages.lean4.package
+
+
+
+The lean4 package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.lean4" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)
+
+
+
 ## languages.lua.enable
 
 
@@ -4739,8 +4786,6 @@ package
 
 ## languages.racket.enable
 
-
-
 Whether to enable tools for Racket development.
 
 
@@ -4785,6 +4830,8 @@ package
 
 
 ## languages.raku.enable
+
+
 
 Whether to enable tools for Raku development.
 
@@ -7541,8 +7588,6 @@ submodule
 
 ## pre-commit.hooks.ansible-lint.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -7640,6 +7685,8 @@ string
 
 
 ## pre-commit.hooks.ansible-lint.excludes
+
+
 
 Exclude files that were matched by these patterns.
 
@@ -35156,7 +35203,7 @@ strings concatenated with “\\n”
 
 
 The TCP port to accept connections.
-If port 0 is specified Redis, will not listen on a TCP socket.
+If port 0 is specified Redis, will not listen on a TCP socket and a unix socket file will be found at $REDIS_UNIX_SOCKET.
 
 
 
