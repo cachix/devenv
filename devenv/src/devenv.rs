@@ -62,6 +62,13 @@ pub struct Devenv {
 
 impl Devenv {
     pub fn new(options: DevenvOptions) -> Self {
+        let global_options = options.global_options.unwrap_or_default();
+
+        if let Some(dir) = &global_options.change_dir {
+            println!("Changing directory to {}", dir.display());
+            std::env::set_current_dir(&dir).expect("Failed to change directory");
+        }
+
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
         let devenv_home = xdg_dirs.get_data_home();
         let devenv_home_gc = devenv_home.join("gc");
@@ -88,8 +95,6 @@ impl Devenv {
         let devenv_runtime =
             Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
-
-        let global_options = options.global_options.unwrap_or_default();
 
         let level = if global_options.verbose {
             log::Level::Debug
