@@ -74,8 +74,9 @@ in
       cfg.package
     ];
 
-    env.REDIS_UNIX_SOCKET = REDIS_UNIX_SOCKET;
-    env.REDISDATA = config.env.DEVENV_STATE + "/redis";
+    env = {
+      REDISDATA = config.env.DEVENV_STATE + "/redis";
+    } // optionalAttrs (cfg.port == 0) { inherit REDIS_UNIX_SOCKET; };
 
     processes.redis = {
       exec = "${startScript}/bin/start-redis";
