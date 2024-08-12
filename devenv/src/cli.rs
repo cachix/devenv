@@ -23,6 +23,9 @@ pub struct GlobalOptions {
     #[arg(short, long, global = true, help = "Enable debug log level.")]
     pub verbose: bool,
 
+    #[arg(short, long, global = true, help = "Disable all logs")]
+    pub quiet: bool,
+
     #[arg(short = 'j', long,
         global = true, help = "Maximum number of Nix builds at any time.",
         default_value_t = max_jobs())]
@@ -96,6 +99,7 @@ impl Default for GlobalOptions {
     fn default() -> Self {
         Self {
             verbose: false,
+            quiet: false,
             max_jobs: max_jobs(),
             cores: 2,
             system: default_system(),

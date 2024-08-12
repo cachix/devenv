@@ -14,6 +14,8 @@ fn main() -> Result<()> {
 
     let level = if cli.global_options.verbose {
         log::Level::Debug
+    } else if cli.global_options.quiet {
+        log::Level::Silent
     } else {
         log::Level::Info
     };
