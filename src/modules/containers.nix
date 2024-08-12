@@ -95,11 +95,11 @@ let
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
     tag = cfg.version;
-    initializeNixDatabase = true;
+    initializeNixDatabase = cfg.isDev;
     nixUid = lib.toInt uid;
     nixGid = lib.toInt gid;
 
-    copyToRoot = [
+    copyToRoot = lib.lists.optionals cfg.isDev [
       (pkgs.buildEnv {
         name = "devenv-container-root";
         paths = [
@@ -116,14 +116,16 @@ let
 
     maxLayers = cfg.maxLayers;
 
-    layers = [
-      (nix2container.nix2container.buildLayer {
-        perms = map mkPerm (mkMultiHome (homeRoots cfg));
-        copyToRoot = mkMultiHome (homeRoots cfg);
-      })
-    ];
+    layers =
+      if cfg.isDev
+      then [
+        (nix2container.nix2container.buildLayer {
+          perms = map mkPerm (mkMultiHome (homeRoots cfg));
+          copyToRoot = mkMultiHome (homeRoots cfg);
+        })
+      ] else homeRoots cfg;
 
-    perms = [
+    perms = lib.lists.optionals cfg.isDev [
       {
         path = mkTmp;
         regex = "/tmp";
@@ -135,17 +137,19 @@ let
       }
     ];
 
-    config = {
-      Entrypoint = cfg.entrypoint;
-      User = "${user}";
-      WorkingDir = "${homeDir}";
-      Env = lib.mapAttrsToList
-        (name: value:
-          "${name}=${toString value}"
-        )
-        config.env ++ [ "HOME=${homeDir}" "USER=${user}" ];
-      Cmd = [ cfg.startupCommand ];
-    };
+    config = lib.attrsets.mergeAttrsList [
+      {
+        Entrypoint = cfg.entrypoint;
+        Cmd = [ cfg.startupCommand ];
+        Env = lib.mapAttrsToList (name: value: "${name}=${toString value}")
+          config.env ++ lib.lists.optionals cfg.isDev [ "HOME=${homeDir}" "USER=${user}" ];
+      }
+      (if cfg.isDev then {
+        User = "${user}";
+        WorkingDir = "${homeDir}";
+      } else
+        { })
+    ];
   };
 
   # <registry> <args>
@@ -237,6 +241,12 @@ let
         type = types.bool;
         default = false;
         description = "Set to true when the environment is building this container.";
+      };
+
+      isDev = lib.mkOption {
+        type = types.bool;
+        default = true;
+        description = "Is a development containers (add tools).";
       };
 
       derivation = lib.mkOption {
