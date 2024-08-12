@@ -23,7 +23,13 @@ pub struct GlobalOptions {
     #[arg(short, long, global = true, help = "Enable debug log level.")]
     pub verbose: bool,
 
-    #[arg(short, long, global = true, help = "Disable all logs")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        conflicts_with = "verbose",
+        help = "Disable all logs"
+    )]
     pub quiet: bool,
 
     #[arg(short = 'j', long,
