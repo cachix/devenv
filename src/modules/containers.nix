@@ -95,11 +95,11 @@ let
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
     tag = cfg.version;
-    initializeNixDatabase = true;
+    initializeNixDatabase = cfg.isDev;
     nixUid = lib.toInt uid;
     nixGid = lib.toInt gid;
 
-    copyToRoot = [
+    copyToRoot = lib.lists.optionals cfg.isDev [
       (pkgs.buildEnv {
         name = "devenv-container-root";
         paths = [
@@ -123,7 +123,7 @@ let
       })
     ];
 
-    perms = [
+    perms = lib.lists.optionals cfg.isDev [
       {
         path = mkTmp;
         regex = "/tmp";
@@ -135,17 +135,19 @@ let
       }
     ];
 
-    config = {
-      Entrypoint = cfg.entrypoint;
-      User = "${user}";
-      WorkingDir = "${homeDir}";
-      Env = lib.mapAttrsToList
-        (name: value:
-          "${name}=${toString value}"
-        )
-        config.env ++ [ "HOME=${homeDir}" "USER=${user}" ];
-      Cmd = [ cfg.startupCommand ];
-    };
+    config = lib.attrsets.mergeAttrsList [
+      {
+        User = "${user}";
+        WorkingDir = "${homeDir}";
+      }
+      (if cfg.isDev then {
+        Env = lib.mapAttrsToList (name: value: "${name}=${toString value}")
+          config.env ++ [ "HOME=${homeDir}" "USER=${user}" ];
+        Entrypoint = cfg.entrypoint;
+        Cmd = [ cfg.startupCommand ];
+      } else
+        { })
+    ];
   };
 
   # <registry> <args>
@@ -237,6 +239,12 @@ let
         type = types.bool;
         default = false;
         description = "Set to true when the environment is building this container.";
+      };
+
+      isDev = lib.mkOption {
+        type = types.bool;
+        default = true;
+        description = "Is a development containers (add tools).";
       };
 
       derivation = lib.mkOption {
