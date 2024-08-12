@@ -39,6 +39,7 @@ pub struct Devenv {
     pub(crate) global_options: cli::GlobalOptions,
 
     pub(crate) logger: log::Logger,
+    pub(crate) log_progress: log::LogProgressCreator,
 
     // All kinds of paths
     xdg_dirs: xdg::BaseDirectories,
@@ -98,10 +99,17 @@ impl Devenv {
         };
         let logger = options.logger.unwrap_or_else(|| log::Logger::new(level));
 
+        let log_progress = if global_options.quiet {
+            log::LogProgressCreator::Silent
+        } else {
+            log::LogProgressCreator::Logging
+        };
+
         Self {
             config: options.config,
             global_options,
             logger,
+            log_progress,
             xdg_dirs,
             devenv_root,
             devenv_dotfile,
@@ -283,7 +291,7 @@ impl Devenv {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
         };
-        let _logprogress = log::LogProgress::new(&msg, true);
+        let _logprogress = self.log_progress.with_newline(&msg);
         self.assemble(false)?;
 
         match input_name {
@@ -306,7 +314,9 @@ impl Devenv {
             bail!("Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430");
         }
 
-        let _logprogress = log::LogProgress::new(&format!("Building {name} container"), true);
+        let _logprogress = self
+            .log_progress
+            .with_newline(&format!("Building {name} container"));
 
         self.assemble(false)?;
 
@@ -337,7 +347,9 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name)?;
 
-        let _logprogress = log::LogProgress::new(&format!("Copying {name} container"), false);
+        let _logprogress = self
+            .log_progress
+            .without_newline(&format!("Copying {name} container"));
 
         let copy_script = self.run_nix(
             "nix",
@@ -390,7 +402,9 @@ impl Devenv {
         };
         self.container_copy(name, copy_args, Some("docker-daemon:"))?;
 
-        let _logprogress = log::LogProgress::new(&format!("Running {name} container"), false);
+        let _logprogress = self
+            .log_progress
+            .without_newline(&format!("Running {name} container"));
 
         let run_script = self.run_nix(
             "nix",
@@ -431,13 +445,10 @@ impl Devenv {
         let start = std::time::Instant::now();
 
         let (to_gc, removed_symlinks) = {
-            let _logprogress = log::LogProgress::new(
-                &format!(
-                    "Removing non-existing symlinks in {} ...",
-                    &self.devenv_home_gc.display()
-                ),
-                false,
-            );
+            let _logprogress = self.log_progress.without_newline(&format!(
+                "Removing non-existing symlinks in {} ...",
+                &self.devenv_home_gc.display()
+            ));
             cleanup_symlinks(&self.devenv_home_gc)
         };
 
@@ -449,9 +460,8 @@ impl Devenv {
         ));
 
         {
-            let _logprogress = log::LogProgress::new(
+            let _logprogress = self.log_progress.without_newline(
                 "Running garbage collection (this process may take some time) ...",
-                false,
             );
             let paths: Vec<&str> = to_gc
                 .iter()
@@ -561,7 +571,7 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let _logprogress = log::LogProgress::new("Building tests", true);
+            let _logprogress = self.log_progress.with_newline("Building tests");
             self.run_nix(
                 "nix",
                 &["build", ".#devenv.test", "--no-link", "--print-out-paths"],
@@ -583,7 +593,7 @@ impl Devenv {
         }
 
         let result = {
-            let _logprogress = log::LogProgress::new("Running tests", true);
+            let _logprogress = self.log_progress.with_newline("Running tests");
 
             self.logger
                 .debug(&format!("Running command: {test_script_string}"));
@@ -678,7 +688,7 @@ impl Devenv {
 
         let proc_script_string: String;
         {
-            let _logprogress = log::LogProgress::new("Building processes", true);
+            let _logprogress = self.log_progress.with_newline("Building processes");
 
             let proc_script = self.run_nix(
                 "nix",
@@ -699,7 +709,7 @@ impl Devenv {
         }
 
         {
-            let _logprogress = log::LogProgress::new("Starting processes", true);
+            let _logprogress = self.log_progress.with_newline("Starting processes");
 
             let process = process.unwrap_or("");
 
@@ -885,7 +895,7 @@ impl Devenv {
     pub fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<(Vec<u8>, PathBuf)> {
         self.assemble(false)?;
         let _logprogress = if logging {
-            Some(log::LogProgress::new("Building shell", true))
+            Some(self.log_progress.with_newline("Building shell"))
         } else {
             None
         };
