@@ -1,0 +1,47 @@
+nav:
+  - Home: index.md
+  - Documentation:
+    - Getting Started: getting-started.md
+    - Files And Variables: files-and-variables.md
+    - Writing devenv.nix:
+      - Basics: basics.md
+      - Packages: packages.md
+      - Scripts: scripts.md
+      - Languages: 
+        - Overview: languages.md
+        - Supported Languages: autogen-language-docs
+      - Processes: 
+        - Overview: processes.md
+        - Supported Process Managers: autogen-process-manager-docs
+      - Services: 
+        - Overview: services.md
+        - Supported Services: autogen-service-docs
+      - Containers: containers.md
+      - Binary Caching: binary-caching.md
+      - Pre-Commit Hooks: pre-commit-hooks.md
+      - Tests: tests.md
+      - Common Patterns: common-patterns.md
+    - Writing devenv.yaml:
+      - Inputs: inputs.md
+      - Imports: composing-using-imports.md
+    - Overview:
+      - Automatic Shell Activation: automatic-shell-activation.md
+      - Garbage Collection: garbage-collection.md
+    - Guides:
+      - Using With Flakes: guides/using-with-flakes
+      - Using With flake.parts: guides/using-with-flake-parts
+    - Integrations:
+      - .env: integrations/dotenv
+      - GitHub Actions: integrations/github-actions
+      - Codespaces / devcontainer: integrations/codespaces-devcontainer
+      - Difftastic: integrations/difftastic
+      - Android: integrations/android
+    - Examples: examples
+    - Editor Support:
+      - VSCode: editor-support/vscode
+      - PhpStorm: editor-support/phpstorm
+      - Zed: editor-support/zed
+    - Roadmap: roadmap.md
+  - Reference: reference
+  - Blog: blog
+  - Community: community
