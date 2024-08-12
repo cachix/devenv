@@ -89,7 +89,7 @@ strings concatenated with “\\n”
 
 
 The TCP port to accept connections\.
-If port 0 is specified Redis, will not listen on a TCP socket\.
+If port 0 is specified Redis, will not listen on a TCP socket and a unix socket file will be found at $REDIS_UNIX_SOCKET\.
 
 
 
