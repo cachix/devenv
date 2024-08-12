@@ -9858,6 +9858,8 @@ list of string
 
 ## pre-commit.hooks.cmake-format.verbose
 
+
+
 forces the output of the hook to be printed even when the hook passes.
 
 
@@ -11745,6 +11747,8 @@ boolean
 
 
 ## pre-commit.hooks.dune-fmt.package
+
+
 
 An optional package that provides the hook.
 
@@ -14027,6 +14031,8 @@ boolean
 
 ## pre-commit.hooks.flynt.settings.string
 
+
+
 Interpret the input as a Python code snippet and print the converted version.
 
 
@@ -16107,6 +16113,8 @@ internal name, same as ` id `
 
 ## pre-commit.hooks.lacheck.pass_filenames
 
+
+
 Whether to pass filenames as arguments to the entry point.
 
 
@@ -17997,6 +18005,8 @@ boolean
 
 
 ## pre-commit.hooks.mdl.package
+
+
 
 An optional package that provides the hook.
 
@@ -20273,6 +20283,8 @@ boolean
 
 ## pre-commit.hooks.no-commit-to-branch.settings.branch
 
+
+
 Branches to disallow commits to.
 
 
@@ -22391,6 +22403,8 @@ boolean
 
 ## pre-commit.hooks.phpstan.raw
 
+
+
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
 
@@ -24498,6 +24512,8 @@ null or string
 
 ## pre-commit.hooks.pylint.settings.reports
 
+
+
 Whether to display a full report.
 
 
@@ -26583,6 +26599,8 @@ attribute set of unspecified value
 
 
 ## pre-commit.hooks.rome.require_serial
+
+
 
 if true this hook will execute using a single process instead of in parallel.
 
@@ -28702,6 +28720,8 @@ boolean
 
 
 ## pre-commit.hooks.typos.files
+
+
 
 The pattern of files to run on.
 
@@ -30937,6 +30957,8 @@ string
 
 ## scripts.\<name>.exec
 
+
+
 Shell code to execute when the script is run.
 
 
@@ -31370,7 +31392,7 @@ path
 
 
 *Default:*
-` "/home/k3ys/sandbox/cachix/devenv/.devenv/state/caddy" `
+` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -33377,6 +33399,8 @@ strings concatenated with “\\n”
 
 
 ## services.minio.browser
+
+
 
 Enable or disable access to web UI.
 
@@ -35950,16 +35974,16 @@ unspecified value *(read only)*
 ```
 {
   bindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
-  cachedir = "/home/k3ys/sandbox/cachix/devenv/.devenv/state/trafficserver/cache";
-  datadir = "/home/k3ys/sandbox/cachix/devenv/.devenv/state/trafficserver/share";
-  exec_prefix = "/home/k3ys/sandbox/cachix/devenv/.devenv/state/trafficserver";
+  cachedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache";
+  datadir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/share";
+  exec_prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
   includedir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/include";
   libdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/lib";
   libexecdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/libexec";
-  localstatedir = "/home/k3ys/sandbox/cachix/devenv/.devenv/state/trafficserver/state";
-  logdir = "/home/k3ys/sandbox/cachix/devenv/.devenv/state/trafficserver/log";
-  prefix = "/home/k3ys/sandbox/cachix/devenv/.devenv/state/trafficserver";
-  runtimedir = "/run/user/1000/devenv-af2c776/trafficserver";
+  localstatedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/state";
+  logdir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/log";
+  prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
+  runtimedir = "/run/user/1001/devenv-0957646/trafficserver";
   sbindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
   sysconfdir = <derivation trafficserver-config>;
 }
@@ -36091,7 +36115,7 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "/home/k3ys/sandbox/cachix/devenv/.devenv/state/trafficserver/cache 256M" `
+` "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache 256M" `
 
 
 
