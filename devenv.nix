@@ -145,7 +145,7 @@
   scripts."devenv-generate-individual-docs" = {
     description = "Generate individual docs of all devenv modules";
     exec = ''
-      mkdir -p docs/{autogen-language-docs,autogen-service-docs,autogen-process-manager-docs}
+      mkdir -p docs/{supported-languages,supported-services,supported-process-managers}
 
       nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
       cp -r --no-preserve=all result/docs/individual-docs/* docs/
