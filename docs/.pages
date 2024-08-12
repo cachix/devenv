@@ -1,6 +1,6 @@
 nav:
   - Home: index.md
-  - Documentation:
+  - Guide:
     - Getting Started: getting-started.md
     - Files And Variables: files-and-variables.md
     - Writing devenv.nix:
