@@ -148,14 +148,12 @@
       mkdir -p docs/{autogen-language-docs,autogen-service-docs,autogen-process-manager-docs}
 
       nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
-      cp -r result/docs/individual-docs/* docs/
-      chmod -R u+rwX docs/{autogen-language-docs,autogen-service-docs,autogen-process-manager-docs}
-
+      cp -r --no-preserve=all result/docs/individual-docs/* docs/
     '';
   };
 
-  scripts."verify-individual-docs" = {
-    description = "Generate missing template markdown files ";
+  scripts."devenv-verify-individual-docs" = {
+    description = "Generate missing template markdown files";
     exec = ''
 
     process_directory() {

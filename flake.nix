@@ -89,7 +89,7 @@
             ];
             specialArgs = { inherit pre-commit-hooks pkgs inputs; };
           };
-          generate-key-options = key:
+          generateKeyOptions = key:
             filterOptions
               (path: option:
                 lib.any (lib.hasSuffix "/${key}.nix") option.declarations)
@@ -109,18 +109,18 @@
           devenv-generate-individual-docs =
             let
               inherit (pkgs) lib;
-              languageOptions = builtins.mapAttrs (key: _: generate-key-options key) evaluatedModules.config.languages;
-              serviceOptions = builtins.mapAttrs (key: _: generate-key-options key) evaluatedModules.config.services;
-              processManagersOptions = builtins.mapAttrs (key: _: generate-key-options key) evaluatedModules.config.process-managers;
+              languageOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.languages;
+              serviceOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.services;
+              processManagersOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.process-managers;
               processedOptions = option: builtins.mapAttrs (key: options: optionsDocs options) option;
             in
             pkgs.stdenv.mkDerivation {
               name = "generate-individual-docs";
-              src = ./.;
+              src = ./docs/individual-docs;
               buildPhase = ''
-                                languageDir=./docs/individual-docs/languages
-                                serviceDir=./docs/individual-docs/services
-                                processManagerDir=./docs/individual-docs/process-managers
+                                languageDir=./languages
+                                serviceDir=./services
+                                processManagerDir=./process-managers
                                 mkdir -p $out/docs/individual-docs/autogen-language-docs
                                 mkdir -p $out/docs/individual-docs/autogen-service-docs
                                 mkdir -p $out/docs/individual-docs/autogen-process-manager-docs
