@@ -9,13 +9,13 @@ nav:
       - Scripts: scripts.md
       - Languages: 
         - Overview: languages.md
-        - Supported Languages: autogen-language-docs
+        - Supported Languages: supported-languages
       - Processes: 
         - Overview: processes.md
-        - Supported Process Managers: autogen-process-manager-docs
+        - Supported Process Managers: supported-process-managers
       - Services: 
         - Overview: services.md
-        - Supported Services: autogen-service-docs
+        - Supported Services: supported-services
       - Containers: containers.md
       - Binary Caching: binary-caching.md
       - Pre-Commit Hooks: pre-commit-hooks.md
