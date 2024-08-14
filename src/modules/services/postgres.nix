@@ -85,10 +85,12 @@ let
 
   configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
     (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
-  setupPgHbaFileScript = 
-    if cfg.hbaConf != null then let
-      file = pkgs.writeText "pg_hba.conf" cfg.hbaConf;
-    in ''cp ${file} "$PGDATA/pg_hba.conf"''
+  setupPgHbaFileScript =
+    if cfg.hbaConf != null then
+      let
+        file = pkgs.writeText "pg_hba.conf" cfg.hbaConf;
+      in
+      ''cp ${file} "$PGDATA/pg_hba.conf"''
     else "";
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
