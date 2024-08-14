@@ -3,13 +3,15 @@ mod command;
 mod config;
 mod devenv;
 mod log;
+mod tasks;
 
 use clap::{crate_version, Parser};
-use cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand};
+use cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand};
 use devenv::Devenv;
 use miette::Result;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let level = if cli.global_options.verbose {
@@ -125,6 +127,9 @@ fn main() -> Result<()> {
                 devenv.up(process.as_deref(), &detach, &detach)
             }
             ProcessesCommand::Down {} => devenv.down(),
+        },
+        Commands::Tasks { command } => match command {
+            TasksCommand::Run { tasks } => devenv.tasks_run(tasks).await,
         },
         Commands::Inputs { command } => match command {
             InputsCommand::Add { name, url, follows } => devenv.inputs_add(&name, &url, &follows),

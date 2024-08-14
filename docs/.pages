@@ -7,6 +7,7 @@ nav:
       - Basics: basics.md
       - Packages: packages.md
       - Scripts: scripts.md
+      - Tasks: tasks.md
       - Languages: 
         - Overview: languages.md
         - Supported Languages: supported-languages

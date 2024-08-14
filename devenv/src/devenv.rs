@@ -1,4 +1,4 @@
-use super::{cli, command, config, log};
+use super::{cli, command, config, log, tasks};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -566,6 +566,41 @@ impl Devenv {
             self.has_processes = Some(processes.trim() != "{}");
         }
         Ok(self.has_processes.unwrap())
+    }
+
+    pub async fn tasks_run(&mut self, roots: Vec<String>) -> Result<()> {
+        if roots.is_empty() {
+            bail!("No tasks specified.");
+        }
+        let config = {
+            let _logprogress = self.log_progress.with_newline("Evaluating tasks");
+            self.run_nix(
+                "nix",
+                &[
+                    "build",
+                    ".#devenv.task.config",
+                    "--no-link",
+                    "--print-out-paths",
+                ],
+                &command::Options::default(),
+            )?
+        };
+        // parse tasks config
+        let config_content =
+            std::fs::read_to_string(String::from_utf8_lossy(&config.stdout).trim())
+                .expect("Failed to read config file");
+        let tasks: Vec<tasks::TaskConfig> =
+            serde_json::from_str(&config_content).expect("Failed to parse tasks config");
+        // run tasks
+        let config = tasks::Config { roots, tasks };
+        let mut tui = tasks::TasksUi::new(config).await?;
+        let tasks_status = tui.run().await?;
+
+        if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
+            Err(miette::bail!("Some tasks failed"))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn test(&mut self) -> Result<()> {
