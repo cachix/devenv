@@ -2,6 +2,8 @@
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
   # ignore annoying browserlists warning that breaks pre-commit hooks
   env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
+  env.RUST_LOG = "devenv=debug";
+  env.RUST_LOG_SPAN_EVENTS = "full";
 
   packages = [
     pkgs.cairo
@@ -207,6 +209,10 @@ EOF
     process_directory "src/modules/process-managers" "docs/individual-docs/process-managers" "process manager"
     '';
   };
+
+
+  tasks.sleep.exec = "sleep 10";
+  tasks.sleep.depends = [ "enterShell" ];
 
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;

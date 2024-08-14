@@ -228,6 +228,7 @@ in
     ./lib.nix
     ./tests.nix
     ./cachix.nix
+    ./tasks.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
