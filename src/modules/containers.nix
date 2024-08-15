@@ -135,20 +135,15 @@ let
       }
     ];
 
-    config = lib.attrsets.mergeAttrsList [
-      {
-        User = "${user}";
-        WorkingDir = "${homeDir}";
-      }
-      (if cfg.isDev then {
-        Env = lib.mapAttrsToList (name: value: "${name}=${toString value}")
+    config = {
+      User = "${user}";
+      WorkingDir = "${homeDir}";
+    } // lib.optionalAttrs cfg.isDev {
+      Env = lib.mapAttrsToList (name: value: "${name}=${toString value}")
           config.env ++ [ "HOME=${homeDir}" "USER=${user}" ];
-        Entrypoint = cfg.entrypoint;
-        Cmd = [ cfg.startupCommand ];
-      } else
-        { })
-    ];
-  };
+      Entrypoint = cfg.entrypoint;
+      Cmd = [ cfg.startupCommand ];
+   };
 
   # <registry> <args>
   mkCopyScript = cfg: pkgs.writeShellScript "copy-container" ''
