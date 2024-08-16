@@ -104,6 +104,7 @@
         {
           default = self.packages.${system}.devenv;
           devenv = mkPackage pkgs;
+          devenv-module-options = evaluatedModules;
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
           devenv-generate-individual-docs =
