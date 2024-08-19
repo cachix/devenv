@@ -159,6 +159,34 @@ extensions: [
 
 
 
+## services\.postgres\.hbaConf
+
+
+
+The contents of a custom pg_hba\.conf file to copy into the postgres installation\.
+This allows for custom connection rules that you want to establish on the server\.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+builtins.readFile ./my-custom/directory/to/pg_hba.conf
+
+```
+
+
+
 ## services\.postgres\.initdbArgs
 
 
