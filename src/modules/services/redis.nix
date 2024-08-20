@@ -22,7 +22,7 @@ let
       mkdir -p "$REDISDATA"
     fi
 
-    exec ${cfg.package}/bin/redis-server ${redisConfig} --dir "$REDISDATA"
+    exec ${cfg.package}/bin/redis-server ${redisConfig} --daemonize no --dir "$REDISDATA"
   '';
 
   tcpPing = "${cfg.package}/bin/redis-cli -p ${toString cfg.port} ping";
