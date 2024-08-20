@@ -158,8 +158,8 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.nodejs;
-      defaultText = lib.literalExpression "pkgs.nodejs";
+      default = pkgs.nodejs-slim;
+      defaultText = lib.literalExpression "pkgs.nodejs-slim";
       description = "The Node.js package to use.";
     };
 
