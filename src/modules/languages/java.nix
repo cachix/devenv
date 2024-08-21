@@ -2,7 +2,7 @@
 
 let
   cfg = config.languages.java;
-  mavenArgs = pkgs.maven.override.__functionArgs;
+  mavenArgs = lib.functionArgs pkgs.maven.override;
   mavenPackage =
     if builtins.hasAttr "jdk" mavenArgs then
     # ensure backwards compatibility when using pkgs from before this commit: https://github.com/NixOS/nixpkgs/commit/ea0bc3224593ddf7ac6c702c7acb6c89cf188f0f
