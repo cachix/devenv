@@ -2,6 +2,13 @@
 
 let
   cfg = config.languages.java;
+  mavenArgs = pkgs.maven.override.__functionArgs;
+  mavenPackage =
+    if builtins.hasAttr "jdk" mavenArgs then
+    # ensure backwards compatibility when using pkgs from before this commit: https://github.com/NixOS/nixpkgs/commit/ea0bc3224593ddf7ac6c702c7acb6c89cf188f0f
+      pkgs.maven.override { jdk = cfg.jdk.package; }
+    else
+      pkgs.maven.override { jdk_headless = cfg.jdk.package; };
   inherit (lib) types mkEnableOption mkOption mkDefault mkIf optional literalExpression;
 in
 {
@@ -21,7 +28,7 @@ in
       enable = mkEnableOption "maven";
       package = mkOption {
         type = types.package;
-        defaultText = "pkgs.maven.override { jdk = cfg.jdk.package; }";
+        defaultText = "pkgs.maven.override { jdk_headless = cfg.jdk.package; }";
         description = ''
           The Maven package to use.
           The Maven package by default inherits the JDK from `languages.java.jdk.package`.
@@ -42,7 +49,7 @@ in
   };
 
   config = mkIf cfg.enable {
-    languages.java.maven.package = mkDefault (pkgs.maven.override { jdk = cfg.jdk.package; });
+    languages.java.maven.package = mkDefault mavenPackage;
     languages.java.gradle.package = mkDefault (pkgs.gradle.override { java = cfg.jdk.package; });
     packages = (optional cfg.enable cfg.jdk.package)
       ++ (optional cfg.maven.enable cfg.maven.package)

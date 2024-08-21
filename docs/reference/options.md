@@ -2649,7 +2649,7 @@ package
 
 
 *Default:*
-` "pkgs.maven.override { jdk = cfg.jdk.package; }" `
+` "pkgs.maven.override { jdk_headless = cfg.jdk.package; }" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
