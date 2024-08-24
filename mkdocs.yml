@@ -41,6 +41,10 @@ theme:
     - tabs
     - toc.follow
 
+# Exclude doc templates
+exclude_docs: |
+  /individual-docs/**/*.md
+
 plugins:
   blog: {}
   search: {}
