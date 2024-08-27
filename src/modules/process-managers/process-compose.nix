@@ -57,7 +57,16 @@ in
           (name: value: "${name}=${toString value}")
           config.env;
         processes = lib.mapAttrs
-          (name: value: { command = "exec ${pkgs.writeShellScript name value.exec}"; } // value.process-compose)
+          (name: value:
+            let
+              scriptPath = pkgs.writeShellScript name value.exec;
+              command =
+                if value.process-compose.is_elevated or false
+                then "${scriptPath}"
+                else "exec ${scriptPath}";
+            in
+            { inherit command; } // value.process-compose
+          )
           config.processes;
       };
     };
