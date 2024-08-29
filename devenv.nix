@@ -208,12 +208,22 @@ EOF
     '';
   };
 
+  #enable tree fmt
+  treefmt = {
+    projectRootFile = "devenv.nix";
+    programs = {
+      nixpkgs-fmt.enable = true;
+      rustfmt.enable = true;
+    };
+  };
+
   pre-commit.hooks = {
-    nixpkgs-fmt.enable = true;
     #shellcheck.enable = true;
     #clippy.enable = true;
-    rustfmt.enable = true;
     #markdownlint.enable = true;
+    treefmt = {
+      enable = true;
+    };
     markdownlint.settings.configuration = {
       MD013 = {
         line_length = 120;
