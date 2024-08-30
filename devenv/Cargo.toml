@@ -11,7 +11,6 @@ default-run = "devenv"
 
 [dependencies]
 ansiterm.workspace = true
-assert_matches = "1.5.0"
 clap.workspace = true
 cli-table.workspace = true
 crossterm = "0.28.1"
@@ -23,6 +22,7 @@ indoc.workspace = true
 miette.workspace = true
 nix.workspace = true
 petgraph = "0.6.5"
+pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 regex.workspace = true
 reqwest.workspace = true
 schemars.workspace = true

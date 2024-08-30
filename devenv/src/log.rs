@@ -75,7 +75,7 @@ pub enum Level {
 
 #[derive(Clone)]
 pub struct Logger {
-    level: Level,
+    pub level: Level,
 }
 
 impl Logger {

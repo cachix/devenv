@@ -1,7 +1,5 @@
-#[macro_use]
-extern crate assert_matches;
 mod cli;
-pub mod command;
+pub mod cnix;
 pub mod config;
 mod devenv;
 pub mod log;

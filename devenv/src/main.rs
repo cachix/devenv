@@ -1,5 +1,5 @@
 mod cli;
-mod command;
+mod cnix;
 mod config;
 mod devenv;
 mod log;
@@ -43,11 +43,11 @@ async fn main() -> Result<()> {
     }
 
     match cli.command {
-        Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true),
+        Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true).await,
         Commands::Test {
             dont_override_dotfile,
         } => {
-            let tmpdir = tempdir::TempDir::new_in(devenv.devenv_root(), ".devenv")
+            let tmpdir = tempdir::TempDir::new_in(devenv.devenv_root.as_path(), ".devenv")
                 .expect("Failed to create temporary directory");
             if !dont_override_dotfile {
                 logger.info(&format!(
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
                 ));
                 devenv.update_devenv_dotfile(tmpdir.as_ref());
             }
-            devenv.test()
+            devenv.test().await
         }
         Commands::Version {} => Ok(println!(
             "devenv {} ({})",
@@ -78,15 +78,19 @@ async fn main() -> Result<()> {
                         match c {
                             ContainerCommand::Build { name } => {
                                 devenv.container_name = Some(name.clone());
-                                let _ = devenv.container_build(&name)?;
+                                let _ = devenv.container_build(&name).await?;
                             }
                             ContainerCommand::Copy { name } => {
                                 devenv.container_name = Some(name.clone());
-                                devenv.container_copy(&name, &copy_args, registry.as_deref())?;
+                                devenv
+                                    .container_copy(&name, &copy_args, registry.as_deref())
+                                    .await?;
                             }
                             ContainerCommand::Run { name } => {
                                 devenv.container_name = Some(name.clone());
-                                devenv.container_run(&name, &copy_args, registry.as_deref())?;
+                                devenv
+                                    .container_run(&name, &copy_args, registry.as_deref())
+                                    .await?;
                             }
                         }
                     }
@@ -97,17 +101,21 @@ async fn main() -> Result<()> {
                             logger.warn(
                                 "--copy flag is deprecated, use `devenv container copy` instead",
                             );
-                            devenv.container_copy(&name, &copy_args, registry.as_deref())?;
+                            devenv
+                                .container_copy(&name, &copy_args, registry.as_deref())
+                                .await?;
                         }
                         (_, true) => {
                             logger.warn(
                                 "--docker-run flag is deprecated, use `devenv container run` instead",
                             );
-                            devenv.container_run(&name, &copy_args, registry.as_deref())?;
+                            devenv
+                                .container_run(&name, &copy_args, registry.as_deref())
+                                .await?;
                         }
                         _ => {
                             logger.warn("Calling without a subcommand is deprecated, use `devenv container build` instead");
-                            let _ = devenv.container_build(&name)?;
+                            let _ = devenv.container_build(&name).await?;
                         }
                     };
                 }
@@ -115,16 +123,16 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Init { target } => devenv.init(&target),
-        Commands::Search { name } => devenv.search(&name),
+        Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
         Commands::Info {} => devenv.info(),
         Commands::Repl {} => devenv.repl(),
-        Commands::Build { attributes } => devenv.build(&attributes),
+        Commands::Build { attributes } => devenv.build(&attributes).await,
         Commands::Update { name } => devenv.update(&name),
-        Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach),
+        Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach).await,
         Commands::Processes { command } => match command {
             ProcessesCommand::Up { process, detach } => {
-                devenv.up(process.as_deref(), &detach, &detach)
+                devenv.up(process.as_deref(), &detach, &detach).await
             }
             ProcessesCommand::Down {} => devenv.down(),
         },
@@ -137,7 +145,7 @@ async fn main() -> Result<()> {
 
         // hidden
         Commands::Assemble => devenv.assemble(false),
-        Commands::PrintDevEnv { json } => devenv.print_dev_env(json),
+        Commands::PrintDevEnv { json } => devenv.print_dev_env(json).await,
         Commands::GenerateJSONSchema => {
             config::write_json_schema();
             Ok(())
