@@ -8,7 +8,7 @@ let
           if builtins.isNull command
           then null
           else
-            pkgs.writeScriptBin name ''
+            pkgs.writeScript name ''
               #!${pkgs.lib.getBin config.package}/bin/${config.binary}
               ${command}
             '';
@@ -44,7 +44,7 @@ let
           statusCommand = lib.mkOption {
             type = types.nullOr types.package;
             internal = true;
-            default = mkCommand config.exec;
+            default = mkCommand config.status;
             description = "Path to the script to run.";
           };
           config = lib.mkOption {
