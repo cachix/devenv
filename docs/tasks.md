@@ -38,7 +38,7 @@ Tasks can also reference scripts and depend on other tasks, for example when ent
       exec = "echo 'Hello world from bash!'";
       depends = [ "python:hello" ];
     };
-    enterShell.depends = [ "bash:hello" ];
+    "devenv:enterShell".depends = [ "bash:hello" ];
   };
 }
 ```

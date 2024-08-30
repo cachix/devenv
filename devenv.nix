@@ -211,8 +211,8 @@ EOF
   };
 
 
-  tasks.sleep.exec = "sleep 10";
-  tasks.sleep.depends = [ "enterShell" ];
+  tasks."devenv:sleep".exec = "sleep 1";
+  tasks."devenv:enterShell".depends = [ "devenv:sleep" ];
 
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
