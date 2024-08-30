@@ -96,11 +96,20 @@ impl TryFrom<serde_json::Value> for Config {
     }
 }
 
-#[derive(Debug)]
+type Output = Vec<(std::time::Instant, String)>;
+
+#[derive(Debug, Clone)]
+struct TaskFailure {
+    stdout: Output,
+    stderr: Output,
+    error: String,
+}
+
+#[derive(Debug, Clone)]
 enum TaskCompleted {
     Success(Duration),
     Skipped,
-    Failed(Duration),
+    Failed(Duration, TaskFailure),
     DependencyFailed,
 }
 
@@ -108,12 +117,12 @@ impl TaskCompleted {
     fn has_failed(&self) -> bool {
         matches!(
             self,
-            TaskCompleted::Failed(_) | TaskCompleted::DependencyFailed
+            TaskCompleted::Failed(_, _) | TaskCompleted::DependencyFailed
         )
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum TaskStatus {
     Pending,
     Running(Instant),
@@ -134,49 +143,112 @@ impl TaskState {
         }
     }
 
-    #[instrument]
+    #[instrument(ret)]
     async fn run(&mut self) -> TaskCompleted {
         let now = Instant::now();
         self.status = TaskStatus::Running(now);
         if let Some(cmd) = &self.task.status {
-            // TODO: stdout/stderr should be piped for debugging
-            let status = Command::new(cmd)
+            let result = Command::new(cmd)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .status()
-                .await
-                .expect("Failed to execute status");
-            if status.success() {
-                return TaskCompleted::Skipped;
+                .await;
+            match result {
+                Ok(status) => {
+                    if status.success() {
+                        return TaskCompleted::Skipped;
+                    }
+                }
+                Err(e) => {
+                    // TODO: stdout, stderr
+                    return TaskCompleted::Failed(
+                        now.elapsed(),
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error: e.to_string(),
+                        },
+                    );
+                }
             }
         }
         if let Some(cmd) = &self.task.command {
-            let mut child = Command::new(cmd)
+            let result = Command::new(cmd)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .spawn()
-                .expect("Failed to execute command");
+                .spawn();
 
-            let stdout = child.stdout.take().expect("Failed to open stdout");
-            let stderr = child.stderr.take().expect("Failed to open stderr");
+            let mut child = match result {
+                Ok(c) => c,
+                Err(e) => {
+                    return TaskCompleted::Failed(
+                        now.elapsed(),
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error: e.to_string(),
+                        },
+                    );
+                }
+            };
+
+            let stdout = match child.stdout.take() {
+                Some(stdout) => stdout,
+                None => {
+                    return TaskCompleted::Failed(
+                        now.elapsed(),
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error: "Failed to capture stdout".to_string(),
+                        },
+                    )
+                }
+            };
+            let stderr = match child.stderr.take() {
+                Some(stderr) => stderr,
+                None => {
+                    return TaskCompleted::Failed(
+                        now.elapsed(),
+                        TaskFailure {
+                            stdout: Vec::new(),
+                            stderr: Vec::new(),
+                            error: "Failed to capture stderr".to_string(),
+                        },
+                    )
+                }
+            };
 
             let mut stderr_reader = BufReader::new(stderr).lines();
             let mut stdout_reader = BufReader::new(stdout).lines();
+
+            let mut stdout_lines = Vec::new();
+            let mut stderr_lines = Vec::new();
 
             loop {
                 tokio::select! {
                     result = stdout_reader.next_line() => {
                         match result {
-                            Ok(Some(line)) => info!(stdout = %line),
+                            Ok(Some(line)) => {
+                                info!(stdout = %line);
+                                stdout_lines.push((std::time::Instant::now(), line));
+                            },
                             Ok(None) => {},
-                            Err(e) => error!("Error reading stdout: {}", e),
+                            Err(e) => {
+                                error!("Error reading stdout: {}", e);
+                                stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                            },
                         }
                     }
                     result = stderr_reader.next_line() => {
                         match result {
-                            Ok(Some(line)) => error!(stderr = %line),
+                            Ok(Some(line)) => {
+                                stderr_lines.push((std::time::Instant::now(), line));
+                            },
                             Ok(None) => {},
-                            Err(e) => error!("Error reading stderr: {}", e),
+                            Err(e) => {
+                                stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                            },
                         }
                     }
                     result = child.wait() => {
@@ -185,12 +257,26 @@ impl TaskState {
                                 if status.success() {
                                     return TaskCompleted::Success(now.elapsed());
                                 } else {
-                                    return TaskCompleted::Failed(now.elapsed());
+                                    return TaskCompleted::Failed(
+                                        now.elapsed(),
+                                        TaskFailure {
+                                            stdout: stdout_lines,
+                                            stderr: stderr_lines,
+                                            error: format!("Task exited with status: {}", status),
+                                        },
+                                    );
                                 }
                             },
                             Err(e) => {
                                 error!("Error waiting for command: {}", e);
-                                return TaskCompleted::Failed(now.elapsed());
+                                return TaskCompleted::Failed(
+                                    now.elapsed(),
+                                    TaskFailure {
+                                        stdout: stdout_lines,
+                                        stderr: stderr_lines,
+                                        error: format!("Error waiting for command: {}", e),
+                                    },
+                                );
                             }
                         }
                     }
@@ -249,7 +335,7 @@ impl Tasks {
             tasks_order: vec![],
         };
         tasks.resolve_dependencies(task_indices).await?;
-        tasks.schedule().await?;
+        tasks.tasks_order = tasks.schedule().await?;
         Ok((tasks, receiver_rx))
     }
 
@@ -283,46 +369,49 @@ impl Tasks {
         }
     }
 
-    #[instrument(skip(self))]
-    async fn schedule(&mut self) -> Result<(), Error> {
-        // TODO: we traverse the graph twice, see https://github.com/petgraph/petgraph/issues/661
+    #[instrument(skip(self), fields(graph, subgraph), ret)]
+    async fn schedule(&mut self) -> Result<Vec<NodeIndex>, Error> {
         let mut subgraph = DiGraph::new();
-
-        // Map to track which nodes in the original graph correspond to which nodes in the new subgraph
         let mut node_map = HashMap::new();
         let mut visited = HashSet::new();
+        let mut to_visit = Vec::new();
 
-        // Traverse the graph starting from the root nodes
-        for root_index in &self.roots {
-            let mut dfs = Dfs::new(&self.graph, *root_index);
+        // Start with root nodes
+        for &root_index in &self.roots {
+            to_visit.push(root_index);
+        }
 
-            while let Some(node) = dfs.next(&self.graph) {
-                if visited.insert(node) {
-                    // Add the node to the new subgraph and map it
-                    let new_node = subgraph.add_node(self.graph[node].clone());
-                    node_map.insert(node, new_node);
+        // Depth-first search including dependencies
+        while let Some(node) = to_visit.pop() {
+            if visited.insert(node) {
+                let new_node = subgraph.add_node(self.graph[node].clone());
+                node_map.insert(node, new_node);
 
-                    // Copy edges to the new subgraph
-                    for edge in self.graph.edges(node) {
-                        let target = edge.target();
-                        if visited.contains(&target) {
-                            // Both nodes must already be added to subgraph
-                            let new_source = node_map[&node];
-                            let new_target = node_map[&target];
-                            subgraph.add_edge(new_source, new_target, ());
-                        }
-                    }
+                // Add dependencies to visit
+                for neighbor in self
+                    .graph
+                    .neighbors_directed(node, petgraph::Direction::Incoming)
+                {
+                    to_visit.push(neighbor);
+                }
+            }
+        }
+
+        // Add edges to subgraph
+        for (&old_node, &new_node) in &node_map {
+            for edge in self.graph.edges(old_node) {
+                let target = edge.target();
+                if let Some(&new_target) = node_map.get(&target) {
+                    subgraph.add_edge(new_node, new_target, ());
                 }
             }
         }
 
         self.graph = subgraph;
 
+        // Run topological sort on the subgraph
         match toposort(&self.graph, None) {
-            Ok(indexes) => {
-                self.tasks_order = indexes.into_iter().rev().collect();
-                Ok(())
-            }
+            Ok(indexes) => Ok(indexes),
             Err(cycle) => Err(Error::CycleDetected(
                 self.graph[cycle.node_id()].read().await.task.name.clone(),
             )),
@@ -336,7 +425,9 @@ impl Tasks {
         for index in &self.tasks_order {
             let task_state = &self.graph[*index];
 
-            loop {
+            let mut dependency_failed = false;
+
+            'dependency_check: loop {
                 let mut dependencies_completed = true;
                 for dep_index in self
                     .graph
@@ -345,10 +436,8 @@ impl Tasks {
                     match &self.graph[dep_index].read().await.status {
                         TaskStatus::Completed(completed) => {
                             if completed.has_failed() {
-                                let mut task_state = self.graph[dep_index].write().await;
-                                task_state.status =
-                                    TaskStatus::Completed(TaskCompleted::DependencyFailed);
-                                continue;
+                                dependency_failed = true;
+                                break 'dependency_check;
                             }
                         }
                         TaskStatus::Pending => {
@@ -369,13 +458,18 @@ impl Tasks {
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
 
-            let task_state_clone = Arc::clone(task_state);
+            if dependency_failed {
+                let mut task_state = task_state.write().await;
+                task_state.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
+            } else {
+                let task_state_clone = Arc::clone(task_state);
 
-            running_tasks.spawn(async move {
-                let mut task_state = task_state_clone.write().await;
-                let completed = task_state.run().await;
-                task_state.status = TaskStatus::Completed(completed);
-            });
+                running_tasks.spawn(async move {
+                    let mut task_state = task_state_clone.write().await;
+                    let completed = task_state.run().await;
+                    task_state.status = TaskStatus::Completed(completed);
+                });
+            }
         }
 
         while let Some(res) = running_tasks.join_next().await {
@@ -453,7 +547,7 @@ impl TasksUi {
                     tasks_status.succeeded += 1;
                     ("Succeeded".green().bold(), Some(*duration))
                 }
-                TaskStatus::Completed(TaskCompleted::Failed(duration)) => {
+                TaskStatus::Completed(TaskCompleted::Failed(duration, _)) => {
                     tasks_status.failed += 1;
                     ("Failed".red().bold(), Some(*duration))
                 }
@@ -608,12 +702,15 @@ async fn test_task_name() -> Result<(), Error> {
 
 #[test(tokio::test)]
 async fn test_basic_tasks() -> Result<(), Error> {
-    let script1 =
-        create_script("#!/bin/sh\necho 'Task 1 is running' && sleep 2 && echo 'Task 1 completed'")?;
-    let script2 =
-        create_script("#!/bin/sh\necho 'Task 2 is running' && sleep 3 && echo 'Task 2 completed'")?;
-    let script3 =
-        create_script("#!/bin/sh\necho 'Task 3 is running' && sleep 1 && echo 'Task 3 completed'")?;
+    let script1 = create_script(
+        "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
+    )?;
+    let script2 = create_script(
+        "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
+    )?;
+    let script3 = create_script(
+        "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
+    )?;
     let script4 = create_script("#!/bin/sh\necho 'Task 4 is running' && echo 'Task 4 completed'")?;
 
     let (mut tasks, _) = Tasks::new(
@@ -645,88 +742,76 @@ async fn test_basic_tasks() -> Result<(), Error> {
     .await?;
     tasks.run().await;
 
-    // Assert the order is 1, 3, 4 and they all succeed
-    let task_1_name = String::from("myapp:task_1");
-    let task_3_name = String::from("myapp:task_3");
-    let task_4_name = String::from("myapp:task_4");
-    let tasks_order_len = tasks.tasks_order.len();
-    let task_0 = tasks.graph[tasks.tasks_order[0]].read().await;
-    let task_1 = tasks.graph[tasks.tasks_order[1]].read().await;
-    let task_2 = tasks.graph[tasks.tasks_order[2]].read().await;
+    let task_statuses = inspect_tasks(&tasks).await;
+    let task_statuses = task_statuses.as_slice();
     assert_matches!(
-        (
-            tasks_order_len,
-            &task_0.status,
-            &task_0.task.name,
-            &task_1.status,
-            &task_1.task.name,
-            &task_2.status,
-            &task_2.task.name
-        ),
-        (
-            3,
-            TaskStatus::Completed(TaskCompleted::Success(_)),
-            task_1_name,
-            TaskStatus::Completed(TaskCompleted::Success(_)),
-            task_3_name,
-            TaskStatus::Completed(TaskCompleted::Success(_)),
-            task_4_name
-        )
+        task_statuses,
+        [
+            (name1, TaskStatus::Completed(TaskCompleted::Success(_))),
+            (name2, TaskStatus::Completed(TaskCompleted::Success(_))),
+            (name3, TaskStatus::Completed(TaskCompleted::Success(_)))
+        ] if name1 == "myapp:task_1" && name2 == "myapp:task_3" && name3 == "myapp:task_4"
     );
     Ok(())
 }
 
-// #[test(tokio::test)]
-// async fn test_tasks_cycle() -> Result<(), Error> {
-//     let (mut tasks, _) = Tasks::new(
-//         Config::try_from(json!({
-//             "roots": ["myapp:task_1"],
-//             "tasks": [
-//                 {
-//                     "name": "myapp:task_1",
-//                     "depends": ["myapp:task_2"],
-//                     "command": "echo 'Task 1 is running' && sleep 2 && echo 'Task 1 completed'"
-//                 },
-//                 {
-//                     "name": "myapp:task_2",
-//                     "depends": ["myapp:task_1"],
-//                     "command": "echo 'Task 2 is running' && sleep 3 && echo 'Task 2 completed'"
-//                 }
-//             ]
-//         }))
-//         .unwrap(),
-//     )
-//     .await?;
-
-//     let err = "myapp_task_2".to_string();
-
-//     assert!(matches!(tasks.run().await, Err(Error::CycleDetected(err))));
-//     Ok(())
-// }
+#[test(tokio::test)]
+async fn test_tasks_cycle() -> Result<(), Error> {
+    let result = Tasks::new(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1"],
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "depends": ["myapp:task_2"],
+                    "command": "echo 'Task 1 is running' && echo 'Task 1 completed'"
+                },
+                {
+                    "name": "myapp:task_2",
+                    "depends": ["myapp:task_1"],
+                    "command": "echo 'Task 2 is running' && echo 'Task 2 completed'"
+                }
+            ]
+        }))
+        .unwrap(),
+    )
+    .await;
+    if let Err(Error::CycleDetected(task)) = result {
+        assert_eq!(task, "myapp:task_2".to_string());
+    } else {
+        panic!("Expected Error::CycleDetected, got {:?}", result);
+    }
+    Ok(())
+}
 
 #[test(tokio::test)]
 async fn test_status() -> Result<(), Error> {
-    let run_task = |root: &'static str| async move {
-        let command_script1 =
-            create_script("#!/bin/sh\necho 'Task 1 is running' && echo 'Task 1 completed'")?;
-        let status_script1 = create_script("#!/bin/sh\nexit 0")?;
-        let command_script2 =
-            create_script("#!/bin/sh\necho 'Task 2 is running' && echo 'Task 2 completed'")?;
-        let status_script2 = create_script("#!/bin/sh\nexit 1")?;
+    let command_script1 =
+        create_script("#!/bin/sh\necho 'Task 1 is running' && echo 'Task 1 completed'")?;
+    let status_script1 = create_script("#!/bin/sh\nexit 0")?;
+    let command_script2 =
+        create_script("#!/bin/sh\necho 'Task 2 is running' && echo 'Task 2 completed'")?;
+    let status_script2 = create_script("#!/bin/sh\nexit 1")?;
 
+    let command1 = command_script1.to_str().unwrap();
+    let status1 = status_script1.to_str().unwrap();
+    let command2 = command_script2.to_str().unwrap();
+    let status2 = status_script2.to_str().unwrap();
+
+    let create_tasks = |root: &'static str| async move {
         Tasks::new(
             Config::try_from(json!({
                 "roots": [root],
                 "tasks": [
                     {
                         "name": "myapp:task_1",
-                        "command": command_script1.to_str().unwrap(),
-                        "status": status_script1.to_str().unwrap()
+                        "command": command1,
+                        "status": status1
                     },
                     {
                         "name": "myapp:task_2",
-                        "command": command_script2.to_str().unwrap(),
-                        "status": status_script2.to_str().unwrap()
+                        "command": command2,
+                        "status": status2
                     }
                 ]
             }))
@@ -735,18 +820,60 @@ async fn test_status() -> Result<(), Error> {
         .await
     };
 
-    let (mut tasks, _) = run_task("myapp:task_1").await.unwrap();
+    let (mut tasks, _) = create_tasks("myapp:task_1").await.unwrap();
     tasks.run().await;
+    assert_eq!(tasks.tasks_order.len(), 1);
     assert_matches!(
         tasks.graph[tasks.tasks_order[0]].read().await.status,
         TaskStatus::Completed(TaskCompleted::Skipped)
     );
 
-    let (mut tasks, _) = run_task("myapp:task_2").await.unwrap();
+    let (mut tasks, _) = create_tasks("myapp:task_2").await.unwrap();
     tasks.run().await;
+    assert_eq!(tasks.tasks_order.len(), 1);
     assert_matches!(
         tasks.graph[tasks.tasks_order[0]].read().await.status,
         TaskStatus::Completed(TaskCompleted::Success(_))
+    );
+
+    Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_nonexistent_script() -> Result<(), Error> {
+    let (tasks, _) = Tasks::new(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1"],
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": "/path/to/nonexistent/script.sh"
+                }
+            ]
+        }))
+        .unwrap(),
+    )
+    .await?;
+
+    let mut tasks = tasks;
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+    let task_statuses = task_statuses.as_slice();
+    let task_1 = String::from("myapp:task_1");
+    assert_matches!(
+        &task_statuses,
+        [(
+            task_1,
+            TaskStatus::Completed(TaskCompleted::Failed(
+                _,
+                TaskFailure {
+                    stdout: _,
+                    stderr: _,
+                    error
+                }
+            ))
+        )] if error == "No such file or directory (os error 2)"
     );
 
     Ok(())
@@ -772,6 +899,58 @@ async fn test_status_without_command() -> Result<(), Error> {
 
     assert!(matches!(result, Err(Error::MissingCommand(_))));
     Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_dependency_failure() -> Result<(), Error> {
+    let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
+    let dependent_script = create_script("#!/bin/sh\necho 'Dependent task' && exit 0")?;
+
+    let (mut tasks, _) = Tasks::new(
+        Config::try_from(json!({
+            "roots": ["myapp:task_2"],
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": failing_script.to_str().unwrap()
+                },
+                {
+                    "name": "myapp:task_2",
+                    "depends": ["myapp:task_1"],
+                    "command": dependent_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+    )
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+    let task_statuses_slice = &task_statuses.as_slice();
+    assert_matches!(
+        *task_statuses_slice,
+        [
+            (task_1, TaskStatus::Completed(TaskCompleted::Failed(_, _))),
+            (
+                task_2,
+                TaskStatus::Completed(TaskCompleted::DependencyFailed)
+            )
+        ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
+    );
+
+    Ok(())
+}
+
+#[cfg(test)]
+async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
+    let mut result = Vec::new();
+    for index in &tasks.tasks_order {
+        let task_state = tasks.graph[*index].read().await;
+        result.push((task_state.task.name.clone(), task_state.status.clone()));
+    }
+    result
 }
 
 #[cfg(test)]
