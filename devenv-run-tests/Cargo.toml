@@ -9,3 +9,4 @@ clap.workspace = true
 tempdir.workspace = true
 
 devenv= { path = "../devenv" }
+tokio = "1.39.3"

@@ -1,4 +1,3 @@
-use assert_matches::assert_matches;
 use crossterm::{
     cursor, execute,
     style::{self, Stylize},
@@ -8,8 +7,11 @@ use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Dfs, EdgeRef};
+#[cfg(test)]
+use pretty_assertions::assert_matches;
 use serde::Deserialize;
-use serde_json::{json, Value};
+#[cfg(test)]
+use serde_json::json;
 use std::io::{self, Write};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -33,6 +35,7 @@ pub enum Error {
     #[error(transparent)]
     IoError(#[from] std::io::Error),
     TaskNotFound(String),
+    MissingCommand(String),
     TasksNotFound(Vec<(String, String)>),
     InvalidTaskName(String),
     // TODO: be more precies where the cycle happens
@@ -54,6 +57,11 @@ impl Display for Error {
             ),
             Error::TaskNotFound(task) => write!(f, "Task does not exist: {}", task),
             Error::CycleDetected(task) => write!(f, "Cycle detected at task: {}", task),
+            Error::MissingCommand(task) => write!(
+                f,
+                "Task {} defined a status, but is missing a command",
+                task
+            ),
             Error::InvalidTaskName(task) => write!(
                 f,
                 "Invalid task name: {}, expected [a-zA-Z-_]:[a-zA-Z-_]",
@@ -130,20 +138,16 @@ impl TaskState {
     async fn run(&mut self) -> TaskCompleted {
         let now = Instant::now();
         self.status = TaskStatus::Running(now);
-        if let Some(status) = &self.task.status {
-            let mut child = Command::new(status)
+        if let Some(cmd) = &self.task.status {
+            // TODO: stdout/stderr should be piped for debugging
+            let status = Command::new(cmd)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .spawn()
+                .status()
+                .await
                 .expect("Failed to execute status");
-
-            match child.wait().await {
-                Err(_) => {}
-                Ok(status) => {
-                    if status.success() {
-                        return TaskCompleted::Skipped;
-                    }
-                }
+            if status.success() {
+                return TaskCompleted::Skipped;
             }
         }
         if let Some(cmd) = &self.task.command {
@@ -164,14 +168,14 @@ impl TaskState {
                     result = stdout_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => info!(stdout = %line),
-                            Ok(None) => break,
+                            Ok(None) => {},
                             Err(e) => error!("Error reading stdout: {}", e),
                         }
                     }
                     result = stderr_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => error!(stderr = %line),
-                            Ok(None) => break,
+                            Ok(None) => {},
                             Err(e) => error!("Error reading stderr: {}", e),
                         }
                     }
@@ -192,8 +196,9 @@ impl TaskState {
                     }
                 }
             }
+        } else {
+            return TaskCompleted::Skipped;
         }
-        return TaskCompleted::Skipped;
     }
 }
 
@@ -222,6 +227,9 @@ impl Tasks {
                     .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-')
             {
                 return Err(Error::InvalidTaskName(name));
+            }
+            if task.status.is_some() && task.command.is_none() {
+                return Err(Error::MissingCommand(name));
             }
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(task))));
             task_indices.insert(name, index);
@@ -312,7 +320,7 @@ impl Tasks {
 
         match toposort(&self.graph, None) {
             Ok(indexes) => {
-                self.tasks_order = indexes;
+                self.tasks_order = indexes.into_iter().rev().collect();
                 Ok(())
             }
             Err(cycle) => Err(Error::CycleDetected(
@@ -322,7 +330,7 @@ impl Tasks {
     }
 
     #[instrument(skip(self))]
-    async fn run(&mut self) -> Result<(), Error> {
+    async fn run(&mut self) {
         let mut running_tasks = JoinSet::new();
 
         for index in &self.tasks_order {
@@ -332,7 +340,7 @@ impl Tasks {
                 let mut dependencies_completed = true;
                 for dep_index in self
                     .graph
-                    .neighbors_directed(*index, petgraph::Direction::Outgoing)
+                    .neighbors_directed(*index, petgraph::Direction::Incoming)
                 {
                     match &self.graph[dep_index].read().await.status {
                         TaskStatus::Completed(completed) => {
@@ -358,7 +366,7 @@ impl Tasks {
                     break;
                 }
 
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
 
             let task_state_clone = Arc::clone(task_state);
@@ -373,11 +381,9 @@ impl Tasks {
         while let Some(res) = running_tasks.join_next().await {
             match res {
                 Ok(_) => (),
-                Err(e) => eprintln!("Task failed: {:?}", e),
+                Err(e) => eprintln!("Task crashed: {}", e),
             }
         }
-
-        Ok(())
     }
 }
 
@@ -475,9 +481,7 @@ impl TasksUi {
         let tasks_clone = Arc::clone(&self.tasks);
         let handle = tokio::spawn(async move {
             let mut tasks = tasks_clone.lock().await;
-            if let Err(e) = tasks.run().await {
-                eprintln!("Error running tasks: {:?}", e);
-            }
+            tasks.run().await
         });
 
         // start TUI
@@ -639,33 +643,35 @@ async fn test_basic_tasks() -> Result<(), Error> {
         .unwrap(),
     )
     .await?;
-    tasks.run().await?;
+    tasks.run().await;
 
     // Assert the order is 1, 3, 4 and they all succeed
-    assert_eq!(tasks.tasks_order.len(), 3);
+    let task_1_name = String::from("myapp:task_1");
+    let task_3_name = String::from("myapp:task_3");
+    let task_4_name = String::from("myapp:task_4");
+    let tasks_order_len = tasks.tasks_order.len();
+    let task_0 = tasks.graph[tasks.tasks_order[0]].read().await;
+    let task_1 = tasks.graph[tasks.tasks_order[1]].read().await;
+    let task_2 = tasks.graph[tasks.tasks_order[2]].read().await;
     assert_matches!(
-        tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_))
-    );
-    assert_eq!(
-        tasks.graph[tasks.tasks_order[0]].read().await.task.name,
-        "myapp:task_1"
-    );
-    assert_matches!(
-        tasks.graph[tasks.tasks_order[1]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_))
-    );
-    assert_eq!(
-        tasks.graph[tasks.tasks_order[1]].read().await.task.name,
-        "myapp:task_3"
-    );
-    assert_matches!(
-        tasks.graph[tasks.tasks_order[2]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_))
-    );
-    assert_eq!(
-        tasks.graph[tasks.tasks_order[2]].read().await.task.name,
-        "myapp:task_4"
+        (
+            tasks_order_len,
+            &task_0.status,
+            &task_0.task.name,
+            &task_1.status,
+            &task_1.task.name,
+            &task_2.status,
+            &task_2.task.name
+        ),
+        (
+            3,
+            TaskStatus::Completed(TaskCompleted::Success(_)),
+            task_1_name,
+            TaskStatus::Completed(TaskCompleted::Success(_)),
+            task_3_name,
+            TaskStatus::Completed(TaskCompleted::Success(_)),
+            task_4_name
+        )
     );
     Ok(())
 }
@@ -730,14 +736,14 @@ async fn test_status() -> Result<(), Error> {
     };
 
     let (mut tasks, _) = run_task("myapp:task_1").await.unwrap();
-    tasks.run().await?;
+    tasks.run().await;
     assert_matches!(
         tasks.graph[tasks.tasks_order[0]].read().await.status,
         TaskStatus::Completed(TaskCompleted::Skipped)
     );
 
     let (mut tasks, _) = run_task("myapp:task_2").await.unwrap();
-    tasks.run().await?;
+    tasks.run().await;
     assert_matches!(
         tasks.graph[tasks.tasks_order[0]].read().await.status,
         TaskStatus::Completed(TaskCompleted::Success(_))
@@ -746,6 +752,29 @@ async fn test_status() -> Result<(), Error> {
     Ok(())
 }
 
+#[test(tokio::test)]
+async fn test_status_without_command() -> Result<(), Error> {
+    let status_script = create_script("#!/bin/sh\nexit 0")?;
+
+    let result = Tasks::new(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1"],
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "status": status_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+    )
+    .await;
+
+    assert!(matches!(result, Err(Error::MissingCommand(_))));
+    Ok(())
+}
+
+#[cfg(test)]
 fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     let mut temp_file = tempfile::Builder::new()
         .prefix(&format!("script"))
