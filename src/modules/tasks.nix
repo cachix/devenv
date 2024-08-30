@@ -26,8 +26,8 @@ let
             default = config.package.pname;
           };
           package = lib.mkOption {
-            type = types.nullOr types.package;
-            default = null;
+            type = types.package;
+            default = pkgs.bash;
             description = "Package to install for this task.";
           };
           command = lib.mkOption {
@@ -79,7 +79,6 @@ in
   options.task.config = lib.mkOption {
     type = types.package;
     internal = true;
-    default = (pkgs.formats.json { }).generate "tasks.json" (lib.mapAttrsToList (name: value: { inherit name; } // value) config.tasks);
   };
 
   config = {
@@ -87,6 +86,9 @@ in
       lib.mapAttrsToList
         (name: task: "${name}: ${task.description} ${task.command}")
         config.tasks;
+
+    task.config = (pkgs.formats.json { }).generate "tasks.json"
+      (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);
     tasks = {
       "devenv:enterShell" = {
         description = "Runs when entering the shell";

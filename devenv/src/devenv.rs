@@ -340,7 +340,7 @@ impl<'a> Devenv<'a> {
 
         let copy_script = self
             .nix
-            .build(&[&format!(".#devenv.containers.{name}.copyScript")])
+            .build(&[&format!("devenv.containers.{name}.copyScript")])
             .await?;
         let copy_script = &copy_script[0];
         let copy_script_string = &copy_script.to_string_lossy();
