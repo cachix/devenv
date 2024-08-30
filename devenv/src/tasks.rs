@@ -9,7 +9,7 @@ use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{Dfs, EdgeRef};
 #[cfg(test)]
 use pretty_assertions::assert_matches;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use serde_json::json;
 use std::io::{self, Write};
@@ -71,7 +71,7 @@ impl Display for Error {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
     name: String,
     #[serde(default)]
@@ -82,7 +82,7 @@ pub struct TaskConfig {
     status: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,

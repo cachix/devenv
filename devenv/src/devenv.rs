@@ -525,6 +525,12 @@ impl<'a> Devenv<'a> {
             serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
         // run tasks
         let config = tasks::Config { roots, tasks };
+        if self.global_options.verbose {
+            println!(
+                "Tasks config: {}",
+                serde_json::to_string_pretty(&config).unwrap()
+            );
+        }
         let mut tui = tasks::TasksUi::new(config).await?;
         let tasks_status = tui.run().await?;
 
