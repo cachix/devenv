@@ -537,23 +537,29 @@ impl TasksUi {
                 }
                 TaskStatus::Running(started) => {
                     tasks_status.running += 1;
-                    ("Running".blue().bold(), Some(started.elapsed()))
+                    (
+                        format!("{:17}", "Running").blue().bold(),
+                        Some(started.elapsed()),
+                    )
                 }
                 TaskStatus::Completed(TaskCompleted::Skipped) => {
                     tasks_status.skipped += 1;
-                    ("Skipped".blue().bold(), None)
+                    (format!("{:17}", "Skipped").blue().bold(), None)
                 }
                 TaskStatus::Completed(TaskCompleted::Success(duration)) => {
                     tasks_status.succeeded += 1;
-                    ("Succeeded".green().bold(), Some(*duration))
+                    (
+                        format!("{:17}", "Succeeded").green().bold(),
+                        Some(*duration),
+                    )
                 }
                 TaskStatus::Completed(TaskCompleted::Failed(duration, _)) => {
                     tasks_status.failed += 1;
-                    ("Failed".red().bold(), Some(*duration))
+                    (format!("{:17}", "Failed").red().bold(), Some(*duration))
                 }
                 TaskStatus::Completed(TaskCompleted::DependencyFailed) => {
                     tasks_status.dependency_failed += 1;
-                    ("Dependency failed".magenta().bold(), None)
+                    (format!("{:17}", "Dependency failed").magenta().bold(), None)
                 }
             };
 
@@ -579,20 +585,20 @@ impl TasksUi {
         });
 
         // start TUI
-        let mut stdout = io::stdout();
+        let mut stderr = io::stderr();
         let mut last_list_height: u16 = 0;
 
         loop {
             let tasks_status = self.get_tasks_status().await;
 
             execute!(
-                stdout,
+                stderr,
                 // Clear the screen from the cursor down
                 cursor::MoveUp(last_list_height),
                 Clear(ClearType::FromCursorDown),
                 style::PrintStyledContent(
                     format!(
-                        "{}\nTasks: {}\n",
+                        "{}\n\nTasks: {}\n",
                         tasks_status.lines.join("\n"),
                         [
                             if tasks_status.pending > 0 {
@@ -636,7 +642,7 @@ impl TasksUi {
                         .join(", ")
                     )
                     .stylize()
-                )
+                ),
             )?;
 
             last_list_height = tasks_status.lines.len() as u16 + 1;
@@ -648,6 +654,41 @@ impl TasksUi {
             // Sleep briefly to avoid excessive redraws
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
+
+        let errors = {
+            let tasks = self.tasks.lock().await;
+
+            let mut errors = String::new();
+            for index in &tasks.tasks_order {
+                let task_state = tasks.graph[*index].read().await;
+                if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) = &task_state.status
+                {
+                    errors.push_str(&format!(
+                        "\n--- {} failed with error: {}\n",
+                        task_state.task.name, failure.error
+                    ));
+                    errors.push_str(&format!("--- {} stdout:\n", task_state.task.name));
+                    for (time, line) in &failure.stdout {
+                        errors.push_str(&format!(
+                            "{:07.2}: {}\n",
+                            time.elapsed().as_secs_f32(),
+                            line
+                        ));
+                    }
+                    errors.push_str(&format!("--- {} stderr:\n", task_state.task.name));
+                    for (time, line) in &failure.stderr {
+                        errors.push_str(&format!(
+                            "{:07.2}: {}\n",
+                            time.elapsed().as_secs_f32(),
+                            line
+                        ));
+                    }
+                    errors.push_str("---\n")
+                }
+            }
+            errors.stylize()
+        };
+        execute!(stderr, style::PrintStyledContent(errors));
 
         let tasks_status = self.get_tasks_status().await;
         Ok(tasks_status)

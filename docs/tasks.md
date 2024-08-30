@@ -47,7 +47,9 @@ Tasks can also reference scripts and depend on other tasks, for example when ent
 $ devenv shell
 • Building shell ...
 • Entering shell ...
-Hello world from Python!
-Hello world from bash!
+...
 $
 ```
+
+
+`status`
