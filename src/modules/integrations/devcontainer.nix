@@ -16,7 +16,7 @@ in
         options.image = lib.mkOption {
           type = lib.types.str;
           default = "ghcr.io/cachix/devenv:latest";
-          description = lib.mdDoc ''
+          description = ''
             The name of an image in a container registry.
           '';
         };
@@ -24,7 +24,7 @@ in
         options.overrideCommand = lib.mkOption {
           type = lib.types.anything;
           default = false;
-          description = lib.mdDoc ''
+          description = ''
             Override the default command.
           '';
         };
@@ -32,7 +32,7 @@ in
         options.updateContentCommand = lib.mkOption {
           type = lib.types.anything;
           default = "devenv test";
-          description = lib.mdDoc ''
+          description = ''
             Command to run after container creation.
           '';
         };
@@ -40,7 +40,7 @@ in
         options.customizations.vscode.extensions = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ "mkhl.direnv" ];
-          description = lib.mdDoc ''
+          description = ''
             List of preinstalled VSCode extensions.
           '';
         };
@@ -48,7 +48,7 @@ in
 
       default = { };
 
-      description = lib.mdDoc ''
+      description = ''
         Devcontainer settings.
       '';
     };

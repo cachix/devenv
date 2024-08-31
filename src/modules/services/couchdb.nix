@@ -95,7 +95,7 @@ in
         options.chttpd.bind_address = lib.mkOption {
           type = lib.types.str;
           default = "127.0.0.1";
-          description = lib.mdDoc ''
+          description = ''
             Defines the IP address by which CouchDB will be accessible.
           '';
         };
@@ -103,7 +103,7 @@ in
         options.chttpd.port = lib.mkOption {
           type = lib.types.port;
           default = 5984;
-          description = lib.mdDoc ''
+          description = ''
             Defined the port number to listen.
           '';
         };

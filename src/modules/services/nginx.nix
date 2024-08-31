@@ -41,7 +41,7 @@ in
       default = "${pkgs.mailcap}/etc/nginx/mime.types";
       defaultText = lib.literalExpression "\${pkgs.mailcap}/etc/nginx/mime.types";
       example = lib.literalExpression "\${pkgs.nginx}/conf/mime.types";
-      description = lib.mdDoc ''
+      description = ''
         Default MIME types for NGINX, as MIME types definitions from NGINX are very incomplete,
         we use by default the ones bundled in the mailcap package, used by most of the other
         Linux distributions.
