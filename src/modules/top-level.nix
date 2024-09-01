@@ -139,8 +139,8 @@ in
     hardeningDisable = lib.mkOption {
       type = types.listOf types.str;
       internal = true;
-      default = [];
-      example = ["fortify"];
+      default = [ ];
+      example = [ "fortify" ];
       description = ''
         This options allows modules to disable selected hardening modules.
         Currently used only for Go
@@ -260,8 +260,6 @@ in
       # needed to make sure we can load libs
       pkgs.pkg-config
     ];
-
-    hardeningDisable = [];
 
     enterShell = ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
