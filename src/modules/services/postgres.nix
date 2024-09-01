@@ -1,15 +1,19 @@
-{ pkgs, lib, config, ... }:
-
+{ pkgs
+, lib
+, config
+, ...
+}:
 let
   cfg = config.services.postgres;
-  types = lib.types;
+  inherit (lib) types;
 
   q = lib.escapeShellArg;
 
   runtimeDir = "${config.env.DEVENV_RUNTIME}/postgres";
 
   postgresPkg =
-    if cfg.extensions != null then
+    if cfg.extensions != null
+    then
       if builtins.hasAttr "withPackages" cfg.package
       then cfg.package.withPackages cfg.extensions
       else
@@ -20,20 +24,21 @@ let
     else cfg.package;
 
   setupInitialDatabases =
-    if cfg.initialDatabases != [ ] then
+    if cfg.initialDatabases != [ ]
+    then
       (lib.concatMapStrings
         (database: ''
           echo "Checking presence of database: ${database.name}"
           # Create initial databases
           dbAlreadyExists="$(
-            echo "SELECT 1 as exists FROM pg_database WHERE datname = '${database.name}';" | \
+            echo "SELECT 1 AS exists FROM pg_database WHERE datname = '${database.name}';" | \
             psql --dbname postgres | \
             ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
           )"
           echo $dbAlreadyExists
           if [ 1 -ne "$dbAlreadyExists" ]; then
             echo "Creating database: ${database.name}"
-            echo 'create database "${database.name}";' | psql --dbname postgres
+            echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
 
             ${lib.optionalString (database.schema != null) ''
             echo "Applying database schema on ${database.name}"
@@ -54,7 +59,7 @@ let
               echo "ERROR: Could not determine how to apply schema with ${database.schema}"
               exit 1
             fi
-            ''}
+          ''}
           fi
         '')
         cfg.initialDatabases)
@@ -66,27 +71,27 @@ let
       '';
 
   runInitialScript =
-    if cfg.initialScript != null then
-      ''
-        echo ${q cfg.initialScript} | psql --dbname postgres
-      ''
-    else
-      "";
+    if cfg.initialScript != null
+    then ''
+      echo ${q cfg.initialScript} | psql --dbname postgres
+    ''
+    else "";
 
   toStr = value:
-    if true == value then
-      "yes"
-    else if false == value then
-      "no"
-    else if lib.isString value then
-      "'${lib.replaceStrings [ "'" ] [ "''" ] value}'"
-    else
-      toString value;
+    if true == value
+    then "yes"
+    else if false == value
+    then "no"
+    else if lib.isString value
+    then "'${lib.replaceStrings ["'"] ["''"] value}'"
+    else toString value;
 
-  configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
-    (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
+  configFile =
+    pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
+      (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
   setupPgHbaFileScript =
-    if cfg.hbaConf != null then
+    if cfg.hbaConf != null
+    then
       let
         file = pkgs.writeText "pg_hba.conf" cfg.hbaConf;
       in
@@ -107,7 +112,7 @@ let
 
     # Setup config
     cp ${configFile} "$PGDATA/postgresql.conf"
-    
+
     # Setup pg_hba.conf
     ${setupPgHbaFileScript}
 
@@ -254,6 +259,20 @@ in
             description = ''
               The initial schema of the database; if null (the default),
               an empty database is created.
+            '';
+          };
+          user = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Username of owner of the database (if null, the default $USER is used).
+            '';
+          };
+          pass = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Password of owner of the database (only takes effect if `user` is not `null`).
             '';
           };
         };
