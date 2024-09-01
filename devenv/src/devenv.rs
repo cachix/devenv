@@ -522,7 +522,7 @@ impl Devenv {
 
         let search = self.run_nix(
             "nix",
-            &["search", "--json", "nixpkgs", name],
+            &["search", "--inputs-from", ".", "--json", "nixpkgs", name],
             &command::Options::default(),
         )?;
         let search_json: PackageResults =
