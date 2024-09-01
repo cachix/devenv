@@ -23,45 +23,66 @@ let
         ''
     else cfg.package;
 
+  # TODO: we can probably clean this up a lot by delegating more "if exists" stuff to psql (à la `DO $$...$$` below)
   setupInitialDatabases =
     if cfg.initialDatabases != [ ]
     then
       (lib.concatMapStrings
-        (database: ''
-          echo "Checking presence of database: ${database.name}"
-          # Create initial databases
-          dbAlreadyExists="$(
-            echo "SELECT 1 AS exists FROM pg_database WHERE datname = '${database.name}';" | \
-            psql --dbname postgres | \
-            ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
-          )"
-          echo $dbAlreadyExists
-          if [ 1 -ne "$dbAlreadyExists" ]; then
-            echo "Creating database: ${database.name}"
-            echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
-
-            ${lib.optionalString (database.schema != null) ''
-            echo "Applying database schema on ${database.name}"
-            if [ -f "${database.schema}" ]
-            then
-              echo "Running file ${database.schema}"
-              ${pkgs.gawk}/bin/awk 'NF' "${database.schema}" | psql --dbname ${database.name}
-            elif [ -d "${database.schema}" ]
-            then
-              # Read sql files in version order. Apply one file
-              # at a time to handle files where the last statement
-              # doesn't end in a ;.
-              ls -1v "${database.schema}"/*.sql | while read f ; do
-                 echo "Applying sql file: $f"
-                 ${pkgs.gawk}/bin/awk 'NF' "$f" | psql --dbname ${database.name}
-              done
-            else
-              echo "ERROR: Could not determine how to apply schema with ${database.schema}"
-              exit 1
+        (database:
+          let
+            psqlUserFlags =
+              if (database.user != null && database.pass != null)
+              then "--user ${database.user}"
+              else "";
+          in
+          ''
+            echo "Checking presence of database: ${database.name}"
+            # Create initial databases
+            dbAlreadyExists="$(
+              echo "SELECT 1 AS exists FROM pg_database WHERE datname = '${database.name}';" | \
+              psql --dbname postgres | \
+              ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
+            )"
+            echo $dbAlreadyExists
+            if [ 1 -ne "$dbAlreadyExists" ]; then
+              echo "Creating database: ${database.name}"
+              echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
+              ${lib.optionalString (database.schema != null && database.user != null && database.pass != null) ''
+              echo "Creating role ${database.user}..."
+              psql --dbname postgres <<'EOF'
+              DO $$
+                  BEGIN
+                      CREATE ROLE ${database.user} WITH LOGIN PASSWORD '${database.pass}';
+                      EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+                  END
+              $$;
+              GRANT ALL PRIVILEGES ON DATABASE ${database.name} TO ${database.user};
+              \c ${database.name}
+              GRANT ALL PRIVILEGES ON SCHEMA public TO ${database.user};
+              EOF
+            ''}
+              ${lib.optionalString (database.schema != null) ''
+              echo "Applying database schema on ${database.name}"
+              if [ -f "${database.schema}" ]
+              then
+                echo "Running file ${database.schema}"
+                ${pkgs.gawk}/bin/awk 'NF' "${database.schema}" | psql ${psqlUserFlags} --dbname ${database.name}
+              elif [ -d "${database.schema}" ]
+              then
+                # Read sql files in version order. Apply one file
+                # at a time to handle files where the last statement
+                # doesn't end in a ;.
+                ls -1v "${database.schema}"/*.sql | while read f ; do
+                   echo "Applying sql file: $f"
+                   ${pkgs.gawk}/bin/awk 'NF' "$f" | psql ${psqlUserFlags} --dbname ${database.name}
+                done
+              else
+                echo "ERROR: Could not determine how to apply schema with ${database.schema}"
+                exit 1
+              fi
+            ''}
             fi
-          ''}
-          fi
-        '')
+          '')
         cfg.initialDatabases)
     else
       lib.optionalString cfg.createDatabase ''
