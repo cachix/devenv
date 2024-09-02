@@ -6,26 +6,28 @@ use crossterm::{
 use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::visit::{Dfs, EdgeRef};
+use petgraph::visit::EdgeRef;
 #[cfg(test)]
 use pretty_assertions::assert_matches;
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use serde_json::json;
-use std::io::{self, Write};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
+#[cfg(test)]
+use std::fs;
+use std::io;
+#[cfg(test)]
+use std::io::Write;
+#[cfg(test)]
+use std::os::unix::fs::PermissionsExt;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-};
-use std::{fmt::Display, os::unix::fs::PermissionsExt};
 use test_log::test;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::task::JoinSet;
 use tokio::time::{Duration, Instant};
 use tracing::{error, info, instrument};
