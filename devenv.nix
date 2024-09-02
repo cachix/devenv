@@ -211,7 +211,9 @@ EOF
   };
 
 
-  tasks."devenv:sleep".exec = "sleep 1";
+  tasks."devenv:sleep3".exec = "sleep 3";
+  tasks."devenv:sleep".exec = "sleep 5";
+  tasks."devenv:sleep".depends = [ "devenv:sleep3" ];
   tasks."devenv:enterShell".depends = [ "devenv:sleep" ];
 
   pre-commit.hooks = {

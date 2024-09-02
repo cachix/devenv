@@ -144,9 +144,7 @@ impl TaskState {
     }
 
     #[instrument(ret)]
-    async fn run(&mut self) -> TaskCompleted {
-        let now = Instant::now();
-        self.status = TaskStatus::Running(now);
+    async fn run(&mut self, now: Instant) -> TaskCompleted {
         if let Some(cmd) = &self.task.status {
             let result = Command::new(cmd)
                 .stdout(Stdio::piped())
@@ -291,18 +289,21 @@ impl TaskState {
 #[derive(Debug)]
 struct Tasks {
     roots: Vec<NodeIndex>,
-    sender_tx: Sender<TaskUpdate>,
+    // Stored for reporting
+    root_names: Vec<String>,
+    longest_task_name: usize,
     graph: DiGraph<Arc<RwLock<TaskState>>, ()>,
     tasks_order: Vec<NodeIndex>,
 }
 
 impl Tasks {
-    async fn new(config: Config) -> Result<(Self, Receiver<TaskUpdate>), Error> {
-        let (sender_tx, receiver_rx) = channel(1000);
+    async fn new(config: Config) -> Result<Self, Error> {
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
+        let mut longest_task_name = 0;
         for task in config.tasks {
             let name = task.name.clone();
+            longest_task_name = longest_task_name.max(name.len());
             if !task.name.contains(':')
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
@@ -321,7 +322,7 @@ impl Tasks {
             task_indices.insert(name, index);
         }
         let mut roots = Vec::new();
-        for name in config.roots {
+        for name in config.roots.clone() {
             if let Some(index) = task_indices.get(&name) {
                 roots.push(*index);
             } else {
@@ -330,13 +331,14 @@ impl Tasks {
         }
         let mut tasks = Self {
             roots,
-            sender_tx,
+            root_names: config.roots,
+            longest_task_name,
             graph,
             tasks_order: vec![],
         };
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
-        Ok((tasks, receiver_rx))
+        Ok(tasks)
     }
 
     async fn resolve_dependencies(
@@ -419,7 +421,7 @@ impl Tasks {
     }
 
     #[instrument(skip(self))]
-    async fn run(&mut self) {
+    async fn run(&self) {
         let mut running_tasks = JoinSet::new();
 
         for index in &self.tasks_order {
@@ -462,11 +464,18 @@ impl Tasks {
                 let mut task_state = task_state.write().await;
                 task_state.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
             } else {
-                let task_state_clone = Arc::clone(task_state);
+                let now = Instant::now();
 
+                // hold write lock only to update the status
+                {
+                    let mut task_state = task_state.write().await;
+                    task_state.status = TaskStatus::Running(now);
+                }
+
+                let task_state_clone = Arc::clone(task_state);
                 running_tasks.spawn(async move {
                     let mut task_state = task_state_clone.write().await;
-                    let completed = task_state.run().await;
+                    let completed = task_state.run(now).await;
                     task_state.status = TaskStatus::Completed(completed);
                 });
             }
@@ -511,25 +520,22 @@ impl TasksStatus {
 }
 
 pub struct TasksUi {
-    tasks: Arc<Mutex<Tasks>>,
-    receiver_rx: Receiver<TaskUpdate>,
+    tasks: Arc<Tasks>,
 }
 
 impl TasksUi {
     pub async fn new(config: Config) -> Result<Self, Error> {
-        let (tasks, receiver_rx) = Tasks::new(config).await?;
+        let tasks = Tasks::new(config).await?;
         Ok(Self {
-            tasks: Arc::new(Mutex::new(tasks)),
-            receiver_rx,
+            tasks: Arc::new(tasks),
         })
     }
 
     async fn get_tasks_status(&self) -> TasksStatus {
         let mut tasks_status = TasksStatus::new();
-        let tasks = self.tasks.lock().await;
 
-        for index in &tasks.tasks_order {
-            let task_state = tasks.graph[*index].read().await;
+        for index in &self.tasks.tasks_order {
+            let task_state = self.tasks.graph[*index].read().await;
             let (status_text, duration) = match &task_state.status {
                 TaskStatus::Pending => {
                     tasks_status.pending += 1;
@@ -569,7 +575,14 @@ impl TasksUi {
             };
             tasks_status.lines.push(format!(
                 "{} {} {}",
-                status_text, &task_state.task.name, duration
+                status_text,
+                format!(
+                    "{:width$}",
+                    task_state.task.name.clone(),
+                    width = self.tasks.longest_task_name
+                )
+                .bold(),
+                duration,
             ));
         }
 
@@ -577,60 +590,61 @@ impl TasksUi {
     }
 
     pub async fn run(&mut self) -> Result<TasksStatus, Error> {
+        let mut stdout = io::stdout();
+        let names = self.tasks.root_names.join(", ").bold();
+
         // start processing tasks
         let tasks_clone = Arc::clone(&self.tasks);
-        let handle = tokio::spawn(async move {
-            let mut tasks = tasks_clone.lock().await;
-            tasks.run().await
-        });
+        let handle = tokio::spawn(async move { tasks_clone.run().await });
 
         // start TUI
-        let mut stderr = io::stderr();
+
         let mut last_list_height: u16 = 0;
 
         loop {
             let tasks_status = self.get_tasks_status().await;
 
             execute!(
-                stderr,
+                stdout,
                 // Clear the screen from the cursor down
                 cursor::MoveUp(last_list_height),
                 Clear(ClearType::FromCursorDown),
                 style::PrintStyledContent(
                     format!(
-                        "{}\n\nTasks: {}\n",
+                        "{}\nRunning {}: {}\n",
                         tasks_status.lines.join("\n"),
+                        names.clone(),
                         [
                             if tasks_status.pending > 0 {
-                                format!("{} {}", "Pending".blue().bold(), tasks_status.pending)
+                                format!("{} {}", tasks_status.pending, "Pending".blue().bold())
                             } else {
                                 String::new()
                             },
                             if tasks_status.running > 0 {
-                                format!("{} {}", "Running".blue().bold(), tasks_status.running)
+                                format!("{} {}", tasks_status.running, "Running".blue().bold())
                             } else {
                                 String::new()
                             },
                             if tasks_status.skipped > 0 {
-                                format!("{} {}", "Skipped".blue().bold(), tasks_status.skipped)
+                                format!("{} {}", tasks_status.skipped, "Skipped".blue().bold())
                             } else {
                                 String::new()
                             },
                             if tasks_status.succeeded > 0 {
-                                format!("{} {}", "Succeeded".green().bold(), tasks_status.succeeded)
+                                format!("{} {}", tasks_status.succeeded, "Succeeded".green().bold())
                             } else {
                                 String::new()
                             },
                             if tasks_status.failed > 0 {
-                                format!("{} {}", "Failed".red().bold(), tasks_status.failed)
+                                format!("{} {}", tasks_status.failed, "Failed".red().bold())
                             } else {
                                 String::new()
                             },
                             if tasks_status.dependency_failed > 0 {
                                 format!(
                                     "{} {}",
-                                    "Dependency Failed".red().bold(),
-                                    tasks_status.dependency_failed
+                                    tasks_status.dependency_failed,
+                                    "Dependency Failed".red().bold()
                                 )
                             } else {
                                 String::new()
@@ -656,11 +670,9 @@ impl TasksUi {
         }
 
         let errors = {
-            let tasks = self.tasks.lock().await;
-
             let mut errors = String::new();
-            for index in &tasks.tasks_order {
-                let task_state = tasks.graph[*index].read().await;
+            for index in &self.tasks.tasks_order {
+                let task_state = self.tasks.graph[*index].read().await;
                 if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) = &task_state.status
                 {
                     errors.push_str(&format!(
@@ -688,7 +700,7 @@ impl TasksUi {
             }
             errors.stylize()
         };
-        execute!(stderr, style::PrintStyledContent(errors));
+        execute!(stdout, style::PrintStyledContent(errors))?;
 
         let tasks_status = self.get_tasks_status().await;
         Ok(tasks_status)
@@ -755,7 +767,7 @@ async fn test_basic_tasks() -> Result<(), Error> {
     )?;
     let script4 = create_script("#!/bin/sh\necho 'Task 4 is running' && echo 'Task 4 completed'")?;
 
-    let (mut tasks, _) = Tasks::new(
+    let tasks = Tasks::new(
         Config::try_from(json!({
             "roots": ["myapp:task_1", "myapp:task_4"],
             "tasks": [
@@ -862,7 +874,7 @@ async fn test_status() -> Result<(), Error> {
         .await
     };
 
-    let (mut tasks, _) = create_tasks("myapp:task_1").await.unwrap();
+    let tasks = create_tasks("myapp:task_1").await.unwrap();
     tasks.run().await;
     assert_eq!(tasks.tasks_order.len(), 1);
     assert_matches!(
@@ -870,7 +882,7 @@ async fn test_status() -> Result<(), Error> {
         TaskStatus::Completed(TaskCompleted::Skipped)
     );
 
-    let (mut tasks, _) = create_tasks("myapp:task_2").await.unwrap();
+    let tasks = create_tasks("myapp:task_2").await.unwrap();
     tasks.run().await;
     assert_eq!(tasks.tasks_order.len(), 1);
     assert_matches!(
@@ -883,7 +895,7 @@ async fn test_status() -> Result<(), Error> {
 
 #[test(tokio::test)]
 async fn test_nonexistent_script() -> Result<(), Error> {
-    let (tasks, _) = Tasks::new(
+    let tasks = Tasks::new(
         Config::try_from(json!({
             "roots": ["myapp:task_1"],
             "tasks": [
@@ -897,7 +909,6 @@ async fn test_nonexistent_script() -> Result<(), Error> {
     )
     .await?;
 
-    let mut tasks = tasks;
     tasks.run().await;
 
     let task_statuses = inspect_tasks(&tasks).await;
@@ -948,7 +959,7 @@ async fn test_dependency_failure() -> Result<(), Error> {
     let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
     let dependent_script = create_script("#!/bin/sh\necho 'Dependent task' && exit 0")?;
 
-    let (mut tasks, _) = Tasks::new(
+    let tasks = Tasks::new(
         Config::try_from(json!({
             "roots": ["myapp:task_2"],
             "tasks": [
