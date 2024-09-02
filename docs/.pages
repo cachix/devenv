@@ -27,20 +27,10 @@ nav:
     - Overview:
       - Automatic Shell Activation: automatic-shell-activation.md
       - Garbage Collection: garbage-collection.md
-    - Guides:
-      - Using With Flakes: guides/using-with-flakes
-      - Using With flake.parts: guides/using-with-flake-parts
-    - Integrations:
-      - .env: integrations/dotenv
-      - GitHub Actions: integrations/github-actions
-      - Codespaces / devcontainer: integrations/codespaces-devcontainer
-      - Difftastic: integrations/difftastic
-      - Android: integrations/android
-    - Examples: examples
-    - Editor Support:
-      - VSCode: editor-support/vscode
-      - PhpStorm: editor-support/phpstorm
-      - Zed: editor-support/zed
+    - Guides: guides
+    - Integrations: integrations
+    - Examples: examples.md
+    - Editor Support: editor-support
     - Roadmap: roadmap.md
   - Reference: reference
   - Blog: blog
