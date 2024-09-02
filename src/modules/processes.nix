@@ -85,7 +85,7 @@ in
       };
 
       args = lib.mkOption {
-        type = types.attrsOf types.str;
+        type = types.attrs;
         description = ''
           Additional arguments to pass to the process manager.
         '';
