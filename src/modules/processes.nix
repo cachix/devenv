@@ -17,7 +17,7 @@ let
 
           Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml`
 
-          Only used when using ``process.implementation = "process-compose";``
+          Only used when using ``process.manager.implementation = "process-compose";``
         '';
         example = {
           environment = [ "ENVVAR_FOR_THIS_PROCESS_ONLY=foobar" ];
