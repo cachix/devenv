@@ -4,26 +4,63 @@ let
   settingsFormat = pkgs.formats.yaml { };
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "process-managers" "process-compose" "settings" "port" ] [ "process-managers" "process-compose" "port" ])
+    (lib.mkRenamedOptionModule [ "process-managers" "process-compose" "settings" "tui" ] [ "process-managers" "process-compose" "tui" "enable" ])
+  ];
+
   options.process-managers.process-compose = {
-    enable = lib.mkEnableOption "process-compose as process-manager";
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      internal = true;
+      default = false;
+      description = "Whether to use process-compose as the process manager";
+    };
+
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.process-compose;
       defaultText = lib.literalExpression "pkgs.process-compose";
       description = "The process-compose package to use.";
     };
+
+    port = lib.mkOption {
+      type = lib.types.int;
+      default = 8080;
+    };
+
+    unixSocket = {
+      enable = lib.mkEnableOption "unix domain sockets instead of tcp";
+
+      path = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = "${config.devenv.runtime}/pc.sock";
+        defaultText = lib.literalExpression "\${config.devenv.runtime}/pc.sock";
+        description = "Override the path to the unix socket.";
+      };
+    };
+
+    tui = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable the TUI";
+      };
+    };
+
     configFile = lib.mkOption {
       type = lib.types.path;
       internal = true;
     };
+
     settings = lib.mkOption {
       type = settingsFormat.type;
-      default = { };
       description = ''
-        process-compose.yaml specific process attributes.
+        Top-level process-compose.yaml options
 
         Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml`
       '';
+      default = { };
       example = {
         environment = [ "ENVVAR_FOR_THIS_PROCESS_ONLY=foobar" ];
         availability = {
@@ -36,23 +73,28 @@ in
       };
     };
   };
+
   config = lib.mkIf cfg.enable {
-    processManagerCommand = ''
-      ${cfg.package}/bin/process-compose --config ${cfg.configFile} \
-        --unix-socket ''${PC_SOCKET_PATH:-${toString config.process.process-compose.unix-socket}} \
-        --tui=''${PC_TUI_ENABLED:-${lib.boolToString config.process.process-compose.tui}} \
-        -U up "$@" &
+    process.manager.args = {
+      "config" = cfg.configFile;
+      "U" = cfg.unixSocket.enable;
+      "unix-socket" = "\${PC_SOCKET_PATH:-${toString cfg.unixSocket.path}}";
+      "tui" = "\${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}";
+    };
+
+    process.manager.command = lib.mkDefault ''
+      ${cfg.package}/bin/process-compose \
+        ${lib.concatStringsSep " " (lib.cli.toGNUCommandLine {} config.process.manager.args)} \
+        up "$@" &
     '';
 
     packages = [ cfg.package ];
 
     process-managers.process-compose = {
-      configFile = settingsFormat.generate "process-compose.yaml" cfg.settings;
+      configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
       settings = {
         version = "0.5";
         is_strict = true;
-        port = lib.mkDefault 9999;
-        tui = lib.mkDefault true;
         environment = lib.mapAttrsToList
           (name: value: "${name}=${toString value}")
           config.env;
@@ -70,6 +112,5 @@ in
           config.processes;
       };
     };
-
   };
 }
