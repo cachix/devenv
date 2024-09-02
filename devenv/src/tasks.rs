@@ -490,11 +490,6 @@ impl Tasks {
     }
 }
 
-struct TaskUpdate {
-    name: String,
-    status: TaskStatus,
-}
-
 pub struct TasksStatus {
     lines: Vec<String>,
     pub pending: usize,
@@ -913,7 +908,6 @@ async fn test_nonexistent_script() -> Result<(), Error> {
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
-    let task_1 = String::from("myapp:task_1");
     assert_matches!(
         &task_statuses,
         [(
@@ -926,7 +920,7 @@ async fn test_nonexistent_script() -> Result<(), Error> {
                     error
                 }
             ))
-        )] if error == "No such file or directory (os error 2)"
+        )] if error == "No such file or directory (os error 2)" && task_1 == "myapp:task_1"
     );
 
     Ok(())
