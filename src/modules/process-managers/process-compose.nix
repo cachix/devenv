@@ -19,7 +19,11 @@ in
     port = lib.mkOption {
       type = lib.types.int;
       default = 8080;
-      description = "The port to bind the process-compose server to.";
+      description = ''
+        The port to bind the process-compose server to.
+
+        Not used when `unixSocket.enable` is true.
+      '';
     };
 
     unixSocket = {
@@ -28,7 +32,7 @@ in
       };
 
       path = lib.mkOption {
-        type = lib.types.str;
+        type = lib.types.nullOr lib.types.str;
         default = "${config.devenv.runtime}/pc.sock";
         defaultText = lib.literalExpression "\${config.devenv.runtime}/pc.sock";
         description = "Override the path to the unix socket.";
@@ -72,8 +76,9 @@ in
   config = lib.mkIf cfg.enable {
     process.manager.args = {
       "config" = cfg.configFile;
-      "U" = cfg.unixSocket.enable;
-      "unix-socket" = "\${PC_SOCKET_PATH:-${toString cfg.unixSocket.path}}";
+      # -U enables automatic UDS mode, creating the socket in $TMP.
+      "U" = cfg.unixSocket.enable && cfg.unixSocket.path == null;
+      "unix-socket" = cfg.unixSocket.path;
       "tui" = "\${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}";
     };
 
