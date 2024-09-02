@@ -4,11 +4,6 @@ let
   settingsFormat = pkgs.formats.yaml { };
 in
 {
-  imports = [
-    (lib.mkRenamedOptionModule [ "process-managers" "process-compose" "settings" "port" ] [ "process-managers" "process-compose" "port" ])
-    (lib.mkRenamedOptionModule [ "process-managers" "process-compose" "settings" "tui" ] [ "process-managers" "process-compose" "tui" "enable" ])
-  ];
-
   options.process-managers.process-compose = {
     enable = lib.mkOption {
       type = lib.types.bool;
