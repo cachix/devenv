@@ -64,7 +64,7 @@ impl Display for Error {
             ),
             Error::InvalidTaskName(task) => write!(
                 f,
-                "Invalid task name: {}, expected [a-zA-Z-_]:[a-zA-Z-_]",
+                "Invalid task name: {}, expected [a-zA-Z-_]+:[a-zA-Z-_]+",
                 task
             ),
         }
@@ -304,7 +304,7 @@ impl Tasks {
         for task in config.tasks {
             let name = task.name.clone();
             if !task.name.contains(':')
-                || task.name.split(':').count() != 2
+                || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
                 || task.name.ends_with(':')
                 || !task
@@ -723,6 +723,7 @@ async fn test_task_name() -> Result<(), Error> {
         "devenv:enterShell",
         "devenv:enter-shell",
         "devenv:enter_shell",
+        "devenv:python:virtualenv",
     ];
     for task in valid_names {
         assert_matches!(
