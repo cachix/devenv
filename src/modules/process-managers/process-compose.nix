@@ -19,13 +19,16 @@ in
     port = lib.mkOption {
       type = lib.types.int;
       default = 8080;
+      description = "The port to bind the process-compose server to.";
     };
 
     unixSocket = {
-      enable = lib.mkEnableOption "unix domain sockets instead of tcp";
+      enable = lib.mkEnableOption "running the process-compose server over unix domain sockets instead of tcp" // {
+        default = true;
+      };
 
       path = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
+        type = lib.types.str;
         default = "${config.devenv.runtime}/pc.sock";
         defaultText = lib.literalExpression "\${config.devenv.runtime}/pc.sock";
         description = "Override the path to the unix socket.";
