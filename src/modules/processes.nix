@@ -42,11 +42,13 @@ let
       config.env;
 in
 {
-  imports = [
-    (lib.mkRenamedOptionModule [ "process" "process-compose" "tui" ] [ "process-managers" "process-compose" "tui" "enable" ])
-    (lib.mkRenamedOptionModule [ "process" "process-compose" "unix-socket" ] [ "process-managers" "process-compose" "unixSocket" "path" ])
-    (lib.mkRenamedOptionModule [ "processManagerCommand" ] [ "process" "manager" "command" ])
-  ];
+  imports =
+    (map (name: lib.mkRenamedOptionModule [ "process" name ] [ "process" "manager" name ]) [ "after" "before" "implementation" ])
+    ++ [
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "tui" ] [ "process-managers" "process-compose" "tui" "enable" ])
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "unix-socket" ] [ "process-managers" "process-compose" "unixSocket" "path" ])
+      (lib.mkRenamedOptionModule [ "processManagerCommand" ] [ "process" "manager" "command" ])
+    ];
 
   options = {
     processes = lib.mkOption {
