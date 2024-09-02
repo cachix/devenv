@@ -144,7 +144,7 @@ impl TaskState {
     }
 
     #[instrument(ret)]
-    async fn run(&mut self, now: Instant) -> TaskCompleted {
+    async fn run(&self, now: Instant) -> TaskCompleted {
         if let Some(cmd) = &self.task.status {
             let result = Command::new(cmd)
                 .stdout(Stdio::piped())
@@ -474,9 +474,11 @@ impl Tasks {
 
                 let task_state_clone = Arc::clone(task_state);
                 running_tasks.spawn(async move {
-                    let mut task_state = task_state_clone.write().await;
-                    let completed = task_state.run(now).await;
-                    task_state.status = TaskStatus::Completed(completed);
+                    let completed = task_state_clone.read().await.run(now).await;
+                    {
+                        let mut task_state = task_state_clone.write().await;
+                        task_state.status = TaskStatus::Completed(completed);
+                    }
                 });
             }
         }
@@ -530,8 +532,11 @@ impl TasksUi {
         let mut tasks_status = TasksStatus::new();
 
         for index in &self.tasks.tasks_order {
-            let task_state = self.tasks.graph[*index].read().await;
-            let (status_text, duration) = match &task_state.status {
+            let (task_status, task_name) = {
+                let task_state = self.tasks.graph[*index].read().await;
+                (task_state.status.clone(), task_state.task.name.clone())
+            };
+            let (status_text, duration) = match task_status {
                 TaskStatus::Pending => {
                     tasks_status.pending += 1;
                     continue;
@@ -549,14 +554,11 @@ impl TasksUi {
                 }
                 TaskStatus::Completed(TaskCompleted::Success(duration)) => {
                     tasks_status.succeeded += 1;
-                    (
-                        format!("{:17}", "Succeeded").green().bold(),
-                        Some(*duration),
-                    )
+                    (format!("{:17}", "Succeeded").green().bold(), Some(duration))
                 }
                 TaskStatus::Completed(TaskCompleted::Failed(duration, _)) => {
                     tasks_status.failed += 1;
-                    (format!("{:17}", "Failed").red().bold(), Some(*duration))
+                    (format!("{:17}", "Failed").red().bold(), Some(duration))
                 }
                 TaskStatus::Completed(TaskCompleted::DependencyFailed) => {
                     tasks_status.dependency_failed += 1;
@@ -571,12 +573,7 @@ impl TasksUi {
             tasks_status.lines.push(format!(
                 "{} {} {}",
                 status_text,
-                format!(
-                    "{:width$}",
-                    task_state.task.name.clone(),
-                    width = self.tasks.longest_task_name
-                )
-                .bold(),
+                format!("{:width$}", task_name, width = self.tasks.longest_task_name).bold(),
                 duration,
             ));
         }
@@ -588,6 +585,8 @@ impl TasksUi {
         let mut stdout = io::stdout();
         let names = self.tasks.root_names.join(", ").bold();
 
+        let started = std::time::Instant::now();
+
         // start processing tasks
         let tasks_clone = Arc::clone(&self.tasks);
         let handle = tokio::spawn(async move { tasks_clone.run().await });
@@ -597,6 +596,11 @@ impl TasksUi {
         let mut last_list_height: u16 = 0;
 
         loop {
+            let mut finished = false;
+            if handle.is_finished() {
+                finished = true;
+            }
+
             let tasks_status = self.get_tasks_status().await;
 
             execute!(
@@ -606,8 +610,13 @@ impl TasksUi {
                 Clear(ClearType::FromCursorDown),
                 style::PrintStyledContent(
                     format!(
-                        "{}\nRunning {}: {}\n",
+                        "{}\n{} {}: {}\n",
                         tasks_status.lines.join("\n"),
+                        if finished {
+                            format!("Finished in {:.2?}", started.elapsed())
+                        } else {
+                            format!("Running for {:.2?}", started.elapsed())
+                        },
                         names.clone(),
                         [
                             if tasks_status.pending > 0 {
@@ -654,14 +663,14 @@ impl TasksUi {
                 ),
             )?;
 
-            last_list_height = tasks_status.lines.len() as u16 + 1;
-
-            if handle.is_finished() {
+            if finished {
                 break;
             }
 
+            last_list_height = tasks_status.lines.len() as u16 + 1;
+
             // Sleep briefly to avoid excessive redraws
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
 
         let errors = {
