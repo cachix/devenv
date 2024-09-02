@@ -142,13 +142,13 @@ in
 
       down() {
         echo "Stopping processes..."
-        kill -TERM $backgroundPID
-        wait $backgroundPID
         ${config.process.after}
+        kill -TERM $backgroundPID &> /dev/null || true
+        wait $backgroundPID &> /dev/null || true
         echo "Processes stopped."
       }
 
-      trap down SIGINT SIGTERM
+      trap down EXIT
 
       wait
     '';
