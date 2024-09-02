@@ -4,11 +4,8 @@ let
 in
 {
   options.process-managers.overmind = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
+    enable = lib.mkEnableOption "overmind as the process manager" // {
       internal = true;
-      default = false;
-      description = "Whether to use overmind as the process manager";
     };
 
     package = lib.mkOption {

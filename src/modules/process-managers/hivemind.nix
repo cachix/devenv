@@ -4,11 +4,8 @@ let
 in
 {
   options.process-managers.hivemind = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
+    enable = lib.mkEnableOption "hivemind as the process manager" // {
       internal = true;
-      default = false;
-      description = "Whether to use hivemind as the process manager";
     };
 
     package = lib.mkOption {

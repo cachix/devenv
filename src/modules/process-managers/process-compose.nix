@@ -5,11 +5,8 @@ let
 in
 {
   options.process-managers.process-compose = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
+    enable = lib.mkEnableOption "process-compose as the process manager" // {
       internal = true;
-      default = false;
-      description = "Whether to use process-compose as the process manager";
     };
 
     package = lib.mkOption {

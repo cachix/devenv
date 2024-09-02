@@ -4,11 +4,8 @@ let
 in
 {
   options.process-managers.honcho = {
-    enable = lib.mkOption {
-      type = lib.types.bool;
+    enable = lib.mkEnableOption "honcho as the process manager" // {
       internal = true;
-      default = false;
-      description = "Whether to use honcho as the process manager";
     };
 
     package = lib.mkOption {
