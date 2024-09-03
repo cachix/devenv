@@ -251,7 +251,10 @@ impl<'a> Devenv<'a> {
         self.assemble(false)?;
         let (_, gc_root) = self.get_dev_environment(false, true).await?;
 
-        let mut develop_args = vec![gc_root.to_str().expect("gc root should be utf-8")];
+        let mut develop_args = vec![
+            "develop",
+            gc_root.to_str().expect("gc root should be utf-8"),
+        ];
 
         let default_clean = config::Clean {
             enabled: false,
@@ -666,7 +669,7 @@ impl<'a> Devenv<'a> {
             let mut cmd = self
                 .nix
                 .prepare_command_with_substituters(
-                    "develop",
+                    "nix",
                     &develop_args
                         .iter()
                         .map(AsRef::as_ref)
@@ -701,7 +704,8 @@ impl<'a> Devenv<'a> {
                 }
                 self.logger.info("Stop:      $ devenv processes stop");
             } else {
-                cmd.exec();
+                let err = cmd.exec();
+                bail!(err);
             }
             Ok(())
         }

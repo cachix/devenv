@@ -97,7 +97,7 @@ in
         description = "Runs when entering the test environment";
       };
     };
-    #enterShell = "devenv tasks run devenv:enterShell";
-    #enterTest = "devenv tasks run devenv:enterTest";
+    enterShell = "devenv tasks run devenv:enterShell";
+    enterTest = "devenv tasks run devenv:enterTest";
   };
 }
