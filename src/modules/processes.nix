@@ -82,7 +82,10 @@ in
         type = types.str;
         internal = true;
         description = ''
-          The command to run the process manager. This is meant to be set by the process.manager.''${implementation}.
+          The command to run the process manager.
+
+          This is meant to be set by the process.manager.''${implementation}.
+          If overriding this, ``process.manager.args`` will not be applied.
         '';
       };
 
@@ -102,8 +105,8 @@ in
     };
 
     procfileEnv = lib.mkOption {
-      internal = true;
       type = types.package;
+      internal = true;
     };
 
     procfileScript = lib.mkOption {
