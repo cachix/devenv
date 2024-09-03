@@ -151,8 +151,8 @@ in
 
       down() {
         echo "Stopping processes..."
-        kill -TERM $backgroundPID &> /dev/null || true
-        wait $backgroundPID &> /dev/null || true
+        kill -TERM $backgroundPID 2>&1 /dev/null || true
+        wait $backgroundPID 2>&1 /dev/null || true
         ${config.process.manager.after}
         echo "Processes stopped."
       }
