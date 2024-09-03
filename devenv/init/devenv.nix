@@ -26,6 +26,12 @@
     git --version
   '';
 
+  # https://devenv.sh/tasks/
+  # tasks = {
+  #   "myproj:setup".exec = "mytool build";
+  #   "devenv:enterShell".depends = ["myproj:setup"];
+  # };
+
   # https://devenv.sh/tests/
   enterTest = ''
     echo "Running tests"
