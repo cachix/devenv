@@ -35350,6 +35350,74 @@ If port 0 is specified Redis, will not listen on a TCP socket and a unix socket 
 
 
 
+## services.sqld.enable
+
+
+
+Whether to enable sqld.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
+
+
+
+## services.sqld.extraArgs
+
+
+
+Add other sqld flags.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
+
+
+
+## services.sqld.port
+
+
+
+Port number to listen on
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 8080 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
+
+
+
 ## services.temporal.enable
 
 
