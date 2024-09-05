@@ -116,12 +116,19 @@ let
 
     maxLayers = cfg.maxLayers;
 
-    layers = [
-      (nix2container.nix2container.buildLayer {
-        perms = map mkPerm (mkMultiHome (homeRoots cfg));
-        copyToRoot = mkMultiHome (homeRoots cfg);
-      })
-    ];
+    layers =
+      if cfg.enableLayerDeduplication
+      then
+        builtins.foldl'
+          (layers: layer:
+            layers ++ [
+              (nix2container.nix2container.buildLayer (layer // { inherit layers; }))
+            ]
+          )
+          [ ]
+          cfg.layers
+      else builtins.map (layer: nix2container.nix2container.buildLayer layer) cfg.layers
+    ;
 
     perms = [
       {
@@ -233,6 +240,72 @@ let
         default = 1;
       };
 
+      enableLayerDeduplication = lib.mkOption {
+        type = types.bool;
+        description = "Enalbe layer deduplication using the approach described at https://blog.eigenvalue.net/2023-nix2container-everything-once/";
+        default = true;
+      };
+
+      layers = lib.mkOption {
+        type = types.listOf (types.submoduleWith {
+          modules = [
+            {
+              options = {
+                deps = lib.mkOption {
+                  type = types.listOf types.package;
+                  description = "list of store paths to include in the layer.";
+                  default = [ ];
+                };
+                copyToRoot = lib.mkOption {
+                  type = types.listOf types.package;
+                  description = "a list of derivations copied in the image root directory (store path prefixes `/nix/store/hash-path` are removed, in order to relocate them at the image `/`).";
+                  default = [ ];
+                };
+                reproducible = lib.mkOption {
+                  type = types.bool;
+                  description = "whether the layer should be reproducible.";
+                  default = true;
+                };
+                maxLayers = lib.mkOption {
+                  type = types.int;
+                  description = "the maximum number of layers to create.";
+                  default = 1;
+                };
+                perms = lib.mkOption {
+                  default = [ ];
+                  type = types.listOf (types.submoduleWith {
+                    modules = [
+                      {
+                        options = {
+                          path = lib.mkOption {
+                            type = types.pathInStore;
+                          };
+                          regex = lib.mkOption {
+                            type = types.str;
+                            example = ".*";
+                          };
+                          mode = lib.mkOption {
+                            type = types.str;
+                            example = "644";
+                          };
+                        };
+                      }
+                    ];
+                  });
+                };
+                ignore = lib.mkOption {
+                  type = types.nullOr types.pathInStore;
+                  default = null;
+                  description = "a store path to ignore when building the layer. This is mainly useful to ignore the configuration file from the container layer.";
+                };
+              };
+            }
+          ];
+        });
+        description = "the layers to create.";
+        default = [ ];
+      };
+
       isBuilding = lib.mkOption {
         type = types.bool;
         default = false;
@@ -259,6 +332,13 @@ let
         '';
       };
     };
+    config.layers = [
+      {
+        perms = map mkPerm (mkMultiHome (homeRoots config));
+        copyToRoot = mkMultiHome (homeRoots config);
+      }
+    ];
+
   });
 in
 {
