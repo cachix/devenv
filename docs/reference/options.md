@@ -1039,6 +1039,27 @@ attribute set of (submodule)
 
 
 
+## containers.\<name>.enableLayerDeduplication
+
+
+
+Enalbe layer deduplication using the approach described at https://blog.eigenvalue.net/2023-nix2container-everything-once/
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
 ## containers.\<name>.copyToRoot
 
 
@@ -1118,6 +1139,211 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers
+
+
+
+the layers to create.
+
+
+
+*Type:*
+list of (submodule)
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.copyToRoot
+
+
+
+a list of derivations copied in the image root directory (store path prefixes ` /nix/store/hash-path ` are removed, in order to relocate them at the image ` / `).
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.deps
+
+
+
+list of store paths to include in the layer.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.ignore
+
+
+
+a store path to ignore when building the layer. This is mainly useful to ignore the configuration file from the container layer.
+
+
+
+*Type:*
+null or path in the Nix store
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.maxLayers
+
+
+
+the maximum number of layers to create.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.perms
+
+
+
+This option has no description.
+
+
+
+*Type:*
+list of (submodule)
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.perms.\*.mode
+
+
+
+This option has no description.
+
+
+
+*Type:*
+string
+
+
+
+*Example:*
+` "644" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.perms.\*.path
+
+
+
+This option has no description.
+
+
+
+*Type:*
+path in the Nix store
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.perms.\*.regex
+
+
+
+This option has no description.
+
+
+
+*Type:*
+string
+
+
+
+*Example:*
+` ".*" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.reproducible
+
+
+
+whether the layer should be reproducible.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2083,8 +2309,6 @@ package
 
 ## languages.elixir.enable
 
-
-
 Whether to enable tools for Elixir development.
 
 
@@ -2348,6 +2572,8 @@ boolean
 
 
 ## languages.go.package
+
+
 
 The Go package to use.
 
@@ -4554,8 +4780,6 @@ boolean
 
 ## languages.python.poetry.install.quiet
 
-
-
 Whether ` poetry install ` should avoid outputting messages during devenv initialisation.
 
 
@@ -4785,6 +5009,8 @@ package
 
 
 ## languages.racket.enable
+
+
 
 Whether to enable tools for Racket development.
 
@@ -7203,8 +7429,6 @@ boolean
 
 ## pre-commit.hooks.alejandra.package
 
-
-
 An optional package that provides the hook.
 
 
@@ -7649,6 +7873,8 @@ list of string
 
 
 ## pre-commit.hooks.alejandra.verbose
+
+
 
 forces the output of the hook to be printed even when the hook passes.
 
