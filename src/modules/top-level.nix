@@ -155,6 +155,12 @@ in
         default = builtins.getEnv "PWD";
       };
 
+      flakeArgs = lib.mkOption {
+        type = types.listOf types.str;
+        internal = true;
+        default = [ "--override-input" "devenv-root" "path:.devenv/state/pwd" ];
+      };
+
       dotfile = lib.mkOption {
         type = types.str;
         internal = true;
@@ -272,6 +278,7 @@ in
       fi
 
       mkdir -p "$DEVENV_STATE"
+      printf %s "$DEVENV_ROOT" > "$DEVENV_STATE/pwd"
       if [ ! -L "$DEVENV_DOTFILE/profile" ] || [ "$(${pkgs.coreutils}/bin/readlink $DEVENV_DOTFILE/profile)" != "${profile}" ]
       then
         ln -snf ${profile} "$DEVENV_DOTFILE/profile"
