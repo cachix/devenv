@@ -25,7 +25,6 @@ jobs:
     - name: Generate doc options
       run: devenv shell devenv-generate-doc-options
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs/reference/options.md
@@ -34,7 +33,6 @@ jobs:
     - name: Verify individual docs
       run: devenv shell devenv-verify-individual-docs
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         message: 'Auto generate missing individual markdowns'
@@ -45,7 +43,6 @@ jobs:
         devenv shell devenv-generate-languages-example
         devenv shell devenv-generate-individual-docs
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs examples/supported-languages/devenv.nix
@@ -54,7 +51,6 @@ jobs:
     - name: Generate JSON schema
       run: devenv generate-json-schema
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs/devenv.schema.json
