@@ -1043,7 +1043,8 @@ attribute set of (submodule)
 
 
 
-Enalbe layer deduplication using the approach described at https://blog.eigenvalue.net/2023-nix2container-everything-once/
+Whether to enable layer deduplication using the approach described at https://blog.eigenvalue.net/2023-nix2container-everything-once/
+.
 
 
 
@@ -1053,6 +1054,11 @@ boolean
 
 
 *Default:*
+` true `
+
+
+
+*Example:*
 ` true `
 
 *Declared by:*
@@ -1149,7 +1155,7 @@ boolean
 
 
 
-the layers to create.
+The layers to create.
 
 
 
@@ -1170,7 +1176,9 @@ list of (submodule)
 
 
 
-a list of derivations copied in the image root directory (store path prefixes ` /nix/store/hash-path ` are removed, in order to relocate them at the image ` / `).
+A list of derivations copied to the image root directory.
+
+Store path prefixes ` /nix/store/hash-path ` are removed in order to relocate them to the image ` / `.
 
 
 
@@ -1191,7 +1199,7 @@ list of package
 
 
 
-list of store paths to include in the layer.
+A list of store paths to include in the layer.
 
 
 
@@ -1212,7 +1220,7 @@ list of package
 
 
 
-a store path to ignore when building the layer. This is mainly useful to ignore the configuration file from the container layer.
+A store path to ignore when building the layer. This is mainly useful to ignore the configuration file from the container layer.
 
 
 
@@ -1233,7 +1241,7 @@ null or path in the Nix store
 
 
 
-the maximum number of layers to create.
+The maximum number of layers to create.
 
 
 
@@ -1254,7 +1262,9 @@ signed integer
 
 
 
-This option has no description.
+A list of file permissions which are set when the tar layer is created.
+
+These permissions are not written to the Nix store.
 
 
 
@@ -1275,7 +1285,7 @@ list of (submodule)
 
 
 
-This option has no description.
+The numeric permissions mode to apply to all of the files matched by the ` regex `.
 
 
 
@@ -1296,7 +1306,7 @@ string
 
 
 
-This option has no description.
+A store path.
 
 
 
@@ -1312,7 +1322,7 @@ path in the Nix store
 
 
 
-This option has no description.
+A regex pattern to select files or directories to apply the ` mode ` to.
 
 
 
@@ -1333,7 +1343,7 @@ string
 
 
 
-whether the layer should be reproducible.
+Whether the layer should be reproducible.
 
 
 
