@@ -298,6 +298,22 @@ let
                             description = "The numeric permissions mode to apply to all of the files matched by the ``regex``.";
                             example = "644";
                           };
+                          uid = lib.mkOption {
+                            type = types.int;
+                            default = lib.toInt uid;
+                          };
+                          gid = lib.mkOption {
+                            type = types.int;
+                            default = lib.toInt gid;
+                          };
+                          uname = lib.mkOption {
+                            type = types.str;
+                            default = user;
+                          };
+                          gname = lib.mkOption {
+                            type = types.str;
+                            default = group;
+                          };
                         };
                       }
                     ];
