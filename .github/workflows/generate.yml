@@ -12,7 +12,17 @@ jobs:
   generate-docs:
     runs-on: ubuntu-latest
     steps:
+    # Regular (non-PR) checkout
     - uses: actions/checkout@v4
+      if: ${{ github.event_name == 'push' }}
+
+    # Checkout PRs (including from forks) to allow committing doc changes
+    - uses: actions/checkout@v4
+      if: ${{ github.event_name == 'pull_request' }}
+      with:
+        repository: ${{ github.event.pull_request.head.repo.full_name }}
+        ref: ${{ github.event.pull_request.head.ref }}
+
     - uses: cachix/install-nix-action@v26
       with:
         extra_nix_config: |
