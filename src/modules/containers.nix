@@ -289,9 +289,10 @@ let
                             description = "A store path.";
                           };
                           regex = lib.mkOption {
-                            type = types.str;
+                            type = types.nullOr types.str;
                             description = "A regex pattern to select files or directories to apply the ``mode`` to.";
                             example = ".*";
+                            default = null;
                           };
                           mode = lib.mkOption {
                             type = types.str;
