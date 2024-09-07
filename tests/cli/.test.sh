@@ -1,6 +1,7 @@
 set -xe
 
 rm devenv.yaml || true
+devenv inputs add devenv "path:../../?dir=src/modules"
 devenv build languages.python.package
 devenv shell ls -- -la | grep ".test.sh"
 devenv shell ls ../ | grep "cli"
