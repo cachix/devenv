@@ -290,29 +290,33 @@ let
                           };
                           regex = lib.mkOption {
                             type = types.nullOr types.str;
-                            description = "A regex pattern to select files or directories to apply the ``mode`` to.";
+                            description = "A regex pattern to select files or directories to apply the permissions, owner, and group info to.";
                             example = ".*";
                             default = null;
                           };
                           mode = lib.mkOption {
                             type = types.str;
-                            description = "The numeric permissions mode to apply to all of the files matched by the ``regex``.";
+                            description = "File permissions to apply in octal representation.";
                             example = "644";
                           };
                           uid = lib.mkOption {
                             type = types.int;
+                            description = "Numeric ID of the owner to apply.";
                             default = lib.toInt uid;
                           };
                           gid = lib.mkOption {
                             type = types.int;
+                            description = "Numeric ID of the group to apply.";
                             default = lib.toInt gid;
                           };
                           uname = lib.mkOption {
                             type = types.str;
+                            description = "String representation of the owner to apply.";
                             default = user;
                           };
                           gname = lib.mkOption {
                             type = types.str;
+                            description = "String representation of the group to apply.";
                             default = group;
                           };
                         };
