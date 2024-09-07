@@ -12,7 +12,17 @@ jobs:
   generate-docs:
     runs-on: ubuntu-latest
     steps:
+    # Regular (non-PR) checkout
     - uses: actions/checkout@v4
+      if: ${{ github.event_name == 'push' }}
+
+    # Checkout PRs (including from forks) to allow committing doc changes
+    - uses: actions/checkout@v4
+      if: ${{ github.event_name == 'pull_request' }}
+      with:
+        repository: ${{ github.event.pull_request.head.repo.full_name }}
+        ref: ${{ github.event.pull_request.head.ref }}
+
     - uses: cachix/install-nix-action@v26
       with:
         extra_nix_config: |
@@ -25,7 +35,6 @@ jobs:
     - name: Generate doc options
       run: devenv shell devenv-generate-doc-options
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs/reference/options.md
@@ -34,7 +43,6 @@ jobs:
     - name: Verify individual docs
       run: devenv shell devenv-verify-individual-docs
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         message: 'Auto generate missing individual markdowns'
@@ -45,7 +53,6 @@ jobs:
         devenv shell devenv-generate-languages-example
         devenv shell devenv-generate-individual-docs
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs examples/supported-languages/devenv.nix
@@ -54,7 +61,6 @@ jobs:
     - name: Generate JSON schema
       run: devenv generate-json-schema
     - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
       with:
         default_author: github_actions
         add: docs/devenv.schema.json
