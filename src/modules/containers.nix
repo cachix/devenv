@@ -289,14 +289,40 @@ let
                             description = "A store path.";
                           };
                           regex = lib.mkOption {
-                            type = types.str;
+                            type = types.nullOr types.str;
                             description = "A regex pattern to select files or directories to apply the ``mode`` to.";
                             example = ".*";
+                            default = null;
                           };
                           mode = lib.mkOption {
-                            type = types.str;
+                            type = types.nullOr types.str;
                             description = "The numeric permissions mode to apply to all of the files matched by the ``regex``.";
                             example = "644";
+                            default = null;
+                          };
+                          gid = lib.mkOption {
+                            type = types.nullOr types.int;
+                            description = "The group ID to apply to all of the files matched by the ``regex``.";
+                            example = "1000";
+                            default = null;
+                          };
+                          uid = lib.mkOption {
+                            type = types.nullOr types.int;
+                            description = "The user ID to apply to all of the files matched by the ``regex``.";
+                            example = "1000";
+                            default = null;
+                          };
+                          uname = lib.mkOption {
+                            type = types.nullOr types.str;
+                            description = "The user name to apply to all of the files matched by the ``regex``.";
+                            example = "root";
+                            default = null;
+                          };
+                          gname = lib.mkOption {
+                            type = types.nullOr types.str;
+                            description = "The group name to apply to all of the files matched by the ``regex``.";
+                            example = "root";
+                            default = null;
                           };
                         };
                       }
