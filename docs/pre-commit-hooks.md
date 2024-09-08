@@ -1,4 +1,4 @@
-``devenv`` has first-class integration for [pre-commit](https://pre-commit.com/) via [pre-commit-hooks.nix](https://github.com/cachix/pre-commit-hooks.nix).
+``devenv`` has first-class integration for [pre-commit](https://pre-commit.com/) via [git-hooks.nix](https://github.com/cachix/git-hooks.nix).
 
 ## Set up
 
@@ -21,7 +21,7 @@ We recommend a two-step approach for integrating your linters and formatters.
     # override a package with a different version
     ormolu.enable = true;
     ormolu.package = pkgs.haskellPackages.ormolu;
-    
+
     # some hooks have more than one package, like clippy:
     clippy.enable = true;
     clippy.packageOverrides.cargo = pkgs.cargo;

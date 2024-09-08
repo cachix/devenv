@@ -6307,7 +6307,7 @@ null or string
 
 
 
-Integration of https://github.com/cachix/pre-commit-hooks.nix
+Integration of https://github.com/cachix/git-hooks.nix
 
 
 
@@ -29171,10 +29171,10 @@ string
 ''
   [files]
   ignore-dot = true
-  
+
   [default]
   binary = false
-  
+
   [type.py]
   extend-glob = []
 ''
@@ -30388,9 +30388,9 @@ string
 ```
 ''
   ---
-  
+
   extends: relaxed
-  
+
   rules:
     indentation: enable
 ''
@@ -31595,7 +31595,7 @@ strings concatenated with “\\n”
   {
     debug
   }
-  
+
   # Site block
   example.com {
     encode gzip
@@ -36807,7 +36807,7 @@ strings concatenated with “\\n”
 ```
 ''
   vcl 4.0;
-  
+
   backend default {
     .host = "127.0.0.1";
     .port = "80";
