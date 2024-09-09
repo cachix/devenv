@@ -1281,6 +1281,58 @@ list of (submodule)
 
 
 
+## containers.\<name>.layers.\*.perms.\*.gid
+
+
+
+The group ID to apply to all of the files matched by the ` regex `.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "1000" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.perms.\*.gname
+
+
+
+The group name to apply to all of the files matched by the ` regex `.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "root" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
 ## containers.\<name>.layers.\*.perms.\*.mode
 
 
@@ -1290,7 +1342,12 @@ The numeric permissions mode to apply to all of the files matched by the ` regex
 
 
 *Type:*
-string
+null or string
+
+
+
+*Default:*
+` null `
 
 
 
@@ -1327,12 +1384,69 @@ A regex pattern to select files or directories to apply the ` mode ` to.
 
 
 *Type:*
-string
+null or string
+
+
+
+*Default:*
+` null `
 
 
 
 *Example:*
 ` ".*" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.perms.\*.uid
+
+
+
+The user ID to apply to all of the files matched by the ` regex `.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "1000" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
+
+
+
+## containers.\<name>.layers.\*.perms.\*.uname
+
+
+
+The user name to apply to all of the files matched by the ` regex `.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "root" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2225,8 +2339,6 @@ package
 
 ## languages.deno.enable
 
-
-
 Whether to enable tools for Deno development.
 
 
@@ -2318,6 +2430,8 @@ package
 
 
 ## languages.elixir.enable
+
+
 
 Whether to enable tools for Elixir development.
 
@@ -4706,8 +4820,6 @@ list of string
 
 ## languages.python.poetry.install.ignoredGroups
 
-
-
 Which dependency groups to ignore. See ` --without `.
 
 
@@ -4789,6 +4901,8 @@ boolean
 
 
 ## languages.python.poetry.install.quiet
+
+
 
 Whether ` poetry install ` should avoid outputting messages during devenv initialisation.
 
@@ -7439,6 +7553,8 @@ boolean
 
 ## pre-commit.hooks.alejandra.package
 
+
+
 An optional package that provides the hook.
 
 
@@ -7560,8 +7676,6 @@ list of package
 
 
 ## pre-commit.hooks.alejandra.fail_fast
-
-
 
 if true pre-commit will stop running hooks if this hook fails.
 
