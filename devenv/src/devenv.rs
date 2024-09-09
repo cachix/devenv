@@ -603,12 +603,36 @@ impl<'a> Devenv<'a> {
 
     pub async fn build(&mut self, attributes: &[String]) -> Result<()> {
         self.assemble(false)?;
+        let attributes: Vec<String> = if attributes.is_empty() {
+            // construct dotted names of all attributes that we need to build
+            let build_output = self.nix.eval(&["build"]).await?;
+            serde_json::from_str::<serde_json::Value>(&build_output)
+                .map_err(|e| miette::miette!("Failed to parse build output: {}", e))?
+                .as_object()
+                .ok_or_else(|| miette::miette!("Build output is not an object"))?
+                .iter()
+                .flat_map(|(key, value)| {
+                    fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
+                        match value {
+                            serde_json::Value::Object(obj) => obj
+                                .iter()
+                                .flat_map(|(k, v)| flatten_object(&format!("{}.{}", prefix, k), v))
+                                .collect(),
+                            _ => vec![format!("devenv.{}", prefix)],
+                        }
+                    }
+                    flatten_object(key, value)
+                })
+                .collect()
+        } else {
+            attributes.to_vec()
+        };
         let paths = self
             .nix
             .build(&attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>())
             .await?;
         for path in paths {
-            println!("{}", path.to_string_lossy());
+            println!("{}", path.display());
         }
         Ok(())
     }

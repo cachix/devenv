@@ -139,40 +139,17 @@ impl<'a> Nix<'a> {
 
     pub async fn build(&mut self, attributes: &[&str]) -> Result<Vec<PathBuf>> {
         let options = self.options;
-        let build_attrs: Vec<String> = if attributes.is_empty() {
-            // construct dotted names of all attributes that we need to build
-            let build_output = self.eval(&[".#build"]).await?;
-            serde_json::from_str::<serde_json::Value>(&build_output)
-                .map_err(|e| miette::miette!("Failed to parse build output: {}", e))?
-                .as_object()
-                .ok_or_else(|| miette::miette!("Build output is not an object"))?
-                .iter()
-                .flat_map(|(key, value)| {
-                    fn flatten_object(prefix: &str, value: &serde_json::Value) -> Vec<String> {
-                        match value {
-                            serde_json::Value::Object(obj) => obj
-                                .iter()
-                                .flat_map(|(k, v)| flatten_object(&format!("{}.{}", prefix, k), v))
-                                .collect(),
-                            _ => vec![format!(".#devenv.{}", prefix)],
-                        }
-                    }
-                    flatten_object(key, value)
-                })
-                .collect()
-        } else {
-            attributes
-                .iter()
-                .map(|attr| format!(".#devenv.{}", attr))
-                .collect()
-        };
-
-        if !build_attrs.is_empty() {
+        if !attributes.is_empty() {
             // TODO: use eval underneath
-            let mut args = vec!["build", "--no-link", "--print-out-paths"];
-            args.extend(attributes);
+            let mut args: Vec<String> = vec![
+                "build".to_string(),
+                "--no-link".to_string(),
+                "--print-out-paths".to_string(),
+            ];
+            args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
+            let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
             let output = self
-                .run_nix_with_substituters("nix", &args, &options)
+                .run_nix_with_substituters("nix", &args_str, &options)
                 .await?;
             Ok(String::from_utf8_lossy(&output.stdout)
                 .to_string()

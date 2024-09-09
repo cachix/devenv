@@ -221,6 +221,7 @@ in
     ./info.nix
     ./outputs.nix
     ./processes.nix
+    ./outputs.nix
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
