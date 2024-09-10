@@ -9,7 +9,6 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "APACHE-2.0"
-license_file = "LICENSE"
 homepage = "https://devenv.sh/"
 repository = "https://github.com/cachix/devenv/"
 
