@@ -19,9 +19,10 @@
     flake = false;
   };
   inputs.nix = {
-    url = "github:domenkozar/nix/devenv-2.21";
+    url = "github:domenkozar/nix/devenv-2.24";
     inputs = {
-      nixpkgs.follows = "nixpkgs";
+      # disabled until we fix https://github.com/cachix/devenv-nixpkgs/issues/2
+      #nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
     };
   };
@@ -29,7 +30,7 @@
     url = "github:cachix/cachix";
     inputs = {
       nixpkgs.follows = "nixpkgs";
-      pre-commit-hooks.follows = "pre-commit-hooks";
+      git-hooks.follows = "pre-commit-hooks";
       flake-compat.follows = "flake-compat";
     };
   };
