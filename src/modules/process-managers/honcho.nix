@@ -1,9 +1,9 @@
 { pkgs, config, lib, ... }:
 let
-  cfg = config.process-managers.honcho;
+  cfg = config.process.managers.honcho;
 in
 {
-  options.process-managers.honcho = {
+  options.process.managers.honcho = {
     enable = lib.mkEnableOption "honcho as the process manager" // {
       internal = true;
     };

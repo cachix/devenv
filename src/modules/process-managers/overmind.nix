@@ -1,9 +1,9 @@
 { pkgs, config, lib, ... }:
 let
-  cfg = config.process-managers.overmind;
+  cfg = config.process.managers.overmind;
 in
 {
-  options.process-managers.overmind = {
+  options.process.managers.overmind = {
     enable = lib.mkEnableOption "overmind as the process manager" // {
       internal = true;
     };

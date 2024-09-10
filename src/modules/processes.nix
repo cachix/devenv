@@ -33,7 +33,7 @@ let
     };
   });
 
-  supportedImplementations = builtins.attrNames options.process-managers;
+  supportedImplementations = builtins.attrNames options.process.managers;
 
   implementation = config.process.manager.implementation;
   envList =
@@ -45,9 +45,10 @@ in
   imports =
     (map (name: lib.mkRenamedOptionModule [ "process" name ] [ "process" "manager" name ]) [ "after" "before" "implementation" ])
     ++ [
-      (lib.mkRenamedOptionModule [ "process" "process-compose" "tui" ] [ "process-managers" "process-compose" "tui" "enable" ])
-      (lib.mkRenamedOptionModule [ "process" "process-compose" "unix-socket" ] [ "process-managers" "process-compose" "unixSocket" "path" ])
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "tui" ] [ "process" "managers" "process-compose" "tui" "enable" ])
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "unix-socket" ] [ "process" "managers" "process-compose" "unixSocket" "path" ])
       (lib.mkRenamedOptionModule [ "processManagerCommand" ] [ "process" "manager" "command" ])
+      (lib.mkRenamedOptionModule [ "process-managers" ] [ "process" "managers" ])
     ];
 
   options = {
@@ -122,7 +123,7 @@ in
         let
           enabledImplementations =
             lib.pipe supportedImplementations [
-              (map (name: config.process-managers.${name}.enable))
+              (map (name: config.process.managers.${name}.enable))
               (lib.filter lib.id)
             ];
         in
@@ -132,7 +133,7 @@ in
       '';
     }];
 
-    process-managers.${implementation}.enable = lib.mkDefault true;
+    process.managers.${implementation}.enable = lib.mkDefault true;
 
     procfile =
       pkgs.writeText "procfile" (lib.concatStringsSep "\n"

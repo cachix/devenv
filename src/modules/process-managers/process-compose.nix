@@ -1,10 +1,10 @@
 { pkgs, config, lib, ... }:
 let
-  cfg = config.process-managers.process-compose;
+  cfg = config.process.managers.process-compose;
   settingsFormat = pkgs.formats.yaml { };
 in
 {
-  options.process-managers.process-compose = {
+  options.process.managers.process-compose = {
     enable = lib.mkEnableOption "process-compose as the process manager" // {
       internal = true;
     };
@@ -90,7 +90,7 @@ in
 
     packages = [ cfg.package ];
 
-    process-managers.process-compose = {
+    process.managers.process-compose = {
       configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
       settings = {
         version = "0.5";

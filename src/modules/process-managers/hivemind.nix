@@ -1,9 +1,9 @@
 { pkgs, config, lib, ... }:
 let
-  cfg = config.process-managers.hivemind;
+  cfg = config.process.managers.hivemind;
 in
 {
-  options.process-managers.hivemind = {
+  options.process.managers.hivemind = {
     enable = lib.mkEnableOption "hivemind as the process manager" // {
       internal = true;
     };
