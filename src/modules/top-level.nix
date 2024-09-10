@@ -208,6 +208,7 @@ in
 
   imports = [
     ./info.nix
+    ./outputs.nix
     ./processes.nix
     ./scripts.nix
     ./update-check.nix
