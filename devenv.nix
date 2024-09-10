@@ -1,5 +1,7 @@
 { inputs, pkgs, lib, config, ... }: {
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
+  # ignore annoying browserlists warning that breaks pre-commit hooks
+  env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
 
   packages = [
     pkgs.cairo
@@ -96,9 +98,7 @@
   };
   scripts."devenv-generate-doc-css" = {
     description = "Generate CSS for the docs.";
-    exec = ''
-      ${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css
-    '';
+    exec = "${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css";
   };
   scripts."devenv-generate-doc-options" = {
     description = "Generate option docs.";
@@ -224,11 +224,10 @@ EOF
     generate-doc-css = {
       enable = true;
       name = "generate-doc-css";
-      # Copied from devenv-generate-doc-css
       # In CI, the auto-commit action doesn't run in the shell, so it can't reuse our scripts.
       # And the following command is curently too slow to be a pre-commit command.
       # entry = "devenv shell devenv-generate-doc-css";
-      entry = "${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css";
+      entry = config.scripts."devenv-generate-doc-css".exec;
     };
   };
 }
