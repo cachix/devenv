@@ -6417,6 +6417,35 @@ null or string
 
 
 
+## outputs
+
+
+
+Nix outputs for ` devenv build ` consumption.
+
+
+
+*Type:*
+outputOf (attribute set)
+
+
+
+*Default:*
+
+```
+{
+  foo = {
+    ncdu = <derivation ncdu-2.3>;
+  };
+  git = <derivation git-2.44.0>;
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/outputs.nix](https://github.com/cachix/devenv/blob/main/src/modules/outputs.nix)
+
+
+
 ## pre-commit
 
 
@@ -7632,6 +7661,8 @@ submodule
 
 ## pre-commit.hooks.alejandra.enable
 
+
+
 Whether to enable this pre-commit hook.
 
 
@@ -7713,8 +7744,6 @@ list of string
 
 
 ## pre-commit.hooks.alejandra.description
-
-
 
 Description of the hook. Used for metadata purposes only.
 
