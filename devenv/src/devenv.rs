@@ -460,19 +460,21 @@ impl Devenv {
         ));
 
         {
-            let _logprogress = self.log_progress.without_newline(
-                "Running garbage collection (this process may take some time) ...",
-            );
-            let paths: Vec<&str> = to_gc
+            let _logprogress = self
+                .log_progress
+                .with_newline("Running garbage collection (this process will take some time) ...");
+            self.logger.warn("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
+            let paths: std::collections::HashSet<&str> = to_gc
                 .iter()
                 .filter_map(|path_buf| path_buf.to_str())
                 .collect();
-            let args: Vec<&str> = ["store", "gc"]
-                .iter()
-                .chain(paths.iter())
-                .copied()
-                .collect();
-            self.run_nix("nix", &args, &command::Options::default())?;
+            for path in paths {
+                self.logger.info(&format!("Deleting {}...", path));
+                let args: Vec<&str> = ["store", "delete", path].iter().copied().collect();
+                let cmd = self.prepare_command("nix", &args);
+                // we ignore if this command fails, because root might be in use
+                let _ = cmd?.output();
+            }
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
