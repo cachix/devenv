@@ -3,7 +3,4 @@ inputs:
   devenv:
     url: path:.?dir=src/modules
   nix:
-    url: github:domenkozar/nix/devenv-2.21
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
+    url: github:domenkozar/nix/devenv-2.24
