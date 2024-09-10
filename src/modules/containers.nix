@@ -40,11 +40,8 @@ let
   gid = "1000";
   homeDir = "/env";
 
-  mkEnsureHomeExists = pkgs.runCommand "devenv-ensure-home" { } ''
-    mkdir -p $out${homeDir}
-  '';
-
   mkHome = path: (pkgs.runCommand "devenv-container-home" { } ''
+    mkdir -p $out${homeDir}
     cp -R ${path}/. $out${homeDir}/
   '');
 
@@ -94,6 +91,7 @@ let
       gname = group;
     };
 
+
   mkDerivation = cfg: nix2container.nix2container.buildImage {
     name = cfg.name;
     tag = cfg.version;
@@ -114,7 +112,6 @@ let
       })
       mkEtc
       mkTmp
-      mkEnsureHomeExists
     ];
 
     maxLayers = cfg.maxLayers;
@@ -143,7 +140,6 @@ let
         uname = "root";
         gname = "root";
       }
-      (mkPerm mkEnsureHomeExists)
     ];
 
     config = {
