@@ -2695,6 +2695,27 @@ boolean
 
 
 
+## languages.go.enableHardeningWorkaround
+
+
+
+Enable hardening workaround required for Delve debugger (https://github.com/go-delve/delve/issues/3085)
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
 ## languages.go.package
 
 
@@ -4799,8 +4820,6 @@ list of string
 
 ## languages.python.poetry.install.groups
 
-
-
 Which dependency groups to install. See ` --with `.
 
 
@@ -4819,6 +4838,8 @@ list of string
 
 
 ## languages.python.poetry.install.ignoredGroups
+
+
 
 Which dependency groups to ignore. See ` --without `.
 
@@ -7724,8 +7745,6 @@ boolean
 
 ## pre-commit.hooks.alejandra.args
 
-
-
 List of additional parameters to pass to the hook.
 
 
@@ -7744,6 +7763,8 @@ list of string
 
 
 ## pre-commit.hooks.alejandra.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -39163,8 +39184,6 @@ list of (submodule)
 [
   {
     name = "foodatabase";
-    user = "ufoo";
-    pass = "barpaz";
     schema = ./foodatabase.sql;
   }
   { name = "bardatabase"; }
@@ -39193,32 +39212,21 @@ string
 
 
 
-## services.postgres.initialDatabases.\*.user
-
-
-
-The user who owns the database.
-
-
-
-*Type:*
-string
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
-
-
-
 ## services.postgres.initialDatabases.\*.pass
 
 
 
-The password of the user who owns the database.
+Password of owner of the database (only takes effect if ` user ` is not ` null `).
 
 
 
 *Type:*
-string
+null or string
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
@@ -39236,6 +39244,27 @@ an empty database is created.
 
 *Type:*
 null or path
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+
+
+
+## services.postgres.initialDatabases.\*.user
+
+
+
+Username of owner of the database (if null, the default $USER is used).
+
+
+
+*Type:*
+null or string
 
 
 
