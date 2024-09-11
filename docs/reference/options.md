@@ -39163,6 +39163,8 @@ list of (submodule)
 [
   {
     name = "foodatabase";
+    user = "ufoo";
+    pass = "barpaz";
     schema = ./foodatabase.sql;
   }
   { name = "bardatabase"; }
@@ -39180,6 +39182,38 @@ list of (submodule)
 
 
 The name of the database to create.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+
+
+
+## services.postgres.initialDatabases.\*.user
+
+
+
+The user who owns the database.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+
+
+
+## services.postgres.initialDatabases.\*.pass
+
+
+
+The password of the user who owns the database.
 
 
 
