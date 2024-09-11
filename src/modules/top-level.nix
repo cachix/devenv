@@ -278,7 +278,12 @@ in
       fi
 
       mkdir -p "$DEVENV_STATE"
-      printf %s "$DEVENV_ROOT" > "$DEVENV_STATE/pwd"
+
+      # The pwd file might not exist if the DEVENV_ROOT and DEVENV_STATE are determined from `--no-pure-eval` instead of `--override-input`, so we need to create it here
+      if [ "$DEVENV_ROOT" != "$(< "$DEVENV_STATE/pwd")" ]; then
+        printf %s "$DEVENV_ROOT" > "$DEVENV_STATE/pwd"
+      fi
+
       if [ ! -L "$DEVENV_DOTFILE/profile" ] || [ "$(${pkgs.coreutils}/bin/readlink $DEVENV_DOTFILE/profile)" != "${profile}" ]
       then
         ln -snf ${profile} "$DEVENV_DOTFILE/profile"
