@@ -270,6 +270,24 @@ string
 
 
 
+## services\.postgres\.initialDatabases\.\*\.pass
+
+
+
+Password of owner of the database (only takes effect if ` user ` is not ` null `)\.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
 ## services\.postgres\.initialDatabases\.\*\.schema
 
 
@@ -281,6 +299,24 @@ an empty database is created\.
 
 *Type:*
 null or path
+
+
+
+*Default:*
+` null `
+
+
+
+## services\.postgres\.initialDatabases\.\*\.user
+
+
+
+Username of owner of the database (if null, the default $USER is used)\.
+
+
+
+*Type:*
+null or string
 
 
 
