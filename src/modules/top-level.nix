@@ -278,6 +278,7 @@ in
       fi
 
       mkdir -p "$DEVENV_STATE"
+      printf %s "$DEVENV_ROOT" > "$DEVENV_STATE/pwd"
       if [ ! -L "$DEVENV_DOTFILE/profile" ] || [ "$(${pkgs.coreutils}/bin/readlink $DEVENV_DOTFILE/profile)" != "${profile}" ]
       then
         ln -snf ${profile} "$DEVENV_DOTFILE/profile"
