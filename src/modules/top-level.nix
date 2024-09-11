@@ -279,7 +279,7 @@ in
 
       mkdir -p "$DEVENV_STATE"
 
-      # The pwd file might not exist if the DEVENV_ROOT and DEVENV_STATE are determined from `--no-pure-eval` instead of `--override-input`, so we need to create it here
+      # The pwd file might not exist if the DEVENV_ROOT and DEVENV_STATE are determined from `--no-pure-eval` instead of `--override-input`, for example, when running `nix develop --no-pure-eval --command devenv up`, so we need to create it here
       if [ "$DEVENV_ROOT" != "$(< "$DEVENV_STATE/pwd")" ]; then
         printf %s "$DEVENV_ROOT" > "$DEVENV_STATE/pwd"
       fi
