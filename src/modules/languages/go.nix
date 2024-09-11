@@ -21,6 +21,12 @@ in
       defaultText = lib.literalExpression "pkgs.go";
       description = "The Go package to use.";
     };
+
+    enableHardeningWorkaround = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable hardening workaround required for Delve debugger (https://github.com/go-delve/delve/issues/3085)";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -38,6 +44,8 @@ in
       (buildWithSpecificGo pkgs.gopls)
       (buildWithSpecificGo pkgs.gotests)
     ];
+
+    hardeningDisable = (lib.optional (cfg.enableHardeningWorkaround) "fortify");
 
     env.GOROOT = cfg.package + "/share/go/";
     env.GOPATH = config.env.DEVENV_STATE + "/go";
