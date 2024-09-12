@@ -108,9 +108,15 @@ struct TaskFailure {
 }
 
 #[derive(Debug, Clone)]
+enum Skipped {
+    Cached,
+    NotImplemented,
+}
+
+#[derive(Debug, Clone)]
 enum TaskCompleted {
     Success(Duration),
-    Skipped,
+    Skipped(Skipped),
     Failed(Duration, TaskFailure),
     DependencyFailed,
 }
@@ -156,7 +162,7 @@ impl TaskState {
             match result {
                 Ok(status) => {
                     if status.success() {
-                        return TaskCompleted::Skipped;
+                        return TaskCompleted::Skipped(Skipped::Cached);
                     }
                 }
                 Err(e) => {
@@ -283,7 +289,7 @@ impl TaskState {
                 }
             }
         } else {
-            return TaskCompleted::Skipped;
+            return TaskCompleted::Skipped(Skipped::NotImplemented);
         }
     }
 }
@@ -550,9 +556,13 @@ impl TasksUi {
                         Some(started.elapsed()),
                     )
                 }
-                TaskStatus::Completed(TaskCompleted::Skipped) => {
+                TaskStatus::Completed(TaskCompleted::Skipped(skipped)) => {
                     tasks_status.skipped += 1;
-                    (format!("{:17}", "Skipped").blue().bold(), None)
+                    let status = match skipped {
+                        Skipped::Cached => "Cached",
+                        Skipped::NotImplemented => "Not implemented",
+                    };
+                    (format!("{:17}", status).blue().bold(), None)
                 }
                 TaskStatus::Completed(TaskCompleted::Success(duration)) => {
                     tasks_status.succeeded += 1;
@@ -885,7 +895,7 @@ async fn test_status() -> Result<(), Error> {
     assert_eq!(tasks.tasks_order.len(), 1);
     assert_matches!(
         tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Skipped)
+        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached))
     );
 
     let tasks = create_tasks("myapp:task_2").await.unwrap();
