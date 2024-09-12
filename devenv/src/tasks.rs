@@ -25,11 +25,14 @@ use std::process::Stdio;
 use std::sync::Arc;
 use test_log::test;
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::RwLock;
 use tokio::task::JoinSet;
 use tokio::time::{Duration, Instant};
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    sync::Mutex,
+};
 use tracing::{error, info, instrument};
 
 #[derive(Error, Diagnostic, Debug)]
@@ -82,6 +85,8 @@ pub struct TaskConfig {
     command: Option<String>,
     #[serde(default)]
     status: Option<String>,
+    #[serde(default)]
+    inputs: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -89,6 +94,11 @@ pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,
 }
+
+#[derive(Serialize)]
+pub struct Outputs(HashMap<String, serde_json::Value>);
+#[derive(Debug, Clone)]
+pub struct Output(Option<serde_json::Value>);
 
 impl TryFrom<serde_json::Value> for Config {
     type Error = serde_json::Error;
@@ -98,24 +108,32 @@ impl TryFrom<serde_json::Value> for Config {
     }
 }
 
-type Output = Vec<(std::time::Instant, String)>;
+type LinesOutput = Vec<(std::time::Instant, String)>;
+
+impl std::ops::Deref for Outputs {
+    type Target = HashMap<String, serde_json::Value>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Debug, Clone)]
 struct TaskFailure {
-    stdout: Output,
-    stderr: Output,
+    stdout: LinesOutput,
+    stderr: LinesOutput,
     error: String,
 }
 
 #[derive(Debug, Clone)]
 enum Skipped {
-    Cached,
+    Cached(Output),
     NotImplemented,
 }
 
 #[derive(Debug, Clone)]
 enum TaskCompleted {
-    Success(Duration),
+    Success(Duration, Output),
     Skipped(Skipped),
     Failed(Duration, TaskFailure),
     DependencyFailed,
@@ -151,18 +169,42 @@ impl TaskState {
         }
     }
 
+    fn prepare_command(&self, cmd: &str) -> (Command, tempfile::NamedTempFile) {
+        let mut command = Command::new(&cmd);
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        // Set DEVENV_TASK_INPUTS environment variable
+        if let Some(inputs) = &self.task.inputs {
+            command.env("DEVENV_TASK_INPUT", serde_json::to_string(inputs).unwrap());
+        }
+
+        // Create a temporary file for DEVENV_TASK_OUTPUTS
+        let outputs_file = tempfile::NamedTempFile::new().unwrap();
+        command.env("DEVENV_TASK_OUTPUT", outputs_file.path());
+
+        (command, outputs_file)
+    }
+
+    fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
+        let output = match std::fs::File::open(outputs_file.path()) {
+            // TODO: report JSON parsing errors
+            Ok(file) => serde_json::from_reader(file).ok(),
+            Err(_) => None,
+        };
+        Output(output)
+    }
+
     #[instrument(ret)]
     async fn run(&self, now: Instant) -> TaskCompleted {
         if let Some(cmd) = &self.task.status {
-            let result = Command::new(cmd)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .status()
-                .await;
+            let (mut command, outputs_file) = self.prepare_command(cmd);
+            let result = command.status().await;
             match result {
                 Ok(status) => {
                     if status.success() {
-                        return TaskCompleted::Skipped(Skipped::Cached);
+                        return TaskCompleted::Skipped(Skipped::Cached(Self::get_outputs(
+                            &outputs_file,
+                        )));
                     }
                 }
                 Err(e) => {
@@ -179,10 +221,9 @@ impl TaskState {
             }
         }
         if let Some(cmd) = &self.task.command {
-            let result = Command::new(cmd)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn();
+            let (mut command, outputs_file) = self.prepare_command(cmd);
+
+            let result = command.spawn();
 
             let mut child = match result {
                 Ok(c) => c,
@@ -261,7 +302,7 @@ impl TaskState {
                         match result {
                             Ok(status) => {
                                 if status.success() {
-                                    return TaskCompleted::Success(now.elapsed());
+                                    return TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file));
                                 } else {
                                     return TaskCompleted::Failed(
                                         now.elapsed(),
@@ -429,8 +470,9 @@ impl Tasks {
     }
 
     #[instrument(skip(self))]
-    async fn run(&self) {
+    async fn run(&self) -> Outputs {
         let mut running_tasks = JoinSet::new();
+        let outputs = Arc::new(Mutex::new(HashMap::new()));
 
         for index in &self.tasks_order {
             let task_state = &self.graph[*index];
@@ -481,10 +523,26 @@ impl Tasks {
                 }
 
                 let task_state_clone = Arc::clone(task_state);
+                let outputs_clone = Arc::clone(&outputs);
                 running_tasks.spawn(async move {
                     let completed = task_state_clone.read().await.run(now).await;
                     {
                         let mut task_state = task_state_clone.write().await;
+                        match &completed {
+                            TaskCompleted::Success(_, Output(Some(output))) => {
+                                outputs_clone
+                                    .lock()
+                                    .await
+                                    .insert(task_state.task.name.clone(), output.clone());
+                            }
+                            TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
+                                outputs_clone
+                                    .lock()
+                                    .await
+                                    .insert(task_state.task.name.clone(), output.clone());
+                            }
+                            _ => {}
+                        }
                         task_state.status = TaskStatus::Completed(completed);
                     }
                 });
@@ -497,6 +555,8 @@ impl Tasks {
                 Err(e) => eprintln!("Task crashed: {}", e),
             }
         }
+
+        Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
     }
 }
 
@@ -559,12 +619,12 @@ impl TasksUi {
                 TaskStatus::Completed(TaskCompleted::Skipped(skipped)) => {
                     tasks_status.skipped += 1;
                     let status = match skipped {
-                        Skipped::Cached => "Cached",
+                        Skipped::Cached(_) => "Cached",
                         Skipped::NotImplemented => "Not implemented",
                     };
                     (format!("{:17}", status).blue().bold(), None)
                 }
-                TaskStatus::Completed(TaskCompleted::Success(duration)) => {
+                TaskStatus::Completed(TaskCompleted::Success(duration, _)) => {
                     tasks_status.succeeded += 1;
                     (format!("{:17}", "Succeeded").green().bold(), Some(duration))
                 }
@@ -593,8 +653,8 @@ impl TasksUi {
         tasks_status
     }
 
-    pub async fn run(&mut self) -> Result<TasksStatus, Error> {
-        let mut stdout = io::stdout();
+    pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
+        let mut stderr = io::stderr();
         let names = self.tasks.root_names.join(", ").bold();
 
         let started = std::time::Instant::now();
@@ -616,7 +676,7 @@ impl TasksUi {
             let tasks_status = self.get_tasks_status().await;
 
             execute!(
-                stdout,
+                stderr,
                 // Clear the screen from the cursor down
                 cursor::MoveUp(last_list_height),
                 Clear(ClearType::FromCursorDown),
@@ -716,10 +776,10 @@ impl TasksUi {
             }
             errors.stylize()
         };
-        execute!(stdout, style::PrintStyledContent(errors))?;
+        execute!(stderr, style::PrintStyledContent(errors))?;
 
         let tasks_status = self.get_tasks_status().await;
-        Ok(tasks_status)
+        Ok((tasks_status, handle.await.unwrap()))
     }
 }
 
@@ -817,9 +877,9 @@ async fn test_basic_tasks() -> Result<(), Error> {
     assert_matches!(
         task_statuses,
         [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_)))
+            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
         ] if name1 == "myapp:task_1" && name2 == "myapp:task_3" && name3 == "myapp:task_4"
     );
     Ok(())
@@ -895,7 +955,7 @@ async fn test_status() -> Result<(), Error> {
     assert_eq!(tasks.tasks_order.len(), 1);
     assert_matches!(
         tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached))
+        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_)))
     );
 
     let tasks = create_tasks("myapp:task_2").await.unwrap();
@@ -903,7 +963,7 @@ async fn test_status() -> Result<(), Error> {
     assert_eq!(tasks.tasks_order.len(), 1);
     assert_matches!(
         tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_))
+        TaskStatus::Completed(TaskCompleted::Success(_, _))
     );
 
     Ok(())
@@ -1006,6 +1066,70 @@ async fn test_dependency_failure() -> Result<(), Error> {
                 TaskStatus::Completed(TaskCompleted::DependencyFailed)
             )
         ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
+    );
+
+    Ok(())
+}
+
+#[test(tokio::test)]
+async fn test_inputs_outputs() -> Result<(), Error> {
+    let input_script = create_script(
+        r#"#!/bin/sh
+echo "{\"key\": \"value\"}" > $DEVENV_TASK_OUTPUT
+if [ "$DEVENV_TASK_INPUT" != '{"test":"input"}' ]; then
+    echo "Error: Input does not match expected value" >&2
+    echo "Expected: $expected" >&2
+    echo "Actual: $input" >&2
+    exit 1
+fi
+"#,
+    )?;
+
+    let output_script = create_script(
+        r#"#!/bin/sh
+echo "Output from previous task: $DEVENV_TASK_INPUT"
+echo "{\"result\": \"success\"}" > $DEVENV_TASK_OUTPUT
+"#,
+    )?;
+
+    let tasks = Tasks::new(
+        Config::try_from(json!({
+            "roots": ["myapp:task_1", "myapp:task_2"],
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": input_script.to_str().unwrap(),
+                    "inputs": {"test": "input"}
+                },
+                {
+                    "name": "myapp:task_2",
+                    "command": output_script.to_str().unwrap(),
+                    "depends": ["myapp:task_1"]
+                }
+            ]
+        }))
+        .unwrap(),
+    )
+    .await?;
+
+    let outputs = tasks.run().await;
+    let task_statuses = inspect_tasks(&tasks).await;
+    let task_statuses = task_statuses.as_slice();
+    assert_matches!(
+        task_statuses,
+        [
+            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
+    );
+
+    assert_eq!(
+        outputs.get("myapp:task_1").unwrap(),
+        &json!({"key": "value"})
+    );
+    assert_eq!(
+        outputs.get("myapp:task_2").unwrap(),
+        &json!({"result": "success"})
     );
 
     Ok(())
