@@ -95,7 +95,7 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
         echo '{ "output" = 1; }' > $DEVENV_TASK_OUTPUT
         echo $DEVENV_TASKS_OUTPUTS > $DEVENV_ROOT/outputs.json
       '';
-      inputs = {
+      input = {
         value = 1;
       };
     };

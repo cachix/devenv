@@ -56,6 +56,7 @@ let
               status = config.statusCommand;
               depends = config.depends;
               command = config.command;
+              input = config.input;
             };
           };
           description = lib.mkOption {
@@ -67,6 +68,11 @@ let
             type = types.listOf types.str;
             description = "List of tasks to run before this task.";
             default = [ ];
+          };
+          input = lib.mkOption {
+            type = types.attrsOf types.anything;
+            default = { };
+            description = "Input values for the task, encoded as JSON.";
           };
         };
       });
@@ -89,15 +95,29 @@ in
 
     task.config = (pkgs.formats.json { }).generate "tasks.json"
       (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);
+
     tasks = {
       "devenv:enterShell" = {
         description = "Runs when entering the shell";
+        exec = ''
+          ENTER_SHELL_COMMANDS=$(echo "''${DEVENV_TASKS_OUTPUTS:-{}}" | jq -r 'to_entries[] | select(.value.devenv.enterShell != null) | .value.devenv.enterShell' | tr '\n' ';')
+          eval "$ENTER_SHELL_COMMANDS"
+
+          mkdir -p "$DEVENV_STATE"
+          export -p | sed 's/^declare -x /export /' > "$DEVENV_STATE/load-env"
+          chmod +x "$DEVENV_STATE/load-env"
+        '';
       };
       "devenv:enterTest" = {
         description = "Runs when entering the test environment";
       };
     };
-    enterShell = "devenv tasks run devenv:enterShell";
-    enterTest = "devenv tasks run devenv:enterTest";
+    enterShell = ''
+      devenv tasks run devenv:enterShell >/dev/null
+      source "$DEVENV_STATE/load-env"
+    '';
+    enterTest = ''
+      devenv tasks run devenv:enterTest >/dev/null
+    '';
   };
 }
