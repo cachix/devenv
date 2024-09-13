@@ -169,11 +169,15 @@ impl TaskState {
         }
     }
 
-    fn prepare_command(&self, cmd: &str) -> (Command, tempfile::NamedTempFile) {
+    fn prepare_command(
+        &self,
+        cmd: &str,
+        outputs: &HashMap<String, serde_json::Value>,
+    ) -> (Command, tempfile::NamedTempFile) {
         let mut command = Command::new(&cmd);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-        // Set DEVENV_TASK_INPUTS environment variable
+        // Set DEVENV_TASK_INPUTS
         if let Some(inputs) = &self.task.inputs {
             command.env("DEVENV_TASK_INPUT", serde_json::to_string(inputs).unwrap());
         }
@@ -181,6 +185,10 @@ impl TaskState {
         // Create a temporary file for DEVENV_TASK_OUTPUTS
         let outputs_file = tempfile::NamedTempFile::new().unwrap();
         command.env("DEVENV_TASK_OUTPUT", outputs_file.path());
+
+        // Set DEVENV_TASKS_OUTPUTS
+        let outputs_json = serde_json::to_string(outputs).unwrap();
+        command.env("DEVENV_TASKS_OUTPUTS", outputs_json);
 
         (command, outputs_file)
     }
@@ -195,9 +203,14 @@ impl TaskState {
     }
 
     #[instrument(ret)]
-    async fn run(&self, now: Instant) -> TaskCompleted {
+    async fn run(
+        &self,
+        now: Instant,
+        outputs: &HashMap<String, serde_json::Value>,
+    ) -> TaskCompleted {
         if let Some(cmd) = &self.task.status {
-            let (mut command, outputs_file) = self.prepare_command(cmd);
+            let (mut command, outputs_file) = self.prepare_command(cmd, outputs);
+
             let result = command.status().await;
             match result {
                 Ok(status) => {
@@ -221,7 +234,7 @@ impl TaskState {
             }
         }
         if let Some(cmd) = &self.task.command {
-            let (mut command, outputs_file) = self.prepare_command(cmd);
+            let (mut command, outputs_file) = self.prepare_command(cmd, outputs);
 
             let result = command.spawn();
 
@@ -525,7 +538,10 @@ impl Tasks {
                 let task_state_clone = Arc::clone(task_state);
                 let outputs_clone = Arc::clone(&outputs);
                 running_tasks.spawn(async move {
-                    let completed = task_state_clone.read().await.run(now).await;
+                    let completed = {
+                        let outputs = outputs_clone.lock().await.clone();
+                        task_state_clone.read().await.run(now, &outputs).await
+                    };
                     {
                         let mut task_state = task_state_clone.write().await;
                         match &completed {
@@ -1087,8 +1103,13 @@ fi
 
     let output_script = create_script(
         r#"#!/bin/sh
-echo "Output from previous task: $DEVENV_TASK_INPUT"
-echo "{\"result\": \"success\"}" > $DEVENV_TASK_OUTPUT
+        if [ "$DEVENV_TASKS_OUTPUTS" != '{"myapp:task_1":{"key":"value"}}' ]; then
+            echo "Error: Outputs do not match expected value" >&2
+            echo "Expected: {\"myapp:task_1\":{\"key\":\"value\"}}" >&2
+            echo "Actual: $DEVENV_TASKS_OUTPUTS" >&2
+            exit 1
+        fi
+        echo "{\"result\": \"success\"}" > $DEVENV_TASK_OUTPUT
 "#,
     )?;
 
