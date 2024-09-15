@@ -94,7 +94,7 @@ let
               echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
               ${if cfg.uv.enable then ''
                 echo "Requirements changed, running uv pip install -r ${requirements}..."
-                ${pkgs.uv}/bin/uv pip install -r ${requirements}
+                uv pip install -r ${requirements}
               ''
               else ''
                   echo "Requirements changed, running pip install -r ${requirements}..."
@@ -110,10 +110,12 @@ let
   initUvScript = pkgs.writeShellScript "init-uv.sh" ''
     pushd "${cfg.directory}"
 
+    VENV_PATH="${config.env.DEVENV_STATE}/venv"
+
     function check_uv_version {
       RED='\033[0;31m'
       NC='\033[0m' # No Color
-      local UV_VERSION=$(${pkgs.uv}/bin/uv --version | cut -d ' ' -f 2)
+      local UV_VERSION=$(uv --version | cut -d ' ' -f 2)
       if [ $(${pkgs.nix}/bin/nix-instantiate --eval --expr "builtins.compareVersions \"$UV_VERSION\" \"0.4.4\"") -lt 0 ]; then
         echo -e "''${RED}Warning: uv version $UV_VERSION is less than 0.4.4. uv sync requires version >= 0.4.4.''${NC}" >&2
         return 1
@@ -127,7 +129,7 @@ let
         return 1
       fi
 
-      local UV_SYNC_COMMAND=(${pkgs.uv}/bin/uv sync ${lib.escapeShellArgs cfg.uv.sync.arguments})
+      local UV_SYNC_COMMAND=(uv sync ${lib.escapeShellArgs cfg.uv.sync.arguments})
 
       # Add extras if specified
       ${lib.concatMapStrings (extra: ''
@@ -142,7 +144,7 @@ let
       # Avoid running "uv sync" for every shell.
       # Only run it when the "pyproject.toml" file or Python interpreter has changed.
       local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
-      local UV_CHECKSUM_FILE=".venv/uv.sync.checksum"
+      local UV_CHECKSUM_FILE="$VENV_PATH/uv.sync.checksum"
       if [ -f "$UV_CHECKSUM_FILE" ]
       then
         read -r EXPECTED_UV_CHECKSUM < "$UV_CHECKSUM_FILE"
