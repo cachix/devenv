@@ -5,7 +5,7 @@ repo_name: 'cachix/devenv'
 repo_url: 'https://github.com/cachix/devenv'
 edit_uri: 'edit/main/docs'
 extra_css:
-  - assets/output.css
+  - assets/top-level.css
 theme:
   name: material
   logo: assets/logo.webp
