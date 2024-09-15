@@ -41,7 +41,7 @@ let
 
   initVenvScript =
     let
-      USE_UV_SYNC = cfg.uv.sync.enable && builtins.compareVersions pkgs.uv.version "0.4.4" >= 0;
+      USE_UV_SYNC = cfg.uv.sync.enable && builtins.compareVersions cfg.uv.package.version "0.4.4" >= 0;
     in
     pkgs.writeShellScript "init-venv.sh" ''
       pushd "${cfg.directory}"
@@ -94,7 +94,7 @@ let
               echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
               ${if cfg.uv.enable then ''
                 echo "Requirements changed, running uv pip install -r ${requirements}..."
-                uv pip install -r ${requirements}
+                ${cfg.uv.package}/bin/uv pip install -r ${requirements}
               ''
               else ''
                   echo "Requirements changed, running pip install -r ${requirements}..."
@@ -115,7 +115,7 @@ let
     function check_uv_version {
       RED='\033[0;31m'
       NC='\033[0m' # No Color
-      local UV_VERSION=$(uv --version | cut -d ' ' -f 2)
+      local UV_VERSION=$(${cfg.uv.package}/bin/uv --version | cut -d ' ' -f 2)
       if [ $(${pkgs.nix}/bin/nix-instantiate --eval --expr "builtins.compareVersions \"$UV_VERSION\" \"0.4.4\"") -lt 0 ]; then
         echo -e "''${RED}Warning: uv version $UV_VERSION is less than 0.4.4. uv sync requires version >= 0.4.4.''${NC}" >&2
         return 1
@@ -129,7 +129,7 @@ let
         return 1
       fi
 
-      local UV_SYNC_COMMAND=(uv sync ${lib.escapeShellArgs cfg.uv.sync.arguments})
+      local UV_SYNC_COMMAND=(${cfg.uv.package}/bin/uv sync ${lib.escapeShellArgs cfg.uv.sync.arguments})
 
       # Add extras if specified
       ${lib.concatMapStrings (extra: ''
