@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-uv-sync"
+version = "0.1.0"
+description = ""
+authors = [{ name = "Alex Launi", email = "dev@launi.me" }]
+dependencies = ["requests"]
