@@ -26,11 +26,11 @@ let
     ];
   };
 
-  requirements = pkgs.writeText "requirements.txt" (
+  requirements = pkgs.writeText "requirements.txt" (toString (
     if lib.isPath cfg.venv.requirements
     then builtins.readFile cfg.venv.requirements
     else cfg.venv.requirements
-  );
+  ));
 
   nixpkgs-python = config.lib.getInput {
     name = "nixpkgs-python";
@@ -39,72 +39,73 @@ let
     follows = [ "nixpkgs" ];
   };
 
-  initVenvScript = pkgs.writeShellScript "init-venv.sh" ''
-    pushd "${cfg.directory}"
+  initVenvScript =
+    let
+      USE_UV_SYNC = cfg.uv.sync.enable && builtins.compareVersions pkgs.uv.version "0.4.4" >= 0;
+    in
+    pkgs.writeShellScript "init-venv.sh" ''
+      pushd "${cfg.directory}"
 
-    # Make sure any tools are not attempting to use the Python interpreter from any
-    # existing virtual environment. For instance if devenv was started within an venv.
-    unset VIRTUAL_ENV
+      # Make sure any tools are not attempting to use the Python interpreter from any
+      # existing virtual environment. For instance if devenv was started within an venv.
+      unset VIRTUAL_ENV
 
-    VENV_PATH="${config.env.DEVENV_STATE}/venv"
+      VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    profile_python="$(${readlink} ${package.interpreter})"
-    devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
-    venv_python="$(${readlink} "$devenv_interpreter_path")"
+      profile_python="$(${readlink} ${package.interpreter})"
+      devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
+      venv_python="$(${readlink} "$devenv_interpreter_path")"
 
-    # if uv sync is enabled issue a warning that this is being ignored and dependencies will be installed from pyproject.toml
-    ${if cfg.uv.sync.enable && builtins.compareVersions pkgs.uv.version "0.4.4" >= 0 then ''
-      echo "Warning: uv sync is enabled, and requirements are being ignored. Dependencies will be installed from pyproject.toml."
-    ''
-    else ''
-      requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
-    ''
-    }
-
-    # recreate venv if necessary
-    if [ -z $venv_python ] || [ $profile_python != $venv_python ]
-    then
-      echo "Python interpreter changed, rebuilding Python venv..."
-      ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
-      ${lib.optionalString cfg.poetry.enable ''
-        [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
+      # if uv sync is enabled issue a warning that this is being ignored and dependencies will be installed from pyproject.toml
+      ${lib.optionalString (USE_UV_SYNC && cfg.venv.requirements != null) ''
+        echo "Warning: uv sync is enabled, and requirements are being ignored. Dependencies will be installed from pyproject.toml."
       ''}
-      ${if cfg.uv.enable then ''
-        echo uv venv -p ${package.interpreter} "$VENV_PATH"
-        uv venv -p ${package.interpreter} "$VENV_PATH"
-      ''
-      else ''
-          echo ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
-          ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
-        ''
-      }
-      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
-    fi
+      requirements="${lib.optionalString (!USE_UV_SYNC && cfg.venv.requirements != null) ''${requirements}''}"
 
-    source "$VENV_PATH"/bin/activate
-
-    # reinstall requirements if necessary
-    if [ -n "$requirements" ]
+      # recreate venv if necessary
+      if [ -z $venv_python ] || [ $profile_python != $venv_python ]
       then
-        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| echo false )"
-        devenv_requirements="$(${readlink} "$devenv_requirements_path")"
-        if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
-          then
-            echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
-            ${if cfg.uv.enable then ''
-              echo "Requirements changed, running uv pip install -r ${requirements}..."
-              ${pkgs.uv}/bin/uv pip install -r ${requirements}
-            ''
-            else ''
-                echo "Requirements changed, running pip install -r ${requirements}..."
-                "$VENV_PATH"/bin/pip install -r ${requirements}
-              ''
-            }
-       fi
-    fi
+        echo "Python interpreter changed, rebuilding Python venv..."
+        ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
+        ${lib.optionalString cfg.poetry.enable ''
+          [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
+        ''}
+        ${if cfg.uv.enable then ''
+          echo uv venv -p ${package.interpreter} "$VENV_PATH"
+          uv venv -p ${package.interpreter} "$VENV_PATH"
+        ''
+        else ''
+            echo ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
+            ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
+          ''
+        }
+        echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+      fi
 
-    popd
-  '';
+      source "$VENV_PATH"/bin/activate
+
+      # reinstall requirements if necessary
+      if [ -n "$requirements" ]
+        then
+          devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| echo false )"
+          devenv_requirements="$(${readlink} "$devenv_requirements_path")"
+          if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
+            then
+              echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
+              ${if cfg.uv.enable then ''
+                echo "Requirements changed, running uv pip install -r ${requirements}..."
+                ${pkgs.uv}/bin/uv pip install -r ${requirements}
+              ''
+              else ''
+                  echo "Requirements changed, running pip install -r ${requirements}..."
+                  "$VENV_PATH"/bin/pip install -r ${requirements}
+                ''
+              }
+         fi
+      fi
+
+      popd
+    '';
 
   initUvScript = pkgs.writeShellScript "init-uv.sh" ''
     pushd "${cfg.directory}"
@@ -114,7 +115,7 @@ let
       NC='\033[0m' # No Color
       local UV_VERSION=$(${pkgs.uv}/bin/uv --version | cut -d ' ' -f 2)
       if [ $(${pkgs.nix}/bin/nix-instantiate --eval --expr "builtins.compareVersions \"$UV_VERSION\" \"0.4.4\"") -lt 0 ]; then
-        echo -e "''${RED}Warning: uv version $UV_VERSION is less than 0.4.4. uv sync requires version 0.4.4 or higher.''${NC}" >&2
+        echo -e "''${RED}Warning: uv version $UV_VERSION is less than 0.4.4. uv sync requires version >= 0.4.4.''${NC}" >&2
         return 1
       fi
       return 0
