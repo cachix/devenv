@@ -106,6 +106,70 @@ let
     popd
   '';
 
+  initUvScript = pkgs.writeShellScript "init-uv.sh" ''
+    pushd "${cfg.directory}"
+
+    function check_uv_version {
+      RED='\033[0;31m'
+      NC='\033[0m' # No Color
+      local UV_VERSION=$(${pkgs.uv}/bin/uv --version | cut -d ' ' -f 2)
+      if [ $(${pkgs.nix}/bin/nix-instantiate --eval --expr "builtins.compareVersions \"$UV_VERSION\" \"0.4.4\"") -lt 0 ]; then
+        echo -e "''${RED}Warning: uv version $UV_VERSION is less than 0.4.4. uv sync requires version 0.4.4 or higher.''${NC}" >&2
+        return 1
+      fi
+      return 0
+    }
+
+    function _devenv_uv_sync
+    {
+      if ! check_uv_version; then
+        return 1
+      fi
+
+      local UV_SYNC_COMMAND=(${pkgs.uv}/bin/uv sync ${lib.escapeShellArgs cfg.uv.sync.arguments})
+
+      # Add extras if specified
+      ${lib.concatMapStrings (extra: ''
+        UV_SYNC_COMMAND+=(--extra "${extra}")
+      '') cfg.uv.sync.extras}
+
+      # Add all-extras flag if enabled
+      ${lib.optionalString cfg.uv.sync.allExtras ''
+        UV_SYNC_COMMAND+=(--all-extras)
+      ''}
+
+      # Avoid running "uv sync" for every shell.
+      # Only run it when the "pyproject.toml" file or Python interpreter has changed.
+      local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
+      local UV_CHECKSUM_FILE=".venv/uv.sync.checksum"
+      if [ -f "$UV_CHECKSUM_FILE" ]
+      then
+        read -r EXPECTED_UV_CHECKSUM < "$UV_CHECKSUM_FILE"
+      else
+        EXPECTED_UV_CHECKSUM=""
+      fi
+
+      if [ "$ACTUAL_UV_CHECKSUM" != "$EXPECTED_UV_CHECKSUM" ]
+      then
+        if "''${UV_SYNC_COMMAND[@]}"
+        then
+          echo "$ACTUAL_UV_CHECKSUM" > "$UV_CHECKSUM_FILE"
+        else
+          echo "uv sync failed. Run 'uv sync' manually." >&2
+        fi
+      fi
+    }
+
+    if [ ! -f "pyproject.toml" ]
+    then
+      echo "No pyproject.toml found. Make sure you have a pyproject.toml file in your project." >&2
+    else
+      _devenv_uv_sync
+    fi
+
+    popd
+  '';
+
   initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
     pushd "${cfg.directory}"
 
@@ -380,16 +444,27 @@ in
       POETRY_VIRTUALENVS_PATH = "/var/empty";
     });
 
-    enterShell = lib.concatStringsSep "\n" ([
-      ''
-        export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
-      ''
-    ] ++
-    (lib.optional cfg.venv.enable ''
-      source ${initVenvScript}
-    '') ++ (lib.optional cfg.poetry.install.enable ''
-      source ${initPoetryScript}
-    '')
-    );
+    enterShell =
+      let
+        errorCondition = cfg.poetry.install.enable && cfg.uv.sync.enable;
+        errorMessage = "Error: Both poetry.install.enable and uv.sync.enable cannot be true simultaneously.";
+      in
+      if errorCondition
+      then throw errorMessage
+      else
+        lib.concatStringsSep "\n" ([
+          ''
+            export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+          ''
+        ] ++
+        (lib.optional cfg.venv.enable ''
+          source ${initVenvScript}
+        '') ++
+        (lib.optional cfg.poetry.install.enable ''
+          source ${initPoetryScript}
+        '') ++
+        (lib.optional cfg.uv.sync.enable ''
+          source ${initUvScript}
+        ''));
   };
 }
