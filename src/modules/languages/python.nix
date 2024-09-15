@@ -51,7 +51,15 @@ let
     profile_python="$(${readlink} ${package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
-    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+
+    # if uv sync is enabled issue a warning that this is being ignored and dependencies will be installed from pyproject.toml
+    ${if cfg.uv.sync.enable && builtins.compareVersions pkgs.uv.version "0.4.4" >= 0 then ''
+      echo "Warning: uv sync is enabled, and requirements are being ignored. Dependencies will be installed from pyproject.toml."
+    ''
+    else ''
+      requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+    ''
+    }
 
     # recreate venv if necessary
     if [ -z $venv_python ] || [ $profile_python != $venv_python ]
@@ -85,7 +93,7 @@ let
             echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
             ${if cfg.uv.enable then ''
               echo "Requirements changed, running uv pip install -r ${requirements}..."
-              uv pip install -r ${requirements}
+              ${pkgs.uv}/bin/uv pip install -r ${requirements}
             ''
             else ''
                 echo "Requirements changed, running pip install -r ${requirements}..."
@@ -210,21 +218,21 @@ in
       example = "./directory";
     };
 
-    venv.enable = lib.mkEnableOption "Python virtual environment";
-
-    venv.requirements = lib.mkOption {
-      type = lib.types.nullOr (lib.types.either lib.types.lines lib.types.path);
-      default = null;
-      description = ''
-        Contents of pip requirements.txt file.
-        This is passed to `pip install -r` during `devenv shell` initialisation.
-      '';
-    };
-
-    venv.quiet = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
+    venv = {
+      enable = lib.mkEnableOption "Python virtual environment";
+      requirements = lib.mkOption {
+        type = lib.types.nullOr (lib.types.either lib.types.lines lib.types.path);
+        default = null;
+        description = ''
+          Contents of pip requirements.txt file.
+          This is passed to `pip install -r` during `devenv shell` initialisation.
+        '';
+      };
+      quiet = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
+      };
     };
 
     uv = {
@@ -234,6 +242,25 @@ in
         default = pkgs.uv;
         defaultText = lib.literalExpression "pkgs.uv";
         description = "The uv package to use.";
+      };
+      sync = {
+        enable = lib.mkEnableOption "uv sync during devenv initialisation";
+        arguments = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ "--frozen" "--no-install-workspace" ];
+          description = "Command line arguments pass to `uv sync` during devenv initialisation.";
+          internal = true;
+        };
+        extras = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Which extras to install. See `--extra`.";
+        };
+        allExtras = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether to install all extras. See `--all-extras`.";
+        };
       };
     };
 
@@ -341,14 +368,17 @@ in
       ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
       ++ (lib.optional cfg.uv.enable cfg.uv.package);
 
-    env = lib.optionalAttrs cfg.poetry.enable {
+    env = (lib.optionalAttrs cfg.uv.enable {
+      # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
+      UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
+    }) // (lib.optionalAttrs cfg.poetry.enable {
       # Make poetry use DEVENV_ROOT/.venv
       POETRY_VIRTUALENVS_IN_PROJECT = "true";
       # Make poetry create the local virtualenv when it does not exist.
       POETRY_VIRTUALENVS_CREATE = "true";
       # Make poetry stop accessing any other virtualenvs in $HOME.
       POETRY_VIRTUALENVS_PATH = "/var/empty";
-    };
+    });
 
     enterShell = lib.concatStringsSep "\n" ([
       ''
