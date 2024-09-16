@@ -1,5 +1,7 @@
 { inputs, pkgs, lib, config, ... }: {
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
+  # ignore annoying browserlists warning that breaks pre-commit hooks
+  env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
 
   packages = [
     pkgs.cairo
@@ -96,9 +98,7 @@
   };
   scripts."devenv-generate-doc-css" = {
     description = "Generate CSS for the docs.";
-    exec = ''
-      ${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css
-    '';
+    exec = "${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css";
   };
   scripts."devenv-generate-doc-options" = {
     description = "Generate option docs.";
@@ -106,7 +106,7 @@
       set -e
       output_file=docs/reference/options.md
       options=$(nix build --accept-flake-config --no-pure-eval --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths --no-link '.#devenv-docs-options')
-      echo "# devenv.nix options" > $output_file
+      echo "# devenv.nix" > $output_file
       echo >> $output_file
       cat $options >> $output_file
       # https://github.com/NixOS/nixpkgs/issues/224661
@@ -142,6 +142,71 @@
       EOF
     '';
   };
+  scripts."devenv-generate-individual-docs" = {
+    description = "Generate individual docs of all devenv modules";
+    exec = ''
+      mkdir -p docs/{supported-languages,supported-services,supported-process-managers}
+
+      nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
+      cp -r --no-preserve=all result/docs/individual-docs/* docs/
+    '';
+  };
+
+  scripts."devenv-verify-individual-docs" = {
+    description = "Generate missing template markdown files";
+    exec = ''
+
+    process_directory() {
+      local nix_dir=$1
+      local md_dir=$2
+      local category=$3
+
+      nixFiles=($(ls $nix_dir/*.nix))
+      mdFiles=($(ls $md_dir/*.md))
+
+      declare -a nixList
+      declare -a mdList
+
+      # Remove extensions and populate lists
+      for file in "''${nixFiles[@]}"; do
+        baseName=$(basename "$file" .nix)
+        nixList+=("$baseName")
+      done
+
+      for file in "''${mdFiles[@]}"; do
+        baseName=$(basename "$file" .md)
+        mdList+=("$baseName")
+      done
+
+      IFS=$'\n' sorted_nix=($(sort <<<"''${nixList[*]}"))
+      IFS=$'\n' sorted_md=($(sort <<<"''${mdList[*]}"))
+
+      # Compare and create missing files
+      missing_files=()
+      for item in "''${sorted_nix[@]}"; do
+        if [[ ! " ''${sorted_md[@]} " =~ " $item " ]]; then
+          missing_files+=("$item")
+          cat << EOF > "$md_dir/$item.md"
+
+
+[comment]: # (Please add your documentation on top of this line)
+
+@AUTOGEN_OPTIONS@
+EOF
+          echo "Created missing file: $md_dir/$item.md"
+        fi
+      done
+
+      if [ ''${#missing_files[@]} -eq 0 ]; then
+        echo "All $category docs markdown files are present."
+      fi
+    }
+
+    process_directory "src/modules/languages" "docs/individual-docs/languages" "language"
+    process_directory "src/modules/services" "docs/individual-docs/services" "service"
+    process_directory "src/modules/process-managers" "docs/individual-docs/process-managers" "process manager"
+    '';
+  };
 
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
@@ -159,11 +224,10 @@
     generate-doc-css = {
       enable = true;
       name = "generate-doc-css";
-      # Copied from devenv-generate-doc-css
       # In CI, the auto-commit action doesn't run in the shell, so it can't reuse our scripts.
       # And the following command is curently too slow to be a pre-commit command.
       # entry = "devenv shell devenv-generate-doc-css";
-      entry = "${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css";
+      entry = config.scripts."devenv-generate-doc-css".exec;
     };
   };
 }

@@ -23,3 +23,4 @@ devenv inputs add nix2container github:nlewo/nix2container --follows nixpkgs
 devenv container build shell | grep image-shell.json
 # bw compat
 devenv container shell | grep "image-shell.json"
+devenv gc

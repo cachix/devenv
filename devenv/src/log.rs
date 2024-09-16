@@ -2,6 +2,29 @@ use ansiterm::Colour::{Blue, DarkGray, Green, Red, Yellow};
 use std::io::Write;
 use std::time::Instant;
 
+pub enum LogProgressCreator {
+    Silent,
+    Logging,
+}
+
+impl LogProgressCreator {
+    pub fn with_newline(&self, message: &str) -> Option<LogProgress> {
+        use LogProgressCreator::*;
+        match self {
+            Silent => None,
+            Logging => Some(LogProgress::new(message, true)),
+        }
+    }
+
+    pub fn without_newline(&self, message: &str) -> Option<LogProgress> {
+        use LogProgressCreator::*;
+        match self {
+            Silent => None,
+            Logging => Some(LogProgress::new(message, false)),
+        }
+    }
+}
+
 pub struct LogProgress {
     message: String,
     start: Option<Instant>,
@@ -43,6 +66,7 @@ impl Drop for LogProgress {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Level {
+    Silent,
     Error,
     Warn,
     Info,
@@ -96,6 +120,7 @@ impl Logger {
                 let prefix = DarkGray.paint("•");
                 eprintln!("{} {}", prefix, message);
             }
+            Level::Silent => {}
         }
     }
 }

@@ -1,3 +1,13 @@
+## Using `nixpkgs-unstable` instead of `devenv-nixpkgs`
+
+### In the file `devenv.yaml` edit the `nixpkgs` input to point to nixpkgs-unstable
+
+```yaml
+inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
+```
+
 ## Nix patterns
 
 ### Add a directory to `$PATH`

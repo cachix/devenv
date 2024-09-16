@@ -24,6 +24,7 @@
   services.postgres.enable = true;
   services.rabbitmq.enable = true;
   services.redis.enable = true;
+  services.sqld.enable = true;
   services.temporal.enable = true;
   services.trafficserver.enable = true;
   services.typesense.enable = true;

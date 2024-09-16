@@ -1,0 +1,38 @@
+nav:
+  - Home: index.md
+  - Guide:
+    - Getting Started: getting-started.md
+    - Files And Variables: files-and-variables.md
+    - Writing devenv.nix:
+      - Basics: basics.md
+      - Packages: packages.md
+      - Scripts: scripts.md
+      - Languages: 
+        - Overview: languages.md
+        - Supported Languages: supported-languages
+      - Processes: 
+        - Overview: processes.md
+        - Supported Process Managers: supported-process-managers
+      - Services: 
+        - Overview: services.md
+        - Supported Services: supported-services
+      - Containers: containers.md
+      - Binary Caching: binary-caching.md
+      - Pre-Commit Hooks: pre-commit-hooks.md
+      - Outputs: outputs.md
+      - Tests: tests.md
+      - Common Patterns: common-patterns.md
+    - Writing devenv.yaml:
+      - Inputs: inputs.md
+      - Imports: composing-using-imports.md
+    - Overview:
+      - Automatic Shell Activation: automatic-shell-activation.md
+      - Garbage Collection: garbage-collection.md
+    - Guides: guides
+    - Integrations: integrations
+    - Examples: examples.md
+    - Editor Support: editor-support
+    - Roadmap: roadmap.md
+  - Reference: reference
+  - Blog: blog
+  - Community: community

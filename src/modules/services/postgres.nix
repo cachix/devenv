@@ -1,15 +1,19 @@
-{ pkgs, lib, config, ... }:
-
+{ pkgs
+, lib
+, config
+, ...
+}:
 let
   cfg = config.services.postgres;
-  types = lib.types;
+  inherit (lib) types;
 
   q = lib.escapeShellArg;
 
   runtimeDir = "${config.env.DEVENV_RUNTIME}/postgres";
 
   postgresPkg =
-    if cfg.extensions != null then
+    if cfg.extensions != null
+    then
       if builtins.hasAttr "withPackages" cfg.package
       then cfg.package.withPackages cfg.extensions
       else
@@ -19,44 +23,66 @@ let
         ''
     else cfg.package;
 
+  # TODO: we can probably clean this up a lot by delegating more "if exists" stuff to psql (à la `DO $$...$$` below)
   setupInitialDatabases =
-    if cfg.initialDatabases != [ ] then
+    if cfg.initialDatabases != [ ]
+    then
       (lib.concatMapStrings
-        (database: ''
-          echo "Checking presence of database: ${database.name}"
-          # Create initial databases
-          dbAlreadyExists="$(
-            echo "SELECT 1 as exists FROM pg_database WHERE datname = '${database.name}';" | \
-            psql --dbname postgres | \
-            ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
-          )"
-          echo $dbAlreadyExists
-          if [ 1 -ne "$dbAlreadyExists" ]; then
-            echo "Creating database: ${database.name}"
-            echo 'create database "${database.name}";' | psql --dbname postgres
-
-            ${lib.optionalString (database.schema != null) ''
-            echo "Applying database schema on ${database.name}"
-            if [ -f "${database.schema}" ]
-            then
-              echo "Running file ${database.schema}"
-              ${pkgs.gawk}/bin/awk 'NF' "${database.schema}" | psql --dbname ${database.name}
-            elif [ -d "${database.schema}" ]
-            then
-              # Read sql files in version order. Apply one file
-              # at a time to handle files where the last statement
-              # doesn't end in a ;.
-              ls -1v "${database.schema}"/*.sql | while read f ; do
-                 echo "Applying sql file: $f"
-                 ${pkgs.gawk}/bin/awk 'NF' "$f" | psql --dbname ${database.name}
-              done
-            else
-              echo "ERROR: Could not determine how to apply schema with ${database.schema}"
-              exit 1
-            fi
+        (database:
+          let
+            psqlUserFlags =
+              if (database.user != null && database.pass != null)
+              then "--user ${database.user}"
+              else "";
+          in
+          ''
+            echo "Checking presence of database: ${database.name}"
+            # Create initial databases
+            dbAlreadyExists="$(
+              echo "SELECT 1 AS exists FROM pg_database WHERE datname = '${database.name}';" | \
+              psql --dbname postgres | \
+              ${pkgs.gnugrep}/bin/grep -c 'exists = "1"' || true
+            )"
+            echo $dbAlreadyExists
+            if [ 1 -ne "$dbAlreadyExists" ]; then
+              echo "Creating database: ${database.name}"
+              echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
+              ${lib.optionalString (database.schema != null && database.user != null && database.pass != null) ''
+              echo "Creating role ${database.user}..."
+              psql --dbname postgres <<'EOF'
+              DO $$
+                  BEGIN
+                      CREATE ROLE ${database.user} WITH LOGIN PASSWORD '${database.pass}';
+                      EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+                  END
+              $$;
+              GRANT ALL PRIVILEGES ON DATABASE ${database.name} TO ${database.user};
+              \c ${database.name}
+              GRANT ALL PRIVILEGES ON SCHEMA public TO ${database.user};
+              EOF
             ''}
-          fi
-        '')
+              ${lib.optionalString (database.schema != null) ''
+              echo "Applying database schema on ${database.name}"
+              if [ -f "${database.schema}" ]
+              then
+                echo "Running file ${database.schema}"
+                ${pkgs.gawk}/bin/awk 'NF' "${database.schema}" | psql ${psqlUserFlags} --dbname ${database.name}
+              elif [ -d "${database.schema}" ]
+              then
+                # Read sql files in version order. Apply one file
+                # at a time to handle files where the last statement
+                # doesn't end in a ;.
+                ls -1v "${database.schema}"/*.sql | while read f ; do
+                   echo "Applying sql file: $f"
+                   ${pkgs.gawk}/bin/awk 'NF' "$f" | psql ${psqlUserFlags} --dbname ${database.name}
+                done
+              else
+                echo "ERROR: Could not determine how to apply schema with ${database.schema}"
+                exit 1
+              fi
+            ''}
+            fi
+          '')
         cfg.initialDatabases)
     else
       lib.optionalString cfg.createDatabase ''
@@ -66,25 +92,32 @@ let
       '';
 
   runInitialScript =
-    if cfg.initialScript != null then
-      ''
-        echo ${q cfg.initialScript} | psql --dbname postgres
-      ''
-    else
-      "";
+    if cfg.initialScript != null
+    then ''
+      echo ${q cfg.initialScript} | psql --dbname postgres
+    ''
+    else "";
 
   toStr = value:
-    if true == value then
-      "yes"
-    else if false == value then
-      "no"
-    else if lib.isString value then
-      "'${lib.replaceStrings [ "'" ] [ "''" ] value}'"
-    else
-      toString value;
+    if true == value
+    then "yes"
+    else if false == value
+    then "no"
+    else if lib.isString value
+    then "'${lib.replaceStrings ["'"] ["''"] value}'"
+    else toString value;
 
-  configFile = pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
-    (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
+  configFile =
+    pkgs.writeText "postgresql.conf" (lib.concatStringsSep "\n"
+      (lib.mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.settings));
+  setupPgHbaFileScript =
+    if cfg.hbaConf != null
+    then
+      let
+        file = pkgs.writeText "pg_hba.conf" cfg.hbaConf;
+      in
+      ''cp ${file} "$PGDATA/pg_hba.conf"''
+    else "";
   setupScript = pkgs.writeShellScriptBin "setup-postgres" ''
     set -euo pipefail
     export PATH=${postgresPkg}/bin:${pkgs.coreutils}/bin
@@ -100,6 +133,9 @@ let
 
     # Setup config
     cp ${configFile} "$PGDATA/postgresql.conf"
+
+    # Setup pg_hba.conf
+    ${setupPgHbaFileScript}
 
     if [[ "$POSTGRES_RUN_INITIAL_SCRIPT" = "true" ]]; then
       echo
@@ -246,6 +282,20 @@ in
               an empty database is created.
             '';
           };
+          user = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Username of owner of the database (if null, the default $USER is used).
+            '';
+          };
+          pass = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Password of owner of the database (only takes effect if `user` is not `null`).
+            '';
+          };
         };
       });
       default = [ ];
@@ -276,6 +326,18 @@ in
         CREATE ROLE bar;
       '';
     };
+
+    hbaConf = lib.mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        The contents of a custom pg_hba.conf file to copy into the postgres installation.
+        This allows for custom connection rules that you want to establish on the server.
+      '';
+      example = lib.literalExpression ''
+        builtins.readFile ./my-custom/directory/to/pg_hba.conf
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -292,7 +354,7 @@ in
     };
 
     processes.postgres = {
-      exec = "${startScript}/bin/start-postgres";
+      exec = "exec ${startScript}/bin/start-postgres";
 
       process-compose = {
         # SIGINT (= 2) for faster shutdown: https://www.postgresql.org/docs/current/server-shutdown.html
