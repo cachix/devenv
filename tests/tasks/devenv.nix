@@ -1,8 +1,9 @@
 {
   tasks = {
-    shell.exec = "touch shell";
-    enterShell.depends = [ "shell" ];
-    test.exec = "touch test";
+    "myapp:shell".exec = "touch shell";
+    "devenv:enterShell".depends = [ "myapp:shell" ];
+    "myapp:test".exec = "touch test";
+    "devenv:enterTest".depends = [ "myapp:test" ];
   };
 
   enterTest = ''
@@ -10,7 +11,9 @@
       echo "shell does not exist"
       exit 1
     fi
-    devenv tasks run test
+    rm -f shell
+    rm -f test
+    devenv tasks run myapp:test >/dev/null
     if [ ! -f test ]; then
       echo "test does not exist"
       exit 1

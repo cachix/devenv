@@ -552,15 +552,9 @@ impl<'a> Devenv<'a> {
         // collect tests
         let test_script = {
             let _logprogress = self.log_progress.with_newline("Building tests");
-            let test_scripts = self.nix.build(&["devenv.test"]).await?;
-            std::fs::read_to_string(&test_scripts[0])
-                .map_err(|e| miette::miette!("Failed to read test script: {}", e))?
+            self.nix.build(&["devenv.test"]).await?
         };
-
-        if test_script.is_empty() {
-            self.logger.error("No tests found.");
-            bail!("No tests found");
-        }
+        let test_script = test_script[0].to_string_lossy().to_string();
 
         if self.has_processes().await? {
             self.up(None, &true, &false).await?;
@@ -627,7 +621,10 @@ impl<'a> Devenv<'a> {
                 })
                 .collect()
         } else {
-            attributes.to_vec()
+            attributes
+                .iter()
+                .map(|attr| format!("devenv.{}", attr))
+                .collect()
         };
         let paths = self
             .nix
