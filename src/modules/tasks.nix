@@ -107,8 +107,8 @@ in
           eval "$ENTER_SHELL_COMMANDS"
 
           mkdir -p "$DEVENV_STATE"
-          export -p | sed 's/^declare -x /export /' > "$DEVENV_STATE/load-env"
-          chmod +x "$DEVENV_STATE/load-env"
+          export -p | sed 's/^declare -x /export /' > "$DEVENV_DOTFILE/load-env"
+          chmod +x "$DEVENV_DOTFILE/load-env"
         '';
       };
       "devenv:enterTest" = {
@@ -117,7 +117,7 @@ in
     };
     enterShell = ''
       ${devenv}/bin/tasks devenv:enterShell
-      source "$DEVENV_STATE/load-env"
+      source "$DEVENV_DOTFILE/load-env"
     '';
     enterTest = ''
       ${devenv}/bin/tasks devenv:enterTest
