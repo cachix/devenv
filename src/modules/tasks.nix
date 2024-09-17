@@ -1,6 +1,7 @@
-{ pkgs, lib, config, ... }:
+{ pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
+  devenv = import ./../../package.nix { inherit pkgs inputs; build_tasks = true; };
   taskType = types.submodule
     ({ name, config, ... }:
       let
@@ -76,6 +77,7 @@ let
           };
         };
       });
+  tasksJSON = (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);
 in
 {
   options.tasks = lib.mkOption {
@@ -88,13 +90,14 @@ in
   };
 
   config = {
+    env.DEVENV_TASKS = builtins.toJSON tasksJSON;
+
     info.infoSections.tasks =
       lib.mapAttrsToList
         (name: task: "${name}: ${task.description} ${task.command}")
         config.tasks;
 
-    task.config = (pkgs.formats.json { }).generate "tasks.json"
-      (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);
+    task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
 
     tasks = {
       "devenv:enterShell" = {
@@ -113,11 +116,11 @@ in
       };
     };
     enterShell = ''
-      devenv tasks run devenv:enterShell >/dev/null
+      ${devenv}/bin/tasks devenv:enterShell
       source "$DEVENV_STATE/load-env"
     '';
     enterTest = ''
-      devenv tasks run devenv:enterTest >/dev/null
+      ${devenv}/bin/tasks devenv:enterTest
     '';
   };
 }
