@@ -11,6 +11,9 @@ on:
 jobs:
   generate-docs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
     # Regular (non-PR) checkout
     - uses: actions/checkout@v4
