@@ -34,7 +34,7 @@ in
   ];
 
   options.services.redis = {
-    enable = mkEnableOption "Redis process and expose utilities";
+    enable = mkEnableOption "Redis process and expose utilities SOME CHANGE";
 
     package = mkOption {
       type = types.package;
