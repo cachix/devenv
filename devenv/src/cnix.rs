@@ -76,10 +76,7 @@ impl<'a> Nix<'a> {
             replace_shell,
             ..self.options
         };
-        let mut full_args = vec!["develop"];
-        full_args.extend_from_slice(args);
-        self.run_nix_with_substituters("nix", &full_args, &options)
-            .await
+        self.run_nix_with_substituters("nix", &args, &options).await
     }
 
     pub async fn dev_env(&mut self, json: bool, gc_root: &PathBuf) -> Result<Vec<u8>> {
