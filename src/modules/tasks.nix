@@ -92,9 +92,9 @@ in
   config = {
     env.DEVENV_TASKS = builtins.toJSON tasksJSON;
 
-    info.infoSections.tasks =
+    infoSections."tasks" =
       lib.mapAttrsToList
-        (name: task: "${name}: ${task.description} ${task.command}")
+        (name: task: "${name}: ${task.description} (${if task.command == null then "no command" else task.command})")
         config.tasks;
 
     task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
