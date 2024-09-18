@@ -58,3 +58,20 @@ jobs:
         add: docs/devenv.schema.json
         message: 'Auto generate docs/devenv.schema.json'
 
+    - name: Check for uncommitted changes
+      run: |
+        diff=$(git diff --stat)
+        if [[ -n "$diff" ]]; then
+          message="There are uncommitted doc changes in the repository.
+
+        ${diff}
+
+        To resolve this, you can:
+          a. Run the failing devenv-generate-* commands locally and commit the changes.
+          b. Let CI auto-commit the changes to your fork of the repo. You may need to enable this workflow on your fork."
+
+          echo "::error::${message//$'\n'/%0A}"
+          exit 1
+        else
+          echo "No uncommitted doc changes found."
+        fi
