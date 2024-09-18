@@ -35792,7 +35792,7 @@ path
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
+` "${config.env.DEVENV_STATE}/caddy" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -40179,7 +40179,7 @@ package
 
 
 *Default:*
-` <derivation trafficserver-9.2.3> `
+` pkgs.trafficserver `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -40508,28 +40508,6 @@ File layout used by Traffic Server
 *Type:*
 unspecified value *(read only)*
 
-
-
-*Default:*
-
-```
-{
-  bindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
-  cachedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache";
-  datadir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/share";
-  exec_prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
-  includedir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/include";
-  libdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/lib";
-  libexecdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/libexec";
-  localstatedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/state";
-  logdir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/log";
-  prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
-  runtimedir = "/run/user/1001/devenv-0957646/trafficserver";
-  sbindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
-  sysconfdir = <derivation trafficserver-config>;
-}
-```
-
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
@@ -40656,7 +40634,7 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache 256M" `
+` "${config.services.traffic-server.runroot.cachedir} 256M" `
 
 
 
