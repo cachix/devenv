@@ -328,10 +328,9 @@ impl<'a> Nix<'a> {
         options: &Options<'a>,
     ) -> Result<std::process::Command> {
         let mut final_args = Vec::new();
-        let mut final_command = command.to_string();
-        let mut push_args = Vec::new();
         let known_keys;
         let pull_caches;
+        let mut push_cache = None;
 
         if !self.global_options.offline {
             let cachix_caches = self.get_cachix_caches().await;
@@ -343,6 +342,7 @@ impl<'a> Nix<'a> {
                     self.logger.debug(&format!("{}", e));
                 }
                 Ok(cachix_caches) => {
+                    push_cache = cachix_caches.caches.push.clone();
                     // handle cachix.pull
                     pull_caches = cachix_caches
                         .caches
@@ -363,31 +363,42 @@ impl<'a> Nix<'a> {
                         "extra-trusted-public-keys",
                         &known_keys,
                     ]);
-
-                    // handle cachix.push
-                    if let Some(push_cache) = &cachix_caches.caches.push {
-                        if env::var("CACHIX_AUTH_TOKEN").is_ok() {
-                            final_command = "cachix".to_string();
-                            push_args = vec![
-                                "watch-exec".to_string(),
-                                push_cache.clone(),
-                                "--".to_string(),
-                                command.to_string(),
-                            ];
-                            final_args = push_args.iter().map(|s| s.as_str()).collect();
-                        } else {
-                            self.logger.warn(&format!(
-                                "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
-                                push_cache
-                            ));
-                        }
-                    }
                 }
             }
         }
 
         final_args.extend(args.iter().map(|&s| s));
-        self.prepare_command(&final_command, &final_args, options)
+        let cmd = self.prepare_command(&command.to_string(), &final_args, options)?;
+
+        // handle cachix.push
+        if let Some(push_cache) = push_cache {
+            if env::var("CACHIX_AUTH_TOKEN").is_ok() {
+                let original_command = cmd.get_program().to_string_lossy().to_string();
+                let mut new_cmd = std::process::Command::new("cachix");
+                let push_args = vec![
+                    "watch-exec".to_string(),
+                    push_cache.clone(),
+                    "--".to_string(),
+                    original_command,
+                ];
+                new_cmd.args(&push_args);
+                new_cmd.args(cmd.get_args());
+                // make sure to copy all env vars
+                for (key, value) in cmd.get_envs() {
+                    if let Some(value) = value {
+                        new_cmd.env(key, value);
+                    }
+                }
+                new_cmd.current_dir(cmd.get_current_dir().unwrap_or_else(|| Path::new(".")));
+                return Ok(new_cmd);
+            } else {
+                self.logger.warn(&format!(
+                    "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
+                    push_cache
+                ));
+            }
+        }
+        Ok(cmd)
     }
 
     pub fn prepare_command(
@@ -436,9 +447,8 @@ impl<'a> Nix<'a> {
             // avoid passing it to the older utilities, e.g. like `nix-store` when creating GC roots.
             if command == "nix"
                 && args
-                    .first()
-                    .map(|arg| arg == &"build" || arg == &"eval" || arg == &"print-dev-env")
-                    .unwrap_or(false)
+                    .iter()
+                    .any(|&arg| arg == "build" || arg == "eval" || arg == "print-dev-env")
             {
                 flags.push("--no-pure-eval");
             }
