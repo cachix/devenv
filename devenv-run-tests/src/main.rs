@@ -143,6 +143,17 @@ async fn run_tests_in_directory(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    let executable_path = std::env::current_exe()?;
+    let executable_dir = executable_path.parent().unwrap();
+    std::env::set_var(
+        "PATH",
+        format!(
+            "{}:{}",
+            executable_dir.display(),
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
+
     let test_results = run_tests_in_directory(&args).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
