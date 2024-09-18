@@ -2,7 +2,7 @@
 
 let
   cfg = config.languages.nix;
-  cachix = "${lib.getBin config.cachix.package}";
+  cachix = lib.getBin config.cachix.package;
 
   # a bit of indirection to prevent mkShell from overriding the installed Nix
   vulnix = pkgs.buildEnv {
@@ -27,8 +27,7 @@ in
       statix
       deadnix
       cfg.lsp.package
-    ] ++ (lib.optional config.cachix.enable cachix) ++ [
       vulnix
-    ];
+    ] ++ (lib.optional config.cachix.enable cachix);
   };
 }

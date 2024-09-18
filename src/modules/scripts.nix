@@ -46,10 +46,7 @@ let
   );
 
   renderInfoSection = name: script:
-    ''
-      ${name}${lib.optionalString (script.description != "") ": ${script.description}"}
-        ${script.scriptPackage}
-    '';
+    "${name}${lib.optionalString (script.description != "") ": ${script.description}"} ${script.scriptPackage}";
 in
 {
   options = {
