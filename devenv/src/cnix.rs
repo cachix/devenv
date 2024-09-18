@@ -321,14 +321,18 @@ impl<'a> Nix<'a> {
     }
 
     // We have a separate function to avoid recursion as this needs to call self.prepare_command
-    // TODO: doesn't log the substituters
     pub async fn prepare_command_with_substituters(
         &mut self,
         command: &str,
         args: &[&str],
         options: &Options<'a>,
     ) -> Result<std::process::Command> {
-        let mut cmd = self.prepare_command(command, args, options)?;
+        let mut final_args = Vec::new();
+        let mut final_command = command.to_string();
+        let mut push_args = Vec::new();
+        let known_keys;
+        let pull_caches;
+
         if !self.global_options.offline {
             let cachix_caches = self.get_cachix_caches().await;
 
@@ -340,47 +344,37 @@ impl<'a> Nix<'a> {
                 }
                 Ok(cachix_caches) => {
                     // handle cachix.pull
-                    let pull_caches = cachix_caches
+                    pull_caches = cachix_caches
                         .caches
                         .pull
                         .iter()
                         .map(|cache| format!("https://{}.cachix.org", cache))
                         .collect::<Vec<String>>()
                         .join(" ");
-                    cmd.arg("--option");
-                    cmd.arg("extra-substituters");
-                    cmd.arg(pull_caches);
-                    cmd.arg("--option");
-                    cmd.arg("extra-trusted-public-keys");
-                    cmd.arg(
-                        cachix_caches
-                            .known_keys
-                            .values()
-                            .cloned()
-                            .collect::<Vec<String>>()
-                            .join(" "),
-                    );
+                    final_args.extend_from_slice(&["--option", "extra-substituters", &pull_caches]);
+                    known_keys = cachix_caches
+                        .known_keys
+                        .values()
+                        .cloned()
+                        .collect::<Vec<String>>()
+                        .join(" ");
+                    final_args.extend_from_slice(&[
+                        "--option",
+                        "extra-trusted-public-keys",
+                        &known_keys,
+                    ]);
 
                     // handle cachix.push
                     if let Some(push_cache) = &cachix_caches.caches.push {
                         if env::var("CACHIX_AUTH_TOKEN").is_ok() {
-                            let args = cmd
-                                .get_args()
-                                .map(|arg| arg.to_str().unwrap())
-                                .collect::<Vec<_>>();
-                            let envs = cmd.get_envs().collect::<Vec<_>>();
-                            let command_name = cmd.get_program().to_string_lossy();
-                            let mut newcmd = std::process::Command::new("cachix");
-                            newcmd
-                                .args(["watch-exec", &push_cache, "--"])
-                                .arg(command_name.as_ref())
-                                .args(args);
-                            for (key, value) in envs {
-                                if let Some(value) = value {
-                                    newcmd.env(key, value);
-                                }
-                            }
-                            cmd = newcmd;
+                            final_command = "cachix".to_string();
+                            push_args = vec![
+                                "watch-exec".to_string(),
+                                push_cache.clone(),
+                                "--".to_string(),
+                                command.to_string(),
+                            ];
+                            final_args = push_args.iter().map(|s| s.as_str()).collect();
                         } else {
                             self.logger.warn(&format!(
                                 "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
@@ -391,7 +385,9 @@ impl<'a> Nix<'a> {
                 }
             }
         }
-        Ok(cmd)
+
+        final_args.extend(args.iter().map(|&s| s));
+        self.prepare_command(&final_command, &final_args, options)
     }
 
     pub fn prepare_command(
