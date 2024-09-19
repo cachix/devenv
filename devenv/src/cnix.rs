@@ -8,23 +8,23 @@ use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Nix<'a> {
     logger: log::Logger,
     pub options: Options<'a>,
     // TODO: all these shouldn't be here
-    config: Arc<config::Config>,
-    global_options: Arc<cli::GlobalOptions>,
-    cachix_caches: Option<CachixCaches>,
-    cachix_trusted_keys: Arc<PathBuf>,
-    devenv_home_gc: Arc<PathBuf>,
-    devenv_dot_gc: Arc<PathBuf>,
-    devenv_root: Arc<PathBuf>,
+    config: config::Config,
+    global_options: cli::GlobalOptions,
+    cachix_caches: Arc<Mutex<Option<CachixCaches>>>,
+    cachix_trusted_keys: PathBuf,
+    devenv_home_gc: PathBuf,
+    devenv_dot_gc: PathBuf,
+    devenv_root: PathBuf,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Options<'a> {
     pub replace_shell: bool,
     pub logging: bool,
@@ -33,18 +33,25 @@ pub struct Options<'a> {
 }
 
 impl<'a> Nix<'a> {
-    pub fn new(
+    pub fn new<P: AsRef<Path>>(
         logger: log::Logger,
-        config: Arc<config::Config>,
-        global_options: Arc<cli::GlobalOptions>,
-        cachix_trusted_keys: Arc<PathBuf>,
-        devenv_home_gc: Arc<PathBuf>,
-        devenv_dot_gc: Arc<PathBuf>,
-        devenv_root: Arc<PathBuf>,
+        config: config::Config,
+        global_options: cli::GlobalOptions,
+        cachix_trusted_keys: P,
+        devenv_home_gc: P,
+        devenv_dot_gc: P,
+        devenv_root: P,
     ) -> Self {
-        Nix {
+        let cachix_trusted_keys = cachix_trusted_keys.as_ref().to_path_buf();
+        let devenv_home_gc = devenv_home_gc.as_ref().to_path_buf();
+        let devenv_dot_gc = devenv_dot_gc.as_ref().to_path_buf();
+        let devenv_root = devenv_root.as_ref().to_path_buf();
+
+        let cachix_caches = Arc::new(Mutex::new(None));
+
+        Self {
             logger,
-            cachix_caches: None,
+            cachix_caches,
             config,
             global_options,
             options: Options {
@@ -70,7 +77,7 @@ impl<'a> Nix<'a> {
         }
     }
 
-    pub async fn develop(&mut self, args: &[&str], replace_shell: bool) -> Result<process::Output> {
+    pub async fn develop(&self, args: &[&str], replace_shell: bool) -> Result<process::Output> {
         let options = Options {
             logging_stdout: true,
             replace_shell,
@@ -79,7 +86,7 @@ impl<'a> Nix<'a> {
         self.run_nix_with_substituters("nix", args, &options).await
     }
 
-    pub async fn dev_env(&mut self, json: bool, gc_root: &PathBuf) -> Result<Vec<u8>> {
+    pub async fn dev_env(&self, json: bool, gc_root: &PathBuf) -> Result<Vec<u8>> {
         let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
         let mut args: Vec<&str> = vec!["print-dev-env", "--profile", gc_root_str];
         if json {
@@ -108,8 +115,7 @@ impl<'a> Nix<'a> {
         Ok(env.stdout)
     }
 
-    pub fn add_gc(&mut self, name: &str, path: &Path) -> Result<()> {
-        let options = self.options;
+    pub fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
         self.run_nix(
             "nix-store",
             &[
@@ -118,7 +124,7 @@ impl<'a> Nix<'a> {
                 "-r",
                 path.to_str().unwrap(),
             ],
-            &options,
+            &self.options,
         )?;
         let link_path = self
             .devenv_dot_gc
@@ -127,15 +133,13 @@ impl<'a> Nix<'a> {
         Ok(())
     }
 
-    pub fn repl(&mut self) -> Result<()> {
-        let options = self.options;
-        let mut cmd = self.prepare_command("nix", &["repl", "."], &options)?;
+    pub fn repl(&self) -> Result<()> {
+        let mut cmd = self.prepare_command("nix", &["repl", "."], &self.options)?;
         cmd.exec();
         Ok(())
     }
 
-    pub async fn build(&mut self, attributes: &[&str]) -> Result<Vec<PathBuf>> {
-        let options = self.options;
+    pub async fn build(&self, attributes: &[&str]) -> Result<Vec<PathBuf>> {
         if !attributes.is_empty() {
             // TODO: use eval underneath
             let mut args: Vec<String> = vec![
@@ -146,7 +150,7 @@ impl<'a> Nix<'a> {
             args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
             let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
             let output = self
-                .run_nix_with_substituters("nix", &args_str, &options)
+                .run_nix_with_substituters("nix", &args_str, &self.options)
                 .await?;
             Ok(String::from_utf8_lossy(&output.stdout)
                 .to_string()
@@ -158,40 +162,37 @@ impl<'a> Nix<'a> {
         }
     }
 
-    pub async fn eval(&mut self, attributes: &[&str]) -> Result<String> {
+    pub async fn eval(&self, attributes: &[&str]) -> Result<String> {
         let mut args: Vec<String> = vec!["eval", "--json"]
             .into_iter()
             .map(String::from)
             .collect();
         args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args = &args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-        let options = self.options;
-        let result = self.run_nix("nix", args, &options)?;
+        let result = self.run_nix("nix", args, &self.options)?;
         String::from_utf8(result.stdout)
             .map_err(|err| miette::miette!("Failed to parse command output as UTF-8: {}", err))
     }
 
-    pub fn update(&mut self, input_name: &Option<String>) -> Result<()> {
-        let options = self.options;
+    pub fn update(&self, input_name: &Option<String>) -> Result<()> {
         match input_name {
             Some(input_name) => {
                 self.run_nix(
                     "nix",
                     &["flake", "lock", "--update-input", input_name],
-                    &options,
+                    &self.options,
                 )?;
             }
             None => {
-                self.run_nix("nix", &["flake", "update"], &options)?;
+                self.run_nix("nix", &["flake", "update"], &self.options)?;
             }
         }
         Ok(())
     }
 
-    pub fn metadata(&mut self) -> Result<String> {
+    pub fn metadata(&self) -> Result<String> {
         // TODO: use --json
-        let options = self.options;
-        let metadata = self.run_nix("nix", &["flake", "metadata"], &options)?;
+        let metadata = self.run_nix("nix", &["flake", "metadata"], &self.options)?;
 
         let re = regex::Regex::new(r"(Inputs:.+)$").unwrap();
         let metadata_str = String::from_utf8_lossy(&metadata.stdout);
@@ -200,7 +201,7 @@ impl<'a> Nix<'a> {
             None => "",
         };
 
-        let info_ = self.run_nix("nix", &["eval", "--raw", ".#info"], &options)?;
+        let info_ = self.run_nix("nix", &["eval", "--raw", ".#info"], &self.options)?;
         Ok(format!(
             "{}\n{}",
             inputs,
@@ -208,14 +209,12 @@ impl<'a> Nix<'a> {
         ))
     }
 
-    pub async fn search(&mut self, name: &str) -> Result<process::Output> {
-        let options = self.options;
-        self.run_nix_with_substituters("nix", &["search", "--json", "nixpkgs", name], &options)
+    pub async fn search(&self, name: &str) -> Result<process::Output> {
+        self.run_nix_with_substituters("nix", &["search", "--json", "nixpkgs", name], &self.options)
             .await
     }
 
-    pub fn gc(&mut self, paths: Vec<PathBuf>) -> Result<()> {
-        let options = self.options;
+    pub fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
         let paths: std::collections::HashSet<&str> = paths
             .iter()
             .filter_map(|path_buf| path_buf.to_str())
@@ -223,7 +222,7 @@ impl<'a> Nix<'a> {
         for path in paths {
             self.logger.info(&format!("Deleting {}...", path));
             let args: Vec<&str> = ["store", "delete", path].to_vec();
-            let cmd = self.prepare_command("nix", &args, &options);
+            let cmd = self.prepare_command("nix", &args, &self.options);
             // we ignore if this command fails, because root might be in use
             let _ = cmd?.output();
         }
@@ -232,7 +231,7 @@ impl<'a> Nix<'a> {
 
     // Run Nix with debugger capability and return the output
     pub fn run_nix(
-        &mut self,
+        &self,
         command: &str,
         args: &[&str],
         options: &Options<'a>,
@@ -242,7 +241,7 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn run_nix_with_substituters(
-        &mut self,
+        &self,
         command: &str,
         args: &[&str],
         options: &Options<'a>,
@@ -254,13 +253,14 @@ impl<'a> Nix<'a> {
     }
 
     fn run_nix_command(
-        &mut self,
+        &self,
         mut cmd: std::process::Command,
         options: &Options<'a>,
     ) -> Result<process::Output> {
-        let prev_level = self.logger.level.clone();
+        let mut logger = self.logger.clone();
+
         if !options.logging {
-            self.logger.level = log::Level::Error;
+            logger.level = log::Level::Error;
         }
 
         if options.replace_shell {
@@ -313,7 +313,6 @@ impl<'a> Nix<'a> {
                     display_command(&cmd)
                 ))
             } else {
-                self.logger.level = prev_level;
                 Ok(result)
             }
         }
@@ -321,7 +320,7 @@ impl<'a> Nix<'a> {
 
     // We have a separate function to avoid recursion as this needs to call self.prepare_command
     pub async fn prepare_command_with_substituters(
-        &mut self,
+        &self,
         command: &str,
         args: &[&str],
         options: &Options<'a>,
@@ -401,7 +400,7 @@ impl<'a> Nix<'a> {
     }
 
     pub fn prepare_command(
-        &mut self,
+        &self,
         command: &str,
         args: &[&str],
         options: &Options<'a>,
@@ -455,7 +454,7 @@ impl<'a> Nix<'a> {
             cmd.env("NIX_PATH", ":");
         }
         cmd.args(flags);
-        cmd.current_dir(self.devenv_root.as_path());
+        cmd.current_dir(&self.devenv_root);
 
         if self.global_options.verbose {
             self.logger
@@ -464,154 +463,151 @@ impl<'a> Nix<'a> {
         Ok(cmd)
     }
 
-    async fn get_cachix_caches(&mut self) -> Result<CachixCaches> {
-        match &self.cachix_caches {
-            Some(caches) => Ok(caches.clone()),
-            None => {
-                let no_logging = Options {
-                    logging: false,
-                    ..self.options
-                };
-                let caches_raw = self.eval(&["devenv.cachix"]).await?;
-                let cachix = serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
-                let known_keys = if let Ok(known_keys) =
-                    std::fs::read_to_string(self.cachix_trusted_keys.as_path())
-                {
-                    serde_json::from_str(&known_keys).expect("Failed to parse JSON")
-                } else {
-                    HashMap::new()
-                };
+    async fn get_cachix_caches(&self) -> Result<CachixCaches> {
+        if let Some(caches) = &*self.cachix_caches.lock().unwrap() {
+            return Ok(caches.clone());
+        }
 
-                let mut caches = CachixCaches {
-                    caches: cachix,
-                    known_keys,
-                };
+        let no_logging = Options {
+            logging: false,
+            ..self.options
+        };
+        let caches_raw = self.eval(&["devenv.cachix"]).await?;
+        let cachix = serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
+        let known_keys =
+            if let Ok(known_keys) = std::fs::read_to_string(self.cachix_trusted_keys.as_path()) {
+                serde_json::from_str(&known_keys).expect("Failed to parse JSON")
+            } else {
+                HashMap::new()
+            };
 
-                let mut new_known_keys: HashMap<String, String> = HashMap::new();
-                let client = reqwest::Client::new();
-                for name in caches.caches.pull.iter() {
-                    if !caches.known_keys.contains_key(name) {
-                        let mut request =
-                            client.get(&format!("https://cachix.org/api/v1/cache/{}", name));
-                        if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
-                            request = request.bearer_auth(ret);
-                        }
-                        let resp = request.send().await.expect("Failed to get cache");
-                        if resp.status().is_client_error() {
-                            self.logger.error(&format!(
-                                "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
-                                name
-                            ));
-                            self.logger
-                                .error("To create a cache, go to https://app.cachix.org/.");
-                            bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
-                        } else {
-                            let resp_json = serde_json::from_slice::<CachixResponse>(
-                                &resp.bytes().await.unwrap(),
-                            )
-                            .expect("Failed to parse JSON");
-                            new_known_keys
-                                .insert(name.clone(), resp_json.public_signing_keys[0].clone());
-                        }
-                    }
+        let mut caches = CachixCaches {
+            caches: cachix,
+            known_keys,
+        };
+
+        let mut new_known_keys: HashMap<String, String> = HashMap::new();
+        let client = reqwest::Client::new();
+        for name in caches.caches.pull.iter() {
+            if !caches.known_keys.contains_key(name) {
+                let mut request = client.get(&format!("https://cachix.org/api/v1/cache/{}", name));
+                if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
+                    request = request.bearer_auth(ret);
                 }
-
-                if !caches.caches.pull.is_empty() {
-                    let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
-                    let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
-                        .expect("Failed to parse JSON")
-                        .trusted;
-                    if trusted.is_none() {
-                        self.logger
-                            .warn("You're using very old version of Nix, please upgrade and restart nix-daemon.");
-                    }
-                    let restart_command = if cfg!(target_os = "linux") {
-                        "sudo systemctl restart nix-daemon"
-                    } else {
-                        "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
-                    };
-
+                let resp = request.send().await.expect("Failed to get cache");
+                if resp.status().is_client_error() {
+                    self.logger.error(&format!(
+                        "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
+                        name
+                    ));
                     self.logger
-                        .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
-                    if !new_known_keys.is_empty() {
-                        for (name, pubkey) in new_known_keys.iter() {
-                            self.logger.info(&format!(
-                                "Trusting {}.cachix.org on first use with the public key {}",
-                                name, pubkey
-                            ));
-                        }
-                        caches.known_keys.extend(new_known_keys);
-                    }
-
-                    std::fs::write(
-                        self.cachix_trusted_keys.as_path(),
-                        serde_json::to_string(&caches.known_keys).unwrap(),
-                    )
-                    .expect("Failed to write cachix caches to file");
-
-                    if trusted == Some(0) {
-                        if !Path::new("/etc/NIXOS").exists() {
-                            self.logger.error(&indoc::formatdoc!(
-                            "You're not a trusted user of the Nix store. You have the following options:
-
-                            a) Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
-
-                            trusted-users = root {}
-
-                            Restart nix-daemon with:
-
-                              $ {restart_command}
-
-                            b) Add binary caches to /etc/nix/nix.conf yourself:
-
-                            extra-substituters = {}
-                            extra-trusted-public-keys = {}
-
-                            And disable automatic cache configuration in `devenv.nix`:
-
-                            {{
-                                cachix.enable = false;
-                            }}
-                        ", whoami::username()
-                        , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
-                        , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
-                        ));
-                        } else {
-                            self.logger.error(&indoc::formatdoc!(
-                            "You're not a trusted user of the Nix store. You have the following options:
-
-                            a) Add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix for devenv to manage caches for you.
-
-                            {{
-                                nix.extraOptions = ''
-                                    trusted-users = root {}
-                                '';
-                            }}
-
-                            b) Add binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
-                            {{
-                                nix.extraOptions = ''
-                                    extra-substituters = {};
-                                    extra-trusted-public-keys = {};
-                                '';
-                            }}
-
-                            Lastly rebuild your system
-
-                            $ sudo nixos-rebuild switch
-                        ", whoami::username()
-                        , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
-                        , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
-                        ));
-                        }
-                        bail!("You're not a trusted user of the Nix store.")
-                    }
+                        .error("To create a cache, go to https://app.cachix.org/.");
+                    bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
+                } else {
+                    let resp_json =
+                        serde_json::from_slice::<CachixResponse>(&resp.bytes().await.unwrap())
+                            .expect("Failed to parse JSON");
+                    new_known_keys.insert(name.clone(), resp_json.public_signing_keys[0].clone());
                 }
-
-                self.cachix_caches = Some(caches.clone());
-                Ok(caches)
             }
         }
+
+        if !caches.caches.pull.is_empty() {
+            let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
+            let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
+                .expect("Failed to parse JSON")
+                .trusted;
+            if trusted.is_none() {
+                self.logger.warn(
+                    "You're using very old version of Nix, please upgrade and restart nix-daemon.",
+                );
+            }
+            let restart_command = if cfg!(target_os = "linux") {
+                "sudo systemctl restart nix-daemon"
+            } else {
+                "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
+            };
+
+            self.logger
+                .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
+            if !new_known_keys.is_empty() {
+                for (name, pubkey) in new_known_keys.iter() {
+                    self.logger.info(&format!(
+                        "Trusting {}.cachix.org on first use with the public key {}",
+                        name, pubkey
+                    ));
+                }
+                caches.known_keys.extend(new_known_keys);
+            }
+
+            std::fs::write(
+                self.cachix_trusted_keys.as_path(),
+                serde_json::to_string(&caches.known_keys).unwrap(),
+            )
+            .expect("Failed to write cachix caches to file");
+
+            if trusted == Some(0) {
+                if !Path::new("/etc/NIXOS").exists() {
+                    self.logger.error(&indoc::formatdoc!(
+                        "You're not a trusted user of the Nix store. You have the following options:
+
+                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
+
+                        trusted-users = root {}
+
+                        Restart nix-daemon with:
+
+                          $ {restart_command}
+
+                        b) Add binary caches to /etc/nix/nix.conf yourself:
+
+                        extra-substituters = {}
+                        extra-trusted-public-keys = {}
+
+                        And disable automatic cache configuration in `devenv.nix`:
+
+                        {{
+                            cachix.enable = false;
+                        }}
+                    ", whoami::username()
+                    , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
+                    , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
+                    ));
+                } else {
+                    self.logger.error(&indoc::formatdoc!(
+                        "You're not a trusted user of the Nix store. You have the following options:
+
+                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix for devenv to manage caches for you.
+
+                        {{
+                            nix.extraOptions = ''
+                                trusted-users = root {}
+                            '';
+                        }}
+
+                        b) Add binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
+                        {{
+                            nix.extraOptions = ''
+                                extra-substituters = {};
+                                extra-trusted-public-keys = {};
+                            '';
+                        }}
+
+                        Lastly rebuild your system
+
+                        $ sudo nixos-rebuild switch
+                    ", whoami::username()
+                    , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
+                    , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
+                    ));
+                }
+                bail!("You're not a trusted user of the Nix store.")
+            }
+        }
+
+        let mut caches_mutex = self.cachix_caches.lock().unwrap();
+        *caches_mutex = Some(caches.clone());
+        Ok(caches)
     }
 }
 
