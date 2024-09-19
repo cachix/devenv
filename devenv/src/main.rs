@@ -14,6 +14,15 @@ use miette::Result;
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    if let Commands::Version { .. } = cli.command {
+        println!(
+            "devenv {} ({})",
+            crate_version!(),
+            cli.global_options.system
+        );
+        return Ok(());
+    }
+
     let level = if cli.global_options.verbose {
         log::Level::Debug
     } else if cli.global_options.quiet {
@@ -29,40 +38,35 @@ async fn main() -> Result<()> {
         config.add_input(&input[0].clone(), &input[1].clone(), &[]);
     }
 
-    let options = devenv::DevenvOptions {
+    let mut options = devenv::DevenvOptions {
         logger: Some(logger.clone()),
         global_options: Some(cli.global_options),
         config,
         ..Default::default()
     };
 
-    let mut devenv = Devenv::new(options);
-
-    if !matches!(cli.command, Commands::Version {} | Commands::Gc { .. }) {
-        devenv.create_directories()?;
+    if let Commands::Test {
+        dont_override_dotfile,
+    } = cli.command
+    {
+        let pwd = std::env::current_dir().expect("Failed to get current directory");
+        let tmpdir =
+            tempdir::TempDir::new_in(pwd, ".devenv").expect("Failed to create temporary directory");
+        if !dont_override_dotfile {
+            logger.info(&format!(
+                "Overriding .devenv to {}",
+                tmpdir.path().file_name().unwrap().to_str().unwrap()
+            ));
+            options.devenv_root = Some(tmpdir.path().to_path_buf());
+        }
     }
+
+    let mut devenv = Devenv::new(options);
+    devenv.create_directories()?;
 
     match cli.command {
         Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true).await,
-        Commands::Test {
-            dont_override_dotfile,
-        } => {
-            let tmpdir = tempdir::TempDir::new_in(devenv.devenv_root.as_path(), ".devenv")
-                .expect("Failed to create temporary directory");
-            if !dont_override_dotfile {
-                logger.info(&format!(
-                    "Overriding .devenv to {}",
-                    tmpdir.path().file_name().unwrap().to_str().unwrap()
-                ));
-                devenv.update_devenv_dotfile(tmpdir.as_ref());
-            }
-            devenv.test().await
-        }
-        Commands::Version {} => Ok(println!(
-            "devenv {} ({})",
-            crate_version!(),
-            devenv.global_options.system
-        )),
+        Commands::Test { .. } => devenv.test().await,
         Commands::Container {
             registry,
             copy,
@@ -150,5 +154,6 @@ async fn main() -> Result<()> {
             config::write_json_schema();
             Ok(())
         }
+        Commands::Version {} => unreachable!(),
     }
 }

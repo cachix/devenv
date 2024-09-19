@@ -140,16 +140,6 @@ impl<'a> Devenv<'a> {
         }
     }
 
-    // TODO: refactor test to be able to remove this
-    pub fn update_devenv_dotfile<P>(&mut self, devenv_dotfile: P)
-    where
-        P: AsRef<Path>,
-    {
-        let devenv_dotfile = devenv_dotfile.as_ref();
-        self.devenv_dotfile = devenv_dotfile.to_path_buf();
-        self.devenv_dot_gc = devenv_dotfile.join("gc");
-    }
-
     pub fn processes_log(&self) -> PathBuf {
         self.devenv_dotfile.join("processes.log")
     }
