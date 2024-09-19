@@ -11,7 +11,6 @@ use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
-use std::sync::Arc;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -34,14 +33,14 @@ pub struct DevenvOptions {
     pub devenv_dotfile: Option<PathBuf>,
 }
 
-pub struct Devenv<'a> {
+pub struct Devenv {
     pub(crate) config: config::Config,
     pub(crate) global_options: cli::GlobalOptions,
 
     pub(crate) logger: log::Logger,
     pub(crate) log_progress: log::LogProgressCreator,
 
-    nix: cnix::Nix<'a>,
+    nix: cnix::Nix<'static>,
 
     // All kinds of paths
     xdg_dirs: xdg::BaseDirectories,
@@ -59,7 +58,7 @@ pub struct Devenv<'a> {
     pub(crate) container_name: Option<String>,
 }
 
-impl<'a> Devenv<'a> {
+impl Devenv {
     pub fn new(options: DevenvOptions) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
         let devenv_home = xdg_dirs.get_data_home();
@@ -103,33 +102,26 @@ impl<'a> Devenv<'a> {
             log::LogProgressCreator::Logging
         };
 
-        let config = Arc::new(options.config);
-        let global_options = Arc::new(global_options);
-        let cachix_trusted_keys = Arc::new(cachix_trusted_keys);
-        let devenv_home_gc = Arc::new(devenv_home_gc);
-        let devenv_dot_gc = Arc::new(devenv_dot_gc);
-        let devenv_root = Arc::new(devenv_root);
-
         let nix = cnix::Nix::new(
             logger.clone(),
-            Arc::clone(&config),
-            Arc::clone(&global_options),
-            Arc::clone(&cachix_trusted_keys),
-            Arc::clone(&devenv_home_gc),
-            Arc::clone(&devenv_dot_gc),
-            Arc::clone(&devenv_root),
+            options.config.clone(),
+            global_options.clone(),
+            cachix_trusted_keys,
+            devenv_home_gc.clone(),
+            devenv_dot_gc.clone(),
+            devenv_root.clone(),
         );
 
         Self {
-            config: (*config).clone(),
-            global_options: (*global_options).clone(),
+            config: options.config,
+            global_options,
             logger,
             log_progress,
             xdg_dirs,
-            devenv_root: (*devenv_root).clone(),
+            devenv_root,
             devenv_dotfile,
-            devenv_dot_gc: (*devenv_dot_gc).clone(),
-            devenv_home_gc: (*devenv_home_gc).clone(),
+            devenv_dot_gc,
+            devenv_home_gc,
             devenv_tmp,
             devenv_runtime,
             nix,
@@ -678,7 +670,6 @@ impl<'a> Devenv<'a> {
                 .prepare_develop_args(&Some(processes_script.to_str().unwrap().to_string()), &[])
                 .await?;
 
-            let options = self.nix.options;
             let mut cmd = self
                 .nix
                 .prepare_command_with_substituters(
@@ -687,7 +678,7 @@ impl<'a> Devenv<'a> {
                         .iter()
                         .map(AsRef::as_ref)
                         .collect::<Vec<&str>>(),
-                    &options,
+                    &self.nix.options,
                 )
                 .await?;
 
