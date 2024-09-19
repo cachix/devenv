@@ -163,7 +163,7 @@ impl TaskState {
         cmd: &str,
         outputs: &HashMap<String, serde_json::Value>,
     ) -> (Command, tempfile::NamedTempFile) {
-        let mut command = Command::new(&cmd);
+        let mut command = Command::new(cmd);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         // Set DEVENV_TASK_INPUTS
