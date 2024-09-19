@@ -536,14 +536,14 @@ impl<'a> Devenv<'a> {
         let (tasks_status, outputs) = tui.run().await?;
 
         if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
-            Err(miette::bail!("Some tasks failed"))
-        } else {
-            println!(
-                "{}",
-                serde_json::to_string(&outputs).expect("poarsing of outputs failed")
-            );
-            Ok(())
+            miette::bail!("Some tasks failed");
         }
+
+        println!(
+            "{}",
+            serde_json::to_string(&outputs).expect("parsing of outputs failed")
+        );
+        Ok(())
     }
 
     pub async fn test(&mut self) -> Result<()> {

@@ -76,7 +76,7 @@ impl<'a> Nix<'a> {
             replace_shell,
             ..self.options
         };
-        self.run_nix_with_substituters("nix", &args, &options).await
+        self.run_nix_with_substituters("nix", args, &options).await
     }
 
     pub async fn dev_env(&mut self, json: bool, gc_root: &PathBuf) -> Result<Vec<u8>> {
@@ -102,7 +102,7 @@ impl<'a> Nix<'a> {
         let target = format!("{}-shell", now_ns);
         symlink_force(
             &self.logger,
-            &fs::canonicalize(&gc_root).expect("to resolve gc_root"),
+            &fs::canonicalize(gc_root).expect("to resolve gc_root"),
             &self.devenv_home_gc.join(target),
         );
         Ok(env.stdout)
@@ -150,7 +150,6 @@ impl<'a> Nix<'a> {
                 .await?;
             Ok(String::from_utf8_lossy(&output.stdout)
                 .to_string()
-                .trim()
                 .split_whitespace()
                 .map(|s| PathBuf::from(s.to_string()))
                 .collect())
@@ -164,10 +163,10 @@ impl<'a> Nix<'a> {
             .into_iter()
             .map(String::from)
             .collect();
-        args.extend(attributes.into_iter().map(|attr| format!(".#{}", attr)));
+        args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args = &args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
         let options = self.options;
-        let result = self.run_nix("nix", &args, &options)?;
+        let result = self.run_nix("nix", args, &options)?;
         String::from_utf8(result.stdout)
             .map_err(|err| miette::miette!("Failed to parse command output as UTF-8: {}", err))
     }
@@ -223,7 +222,7 @@ impl<'a> Nix<'a> {
             .collect();
         for path in paths {
             self.logger.info(&format!("Deleting {}...", path));
-            let args: Vec<&str> = ["store", "delete", path].iter().copied().collect();
+            let args: Vec<&str> = ["store", "delete", path].to_vec();
             let cmd = self.prepare_command("nix", &args, &options);
             // we ignore if this command fails, because root might be in use
             let _ = cmd?.output();
@@ -367,8 +366,8 @@ impl<'a> Nix<'a> {
             }
         }
 
-        final_args.extend(args.iter().map(|&s| s));
-        let cmd = self.prepare_command(&command.to_string(), &final_args, options)?;
+        final_args.extend(args.iter().copied());
+        let cmd = self.prepare_command(command, &final_args, options)?;
 
         // handle cachix.push
         if let Some(push_cache) = push_cache {
@@ -456,7 +455,7 @@ impl<'a> Nix<'a> {
             cmd.env("NIX_PATH", ":");
         }
         cmd.args(flags);
-        cmd.current_dir(&self.devenv_root.as_path());
+        cmd.current_dir(self.devenv_root.as_path());
 
         if self.global_options.verbose {
             self.logger
@@ -476,7 +475,7 @@ impl<'a> Nix<'a> {
                 let caches_raw = self.eval(&["devenv.cachix"]).await?;
                 let cachix = serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
                 let known_keys = if let Ok(known_keys) =
-                    std::fs::read_to_string(&self.cachix_trusted_keys.as_path())
+                    std::fs::read_to_string(self.cachix_trusted_keys.as_path())
                 {
                     serde_json::from_str(&known_keys).expect("Failed to parse JSON")
                 } else {
@@ -545,7 +544,7 @@ impl<'a> Nix<'a> {
                     }
 
                     std::fs::write(
-                        &self.cachix_trusted_keys.as_path(),
+                        self.cachix_trusted_keys.as_path(),
                         serde_json::to_string(&caches.known_keys).unwrap(),
                     )
                     .expect("Failed to write cachix caches to file");
