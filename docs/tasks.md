@@ -110,6 +110,6 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
 }
 ```
 
-## SDK
+## SDK using Task Server Protocol
 
-See [xxx](xxx) for a proposal how defining tasks in your favorite language would look like.
+See [Task Server Protocol](https://github.com/cachix/devenv/issues/1457) for a proposal how defining tasks in your favorite language would look like.
