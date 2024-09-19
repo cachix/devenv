@@ -1,4 +1,8 @@
-Tasks allow you to form dependencies between commands, executed in parallel.
+# Tasks
+
+!!! info "New in version 1.2"
+
+Tasks allow you to form dependencies between code, executed in parallel.
 
 ## Defining tasks
 
@@ -13,9 +17,9 @@ Tasks allow you to form dependencies between commands, executed in parallel.
 ```
 
 ```shell-session
-$ devenv tasks run hello
-Hello, world
-$
+$ devenv tasks run myapp:hello
+Succeeded         myapp:hello         9ms
+Finished in 50.14ms myapp:hello: 1 Succeeded
 ```
 
 ## enterShell / enterTest
@@ -32,6 +36,15 @@ If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
     "devenv:enterTest".depends = [ "bash:hello" ];
   };
 }
+```
+
+```shell-session
+$ devenv shell
+...
+Succeeded         devenv:pre-commit:install 25ms
+Succeeded         bash:hello                 9ms
+Succeeded         devenv:enterShell         23ms
+Finished in 103.14ms devenv:enterShell: 3 Succeeded
 ```
 
 ## Using your favourite language
@@ -52,12 +65,6 @@ Tasks can also reference scripts and depend on other tasks, for example when ent
   };
 }
 ```
-
-```shell-session
-$ devenv shell
-...
-```
-
 
 ## Avoiding running expensive `exec` via `status` check
 
