@@ -7,23 +7,12 @@ use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
-#[cfg(test)]
-use pretty_assertions::assert_matches;
 use serde::{Deserialize, Serialize};
-#[cfg(test)]
-use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-#[cfg(test)]
-use std::fs;
 use std::io;
-#[cfg(test)]
-use std::io::Write;
-#[cfg(test)]
-use std::os::unix::fs::PermissionsExt;
 use std::process::Stdio;
 use std::sync::Arc;
-use test_log::test;
 use thiserror::Error;
 use tokio::process::Command;
 use tokio::sync::RwLock;
@@ -799,298 +788,309 @@ impl TasksUi {
     }
 }
 
-#[test(tokio::test)]
-async fn test_task_name() -> Result<(), Error> {
-    let invalid_names = vec![
-        "invalid:name!",
-        "invalid name",
-        "invalid@name",
-        ":invalid",
-        "invalid:",
-        "invalid",
-    ];
-    for task in invalid_names {
-        assert_matches!(
-            Config::try_from(json!({
-                "roots": [],
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use pretty_assertions::assert_matches;
+    use serde_json::json;
+    use std::fs;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[tokio::test]
+    async fn test_task_name() -> Result<(), Error> {
+        let invalid_names = vec![
+            "invalid:name!",
+            "invalid name",
+            "invalid@name",
+            ":invalid",
+            "invalid:",
+            "invalid",
+        ];
+        for task in invalid_names {
+            assert_matches!(
+                Config::try_from(json!({
+                    "roots": [],
+                        "tasks": [{
+                            "name": task.to_string()
+                        }]
+                }))
+                .map(Tasks::new)
+                .unwrap()
+                .await,
+                Err(Error::InvalidTaskName(_))
+            );
+        }
+        let valid_names = vec![
+            "devenv:enterShell",
+            "devenv:enter-shell",
+            "devenv:enter_shell",
+            "devenv:python:virtualenv",
+        ];
+        for task in valid_names {
+            assert_matches!(
+                Config::try_from(serde_json::json!({
+                    "roots": [],
                     "tasks": [{
                         "name": task.to_string()
                     }]
-            }))
-            .map(Tasks::new)
-            .unwrap()
-            .await,
-            Err(Error::InvalidTaskName(_))
-        );
+                }))
+                .map(Tasks::new)
+                .unwrap()
+                .await,
+                Ok(_)
+            );
+        }
+        Ok(())
     }
-    let valid_names = vec![
-        "devenv:enterShell",
-        "devenv:enter-shell",
-        "devenv:enter_shell",
-        "devenv:python:virtualenv",
-    ];
-    for task in valid_names {
-        assert_matches!(
-            Config::try_from(serde_json::json!({
-                "roots": [],
-                "tasks": [{
-                    "name": task.to_string()
-                }]
-            }))
-            .map(Tasks::new)
-            .unwrap()
-            .await,
-            Ok(_)
-        );
-    }
-    Ok(())
-}
 
-#[test(tokio::test)]
-async fn test_basic_tasks() -> Result<(), Error> {
-    let script1 = create_script(
-        "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
-    )?;
-    let script2 = create_script(
-        "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
-    )?;
-    let script3 = create_script(
-        "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
-    )?;
-    let script4 = create_script("#!/bin/sh\necho 'Task 4 is running' && echo 'Task 4 completed'")?;
+    #[tokio::test]
+    async fn test_basic_tasks() -> Result<(), Error> {
+        let script1 = create_script(
+            "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
+        )?;
+        let script2 = create_script(
+            "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
+        )?;
+        let script3 = create_script(
+            "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
+        )?;
+        let script4 =
+            create_script("#!/bin/sh\necho 'Task 4 is running' && echo 'Task 4 completed'")?;
 
-    let tasks = Tasks::new(
-        Config::try_from(json!({
-            "roots": ["myapp:task_1", "myapp:task_4"],
-            "tasks": [
-                {
-                    "name": "myapp:task_1",
-                    "command": script1.to_str().unwrap()
-                },
-                {
-                    "name": "myapp:task_2",
-                    "command": script2.to_str().unwrap()
-                },
-                {
-                    "name": "myapp:task_3",
-                    "depends": ["myapp:task_1"],
-                    "command": script3.to_str().unwrap()
-                },
-                {
-                    "name": "myapp:task_4",
-                    "depends": ["myapp:task_3"],
-                    "command": script4.to_str().unwrap()
-                }
-            ]
-        }))
-        .unwrap(),
-    )
-    .await?;
-    tasks.run().await;
-
-    let task_statuses = inspect_tasks(&tasks).await;
-    let task_statuses = task_statuses.as_slice();
-    assert_matches!(
-        task_statuses,
-        [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
-        ] if name1 == "myapp:task_1" && name2 == "myapp:task_3" && name3 == "myapp:task_4"
-    );
-    Ok(())
-}
-
-#[test(tokio::test)]
-async fn test_tasks_cycle() -> Result<(), Error> {
-    let result = Tasks::new(
-        Config::try_from(json!({
-            "roots": ["myapp:task_1"],
-            "tasks": [
-                {
-                    "name": "myapp:task_1",
-                    "depends": ["myapp:task_2"],
-                    "command": "echo 'Task 1 is running' && echo 'Task 1 completed'"
-                },
-                {
-                    "name": "myapp:task_2",
-                    "depends": ["myapp:task_1"],
-                    "command": "echo 'Task 2 is running' && echo 'Task 2 completed'"
-                }
-            ]
-        }))
-        .unwrap(),
-    )
-    .await;
-    if let Err(Error::CycleDetected(task)) = result {
-        assert_eq!(task, "myapp:task_2".to_string());
-    } else {
-        panic!("Expected Error::CycleDetected, got {:?}", result);
-    }
-    Ok(())
-}
-
-#[test(tokio::test)]
-async fn test_status() -> Result<(), Error> {
-    let command_script1 =
-        create_script("#!/bin/sh\necho 'Task 1 is running' && echo 'Task 1 completed'")?;
-    let status_script1 = create_script("#!/bin/sh\nexit 0")?;
-    let command_script2 =
-        create_script("#!/bin/sh\necho 'Task 2 is running' && echo 'Task 2 completed'")?;
-    let status_script2 = create_script("#!/bin/sh\nexit 1")?;
-
-    let command1 = command_script1.to_str().unwrap();
-    let status1 = status_script1.to_str().unwrap();
-    let command2 = command_script2.to_str().unwrap();
-    let status2 = status_script2.to_str().unwrap();
-
-    let create_tasks = |root: &'static str| async move {
-        Tasks::new(
+        let tasks = Tasks::new(
             Config::try_from(json!({
-                "roots": [root],
+                "roots": ["myapp:task_1", "myapp:task_4"],
                 "tasks": [
                     {
                         "name": "myapp:task_1",
-                        "command": command1,
-                        "status": status1
+                        "command": script1.to_str().unwrap()
                     },
                     {
                         "name": "myapp:task_2",
-                        "command": command2,
-                        "status": status2
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "depends": ["myapp:task_1"],
+                        "command": script3.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_4",
+                        "depends": ["myapp:task_3"],
+                        "command": script4.to_str().unwrap()
                     }
                 ]
             }))
             .unwrap(),
         )
-        .await
-    };
+        .await?;
+        tasks.run().await;
 
-    let tasks = create_tasks("myapp:task_1").await.unwrap();
-    tasks.run().await;
-    assert_eq!(tasks.tasks_order.len(), 1);
-    assert_matches!(
-        tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_)))
-    );
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_3" && name3 == "myapp:task_4"
+        );
+        Ok(())
+    }
 
-    let tasks = create_tasks("myapp:task_2").await.unwrap();
-    tasks.run().await;
-    assert_eq!(tasks.tasks_order.len(), 1);
-    assert_matches!(
-        tasks.graph[tasks.tasks_order[0]].read().await.status,
-        TaskStatus::Completed(TaskCompleted::Success(_, _))
-    );
+    #[tokio::test]
+    async fn test_tasks_cycle() -> Result<(), Error> {
+        let result = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "depends": ["myapp:task_2"],
+                        "command": "echo 'Task 1 is running' && echo 'Task 1 completed'"
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "depends": ["myapp:task_1"],
+                        "command": "echo 'Task 2 is running' && echo 'Task 2 completed'"
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await;
+        if let Err(Error::CycleDetected(task)) = result {
+            assert_eq!(task, "myapp:task_2".to_string());
+        } else {
+            panic!("Expected Error::CycleDetected, got {:?}", result);
+        }
+        Ok(())
+    }
 
-    Ok(())
-}
+    #[tokio::test]
+    async fn test_status() -> Result<(), Error> {
+        let command_script1 =
+            create_script("#!/bin/sh\necho 'Task 1 is running' && echo 'Task 1 completed'")?;
+        let status_script1 = create_script("#!/bin/sh\nexit 0")?;
+        let command_script2 =
+            create_script("#!/bin/sh\necho 'Task 2 is running' && echo 'Task 2 completed'")?;
+        let status_script2 = create_script("#!/bin/sh\nexit 1")?;
 
-#[test(tokio::test)]
-async fn test_nonexistent_script() -> Result<(), Error> {
-    let tasks = Tasks::new(
-        Config::try_from(json!({
-            "roots": ["myapp:task_1"],
-            "tasks": [
-                {
-                    "name": "myapp:task_1",
-                    "command": "/path/to/nonexistent/script.sh"
-                }
-            ]
-        }))
-        .unwrap(),
-    )
-    .await?;
+        let command1 = command_script1.to_str().unwrap();
+        let status1 = status_script1.to_str().unwrap();
+        let command2 = command_script2.to_str().unwrap();
+        let status2 = status_script2.to_str().unwrap();
 
-    tasks.run().await;
-
-    let task_statuses = inspect_tasks(&tasks).await;
-    let task_statuses = task_statuses.as_slice();
-    assert_matches!(
-        &task_statuses,
-        [(
-            task_1,
-            TaskStatus::Completed(TaskCompleted::Failed(
-                _,
-                TaskFailure {
-                    stdout: _,
-                    stderr: _,
-                    error
-                }
-            ))
-        )] if error == "No such file or directory (os error 2)" && task_1 == "myapp:task_1"
-    );
-
-    Ok(())
-}
-
-#[test(tokio::test)]
-async fn test_status_without_command() -> Result<(), Error> {
-    let status_script = create_script("#!/bin/sh\nexit 0")?;
-
-    let result = Tasks::new(
-        Config::try_from(json!({
-            "roots": ["myapp:task_1"],
-            "tasks": [
-                {
-                    "name": "myapp:task_1",
-                    "status": status_script.to_str().unwrap()
-                }
-            ]
-        }))
-        .unwrap(),
-    )
-    .await;
-
-    assert!(matches!(result, Err(Error::MissingCommand(_))));
-    Ok(())
-}
-
-#[test(tokio::test)]
-async fn test_dependency_failure() -> Result<(), Error> {
-    let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
-    let dependent_script = create_script("#!/bin/sh\necho 'Dependent task' && exit 0")?;
-
-    let tasks = Tasks::new(
-        Config::try_from(json!({
-            "roots": ["myapp:task_2"],
-            "tasks": [
-                {
-                    "name": "myapp:task_1",
-                    "command": failing_script.to_str().unwrap()
-                },
-                {
-                    "name": "myapp:task_2",
-                    "depends": ["myapp:task_1"],
-                    "command": dependent_script.to_str().unwrap()
-                }
-            ]
-        }))
-        .unwrap(),
-    )
-    .await?;
-
-    tasks.run().await;
-
-    let task_statuses = inspect_tasks(&tasks).await;
-    let task_statuses_slice = &task_statuses.as_slice();
-    assert_matches!(
-        *task_statuses_slice,
-        [
-            (task_1, TaskStatus::Completed(TaskCompleted::Failed(_, _))),
-            (
-                task_2,
-                TaskStatus::Completed(TaskCompleted::DependencyFailed)
+        let create_tasks = |root: &'static str| async move {
+            Tasks::new(
+                Config::try_from(json!({
+                    "roots": [root],
+                    "tasks": [
+                        {
+                            "name": "myapp:task_1",
+                            "command": command1,
+                            "status": status1
+                        },
+                        {
+                            "name": "myapp:task_2",
+                            "command": command2,
+                            "status": status2
+                        }
+                    ]
+                }))
+                .unwrap(),
             )
-        ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
-    );
+            .await
+        };
 
-    Ok(())
-}
+        let tasks = create_tasks("myapp:task_1").await.unwrap();
+        tasks.run().await;
+        assert_eq!(tasks.tasks_order.len(), 1);
+        assert_matches!(
+            tasks.graph[tasks.tasks_order[0]].read().await.status,
+            TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_)))
+        );
 
-#[test(tokio::test)]
-async fn test_inputs_outputs() -> Result<(), Error> {
-    let input_script = create_script(
-        r#"#!/bin/sh
+        let tasks = create_tasks("myapp:task_2").await.unwrap();
+        tasks.run().await;
+        assert_eq!(tasks.tasks_order.len(), 1);
+        assert_matches!(
+            tasks.graph[tasks.tasks_order[0]].read().await.status,
+            TaskStatus::Completed(TaskCompleted::Success(_, _))
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_nonexistent_script() -> Result<(), Error> {
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": "/path/to/nonexistent/script.sh"
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            &task_statuses,
+            [(
+                task_1,
+                TaskStatus::Completed(TaskCompleted::Failed(
+                    _,
+                    TaskFailure {
+                        stdout: _,
+                        stderr: _,
+                        error
+                    }
+                ))
+            )] if error == "No such file or directory (os error 2)" && task_1 == "myapp:task_1"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_status_without_command() -> Result<(), Error> {
+        let status_script = create_script("#!/bin/sh\nexit 0")?;
+
+        let result = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "status": status_script.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await;
+
+        assert!(matches!(result, Err(Error::MissingCommand(_))));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dependency_failure() -> Result<(), Error> {
+        let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
+        let dependent_script = create_script("#!/bin/sh\necho 'Dependent task' && exit 0")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_2"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": failing_script.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "depends": ["myapp:task_1"],
+                        "command": dependent_script.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses_slice = &task_statuses.as_slice();
+        assert_matches!(
+            *task_statuses_slice,
+            [
+                (task_1, TaskStatus::Completed(TaskCompleted::Failed(_, _))),
+                (
+                    task_2,
+                    TaskStatus::Completed(TaskCompleted::DependencyFailed)
+                )
+            ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_inputs_outputs() -> Result<(), Error> {
+        let input_script = create_script(
+            r#"#!/bin/sh
 echo "{\"key\": \"value\"}" > $DEVENV_TASK_OUTPUT
 if [ "$DEVENV_TASK_INPUT" != '{"test":"input"}' ]; then
     echo "Error: Input does not match expected value" >&2
@@ -1099,10 +1099,10 @@ if [ "$DEVENV_TASK_INPUT" != '{"test":"input"}' ]; then
     exit 1
 fi
 "#,
-    )?;
+        )?;
 
-    let output_script = create_script(
-        r#"#!/bin/sh
+        let output_script = create_script(
+            r#"#!/bin/sh
         if [ "$DEVENV_TASKS_OUTPUTS" != '{"myapp:task_1":{"key":"value"}}' ]; then
             echo "Error: Outputs do not match expected value" >&2
             echo "Expected: {\"myapp:task_1\":{\"key\":\"value\"}}" >&2
@@ -1111,70 +1111,71 @@ fi
         fi
         echo "{\"result\": \"success\"}" > $DEVENV_TASK_OUTPUT
 "#,
-    )?;
+        )?;
 
-    let tasks = Tasks::new(
-        Config::try_from(json!({
-            "roots": ["myapp:task_1", "myapp:task_2"],
-            "tasks": [
-                {
-                    "name": "myapp:task_1",
-                    "command": input_script.to_str().unwrap(),
-                    "inputs": {"test": "input"}
-                },
-                {
-                    "name": "myapp:task_2",
-                    "command": output_script.to_str().unwrap(),
-                    "depends": ["myapp:task_1"]
-                }
-            ]
-        }))
-        .unwrap(),
-    )
-    .await?;
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1", "myapp:task_2"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": input_script.to_str().unwrap(),
+                        "inputs": {"test": "input"}
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "command": output_script.to_str().unwrap(),
+                        "depends": ["myapp:task_1"]
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
 
-    let outputs = tasks.run().await;
-    let task_statuses = inspect_tasks(&tasks).await;
-    let task_statuses = task_statuses.as_slice();
-    assert_matches!(
-        task_statuses,
-        [
-            (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            (name2, TaskStatus::Completed(TaskCompleted::Success(_, _)))
-        ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
-    );
+        let outputs = tasks.run().await;
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
+        );
 
-    assert_eq!(
-        outputs.get("myapp:task_1").unwrap(),
-        &json!({"key": "value"})
-    );
-    assert_eq!(
-        outputs.get("myapp:task_2").unwrap(),
-        &json!({"result": "success"})
-    );
+        assert_eq!(
+            outputs.get("myapp:task_1").unwrap(),
+            &json!({"key": "value"})
+        );
+        assert_eq!(
+            outputs.get("myapp:task_2").unwrap(),
+            &json!({"result": "success"})
+        );
 
-    Ok(())
-}
-
-#[cfg(test)]
-async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
-    let mut result = Vec::new();
-    for index in &tasks.tasks_order {
-        let task_state = tasks.graph[*index].read().await;
-        result.push((task_state.task.name.clone(), task_state.status.clone()));
+        Ok(())
     }
-    result
-}
 
-#[cfg(test)]
-fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
-    let mut temp_file = tempfile::Builder::new()
-        .prefix(&format!("script"))
-        .suffix(".sh")
-        .tempfile()?;
-    temp_file.write_all(script.as_bytes())?;
-    temp_file
-        .as_file_mut()
-        .set_permissions(fs::Permissions::from_mode(0o755))?;
-    Ok(temp_file.into_temp_path())
+    #[cfg(test)]
+    async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
+        let mut result = Vec::new();
+        for index in &tasks.tasks_order {
+            let task_state = tasks.graph[*index].read().await;
+            result.push((task_state.task.name.clone(), task_state.status.clone()));
+        }
+        result
+    }
+
+    #[cfg(test)]
+    fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
+        let mut temp_file = tempfile::Builder::new()
+            .prefix("script")
+            .suffix(".sh")
+            .tempfile()?;
+        temp_file.write_all(script.as_bytes())?;
+        temp_file
+            .as_file_mut()
+            .set_permissions(fs::Permissions::from_mode(0o755))?;
+        Ok(temp_file.into_temp_path())
+    }
 }
