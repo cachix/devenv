@@ -1,6 +1,7 @@
 use crate::{cli, config, log};
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use serde::Deserialize;
+use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -8,7 +9,6 @@ use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Nix<'a> {
@@ -17,7 +17,7 @@ pub struct Nix<'a> {
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
-    cachix_caches: Arc<Mutex<Option<CachixCaches>>>,
+    cachix_caches: RefCell<Option<CachixCaches>>,
     cachix_trusted_keys: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_dot_gc: PathBuf,
@@ -47,7 +47,7 @@ impl<'a> Nix<'a> {
         let devenv_dot_gc = devenv_dot_gc.as_ref().to_path_buf();
         let devenv_root = devenv_root.as_ref().to_path_buf();
 
-        let cachix_caches = Arc::new(Mutex::new(None));
+        let cachix_caches = RefCell::new(None);
 
         Self {
             logger,
@@ -463,92 +463,92 @@ impl<'a> Nix<'a> {
         Ok(cmd)
     }
 
-    async fn get_cachix_caches(&self) -> Result<CachixCaches> {
-        if let Some(caches) = &*self.cachix_caches.lock().unwrap() {
-            return Ok(caches.clone());
-        }
-
-        let no_logging = Options {
-            logging: false,
-            ..self.options
-        };
-        let caches_raw = self.eval(&["devenv.cachix"]).await?;
-        let cachix = serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
-        let known_keys =
-            if let Ok(known_keys) = std::fs::read_to_string(self.cachix_trusted_keys.as_path()) {
+    async fn get_cachix_caches(&self) -> Result<Ref<CachixCaches>> {
+        if self.cachix_caches.borrow().is_none() {
+            let no_logging = Options {
+                logging: false,
+                ..self.options
+            };
+            let caches_raw = self.eval(&["devenv.cachix"]).await?;
+            let cachix = serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
+            let known_keys = if let Ok(known_keys) =
+                std::fs::read_to_string(self.cachix_trusted_keys.as_path())
+            {
                 serde_json::from_str(&known_keys).expect("Failed to parse JSON")
             } else {
                 HashMap::new()
             };
 
-        let mut caches = CachixCaches {
-            caches: cachix,
-            known_keys,
-        };
+            let mut caches = CachixCaches {
+                caches: cachix,
+                known_keys,
+            };
 
-        let mut new_known_keys: HashMap<String, String> = HashMap::new();
-        let client = reqwest::Client::new();
-        for name in caches.caches.pull.iter() {
-            if !caches.known_keys.contains_key(name) {
-                let mut request = client.get(&format!("https://cachix.org/api/v1/cache/{}", name));
-                if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
-                    request = request.bearer_auth(ret);
-                }
-                let resp = request.send().await.expect("Failed to get cache");
-                if resp.status().is_client_error() {
-                    self.logger.error(&format!(
+            let mut new_known_keys: HashMap<String, String> = HashMap::new();
+            let client = reqwest::Client::new();
+            for name in caches.caches.pull.iter() {
+                if !caches.known_keys.contains_key(name) {
+                    let mut request =
+                        client.get(&format!("https://cachix.org/api/v1/cache/{}", name));
+                    if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
+                        request = request.bearer_auth(ret);
+                    }
+                    let resp = request.send().await.expect("Failed to get cache");
+                    if resp.status().is_client_error() {
+                        self.logger.error(&format!(
                         "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
                         name
                     ));
-                    self.logger
-                        .error("To create a cache, go to https://app.cachix.org/.");
-                    bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
-                } else {
-                    let resp_json =
-                        serde_json::from_slice::<CachixResponse>(&resp.bytes().await.unwrap())
-                            .expect("Failed to parse JSON");
-                    new_known_keys.insert(name.clone(), resp_json.public_signing_keys[0].clone());
+                        self.logger
+                            .error("To create a cache, go to https://app.cachix.org/.");
+                        bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
+                    } else {
+                        let resp_json =
+                            serde_json::from_slice::<CachixResponse>(&resp.bytes().await.unwrap())
+                                .expect("Failed to parse JSON");
+                        new_known_keys
+                            .insert(name.clone(), resp_json.public_signing_keys[0].clone());
+                    }
                 }
             }
-        }
 
-        if !caches.caches.pull.is_empty() {
-            let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
-            let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
-                .expect("Failed to parse JSON")
-                .trusted;
-            if trusted.is_none() {
-                self.logger.warn(
+            if !caches.caches.pull.is_empty() {
+                let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
+                let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
+                    .expect("Failed to parse JSON")
+                    .trusted;
+                if trusted.is_none() {
+                    self.logger.warn(
                     "You're using very old version of Nix, please upgrade and restart nix-daemon.",
                 );
-            }
-            let restart_command = if cfg!(target_os = "linux") {
-                "sudo systemctl restart nix-daemon"
-            } else {
-                "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
-            };
-
-            self.logger
-                .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
-            if !new_known_keys.is_empty() {
-                for (name, pubkey) in new_known_keys.iter() {
-                    self.logger.info(&format!(
-                        "Trusting {}.cachix.org on first use with the public key {}",
-                        name, pubkey
-                    ));
                 }
-                caches.known_keys.extend(new_known_keys);
-            }
+                let restart_command = if cfg!(target_os = "linux") {
+                    "sudo systemctl restart nix-daemon"
+                } else {
+                    "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
+                };
 
-            std::fs::write(
-                self.cachix_trusted_keys.as_path(),
-                serde_json::to_string(&caches.known_keys).unwrap(),
-            )
-            .expect("Failed to write cachix caches to file");
+                self.logger
+                    .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
+                if !new_known_keys.is_empty() {
+                    for (name, pubkey) in new_known_keys.iter() {
+                        self.logger.info(&format!(
+                            "Trusting {}.cachix.org on first use with the public key {}",
+                            name, pubkey
+                        ));
+                    }
+                    caches.known_keys.extend(new_known_keys);
+                }
 
-            if trusted == Some(0) {
-                if !Path::new("/etc/NIXOS").exists() {
-                    self.logger.error(&indoc::formatdoc!(
+                std::fs::write(
+                    self.cachix_trusted_keys.as_path(),
+                    serde_json::to_string(&caches.known_keys).unwrap(),
+                )
+                .expect("Failed to write cachix caches to file");
+
+                if trusted == Some(0) {
+                    if !Path::new("/etc/NIXOS").exists() {
+                        self.logger.error(&indoc::formatdoc!(
                         "You're not a trusted user of the Nix store. You have the following options:
 
                         a) Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
@@ -573,8 +573,8 @@ impl<'a> Nix<'a> {
                     , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                     , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
                     ));
-                } else {
-                    self.logger.error(&indoc::formatdoc!(
+                    } else {
+                        self.logger.error(&indoc::formatdoc!(
                         "You're not a trusted user of the Nix store. You have the following options:
 
                         a) Add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix for devenv to manage caches for you.
@@ -600,14 +600,17 @@ impl<'a> Nix<'a> {
                     , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                     , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
                     ));
+                    }
+                    bail!("You're not a trusted user of the Nix store.")
                 }
-                bail!("You're not a trusted user of the Nix store.")
             }
+
+            *self.cachix_caches.borrow_mut() = Some(caches);
         }
 
-        let mut caches_mutex = self.cachix_caches.lock().unwrap();
-        *caches_mutex = Some(caches.clone());
-        Ok(caches)
+        Ok(Ref::map(self.cachix_caches.borrow(), |option| {
+            option.as_ref().unwrap()
+        }))
     }
 }
 
