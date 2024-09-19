@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
                 "Overriding .devenv to {}",
                 tmpdir.path().file_name().unwrap().to_str().unwrap()
             ));
-            options.devenv_root = Some(tmpdir.path().to_path_buf());
+            options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
         }
     }
 
