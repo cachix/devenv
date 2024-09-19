@@ -447,27 +447,26 @@ in
       POETRY_VIRTUALENVS_PATH = "/var/empty";
     });
 
-    enterShell =
-      let
-        errorCondition = cfg.poetry.install.enable && cfg.uv.sync.enable;
-        errorMessage = "Error: Both poetry.install.enable and uv.sync.enable cannot be true simultaneously.";
-      in
-      if errorCondition
-      then throw errorMessage
-      else
-        lib.concatStringsSep "\n" ([
-          ''
-            export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
-          ''
-        ] ++
-        (lib.optional cfg.venv.enable ''
-          source ${initVenvScript}
-        '') ++
-        (lib.optional cfg.poetry.install.enable ''
-          source ${initPoetryScript}
-        '') ++
-        (lib.optional cfg.uv.sync.enable ''
-          source ${initUvScript}
-        ''));
+    assertions = [
+      {
+        assertion = !(cfg.poetry.install.enable && cfg.uv.sync.enable);
+        message = "Error: Both poetry.install.enable and uv.sync.enable cannot be true simultaneously.";
+      }
+    ];
+
+    enterShell = lib.concatStringsSep "\n" ([
+      ''
+        export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+      ''
+    ] ++
+    (lib.optional cfg.venv.enable ''
+      source ${initVenvScript}
+    '') ++
+    (lib.optional cfg.poetry.install.enable ''
+      source ${initPoetryScript}
+    '') ++
+    (lib.optional cfg.uv.sync.enable ''
+      source ${initUvScript}
+    ''));
   };
 }
