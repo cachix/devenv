@@ -210,8 +210,12 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn search(&self, name: &str) -> Result<process::Output> {
-        self.run_nix_with_substituters("nix", &["search", "--json", "nixpkgs", name], &self.options)
-            .await
+        self.run_nix_with_substituters(
+            "nix",
+            &["search", "--inputs-from", ".", "--json", "nixpkgs", name],
+            &self.options,
+        )
+        .await
     }
 
     pub fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
