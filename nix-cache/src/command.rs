@@ -219,9 +219,9 @@ fn extract_op_from_log_line(line: String) -> Option<PathBuf> {
                 | Op::ReadFile { source }
                 | Op::CopiedSource { source, .. }
                 | Op::TrackedPath { source }
-                    if source.starts_with("/") =>
+                    if source.starts_with("/") && !source.starts_with("/nix/store") =>
                 {
-                    Some(normalize_path(source))
+                    Some(source)
                 }
                 _ => None,
             }
