@@ -17,10 +17,12 @@
     };
   };
 
-  outputs = let
-    name = "my-app";
-    version = "1.0.0";
-  in { app = import ./default.nix { inherit pkgs name version; }; };
+  outputs =
+    let
+      name = "my-app";
+      version = "1.0.0";
+    in
+    { app = import ./default.nix { inherit pkgs name version; }; };
 
   # See full reference at https://devenv.sh/reference/options/
 }
