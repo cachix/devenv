@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    let mut devenv = Devenv::new(options);
+    let mut devenv = Devenv::new(options).await;
     devenv.create_directories()?;
 
     match cli.command {
@@ -129,10 +129,10 @@ async fn main() -> Result<()> {
         Commands::Init { target } => devenv.init(&target),
         Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
-        Commands::Info {} => devenv.info(),
+        Commands::Info {} => devenv.info().await,
         Commands::Repl {} => devenv.repl(),
         Commands::Build { attributes } => devenv.build(&attributes).await,
-        Commands::Update { name } => devenv.update(&name),
+        Commands::Update { name } => devenv.update(&name).await,
         Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach).await,
         Commands::Processes { command } => match command {
             ProcessesCommand::Up { process, detach } => {

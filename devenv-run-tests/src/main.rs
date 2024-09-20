@@ -95,7 +95,7 @@ async fn run_tests_in_directory(
                     devenv_dotfile: Some(tmpdir.path().to_path_buf()),
                     ..Default::default()
                 };
-                let mut devenv = Devenv::new(options);
+                let mut devenv = Devenv::new(options).await;
                 devenv.create_directories()?;
 
                 // A script to patch files in the working directory before the shell.

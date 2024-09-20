@@ -1,0 +1,19 @@
+[package]
+name = "nix-cache"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "nix-log-parser"
+
+[dependencies]
+blake3 = "1.5.4"
+futures.workspace = true
+lazy_static = "1.5.0"
+miette.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true

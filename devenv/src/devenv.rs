@@ -59,7 +59,7 @@ pub struct Devenv {
 }
 
 impl Devenv {
-    pub fn new(options: DevenvOptions) -> Self {
+    pub async fn new(options: DevenvOptions) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
         let devenv_home = xdg_dirs.get_data_home();
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
@@ -108,9 +108,12 @@ impl Devenv {
             global_options.clone(),
             cachix_trusted_keys,
             devenv_home_gc.clone(),
+            devenv_dotfile.clone(),
             devenv_dot_gc.clone(),
             devenv_root.clone(),
-        );
+        )
+        .await
+        .unwrap(); // TODO: handle error
 
         Self {
             config: options.config,
@@ -277,7 +280,7 @@ impl Devenv {
         Ok(develop_args.into_iter().map(|s| s.to_string()).collect())
     }
 
-    pub fn update(&mut self, input_name: &Option<String>) -> Result<()> {
+    pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
@@ -285,7 +288,7 @@ impl Devenv {
         let _logprogress = self.log_progress.with_newline(&msg);
         self.assemble(false)?;
 
-        self.nix.update(input_name)?;
+        self.nix.update(input_name).await?;
         Ok(())
     }
 
@@ -573,9 +576,9 @@ impl Devenv {
         }
     }
 
-    pub fn info(&mut self) -> Result<()> {
+    pub async fn info(&mut self) -> Result<()> {
         self.assemble(false)?;
-        let output = self.nix.metadata()?;
+        let output = self.nix.metadata().await?;
         println!("{}", output);
         Ok(())
     }
@@ -640,7 +643,7 @@ impl Devenv {
                 .to_str()
                 .expect("Failed to get proc script path")
                 .to_string();
-            self.nix.add_gc("procfilescript", &proc_script[0])?;
+            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
         }
         {
             let _logprogress = self.log_progress.with_newline("Starting processes");

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["devenv", "devenv-run-tests", "xtask", "tasks"]
+members = ["devenv", "devenv-run-tests", "nix-cache", "xtask", "tasks"]
 
 [workspace.package]
 edition = "2021"
@@ -14,6 +14,7 @@ clap = { version = "4.5.1", features = ["derive", "cargo"] }
 cli-table = "0.4.7"
 dotlock = "0.5.0"
 fs2 = "0.4.3"
+futures = "0.3.30"
 hex = "0.4.3"
 include_dir = "0.7.3"
 indoc = "2.0.4"
@@ -31,10 +32,15 @@ serde = "1.0.197"
 serde_json = "1.0.114"
 serde_yaml = "0.9.32"
 sha2 = "0.10.8"
+sqlx = { version = "0.8.2", features = ["time", "sqlite", "runtime-tokio"] }
 tempdir = "0.3.7"
+thiserror = "1.0.63"
 tracing = "0.1.40"
 which = "6.0.0"
 whoami = "1.5.1"
 xdg = "2.5.2"
 tokio = "1.39.3"
 schemars = "0.8.16"
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3
