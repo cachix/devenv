@@ -415,6 +415,65 @@ package
 
 
 
+## languages\.python\.uv\.sync\.enable
+
+
+
+Whether to enable uv sync during devenv initialisation\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## languages\.python\.uv\.sync\.allExtras
+
+
+
+Whether to install all extras\. See ` --all-extras `\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+## languages\.python\.uv\.sync\.extras
+
+
+
+Which extras to install\. See ` --extra `\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
 ## languages\.python\.venv\.enable
 
 
