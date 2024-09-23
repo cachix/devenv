@@ -44,7 +44,7 @@ in
         -U up "$@" &
     '';
 
-    packages = [ cfg.package ];
+    packages = [ cfg.package ] ++ lib.optionals config.process.process-compose.tui pkgs.ncurses;
 
     process-managers.process-compose = {
       configFile = settingsFormat.generate "process-compose.yaml" cfg.settings;
