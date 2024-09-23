@@ -4,7 +4,7 @@
 | ---------------------------- | ----------------------------------------------------------------------------- |
 | allowUnfree                  | Allow unfree packages. Defaults to `false`.                                   |
 | allowBroken                  | Allow packages marked as broken. Defaults to `false`.                         |
-| inputs                       | Defaults to `inputs.nixpkgs.url: github:NixOS/nixpkgs/nixpkgs-unstable`.      |
+| inputs                       | Defaults to `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.      |
 | inputs.&lt;name&gt;          | Identifier name used when passing the input in your ``devenv.nix`` function.  |
 | inputs.&lt;name&gt;.url      | URI specification of the input, see below for possible values.                |
 | inputs.&lt;name&gt;.flake    | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
