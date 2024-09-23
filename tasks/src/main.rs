@@ -1,28 +1,61 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use devenv::tasks::{Config, TaskConfig, TasksUi};
 use std::env;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
 struct Args {
-    #[clap(help = "Root directories to search for tasks")]
-    roots: Vec<String>,
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    Run {
+        #[clap()]
+        roots: Vec<String>,
+    },
+    Export {
+        #[clap()]
+        strings: Vec<String>,
+    },
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let tasks_json = env::var("DEVENV_TASKS")?;
-    let tasks: Vec<TaskConfig> = serde_json::from_str(&tasks_json)?;
+    match args.command {
+        Command::Run { roots } => {
+            let tasks_json = env::var("DEVENV_TASKS")?;
+            let tasks: Vec<TaskConfig> = serde_json::from_str(&tasks_json)?;
 
-    let config = Config {
-        tasks,
-        roots: args.roots,
-    };
+            let config = Config { tasks, roots };
 
-    let mut tasks_ui = TasksUi::new(config).await?;
-    tasks_ui.run().await?;
+            let mut tasks_ui = TasksUi::new(config).await?;
+            tasks_ui.run().await?;
+        }
+        Command::Export { strings } => {
+            let output_file =
+                env::var("DEVENV_TASK_OUTPUT_FILE").expect("DEVENV_TASK_OUTPUT_FILE not set");
+            let mut output: serde_json::Value = std::fs::read_to_string(&output_file)
+                .map(|content| serde_json::from_str(&content).unwrap_or(serde_json::json!({})))
+                .unwrap_or(serde_json::json!({}));
+
+            let mut exported_vars = serde_json::Map::new();
+            for var in strings {
+                if let Ok(value) = env::var(&var) {
+                    exported_vars.insert(var, serde_json::Value::String(value));
+                }
+            }
+
+            if let serde_json::Value::Object(ref mut map) = output {
+                map.extend(exported_vars);
+            }
+
+            std::fs::write(output_file, serde_json::to_string_pretty(&output)?)?;
+        }
+    }
 
     Ok(())
 }

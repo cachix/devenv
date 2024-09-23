@@ -88,8 +88,8 @@ If you define a `status` command, it will be executed first and if it returns `0
 Tasks support passing inputs and produce outputs, both as JSON objects:
 
 - `$DEVENV_TASK_INPUT`: JSON object serializing `tasks."myapp:mytask".inputs`.
-- `$DEVENV_TASK_OUTPUT`: a writable file with tasks' outputs in JSON.
 - `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values.
+- `$DEVENV_TASK_OUTPUT_FILE`: a writable file with tasks' outputs in JSON.
 
 ```nix title="devenv.nix"
 { pkgs, lib, config, ... }:
@@ -99,7 +99,7 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
     "myapp:mytask" = {
       exec = ''
         echo $DEVENV_TASK_INPUTS> $DEVENV_ROOT/input.json
-        echo '{ "output" = 1; }' > $DEVENV_TASK_OUTPUT
+        echo '{ "output" = 1; }' > $DEVENV_TASK_OUTPUT_FILE
         echo $DEVENV_TASKS_OUTPUTS > $DEVENV_ROOT/outputs.json
       '';
       input = {

@@ -12,6 +12,7 @@ let
             pkgs.writeScript name ''
               #!${pkgs.lib.getBin config.package}/bin/${config.binary}
               ${command}
+              ${lib.optionalString (config.exports != []) "${devenv}/bin/tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in
       {
@@ -60,6 +61,11 @@ let
               input = config.input;
             };
           };
+          exports = lib.mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "List of environment variables to export.";
+          };
           description = lib.mkOption {
             type = types.str;
             default = "";
@@ -92,6 +98,13 @@ in
   config = {
     env.DEVENV_TASKS = builtins.toJSON tasksJSON;
 
+    assertions = [
+      {
+        assertion = lib.all (task: task.binary == "bash" || task.export == [ ]) (lib.attrValues config.tasks);
+        message = "The 'export' option can only be set when 'binary' is set to 'bash'.";
+      }
+    ];
+
     infoSections."tasks" =
       lib.mapAttrsToList
         (name: task: "${name}: ${task.description} (${if task.command == null then "no command" else task.command})")
@@ -103,12 +116,8 @@ in
       "devenv:enterShell" = {
         description = "Runs when entering the shell";
         exec = ''
-          ENTER_SHELL_COMMANDS=$(echo "''${DEVENV_TASKS_OUTPUTS:-{}}" | jq -r 'to_entries[] | select(.value.devenv.enterShell != null) | .value.devenv.enterShell' | tr '\n' ';')
-          eval "$ENTER_SHELL_COMMANDS"
-
-          mkdir -p "$DEVENV_STATE"
-          export -p | sed 's/^declare -x /export /' > "$DEVENV_DOTFILE/load-env"
-          chmod +x "$DEVENV_DOTFILE/load-env"
+          echo "$DEVENV_TASK_ENV" > "$DEVENV_DOTFILE/load-exports"
+          chmod +x "$DEVENV_DOTFILE/load-exports"
         '';
       };
       "devenv:enterTest" = {
@@ -116,11 +125,11 @@ in
       };
     };
     enterShell = ''
-      ${devenv}/bin/tasks devenv:enterShell
-      source "$DEVENV_DOTFILE/load-env"
+      ${devenv}/bin/tasks run devenv:enterShell
+      source "$DEVENV_DOTFILE/load-exports"
     '';
     enterTest = ''
-      ${devenv}/bin/tasks devenv:enterTest
+      ${devenv}/bin/tasks run devenv:enterTest
     '';
   };
 }

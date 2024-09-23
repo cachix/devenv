@@ -171,9 +171,26 @@ impl TaskState {
             command.env("DEVENV_TASK_INPUT", serde_json::to_string(inputs).unwrap());
         }
 
-        // Create a temporary file for DEVENV_TASK_OUTPUTS
+        // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
         let outputs_file = tempfile::NamedTempFile::new().unwrap();
-        command.env("DEVENV_TASK_OUTPUT", outputs_file.path());
+        command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
+
+        // Set environment variables from task outputs
+        let mut devenv_env = String::new();
+        for (_, value) in outputs.iter() {
+            if let Some(env) = value.get("devenv").and_then(|d| d.get("env")) {
+                if let Some(env_obj) = env.as_object() {
+                    for (env_key, env_value) in env_obj {
+                        if let Some(env_str) = env_value.as_str() {
+                            command.env(env_key, env_str);
+                            devenv_env.push_str(&format!("export {}={}\n", env_key, env_str));
+                        }
+                    }
+                }
+            }
+        }
+        // Internal for now
+        command.env("DEVENV_TASK_ENV", devenv_env);
 
         // Set DEVENV_TASKS_OUTPUTS
         let outputs_json = serde_json::to_string(outputs).unwrap();
@@ -690,9 +707,9 @@ impl TasksUi {
                         "{}\n{} {}: {}\n",
                         tasks_status.lines.join("\n"),
                         if finished {
-                            format!("Finished in {:.2?}", started.elapsed())
+                            format!("Tasks done in {:.2?}", started.elapsed())
                         } else {
-                            format!("Running for {:.2?}", started.elapsed())
+                            format!("Tasks running for {:.2?}", started.elapsed())
                         },
                         names.clone(),
                         [
@@ -1091,7 +1108,7 @@ mod test {
     async fn test_inputs_outputs() -> Result<(), Error> {
         let input_script = create_script(
             r#"#!/bin/sh
-echo "{\"key\": \"value\"}" > $DEVENV_TASK_OUTPUT
+echo "{\"key\": \"value\"}" > $DEVENV_TASK_OUTPUT_FILE
 if [ "$DEVENV_TASK_INPUT" != '{"test":"input"}' ]; then
     echo "Error: Input does not match expected value" >&2
     echo "Expected: $expected" >&2
@@ -1109,7 +1126,7 @@ fi
             echo "Actual: $DEVENV_TASKS_OUTPUTS" >&2
             exit 1
         fi
-        echo "{\"result\": \"success\"}" > $DEVENV_TASK_OUTPUT
+        echo "{\"result\": \"success\"}" > $DEVENV_TASK_OUTPUT_FILE
 "#,
         )?;
 
