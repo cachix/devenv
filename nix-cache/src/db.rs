@@ -67,6 +67,7 @@ where
     let mut conn = conn.acquire().await?;
     let mut tx = conn.begin().await?;
 
+    delete_command(&mut tx, cmd_hash).await?;
     let command_id = insert_command(&mut tx, raw_cmd, cmd_hash, output).await?;
     let file_ids = insert_files(&mut tx, paths, command_id).await?;
 
@@ -74,7 +75,6 @@ where
 
     Ok((command_id, file_ids))
 }
-
 async fn insert_command<'a, A>(
     conn: A,
     raw_cmd: &str,
@@ -100,6 +100,24 @@ where
     .await?;
 
     Ok(record.id)
+}
+async fn delete_command<'a, A>(conn: A, cmd_hash: &str) -> Result<(), sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
+
+    sqlx::query!(
+        r#"
+        DELETE FROM cached_cmd
+        WHERE cmd_hash = ?
+        "#,
+        cmd_hash
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
 }
 
 async fn insert_files<'a, A>(
