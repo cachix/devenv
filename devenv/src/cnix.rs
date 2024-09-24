@@ -303,77 +303,74 @@ impl<'a> Nix<'a> {
                 display_command(&cmd),
             ));
             bail!("Failed to replace shell")
-        } else {
-            let start = SystemTime::now();
+        }
+        let start = SystemTime::now();
 
+        if options.logging {
+            cmd.stdin(process::Stdio::inherit())
+                .stderr(process::Stdio::inherit());
+            if options.logging_stdout {
+                cmd.stdout(std::process::Stdio::inherit());
+            }
+        }
+
+        // TODO: add devenv.yaml to the list of cached files
+        let result = if cmd.get_program().to_string_lossy().ends_with("nix") {
+            let mut cached_cmd = CachedCommand::new(&self.pool);
             if options.logging {
-                cmd.stdin(process::Stdio::inherit())
-                    .stderr(process::Stdio::inherit());
-                if options.logging_stdout {
-                    cmd.stdout(std::process::Stdio::inherit());
-                }
-            }
-
-            // TODO: add devenv.yaml to the list of cached files
-            let result = if cmd.get_program().to_string_lossy().ends_with("nix") {
-                let mut cached_cmd = CachedCommand::new(&self.pool);
-                if options.logging {
-                    cached_cmd.on_stderr(|log| {
-                        if let NixInternalLog::Msg { msg, level, .. } = log {
-                            if *level <= NixVerbosity::Warn {
-                                eprintln!("{msg}");
-                            }
+                cached_cmd.on_stderr(|log| {
+                    if let NixInternalLog::Msg { msg, level, .. } = log {
+                        if *level <= NixVerbosity::Warn {
+                            eprintln!("{msg}");
                         }
-                    });
-                }
-                cached_cmd
-                    .output(&mut cmd)
-                    .await
-                    .into_diagnostic()
-                    .wrap_err_with(|| {
-                        format!("Failed to run command `{}`", display_command(&cmd))
-                    })?
-            } else {
-                cmd.output().into_diagnostic().wrap_err_with(|| {
-                    format!("Failed to run command `{}`", display_command(&cmd))
-                })?
-            };
-
-            // TODO: remove
-            let duration = SystemTime::now().duration_since(start).unwrap();
-            logger.info(&format!(
-                "Command `{}` took {}.{:03} seconds",
-                display_command(&cmd),
-                duration.as_secs(),
-                duration.subsec_millis()
-            ));
-
-            if !result.status.success() {
-                let code = match result.status.code() {
-                    Some(code) => format!("with exit code {}", code),
-                    None => "without exit code".to_string(),
-                };
-                if options.logging {
-                    eprintln!();
-                    self.logger.error(&format!(
-                        "Command produced the following output:\n{}\n{}",
-                        String::from_utf8_lossy(&result.stdout),
-                        "oops" // String::from_utf8_lossy(&result.stderr),
-                    ));
-                }
-                if self.global_options.nix_debugger
-                    && cmd.get_program().to_string_lossy().ends_with("bin/nix")
-                {
-                    self.logger.info("Starting Nix debugger ...");
-                    cmd.arg("--debugger").exec();
-                }
-                bail!(format!(
-                    "Command `{}` failed with {code}",
-                    display_command(&cmd)
-                ))
-            } else {
-                Ok(result)
+                    }
+                });
             }
+            cached_cmd
+                .output(&mut cmd)
+                .await
+                .into_diagnostic()
+                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?
+        } else {
+            cmd.output()
+                .into_diagnostic()
+                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?
+        };
+
+        // TODO: remove
+        let duration = SystemTime::now().duration_since(start).unwrap();
+        logger.info(&format!(
+            "Command `{}` took {}.{:03} seconds",
+            display_command(&cmd),
+            duration.as_secs(),
+            duration.subsec_millis()
+        ));
+
+        if !result.status.success() {
+            let code = match result.status.code() {
+                Some(code) => format!("with exit code {}", code),
+                None => "without exit code".to_string(),
+            };
+            if options.logging {
+                eprintln!();
+                self.logger.error(&format!(
+                    "Command produced the following output:\n{}\n{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    "oops" // String::from_utf8_lossy(&result.stderr),
+                ));
+            }
+            if self.global_options.nix_debugger
+                && cmd.get_program().to_string_lossy().ends_with("bin/nix")
+            {
+                self.logger.info("Starting Nix debugger ...");
+                cmd.arg("--debugger").exec();
+            }
+            bail!(format!(
+                "Command `{}` failed with {code}",
+                display_command(&cmd)
+            ))
+        } else {
+            Ok(result)
         }
     }
 
