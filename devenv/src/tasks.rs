@@ -676,18 +676,17 @@ impl TasksUi {
     }
 
     pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
-        let mut stderr = io::stderr();
         let names = self.tasks.root_names.join(", ").bold();
-
-        let started = std::time::Instant::now();
+        eprint!("{:17} {}", "Running tasks", names);
 
         // start processing tasks
+        let started = std::time::Instant::now();
         let tasks_clone = Arc::clone(&self.tasks);
         let handle = tokio::spawn(async move { tasks_clone.run().await });
 
         // start TUI
-
         let mut last_list_height: u16 = 0;
+        let mut stderr = io::stderr();
 
         loop {
             let mut finished = false;
@@ -697,65 +696,66 @@ impl TasksUi {
 
             let tasks_status = self.get_tasks_status().await;
 
-            execute!(
-                stderr,
-                // Clear the screen from the cursor down
-                cursor::MoveUp(last_list_height),
-                Clear(ClearType::FromCursorDown),
-                style::PrintStyledContent(
-                    format!(
-                        "{}\n{} {}: {}\n",
-                        tasks_status.lines.join("\n"),
-                        if finished {
-                            format!("Tasks done in {:.2?}", started.elapsed())
+            let output = style::PrintStyledContent(
+                format!(
+                    "{}\n{} {:>width$}\n",
+                    tasks_status.lines.join("\n"),
+                    [
+                        if tasks_status.pending > 0 {
+                            format!("{} {}", tasks_status.pending, "Pending".blue().bold())
                         } else {
-                            format!("Tasks running for {:.2?}", started.elapsed())
+                            String::new()
                         },
-                        names.clone(),
-                        [
-                            if tasks_status.pending > 0 {
-                                format!("{} {}", tasks_status.pending, "Pending".blue().bold())
-                            } else {
-                                String::new()
-                            },
-                            if tasks_status.running > 0 {
-                                format!("{} {}", tasks_status.running, "Running".blue().bold())
-                            } else {
-                                String::new()
-                            },
-                            if tasks_status.skipped > 0 {
-                                format!("{} {}", tasks_status.skipped, "Skipped".blue().bold())
-                            } else {
-                                String::new()
-                            },
-                            if tasks_status.succeeded > 0 {
-                                format!("{} {}", tasks_status.succeeded, "Succeeded".green().bold())
-                            } else {
-                                String::new()
-                            },
-                            if tasks_status.failed > 0 {
-                                format!("{} {}", tasks_status.failed, "Failed".red().bold())
-                            } else {
-                                String::new()
-                            },
-                            if tasks_status.dependency_failed > 0 {
-                                format!(
-                                    "{} {}",
-                                    tasks_status.dependency_failed,
-                                    "Dependency Failed".red().bold()
-                                )
-                            } else {
-                                String::new()
-                            },
-                        ]
-                        .into_iter()
-                        .filter(|s| !s.is_empty())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                    )
-                    .stylize()
-                ),
-            )?;
+                        if tasks_status.running > 0 {
+                            format!("{} {}", tasks_status.running, "Running".blue().bold())
+                        } else {
+                            String::new()
+                        },
+                        if tasks_status.skipped > 0 {
+                            format!("{} {}", tasks_status.skipped, "Skipped".blue().bold())
+                        } else {
+                            String::new()
+                        },
+                        if tasks_status.succeeded > 0 {
+                            format!("{} {}", tasks_status.succeeded, "Succeeded".green().bold())
+                        } else {
+                            String::new()
+                        },
+                        if tasks_status.failed > 0 {
+                            format!("{} {}", tasks_status.failed, "Failed".red().bold())
+                        } else {
+                            String::new()
+                        },
+                        if tasks_status.dependency_failed > 0 {
+                            format!(
+                                "{} {}",
+                                tasks_status.dependency_failed,
+                                "Dependency Failed".red().bold()
+                            )
+                        } else {
+                            String::new()
+                        },
+                    ]
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                    format!("{:.2?}", started.elapsed()),
+                    width = self.tasks.longest_task_name + 15
+                )
+                .stylize(),
+            );
+
+            if last_list_height > 0 {
+                execute!(
+                    stderr,
+                    cursor::MoveUp(last_list_height),
+                    Clear(ClearType::FromCursorDown),
+                    output
+                )?;
+            } else {
+                execute!(stderr, output)?;
+            }
 
             if finished {
                 break;

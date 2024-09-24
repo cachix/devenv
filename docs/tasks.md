@@ -18,8 +18,9 @@ Tasks allow you to form dependencies between code, executed in parallel.
 
 ```shell-session
 $ devenv tasks run myapp:hello
+Running tasks     myapp:hello
 Succeeded         myapp:hello         9ms
-Finished in 50.14ms myapp:hello: 1 Succeeded
+1 Succeeded                           50.14ms
 ```
 
 ## enterShell / enterTest
@@ -41,15 +42,16 @@ If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
 ```shell-session
 $ devenv shell
 ...
+Running tasks     devenv:enterShell
 Succeeded         devenv:pre-commit:install 25ms
 Succeeded         bash:hello                 9ms
 Succeeded         devenv:enterShell         23ms
-Finished in 103.14ms devenv:enterShell: 3 Succeeded
+3 Succeeded                                 103.14ms
 ```
 
 ## Using your favourite language
 
-Tasks can also reference scripts and depend on other tasks, for example when entering the shell:
+Tasks can also use another package for execution, for example when entering the shell:
 
 ```nix title="devenv.nix"
 { pkgs, lib, config, ... }:
@@ -87,7 +89,7 @@ If you define a `status` command, it will be executed first and if it returns `0
 
 Tasks support passing inputs and produce outputs, both as JSON objects:
 
-- `$DEVENV_TASK_INPUT`: JSON object serializing `tasks."myapp:mytask".inputs`.
+- `$DEVENV_TASK_INPUT`: JSON object of  `tasks."myapp:mytask".input`.
 - `$DEVENV_TASKS_OUTPUTS`: JSON object with dependent tasks as keys and their outputs as values.
 - `$DEVENV_TASK_OUTPUT_FILE`: a writable file with tasks' outputs in JSON.
 
