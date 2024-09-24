@@ -26,8 +26,8 @@
       # TODO: split installation script into status + exec
       "devenv:pre-commit:install".exec = config.pre-commit.installationScript;
       "devenv:pre-commit:run".exec = "pre-commit run -a";
-      "devenv:enterShell".depends = [ "devenv:pre-commit:install" ];
-      "devenv:enterTest".depends = [ "devenv:pre-commit:run" ];
+      "devenv:enterShell".after = [ "devenv:pre-commit:install" ];
+      "devenv:enterTest".after = [ "devenv:pre-commit:run" ];
     };
   };
 }

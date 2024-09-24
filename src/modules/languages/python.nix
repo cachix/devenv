@@ -473,7 +473,7 @@ in
         exports = [ "PATH" "VIRTUAL_ENV" ];
       };
 
-      "devenv:enterShell".depends = lib.optional cfg.venv.enable "devenv:python:venv"
+      "devenv:enterShell".after = lib.optional cfg.venv.enable "devenv:python:venv"
         ++ lib.optional cfg.poetry.install.enable "devenv:python:poetry"
         ++ lib.optional cfg.uv.sync.enable "devenv:python:uv";
     };

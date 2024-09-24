@@ -1,9 +1,9 @@
 {
   tasks = {
     "myapp:shell".exec = "touch shell";
-    "devenv:enterShell".depends = [ "myapp:shell" ];
+    "devenv:enterShell".after = [ "myapp:shell" ];
     "myapp:test".exec = "touch test";
-    "devenv:enterTest".depends = [ "myapp:test" ];
+    "devenv:enterTest".after = [ "myapp:test" ];
   };
 
   enterTest = ''

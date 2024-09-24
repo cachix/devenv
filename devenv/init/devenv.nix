@@ -29,7 +29,7 @@
   # https://devenv.sh/tasks/
   # tasks = {
   #   "myproj:setup".exec = "mytool build";
-  #   "devenv:enterShell".depends = ["myproj:setup"];
+  #   "devenv:enterShell".after = [ "myproj:setup" ];
   # };
 
   # https://devenv.sh/tests/

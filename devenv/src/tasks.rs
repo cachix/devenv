@@ -69,7 +69,7 @@ impl Display for Error {
 pub struct TaskConfig {
     name: String,
     #[serde(default)]
-    depends: Vec<String>,
+    after: Vec<String>,
     #[serde(default)]
     command: Option<String>,
     #[serde(default)]
@@ -419,7 +419,7 @@ impl Tasks {
         for index in self.graph.node_indices() {
             let task_state = &self.graph[index].read().await;
 
-            for dep_name in &task_state.task.depends {
+            for dep_name in &task_state.task.after {
                 if let Some(dep_idx) = task_indices.get(dep_name) {
                     edges_to_add.push((*dep_idx, index));
                 } else {
@@ -890,12 +890,12 @@ mod test {
                     },
                     {
                         "name": "myapp:task_3",
-                        "depends": ["myapp:task_1"],
+                        "after": ["myapp:task_1"],
                         "command": script3.to_str().unwrap()
                     },
                     {
                         "name": "myapp:task_4",
-                        "depends": ["myapp:task_3"],
+                        "after": ["myapp:task_3"],
                         "command": script4.to_str().unwrap()
                     }
                 ]
@@ -926,12 +926,12 @@ mod test {
                 "tasks": [
                     {
                         "name": "myapp:task_1",
-                        "depends": ["myapp:task_2"],
+                        "after": ["myapp:task_2"],
                         "command": "echo 'Task 1 is running' && echo 'Task 1 completed'"
                     },
                     {
                         "name": "myapp:task_2",
-                        "depends": ["myapp:task_1"],
+                        "after": ["myapp:task_1"],
                         "command": "echo 'Task 2 is running' && echo 'Task 2 completed'"
                     }
                 ]
@@ -1077,7 +1077,7 @@ mod test {
                     },
                     {
                         "name": "myapp:task_2",
-                        "depends": ["myapp:task_1"],
+                        "after": ["myapp:task_1"],
                         "command": dependent_script.to_str().unwrap()
                     }
                 ]
@@ -1142,7 +1142,7 @@ fi
                     {
                         "name": "myapp:task_2",
                         "command": output_script.to_str().unwrap(),
-                        "depends": ["myapp:task_1"]
+                        "after": ["myapp:task_1"]
                     }
                 ]
             }))

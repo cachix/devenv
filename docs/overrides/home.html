@@ -161,7 +161,7 @@ ncdu 2.3
 
   tasks = {
     "myapp:build".exec = "build";
-    "devenv:enterShell".depends = ["myapp:build"];
+    "devenv:enterShell".after = [ "myapp:build" ];
   };
 
   # Runs on `git commit` and `devenv test`
@@ -182,10 +182,11 @@ ncdu 2.3
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
 <pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv shell
 ...
+Running tasks     devenv:enterShell
 Succeeded         devenv:pre-commit:install 15ms
 Succeeded         myapp:build               23ms
 Succeeded         devenv:enterShell         23ms
-Finished in 50.14ms devenv:enterShell: 3 Succeeded
+3 Succeeded                                 50.14ms
 $
 
 </code></pre>
