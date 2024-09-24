@@ -2,7 +2,7 @@
 
 pkgs.rustPlatform.buildRustPackage {
   pname = "devenv";
-  version = "1.1";
+  version = "1.2";
 
   src = pkgs.lib.sourceByRegex ./. [
     "^\.cargo(/.*)?$"
