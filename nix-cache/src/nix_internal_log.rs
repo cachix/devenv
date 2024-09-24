@@ -36,17 +36,18 @@ pub enum NixInternalLog {
 }
 
 /// See https://github.com/NixOS/nix/blob/322d2c767f2a3f8ef2ac3d1ba46c19caf9a1ffce/src/libutil/error.hh#L33-L42
-#[derive(Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum NixVerbosity {
-    Error,
-    Warn,
-    Notice,
-    Info,
-    Talkative,
-    Chatty,
-    Debug,
-    Vomit,
+    Error = 0,
+    Warn = 1,
+    Notice = 2,
+    #[default]
+    Info = 3,
+    Talkative = 4,
+    Chatty = 5,
+    Debug = 6,
+    Vomit = 7,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -134,5 +135,12 @@ mod test {
     fn test_parse_non_nix_log() {
         let line = "This is not a Nix log line";
         assert!(NixInternalLog::parse(line).is_none());
+    }
+
+    #[test]
+    fn test_verbosity_deserialize() {
+        let json = r#"0"#;
+        let verbosity: NixVerbosity = serde_json::from_str(json).unwrap();
+        assert_eq!(verbosity, NixVerbosity::Error);
     }
 }
