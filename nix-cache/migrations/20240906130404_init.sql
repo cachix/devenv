@@ -1,14 +1,14 @@
-CREATE TABLE IF NOT EXISTS nix_command
+CREATE TABLE IF NOT EXISTS cached_cmd
 (
   id             INTEGER NOT NULL PRIMARY KEY,
   raw            TEXT NOT NULL,
-  command_hash   CHAR(64) NOT NULL UNIQUE,
+  cmd_hash       CHAR(64) NOT NULL UNIQUE,
   output         TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_nix_command_command_hash ON nix_command(command_hash);
+CREATE INDEX IF NOT EXISTS idx_cached_cmd_hash ON cached_cmd(cmd_hash);
 
-CREATE TABLE IF NOT EXISTS file
+CREATE TABLE IF NOT EXISTS file_path
 (
   id           INTEGER NOT NULL PRIMARY KEY,
   path         BLOB NOT NULL UNIQUE,
@@ -16,24 +16,24 @@ CREATE TABLE IF NOT EXISTS file
   updated_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_file_path ON file(path);
+CREATE INDEX IF NOT EXISTS idx_file_path ON file_path(path);
 
-CREATE TABLE IF NOT EXISTS input_file
+CREATE TABLE IF NOT EXISTS cmd_input_path
 (
-  id             INTEGER NOT NULL PRIMARY KEY,
-  nix_command_id INTEGER,
-  file_id        INTEGER,
-  UNIQUE(nix_command_id, file_id),
-  FOREIGN KEY(nix_command_id)
-    REFERENCES nix_command(id)
+  id                     INTEGER NOT NULL PRIMARY KEY,
+  cached_cmd_id          INTEGER,
+  file_path_id        INTEGER,
+  UNIQUE(cached_cmd_id, file_path_id),
+  FOREIGN KEY(cached_cmd_id)
+    REFERENCES cached_cmd(id)
     ON UPDATE CASCADE
     ON DELETE CASCADE,
-  FOREIGN KEY(file_id)
-    REFERENCES file(id)
+  FOREIGN KEY(file_path_id)
+    REFERENCES file_path(id)
     ON UPDATE CASCADE
     ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_input_file_nix_command_id ON input_file(nix_command_id);
-CREATE INDEX IF NOT EXISTS idx_input_file_file_id ON input_file(file_id);
-CREATE INDEX IF NOT EXISTS idx_input_file_composite ON input_file(nix_command_id, file_id);
+CREATE INDEX IF NOT EXISTS idx_cmd_input_path_cached_cmd_id ON cmd_input_path(cached_cmd_id);
+CREATE INDEX IF NOT EXISTS idx_cmd_input_path_file_path_id ON cmd_input_path(file_path_id);
+CREATE INDEX IF NOT EXISTS idx_cmd_input_path_composite ON cmd_input_path(cached_cmd_id, file_path_id);
