@@ -49,10 +49,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            if let serde_json::Value::Object(ref mut map) = output {
-                map.extend(exported_vars);
+            if !output.as_object().unwrap().contains_key("devenv") {
+                output["devenv"] = serde_json::json!({});
             }
-
+            if !output["devenv"].as_object().unwrap().contains_key("env") {
+                output["devenv"]["env"] = serde_json::json!({});
+            }
+            output["devenv"]["env"] = serde_json::Value::Object(
+                output["devenv"]["env"]
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .chain(exported_vars)
+                    .collect(),
+            );
             std::fs::write(output_file, serde_json::to_string_pretty(&output)?)?;
         }
     }
