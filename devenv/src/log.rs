@@ -99,7 +99,7 @@ impl Logger {
         self.log(message, Level::Warn);
     }
 
-    fn log(&self, message: &str, level: Level) {
+    pub fn log(&self, message: &str, level: Level) {
         if level > self.level {
             return;
         }

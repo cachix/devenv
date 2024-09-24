@@ -23,35 +23,40 @@ pub enum CommandError {
     Sqlx(#[from] sqlx::Error),
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct CommandOptions {
-    pub force: bool,
-}
-
 pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
-    options: CommandOptions,
+    force: bool,
     extra_paths: Vec<PathBuf>,
+    on_stderr: Option<Box<dyn Fn(&NixInternalLog) + Send>>,
 }
 
 impl<'a> CachedCommand<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
             pool,
-            options: CommandOptions::default(),
+            force: false,
             extra_paths: Vec::new(),
+            on_stderr: None,
         }
     }
 
     /// Watch additional paths for changes.
-    pub fn watch_path<P: AsRef<Path>>(mut self, path: P) -> Self {
+    pub fn watch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.extra_paths.push(path.as_ref().to_path_buf());
         self
     }
 
     /// Force re-evaluation of the command.
-    pub fn force(mut self, force: bool) -> Self {
-        self.options.force = force;
+    pub fn force(&mut self, force: bool) -> &mut Self {
+        self.force = force;
+        self
+    }
+
+    pub fn on_stderr<F>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(&NixInternalLog) + Send + 'static,
+    {
+        self.on_stderr = Some(Box::new(f));
         self
     }
 
@@ -59,12 +64,12 @@ impl<'a> CachedCommand<'a> {
     ///
     /// If the command has been run before and the files it depends on have not been modified,
     /// the cached output will be returned.
-    pub async fn run(&mut self, mut cmd: &'a mut Command) -> Result<process::Output, CommandError> {
+    pub async fn output(mut self, cmd: &'a mut Command) -> Result<process::Output, CommandError> {
         let raw_cmd = format!("{:?}", cmd);
         let cmd_hash = hash::digest(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
-        if !self.options.force {
+        if !self.force {
             if let Ok(Some(output)) = query_cached_output(self.pool, &cmd_hash).await {
                 return Ok(process::Output {
                     status: process::ExitStatus::default(),
@@ -86,6 +91,8 @@ impl<'a> CachedCommand<'a> {
         let mut stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
 
+        let on_stderr = self.on_stderr.take();
+
         let stderr_thread = tokio::spawn(async move {
             let reader = BufReader::new(stderr);
 
@@ -94,10 +101,8 @@ impl<'a> CachedCommand<'a> {
                 .map_while(Result::ok)
                 .filter_map(|line| NixInternalLog::parse(line).and_then(|log| log.ok()))
                 .inspect(|log| {
-                    if let NixInternalLog::Msg { msg, level, .. } = log {
-                        if *level <= NixVerbosity::Info {
-                            eprintln!("{msg}");
-                        }
+                    if let Some(ref f) = &on_stderr {
+                        f(&log);
                     }
                 })
                 .filter_map(extract_op_from_log_line)

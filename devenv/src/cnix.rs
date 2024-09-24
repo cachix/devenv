@@ -282,7 +282,8 @@ impl<'a> Nix<'a> {
         mut cmd: std::process::Command,
         options: &Options<'a>,
     ) -> Result<process::Output> {
-        use nix_cache::command::{CachedCommand, CommandOptions};
+        use nix_cache::command::CachedCommand;
+        use nix_cache::nix_internal_log::{NixInternalLog, NixVerbosity};
 
         let mut logger = self.logger.clone();
 
@@ -303,6 +304,8 @@ impl<'a> Nix<'a> {
             ));
             bail!("Failed to replace shell")
         } else {
+            let start = SystemTime::now();
+
             if options.logging {
                 cmd.stdin(process::Stdio::inherit())
                     .stderr(process::Stdio::inherit());
@@ -313,8 +316,18 @@ impl<'a> Nix<'a> {
 
             // TODO: add devenv.yaml to the list of cached files
             let result = if cmd.get_program().to_string_lossy().ends_with("nix") {
-                CachedCommand::new(&self.pool)
-                    .run(&mut cmd)
+                let mut cached_cmd = CachedCommand::new(&self.pool);
+                if options.logging {
+                    cached_cmd.on_stderr(|log| {
+                        if let NixInternalLog::Msg { msg, level, .. } = log {
+                            if *level <= NixVerbosity::Warn {
+                                eprintln!("{msg}");
+                            }
+                        }
+                    });
+                }
+                cached_cmd
+                    .output(&mut cmd)
                     .await
                     .into_diagnostic()
                     .wrap_err_with(|| {
