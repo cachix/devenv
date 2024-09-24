@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::fs;
 
@@ -160,6 +160,26 @@ impl<'a> CachedCommand<'a> {
     }
 }
 
+/// Represents the state of a file in the cache system.
+#[derive(Debug)]
+enum FileState {
+    /// The file has not been modified since it was last cached.
+    Unchanged { path: PathBuf },
+    /// The file's metadata, i.e. timestamp, has changed, but its content remains the same.
+    MetadataModified {
+        path: PathBuf,
+        modified_at: SystemTime,
+    },
+    /// The file's content has been modified.
+    Modified {
+        path: PathBuf,
+        new_hash: String,
+        modified_at: SystemTime,
+    },
+    /// The file no longer exists in the file system.
+    Removed { path: PathBuf },
+}
+
 async fn query_cached_output(
     pool: &SqlitePool,
     cmd_hash: &str,
@@ -173,47 +193,20 @@ async fn query_cached_output(
             .await
             .map_err(CommandError::Sqlx)?;
 
-        let file_checks = files.into_iter().map(
-            |db::FileRow {
-                 path,
-                 content_hash,
-                 updated_at,
-             }| {
-                tokio::spawn(async move {
-                    let metadata = match fs::metadata(&path).await {
-                        Ok(metadata) => metadata,
-                        Err(_) => return None,
-                    };
-
-                    let file_modified = metadata.modified().ok()?;
-                    let file_modified = file_modified.duration_since(UNIX_EPOCH).ok()?.as_secs();
-                    let updated_at = updated_at.duration_since(UNIX_EPOCH).ok()?.as_secs();
-
-                    if file_modified <= updated_at {
-                        return None; // File has not been modified
-                    }
-
-                    // File has been modified, recompute hash
-                    let new_hash = match hash::compute_file_hash(&path).await {
-                        Ok(hash) => hash,
-                        Err(_) => return None, // Unable to compute hash
-                    };
-
-                    if new_hash != content_hash {
-                        // Hash has changed, return updated information
-                        Some((path, new_hash, file_modified))
-                    } else {
-                        eprintln!("File modified but hash unchanged: {:?}", path);
-                        None // File modified but hash unchanged
-                    }
-                })
-            },
-        );
+        let file_checks = files
+            .into_iter()
+            .map(|file| tokio::spawn(check_file_state(file)));
 
         let updated_files = join_all(file_checks)
             .await
             .into_iter()
-            .filter_map(|result| result.ok().flatten())
+            .filter_map(|result| result.ok().and_then(|r| r.ok()))
+            .filter(|state| {
+                matches!(
+                    state,
+                    FileState::Modified { .. } | FileState::Removed { .. }
+                )
+            })
             .collect::<Vec<_>>();
 
         eprintln!("updated_files: {:?}", updated_files);
@@ -244,6 +237,47 @@ fn extract_op_from_log_line(log: NixInternalLog) -> Option<PathBuf> {
             _ => None,
         }),
         _ => None,
+    }
+}
+
+fn system_time_to_unix_timestamp(time: SystemTime) -> std::io::Result<u64> {
+    time.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+async fn check_file_state(file: db::FileRow) -> std::io::Result<FileState> {
+    let metadata = match fs::metadata(&file.path).await {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(FileState::Removed { path: file.path }),
+    };
+
+    let metadata_modified = metadata.modified()?;
+    let file_modified = system_time_to_unix_timestamp(metadata_modified)?;
+    let updated_at = system_time_to_unix_timestamp(file.updated_at)?;
+
+    if file_modified <= updated_at {
+        // File has not been modified
+        return Ok(FileState::Unchanged { path: file.path });
+    }
+
+    // File has been modified, recompute the hash
+    let new_hash = hash::compute_file_hash(&file.path).await?;
+
+    if new_hash != file.content_hash {
+        // Hash has changed, return updated information
+        Ok(FileState::Modified {
+            path: file.path,
+            new_hash,
+            modified_at: metadata_modified,
+        })
+    } else {
+        eprintln!("File modified but hash unchanged: {:?}", file.path);
+        // File modified but hash unchanged
+        Ok(FileState::MetadataModified {
+            path: file.path,
+            modified_at: metadata_modified,
+        })
     }
 }
 
