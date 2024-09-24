@@ -1,8 +1,4 @@
-use crossterm::{
-    cursor, execute,
-    style::{self, Stylize},
-    terminal::{Clear, ClearType},
-};
+use console::Term;
 use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -10,7 +6,6 @@ use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
-use std::io;
 use std::process::Stdio;
 use std::sync::Arc;
 use thiserror::Error;
@@ -634,7 +629,7 @@ impl TasksUi {
                 TaskStatus::Running(started) => {
                     tasks_status.running += 1;
                     (
-                        format!("{:17}", "Running").blue().bold(),
+                        console::style(format!("{:17}", "Running")).blue().bold(),
                         Some(started.elapsed()),
                     )
                 }
@@ -644,19 +639,30 @@ impl TasksUi {
                         Skipped::Cached(_) => "Cached",
                         Skipped::NotImplemented => "Not implemented",
                     };
-                    (format!("{:17}", status).blue().bold(), None)
+                    (console::style(format!("{:17}", status)).blue().bold(), None)
                 }
                 TaskStatus::Completed(TaskCompleted::Success(duration, _)) => {
                     tasks_status.succeeded += 1;
-                    (format!("{:17}", "Succeeded").green().bold(), Some(duration))
+                    (
+                        console::style(format!("{:17}", "Succeeded")).green().bold(),
+                        Some(duration),
+                    )
                 }
                 TaskStatus::Completed(TaskCompleted::Failed(duration, _)) => {
                     tasks_status.failed += 1;
-                    (format!("{:17}", "Failed").red().bold(), Some(duration))
+                    (
+                        console::style(format!("{:17}", "Failed")).red().bold(),
+                        Some(duration),
+                    )
                 }
                 TaskStatus::Completed(TaskCompleted::DependencyFailed) => {
                     tasks_status.dependency_failed += 1;
-                    (format!("{:17}", "Dependency failed").magenta().bold(), None)
+                    (
+                        console::style(format!("{:17}", "Dependency failed"))
+                            .magenta()
+                            .bold(),
+                        None,
+                    )
                 }
             };
 
@@ -667,7 +673,12 @@ impl TasksUi {
             tasks_status.lines.push(format!(
                 "{} {} {}",
                 status_text,
-                format!("{:width$}", task_name, width = self.tasks.longest_task_name).bold(),
+                console::style(format!(
+                    "{:width$}",
+                    task_name,
+                    width = self.tasks.longest_task_name
+                ))
+                .bold(),
                 duration,
             ));
         }
@@ -676,8 +687,9 @@ impl TasksUi {
     }
 
     pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
-        let names = self.tasks.root_names.join(", ").bold();
-        eprint!("{:17} {}", "Running tasks", names);
+        let names = console::style(self.tasks.root_names.join(", ")).bold();
+        let term = Term::stderr();
+        console::Term::stderr().write_line(&format!("{:17} {}", "Running tasks", names))?;
 
         // start processing tasks
         let started = std::time::Instant::now();
@@ -686,7 +698,6 @@ impl TasksUi {
 
         // start TUI
         let mut last_list_height: u16 = 0;
-        let mut stderr = io::stderr();
 
         loop {
             let mut finished = false;
@@ -696,66 +707,82 @@ impl TasksUi {
 
             let tasks_status = self.get_tasks_status().await;
 
-            let output = style::PrintStyledContent(
-                format!(
-                    "{}\n{:width$} {}\n",
-                    tasks_status.lines.join("\n"),
-                    [
-                        if tasks_status.pending > 0 {
-                            format!("{} {}", tasks_status.pending, "Pending".blue().bold())
-                        } else {
-                            String::new()
-                        },
-                        if tasks_status.running > 0 {
-                            format!("{} {}", tasks_status.running, "Running".blue().bold())
-                        } else {
-                            String::new()
-                        },
-                        if tasks_status.skipped > 0 {
-                            format!("{} {}", tasks_status.skipped, "Skipped".blue().bold())
-                        } else {
-                            String::new()
-                        },
-                        if tasks_status.succeeded > 0 {
-                            format!("{} {}", tasks_status.succeeded, "Succeeded".green().bold())
-                        } else {
-                            String::new()
-                        },
-                        if tasks_status.failed > 0 {
-                            format!("{} {}", tasks_status.failed, "Failed".red().bold())
-                        } else {
-                            String::new()
-                        },
-                        if tasks_status.dependency_failed > 0 {
-                            format!(
-                                "{} {}",
-                                tasks_status.dependency_failed,
-                                "Dependency Failed".red().bold()
-                            )
-                        } else {
-                            String::new()
-                        },
-                    ]
-                    .into_iter()
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                    format!("{:.2?}", started.elapsed()),
-                    width = self.tasks.longest_task_name + 36
-                )
-                .stylize(),
-            );
+            let status_summary = [
+                if tasks_status.pending > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.pending,
+                        console::style("Pending").blue().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if tasks_status.running > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.running,
+                        console::style("Running").blue().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if tasks_status.skipped > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.skipped,
+                        console::style("Skipped").blue().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if tasks_status.succeeded > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.succeeded,
+                        console::style("Succeeded").green().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if tasks_status.failed > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.failed,
+                        console::style("Failed").red().bold()
+                    )
+                } else {
+                    String::new()
+                },
+                if tasks_status.dependency_failed > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.dependency_failed,
+                        console::style("Dependency Failed").red().bold()
+                    )
+                } else {
+                    String::new()
+                },
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(", ");
 
-            if last_list_height > 0 {
-                execute!(
-                    stderr,
-                    cursor::MoveUp(last_list_height),
-                    Clear(ClearType::FromCursorDown),
-                    output
-                )?;
-            } else {
-                execute!(stderr, output)?;
-            }
+            let elapsed_time = format!("{:.2?}", started.elapsed());
+
+            let output = format!(
+                "{}\n{status_summary}{}{elapsed_time}\n",
+                tasks_status.lines.join("\n"),
+                " ".repeat(
+                    (19 + self.tasks.longest_task_name)
+                        .saturating_sub(console::measure_text_width(&status_summary))
+                        .max(1)
+                )
+            );
+            let output = console::Style::new().apply_to(output);
+            term.move_cursor_up(last_list_height as usize)?;
+            term.clear_to_end_of_screen()?;
+            term.write_str(&output.to_string())?;
 
             if finished {
                 break;
@@ -796,9 +823,9 @@ impl TasksUi {
                     errors.push_str("---\n")
                 }
             }
-            errors.stylize()
+            console::Style::new().apply_to(errors)
         };
-        execute!(stderr, style::PrintStyledContent(errors))?;
+        term.write_line(&errors.to_string())?;
 
         let tasks_status = self.get_tasks_status().await;
         Ok((tasks_status, handle.await.unwrap()))
