@@ -221,6 +221,7 @@ in
     ./info.nix
     ./outputs.nix
     ./processes.nix
+    ./outputs.nix
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
@@ -228,6 +229,7 @@ in
     ./lib.nix
     ./tests.nix
     ./cachix.nix
+    ./tasks.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)

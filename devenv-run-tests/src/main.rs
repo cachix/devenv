@@ -32,7 +32,9 @@ struct TestResult {
     passed: bool,
 }
 
-fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
+async fn run_tests_in_directory(
+    args: &Args,
+) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
     let logger = Logger::new(Level::Info);
 
     logger.info("Running Tests");
@@ -118,11 +120,13 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                 // Run .setup.sh if it exists
                 if setup_script_path.exists() {
                     println!("    Running {setup_script}");
-                    devenv.shell(&Some(format!("./{setup_script}")), &[], false)?;
+                    devenv
+                        .shell(&Some(format!("./{setup_script}")), &[], false)
+                        .await?;
                 }
 
                 // TODO: wait for processes to shut down before exiting
-                let status = devenv.test();
+                let status = devenv.test().await;
                 let result = TestResult {
                     name: dir_name.to_string(),
                     passed: status.is_ok(),
@@ -135,10 +139,22 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
     Ok(test_results)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let test_results = run_tests_in_directory(&args)?;
+    let executable_path = std::env::current_exe()?;
+    let executable_dir = executable_path.parent().unwrap();
+    std::env::set_var(
+        "PATH",
+        format!(
+            "{}:{}",
+            executable_dir.display(),
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
+
+    let test_results = run_tests_in_directory(&args).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
 

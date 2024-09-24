@@ -20,11 +20,14 @@
 
   config = lib.mkIf ((lib.filterAttrs (id: value: value.enable) config.pre-commit.hooks) != { }) {
     ci = [ config.pre-commit.run ];
-    enterTest = ''
-      pre-commit run -a
-    '';
     # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
     packages = lib.mkAfter ([ config.pre-commit.package ] ++ (config.pre-commit.enabledPackages or [ ]));
-    enterShell = config.pre-commit.installationScript;
+    tasks = {
+      # TODO: split installation script into status + exec
+      "devenv:pre-commit:install".exec = config.pre-commit.installationScript;
+      "devenv:pre-commit:run".exec = "pre-commit run -a";
+      "devenv:enterShell".after = [ "devenv:pre-commit:install" ];
+      "devenv:enterTest".after = [ "devenv:pre-commit:run" ];
+    };
   };
 }

@@ -1,4 +1,4 @@
-{ pkgs, inputs }:
+{ pkgs, inputs, build_tasks ? false }:
 
 pkgs.rustPlatform.buildRustPackage {
   pname = "devenv";
@@ -9,11 +9,12 @@ pkgs.rustPlatform.buildRustPackage {
     "Cargo\.toml"
     "Cargo\.lock"
     "devenv(/.*)?"
+    "tasks(/.*)?"
     "devenv-run-tests(/.*)?"
     "xtask(/.*)?"
   ];
 
-  cargoBuildFlags = [ "-p devenv -p devenv-run-tests" ];
+  cargoBuildFlags = if build_tasks then [ "-p tasks" ] else [ "-p devenv -p devenv-run-tests" ];
 
   cargoLock = {
     lockFile = ./Cargo.lock;
@@ -29,7 +30,7 @@ pkgs.rustPlatform.buildRustPackage {
     pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
   ];
 
-  postInstall = ''
+  postInstall = pkgs.lib.optionalString (!build_tasks) ''
     wrapProgram $out/bin/devenv \
       --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix} \
       --prefix PATH ":" "$out/bin:${inputs.cachix.packages.${pkgs.stdenv.system}.cachix}/bin"

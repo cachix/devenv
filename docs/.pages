@@ -7,13 +7,14 @@ nav:
       - Basics: basics.md
       - Packages: packages.md
       - Scripts: scripts.md
-      - Languages: 
+      - Tasks: tasks.md
+      - Languages:
         - Overview: languages.md
         - Supported Languages: supported-languages
-      - Processes: 
+      - Processes:
         - Overview: processes.md
         - Supported Process Managers: supported-process-managers
-      - Services: 
+      - Services:
         - Overview: services.md
         - Supported Services: supported-services
       - Containers: containers.md
@@ -21,6 +22,7 @@ nav:
       - Pre-Commit Hooks: pre-commit-hooks.md
       - Outputs: outputs.md
       - Tests: tests.md
+      - Outputs: outputs.md
       - Common Patterns: common-patterns.md
     - Writing devenv.yaml:
       - Inputs: inputs.md

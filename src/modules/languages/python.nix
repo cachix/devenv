@@ -43,7 +43,7 @@ let
     let
       USE_UV_SYNC = cfg.uv.sync.enable && builtins.compareVersions cfg.uv.package.version "0.4.4" >= 0;
     in
-    pkgs.writeShellScript "init-venv.sh" ''
+    ''
       pushd "${cfg.directory}"
 
       # Make sure any tools are not attempting to use the Python interpreter from any
@@ -107,7 +107,7 @@ let
       popd
     '';
 
-  initUvScript = pkgs.writeShellScript "init-uv.sh" ''
+  initUvScript = ''
     pushd "${cfg.directory}"
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
@@ -173,7 +173,7 @@ let
     popd
   '';
 
-  initPoetryScript = pkgs.writeShellScript "init-poetry.sh" ''
+  initPoetryScript = ''
     pushd "${cfg.directory}"
 
     function _devenv_init_poetry_venv
@@ -454,19 +454,32 @@ in
       }
     ];
 
-    enterShell = lib.concatStringsSep "\n" ([
-      ''
-        export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
-      ''
-    ] ++
-    (lib.optional cfg.venv.enable ''
-      source ${initVenvScript}
-    '') ++
-    (lib.optional cfg.poetry.install.enable ''
-      source ${initPoetryScript}
-    '') ++
-    (lib.optional cfg.uv.sync.enable ''
-      source ${initUvScript}
-    ''));
+    tasks = {
+      "devenv:python:virtualenv" = lib.mkIf cfg.venv.enable {
+        description = "Initialize Python virtual environment";
+        exec = initVenvScript;
+        exports = [ "PATH" "VIRTUAL_ENV" ];
+      };
+
+      "devenv:python:poetry" = lib.mkIf cfg.poetry.install.enable {
+        description = "Initialize Poetry";
+        exec = initPoetryScript;
+        exports = [ "PATH" "VIRTUAL_ENV" ];
+      };
+
+      "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
+        description = "Initialize uv sync";
+        exec = initUvScript;
+        exports = [ "PATH" "VIRTUAL_ENV" ];
+      };
+
+      "devenv:enterShell".after = lib.optional cfg.venv.enable "devenv:python:virtualenv"
+        ++ lib.optional cfg.poetry.install.enable "devenv:python:poetry"
+        ++ lib.optional cfg.uv.sync.enable "devenv:python:uv";
+    };
+
+    enterShell = ''
+      export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+    '';
   };
 }

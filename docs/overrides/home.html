@@ -33,7 +33,8 @@
         Develop <a href="/basics" class="text-[#425C82] font-medium">natively</a>
         • Deploy <a href="/containers" class="text-[#425C82] font-medium">containers</a>
         • 100.000+ <a href="/packages" class="text-[#425C82] font-medium">packages</a>
-        • Write <a href="/scripts" class="text-[#425C82] font-medium">scripts</a>
+        • Write <a href="/scripts" class="text-[#425C82] font-medium">scripts</a> and
+        <a href="/tasks" class="text-[#425C82] font-medium">tasks</a>
         • 50+ <a href="/languages" class="text-[#425C82] font-medium">supported languages</a>
         • Define <a href="/processes" class="text-[#425C82] font-medium">processes</a>
         • Reuse <a href="/services" class="text-[#425C82] font-medium">services</a>
@@ -113,7 +114,7 @@
 <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
   env.GREET = "determinism";
 
-  packages = [ 
+  packages = [
     pkgs.ncdu
   ];
 
@@ -154,9 +155,16 @@ ncdu 2.3
                 </div>
               </div>
 <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
-  scripts.build.exec = "parcel build";
+  packages = [ pkgs.yarn ];
 
-  # Runs on git commit and CI
+  scripts.build.exec = "yarn build";
+
+  tasks = {
+    "myapp:build".exec = "build";
+    "devenv:enterShell".after = [ "myapp:build" ];
+  };
+
+  # Runs on `git commit` and `devenv test`
   pre-commit.hooks = {
     black.enable = true;
     # Your custom hooks
@@ -172,8 +180,14 @@ ncdu 2.3
           </div>
 
           <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
-<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv shell build
+<pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv shell
 ...
+Running tasks     devenv:enterShell
+Succeeded         devenv:pre-commit:install 15ms
+Succeeded         myapp:build               23ms
+Succeeded         devenv:enterShell         23ms
+3 Succeeded                                 50.14ms
+$
 
 </code></pre>
           </div>
@@ -182,9 +196,9 @@ ncdu 2.3
 
       <div class="px-4">
         <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Scripts and Git hooks</p>
+          <p class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Scripts and Tasks</p>
           <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
-            Define <a href="/scripts/" class="text-[#425C82] font-semibold">scripts</a> and
+            Define <a href="/scripts/" class="text-[#425C82] font-semibold">scripts</a>,  <a href="/tasks/" class="text-[#425C82] font-semibold">tasks</a> and
             <a href="/pre-commit-hooks/" class="text-[#425C82] font-semibold">git hooks</a>
             to automate your development workflow.
           <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
@@ -199,20 +213,20 @@ ncdu 2.3
             </div>
             <div class="relative lg:pl-3">
               <dt class="block font-semibold text-gray-900">
-                git hooks.
+                Tasks.
+              </dt>
+              <dd class="inline">
+                Form dependencies between automation code, executed in parallel and written in your favorite language.
+              </dd>
+            </div>
+            <div class="relative lg:pl-3">
+              <dt class="block font-semibold text-gray-900">
+                Git hooks.
               </dt>
               <dd class="inline">
                 Pick from builtin and language specific linters and formatters using <a
                   href="https://github.com/cachix/git-hooks.nix?tab=readme-ov-file#hooks"
                   class="text-[#425C82] font-semibold">git-hooks.nix</a>.
-            </div>
-            <div class="relative lg:pl-3">
-              <dt class="block font-semibold text-gray-900">
-                Invoke commands inside the environment.
-              </dt>
-              <dd class="inline">
-                Particularly useful in CI/CD and scripting.
-              </dd>
             </div>
           </dl>
         </div>
@@ -291,7 +305,7 @@ ncdu 2.3
                 Examples
               </dt>
               <dd class="inline">
-                Checkout <a class="text-[#425C82] font-semibold" href="https://github.com/cachix/devenv/tree/main/examples">examples collection</a> 
+                Checkout <a class="text-[#425C82] font-semibold" href="https://github.com/cachix/devenv/tree/main/examples">examples collection</a>
                 to get started.
             </div>
           </dl>
@@ -363,7 +377,7 @@ ncdu 2.3
                 </div>
               </div>
 <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
-  packages = [ 
+  packages = [
     pkgs.mkdocs
     pkgs.watchexec
   ];
@@ -516,7 +530,7 @@ ncdu 2.3
                 </div>
               </div>
 <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
-  packages = [ 
+  packages = [
     pkgs.mkdocs
     pkgs.curl
   ];
@@ -624,7 +638,7 @@ ncdu 2.3
                 </div>
               </div>
 <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
-  packages = [ 
+  packages = [
     pkgs.mkdocs
     pkgs.curl
   ];

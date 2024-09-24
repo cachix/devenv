@@ -165,6 +165,12 @@ pub(crate) enum Commands {
         command: ProcessesCommand,
     },
 
+    #[command(about = "Run tasks. https://devenv.sh/tasks/")]
+    Tasks {
+        #[command(subcommand)]
+        command: TasksCommand,
+    },
+
     #[command(about = "Run tests. http://devenv.sh/tests/", alias = "ci")]
     Test {
         #[arg(short, long, help = "Don't override .devenv to a temporary directory.")]
@@ -239,6 +245,13 @@ pub(crate) enum ProcessesCommand {
     #[command(alias = "stop", about = "Stop processes running in the background.")]
     Down {},
     // TODO: Status/Attach
+}
+
+#[derive(Subcommand, Clone)]
+#[clap(about = "Run tasks. https://devenv.sh/tasks/")]
+pub(crate) enum TasksCommand {
+    #[command(about = "Run tasks.")]
+    Run { tasks: Vec<String> },
 }
 
 #[derive(Subcommand, Clone)]
