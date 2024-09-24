@@ -698,7 +698,7 @@ impl TasksUi {
 
             let output = style::PrintStyledContent(
                 format!(
-                    "{}\n{} {:>width$}\n",
+                    "{}\n{:width$} {}\n",
                     tasks_status.lines.join("\n"),
                     [
                         if tasks_status.pending > 0 {
@@ -741,7 +741,7 @@ impl TasksUi {
                     .collect::<Vec<_>>()
                     .join(", "),
                     format!("{:.2?}", started.elapsed()),
-                    width = self.tasks.longest_task_name + 15
+                    width = self.tasks.longest_task_name + 36
                 )
                 .stylize(),
             );
