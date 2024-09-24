@@ -61,12 +61,13 @@ impl Op {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nix_internal_log::NixVerbosity;
 
     fn create_log(msg: &str) -> NixInternalLog {
         NixInternalLog::Msg {
             msg: msg.to_string(),
             raw_msg: None,
-            level: 1,
+            level: NixVerbosity::Warn,
         }
     }
 

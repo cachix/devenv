@@ -311,11 +311,29 @@ impl<'a> Nix<'a> {
                 }
             }
 
-            let mut cmd = CachedCommand::new(&self.pool, cmd, CommandOptions::default());
-            let result = cmd.run().await.into_diagnostic().wrap_err_with(|| {
-                // format!("Failed to run command `{}`", display_command(&cmd))
-                "Failed to run Command"
-            })?;
+            // TODO: add devenv.yaml to the list of cached files
+            let result = if cmd.get_program().to_string_lossy().ends_with("nix") {
+                CachedCommand::new(&self.pool)
+                    .run(&mut cmd)
+                    .await
+                    .into_diagnostic()
+                    .wrap_err_with(|| {
+                        format!("Failed to run command `{}`", display_command(&cmd))
+                    })?
+            } else {
+                cmd.output().into_diagnostic().wrap_err_with(|| {
+                    format!("Failed to run command `{}`", display_command(&cmd))
+                })?
+            };
+
+            // TODO: remove
+            let duration = SystemTime::now().duration_since(start).unwrap();
+            logger.info(&format!(
+                "Command `{}` took {}.{:03} seconds",
+                display_command(&cmd),
+                duration.as_secs(),
+                duration.subsec_millis()
+            ));
 
             if !result.status.success() {
                 let code = match result.status.code() {
@@ -331,18 +349,14 @@ impl<'a> Nix<'a> {
                     ));
                 }
                 if self.global_options.nix_debugger
-                    && cmd
-                        .inner
-                        .get_program()
-                        .to_string_lossy()
-                        .ends_with("bin/nix")
+                    && cmd.get_program().to_string_lossy().ends_with("bin/nix")
                 {
                     self.logger.info("Starting Nix debugger ...");
-                    cmd.inner.arg("--debugger").exec();
+                    cmd.arg("--debugger").exec();
                 }
                 bail!(format!(
                     "Command `{}` failed with {code}",
-                    display_command(&cmd.inner)
+                    display_command(&cmd)
                 ))
             } else {
                 Ok(result)

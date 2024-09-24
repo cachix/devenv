@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::{
     db, hash,
-    nix_internal_log::{parse_log_line, NixInternalLog},
+    nix_internal_log::{NixInternalLog, NixVerbosity},
     op::Op,
 };
 
@@ -31,35 +31,39 @@ pub struct CommandOptions {
 pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
     options: CommandOptions,
-    pub inner: Command,
+    extra_paths: Vec<PathBuf>,
 }
 
 impl<'a> CachedCommand<'a> {
+    pub fn new(pool: &'a SqlitePool) -> Self {
+        Self {
+            pool,
+            options: CommandOptions::default(),
+            extra_paths: Vec::new(),
+        }
+    }
+
+    /// Watch additional paths for changes.
+    pub fn watch_path<P: AsRef<Path>>(mut self, path: P) -> Self {
+        self.extra_paths.push(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Force re-evaluation of the command.
+    pub fn force(mut self, force: bool) -> Self {
+        self.options.force = force;
+        self
+    }
+
     /// Run a (Nix) command with caching enabled.
     ///
     /// If the command has been run before and the files it depends on have not been modified,
     /// the cached output will be returned.
-    ///
-    /// Pass `force = true` to force re-evaluation of the command.
-    pub fn new(pool: &'a SqlitePool, mut cmd: Command, options: CommandOptions) -> Self {
-        cmd.arg("-vv")
-            .arg("--log-format")
-            .arg("internal-json")
-            .arg("--json")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        Self {
-            pool,
-            options,
-            inner: cmd,
-        }
-    }
-
-    pub async fn run(&mut self) -> Result<process::Output, CommandError> {
-        let raw_cmd = format!("{:?}", self.inner);
+    pub async fn run(&mut self, mut cmd: &'a mut Command) -> Result<process::Output, CommandError> {
+        let raw_cmd = format!("{:?}", cmd);
         let cmd_hash = hash::digest(&raw_cmd);
 
+        // Check whether the command has been previously run and the files it depends on have not been changed.
         if !self.options.force {
             if let Ok(Some(output)) = query_cached_output(self.pool, &cmd_hash).await {
                 return Ok(process::Output {
@@ -70,7 +74,14 @@ impl<'a> CachedCommand<'a> {
             }
         }
 
-        let mut child = self.inner.spawn().map_err(CommandError::Io)?;
+        cmd.arg("-vv")
+            .arg("--log-format")
+            .arg("internal-json")
+            .arg("--json")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let mut child = cmd.spawn().map_err(CommandError::Io)?;
 
         let mut stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
@@ -81,22 +92,32 @@ impl<'a> CachedCommand<'a> {
             reader
                 .lines()
                 .map_while(Result::ok)
+                .filter_map(|line| NixInternalLog::parse(line).and_then(|log| log.ok()))
+                .inspect(|log| {
+                    if let NixInternalLog::Msg { msg, level, .. } = log {
+                        if *level <= NixVerbosity::Info {
+                            eprintln!("{msg}");
+                        }
+                    }
+                })
                 .filter_map(extract_op_from_log_line)
                 .collect::<Vec<PathBuf>>()
         });
 
         let stdout_thread = tokio::spawn(async move {
             let mut output = Vec::new();
-            let res = stdout.read_to_end(&mut output);
-            res.map(|_| output)
+            stdout.read_to_end(&mut output).map(|_| output)
         });
 
         let status = child.wait().map_err(CommandError::Io)?;
 
         let output = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
-        let files = stderr_thread.await.unwrap();
+        let mut files = stderr_thread.await.unwrap();
 
-        println!("files: {:?}", files);
+        eprintln!("files: {:?}", files);
+
+        // Watch additional paths
+        files.extend(self.extra_paths.iter().cloned());
 
         let path_hashes = join_all(files.into_iter().map(|path| {
             tokio::spawn(async move {
@@ -117,7 +138,7 @@ impl<'a> CachedCommand<'a> {
                 .await
                 .map_err(CommandError::Sqlx)?;
 
-        println!(
+        eprintln!(
             r#"
         id: {id}
         command: {raw_cmd}
@@ -177,7 +198,7 @@ async fn query_cached_output(
                         // Hash has changed, return updated information
                         Some((path, new_hash, file_modified))
                     } else {
-                        println!("File modified but hash unchanged: {:?}", path);
+                        eprintln!("File modified but hash unchanged: {:?}", path);
                         None // File modified but hash unchanged
                     }
                 })
@@ -190,13 +211,13 @@ async fn query_cached_output(
             .filter_map(|result| result.ok().flatten())
             .collect::<Vec<_>>();
 
-        println!("updated_files: {:?}", updated_files);
+        eprintln!("updated_files: {:?}", updated_files);
 
         if updated_files.is_empty() {
-            println!("No files have been modified, returning cached output");
+            eprintln!("No files have been modified, returning cached output");
             Ok(Some(output))
         } else {
-            println!("Command not cached, inserting new command and files");
+            eprintln!("Command not cached, inserting new command and files");
             Ok(None)
         }
     } else {
@@ -204,28 +225,21 @@ async fn query_cached_output(
     }
 }
 
-fn extract_op_from_log_line(line: String) -> Option<PathBuf> {
-    parse_log_line(line)
-        .and_then(|log| log.ok())
-        .and_then(|log| match log {
-            NixInternalLog::Msg { .. } => Op::from_internal_log(&log),
-            _ => None,
-        })
-        .and_then(|op| {
-            println!("{:?}", op);
-
-            match op {
-                Op::EvaluatedFile { source }
-                | Op::ReadFile { source }
-                | Op::CopiedSource { source, .. }
-                | Op::TrackedPath { source }
-                    if source.starts_with("/") && !source.starts_with("/nix/store") =>
-                {
-                    Some(source)
-                }
-                _ => None,
+fn extract_op_from_log_line(log: NixInternalLog) -> Option<PathBuf> {
+    match log {
+        NixInternalLog::Msg { .. } => Op::from_internal_log(&log).and_then(|op| match op {
+            Op::EvaluatedFile { source }
+            | Op::ReadFile { source }
+            | Op::CopiedSource { source, .. }
+            | Op::TrackedPath { source }
+                if source.starts_with("/") && !source.starts_with("/nix/store") =>
+            {
+                Some(source)
             }
-        })
+            _ => None,
+        }),
+        _ => None,
+    }
 }
 
 /// Normalize a path by stripping leading slashes.

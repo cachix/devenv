@@ -1,18 +1,19 @@
 use serde::Deserialize;
+use serde_repr::Deserialize_repr;
 
 /// See https://github.com/NixOS/nix/blob/a1cc362d9d249b95e4c9ad403f1e6e26ca302413/src/libutil/logging.cc#L173
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "action")]
 pub enum NixInternalLog {
     Msg {
-        level: u8,
+        level: NixVerbosity,
         msg: String,
         // Raw message when logging ErrorInfo
         raw_msg: Option<String>,
     },
     Start {
         id: u64,
-        level: u8,
+        level: NixVerbosity,
         #[serde(rename = "type")]
         typ: u8,
         text: String,
@@ -34,6 +35,20 @@ pub enum NixInternalLog {
     },
 }
 
+/// See https://github.com/NixOS/nix/blob/322d2c767f2a3f8ef2ac3d1ba46c19caf9a1ffce/src/libutil/error.hh#L33-L42
+#[derive(Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum NixVerbosity {
+    Error,
+    Warn,
+    Notice,
+    Info,
+    Talkative,
+    Chatty,
+    Debug,
+    Vomit,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum NixField {
@@ -41,14 +56,16 @@ pub enum NixField {
     String(String),
 }
 
-// TODO: assumes UTF-8 encoding
-pub fn parse_log_line<T>(line: T) -> Option<serde_json::Result<NixInternalLog>>
-where
-    T: AsRef<str>,
-{
-    line.as_ref()
-        .strip_prefix("@nix ")
-        .map(serde_json::from_str)
+impl NixInternalLog {
+    // TODO: assumes UTF-8 encoding
+    pub fn parse<T>(line: T) -> Option<serde_json::Result<Self>>
+    where
+        T: AsRef<str>,
+    {
+        line.as_ref()
+            .strip_prefix("@nix ")
+            .map(serde_json::from_str)
+    }
 }
 
 #[cfg(test)]
@@ -58,11 +75,11 @@ mod test {
     #[test]
     fn test_parse_log_msg() {
         let line = r#"@nix {"action":"msg","level":1,"msg":"hello"}"#;
-        let log = parse_log_line(line).unwrap().unwrap();
+        let log = NixInternalLog::parse(line).unwrap().unwrap();
         assert_eq!(
             log,
             NixInternalLog::Msg {
-                level: 1,
+                level: NixVerbosity::Warn,
                 msg: "hello".to_string(),
                 raw_msg: None,
             }
@@ -72,12 +89,12 @@ mod test {
     #[test]
     fn test_parse_log_start() {
         let line = r#"@nix {"action":"start","id":1,"level":1,"type":1,"text":"hello","parent":0,"fields":[]}"#;
-        let log = parse_log_line(line).unwrap().unwrap();
+        let log = NixInternalLog::parse(line).unwrap().unwrap();
         assert_eq!(
             log,
             NixInternalLog::Start {
                 id: 1,
-                level: 1,
+                level: NixVerbosity::Warn,
                 typ: 1,
                 text: "hello".to_string(),
                 parent: 0,
@@ -89,14 +106,14 @@ mod test {
     #[test]
     fn test_parse_log_stop() {
         let line = r#"@nix {"action":"stop","id":1}"#;
-        let log = parse_log_line(line).unwrap().unwrap();
+        let log = NixInternalLog::parse(line).unwrap().unwrap();
         assert_eq!(log, NixInternalLog::Stop { id: 1 });
     }
 
     #[test]
     fn test_parse_log_result() {
         let line = r#"@nix {"action":"result","id":1,"type":1,"fields":[]}"#;
-        let log = parse_log_line(line).unwrap().unwrap();
+        let log = NixInternalLog::parse(line).unwrap().unwrap();
         assert_eq!(
             log,
             NixInternalLog::Result {
@@ -110,12 +127,12 @@ mod test {
     #[test]
     fn test_parse_invalid_log() {
         let line = r#"@nix {"action":"invalid"}"#;
-        assert!(parse_log_line(line).unwrap().is_err());
+        assert!(NixInternalLog::parse(line).unwrap().is_err());
     }
 
     #[test]
     fn test_parse_non_nix_log() {
         let line = "This is not a Nix log line";
-        assert!(parse_log_line(line).is_none());
+        assert!(NixInternalLog::parse(line).is_none());
     }
 }
