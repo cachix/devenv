@@ -455,7 +455,7 @@ in
     ];
 
     tasks = {
-      "devenv:python:venv" = lib.mkIf cfg.venv.enable {
+      "devenv:python:virtualenv" = lib.mkIf cfg.venv.enable {
         description = "Initialize Python virtual environment";
         exec = initVenvScript;
         exports = [ "PATH" "VIRTUAL_ENV" ];
@@ -473,7 +473,7 @@ in
         exports = [ "PATH" "VIRTUAL_ENV" ];
       };
 
-      "devenv:enterShell".after = lib.optional cfg.venv.enable "devenv:python:venv"
+      "devenv:enterShell".after = lib.optional cfg.venv.enable "devenv:python:virtualenv"
         ++ lib.optional cfg.poetry.install.enable "devenv:python:poetry"
         ++ lib.optional cfg.uv.sync.enable "devenv:python:uv";
     };

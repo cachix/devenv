@@ -126,7 +126,9 @@ in
     };
     enterShell = ''
       ${devenv}/bin/tasks run devenv:enterShell
-      source "$DEVENV_DOTFILE/load-exports"
+      if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
+        source "$DEVENV_DOTFILE/load-exports"
+      fi
     '';
     enterTest = ''
       ${devenv}/bin/tasks run devenv:enterTest
