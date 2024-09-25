@@ -127,6 +127,17 @@ pub(crate) enum Commands {
         target: Option<PathBuf>,
     },
 
+    #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
+    Generate {
+        description: Option<String>,
+
+        #[clap(long, default_value = "https://generate.devenv.sh")]
+        host: String,
+
+        #[clap(long, action = clap::ArgAction::SetTrue)]
+        disable_telemetry: bool,
+    },
+
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]
     Shell {
         cmd: Option<String>,

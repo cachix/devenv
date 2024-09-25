@@ -127,6 +127,11 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Init { target } => devenv.init(&target),
+        Commands::Generate {
+            description,
+            host,
+            disable_telemetry,
+        } => devenv.generate(description, &host, disable_telemetry).await,
         Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
         Commands::Info {} => devenv.info(),

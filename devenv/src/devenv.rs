@@ -9,7 +9,7 @@ use nix::unistd::Pid;
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
     fs,
@@ -190,6 +190,71 @@ impl Devenv {
             .arg("allow")
             .current_dir(&target)
             .exec();
+        Ok(())
+    }
+
+    pub async fn generate(
+        &mut self,
+        description: Option<String>,
+        host: &str,
+        disable_telemetry: bool,
+    ) -> Result<()> {
+        // TODO: get nixpkgs revision and devenv revision
+        let nixpkgs_rev = "";
+        let devenv_rev = "";
+
+        self.logger
+            .info("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
+        let client = reqwest::Client::new();
+        let mut request = client
+            .post(host)
+            .query(&[("disable_telemetry", disable_telemetry)])
+            .query(&[("nixpkgs", nixpkgs_rev)])
+            .query(&[("devenv", devenv_rev)])
+            .header(reqwest::header::USER_AGENT, crate_version!());
+
+        if let Some(desc) = description {
+            request = request.query(&[("q", desc)]);
+        } else {
+            self.logger.info("Zipping source code for upload...");
+            let body = create_zip_from_directory()?;
+            request = request
+                .body(body)
+                .header(reqwest::header::CONTENT_TYPE, "application/zip");
+        }
+
+        let response = request
+            .send()
+            .await
+            .into_diagnostic()
+            .expect("Failed to send request to server");
+
+        if !response.status().is_success() {
+            bail!("Server failed to generate devenv.nix and devenv.yaml");
+        }
+
+        let response_json: GenerateResponse = response.json().await.expect("Failed to parse JSON.");
+
+        // write the files
+        confirm_overwrite("devenv.nix")?;
+        confirm_overwrite("devenv.yaml")?;
+        std::fs::write("devenv.nix", response_json.devenv_nix).expect("Failed to write devenv.nix");
+        std::fs::write("devenv.yaml", response_json.devenv_yaml)
+            .expect("Failed to write devenv.yaml");
+
+        if std::fs::metadata(".envrc").is_err() {
+            let path = PROJECT_DIR
+                .get_file(".envrc")
+                .unwrap_or_else(|| panic!("missing .envrc in the executable"));
+            std::fs::write(".envrc", path.contents()).expect("Failed to write .envrc");
+            self.logger.info("Created .envrc");
+        }
+        self.logger.info(
+                    &indoc::formatdoc!("
+                      Generated devenv.nix and devenv.yaml 🎉
+
+                      Treat these as templates and open an issue at https://github.com/cachix/devenv/issues if you think we can do better!
+                    "));
         Ok(())
     }
 
@@ -852,6 +917,68 @@ impl Devenv {
         let env = self.nix.dev_env(json, &gc_root).await?;
         Ok((env, gc_root))
     }
+}
+
+fn confirm_overwrite(file: &str) -> Result<()> {
+    if std::fs::metadata(file).is_ok() {
+        let confirm = dialoguer::Confirm::new()
+            .with_prompt(format!(
+                "{} already exists. Do you want to overwrite it?",
+                file
+            ))
+            .interact()
+            .expect("");
+
+        if !confirm {
+            bail!("You declined to overwrite devenv.nix");
+        }
+    }
+    Ok(())
+}
+
+fn create_zip_from_directory() -> Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buffer));
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    let git_ls_files = std::process::Command::new("git")
+        .args(&["ls-files"])
+        .output()
+        .expect("Failed to execute git ls-files");
+
+    if !git_ls_files.status.success() {
+        bail!("Failed to execute git ls-files");
+    }
+
+    let files = String::from_utf8(git_ls_files.stdout)
+        .expect("Failed to parse git ls-files output")
+        .lines()
+        .map(|s| s.to_owned())
+        .collect::<Vec<_>>();
+
+    for file in files {
+        let file_path = std::path::Path::new(&file);
+        if file_path.is_file() {
+            zip.start_file(&file, options).into_diagnostic()?;
+            let mut file = std::fs::File::open(file_path).into_diagnostic()?;
+            let mut contents = Vec::new();
+            file.read_to_end(&mut contents).into_diagnostic()?;
+            zip.write_all(&contents).into_diagnostic()?;
+        } else if file_path.is_dir() {
+            let dir_path = file_path.to_str().unwrap();
+            zip.add_directory(dir_path, options).into_diagnostic()?;
+        }
+    }
+
+    zip.finish().into_diagnostic()?;
+    Ok(buffer)
+}
+
+#[derive(Deserialize)]
+struct GenerateResponse {
+    devenv_nix: String,
+    devenv_yaml: String,
 }
 
 #[derive(Deserialize)]
