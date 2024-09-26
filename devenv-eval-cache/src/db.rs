@@ -133,7 +133,9 @@ where
     let file_path_query = r#"
         INSERT INTO file_path (path, content_hash)
         VALUES (?, ?)
-        ON CONFLICT (path) DO UPDATE SET content_hash = excluded.content_hash
+        ON CONFLICT (path) DO UPDATE
+        SET content_hash = excluded.content_hash,
+            updated_at = strftime('%s', 'now')
         RETURNING id
     "#;
 
