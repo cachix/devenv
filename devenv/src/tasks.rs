@@ -689,7 +689,7 @@ impl TasksUi {
     pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
         let names = console::style(self.tasks.root_names.join(", ")).bold();
         let term = Term::stderr();
-        console::Term::stderr().write_line(&format!("{:17} {}", "Running tasks", names))?;
+        term.write_line(&format!("{:17} {}\n", "Running tasks", names))?;
 
         // start processing tasks
         let started = std::time::Instant::now();
@@ -771,7 +771,7 @@ impl TasksUi {
             let elapsed_time = format!("{:.2?}", started.elapsed());
 
             let output = format!(
-                "{}\n{status_summary}{}{elapsed_time}\n",
+                "{}\n{status_summary}{}{elapsed_time}",
                 tasks_status.lines.join("\n"),
                 " ".repeat(
                     (19 + self.tasks.longest_task_name)
@@ -779,10 +779,14 @@ impl TasksUi {
                         .max(1)
                 )
             );
-            let output = console::Style::new().apply_to(output);
-            term.move_cursor_up(last_list_height as usize)?;
-            term.clear_to_end_of_screen()?;
-            term.write_str(&output.to_string())?;
+            if tasks_status.lines.len() > 0 {
+                let output = console::Style::new().apply_to(output);
+                if last_list_height > 0 {
+                    term.move_cursor_up(last_list_height as usize)?;
+                    term.clear_to_end_of_screen()?;
+                }
+                term.write_line(&output.to_string())?;
+            }
 
             if finished {
                 break;
