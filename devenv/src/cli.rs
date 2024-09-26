@@ -10,12 +10,12 @@ use std::path::PathBuf;
     dont_delimit_trailing_values = true,
     about = format!("https://devenv.sh {}: Fast, Declarative, Reproducible, and Composable Developer Environments", crate_version!())
 )]
-pub(crate) struct Cli {
+pub struct Cli {
     #[command(subcommand)]
-    pub(crate) command: Commands,
+    pub command: Commands,
 
     #[command(flatten)]
-    pub(crate) global_options: GlobalOptions,
+    pub global_options: GlobalOptions,
 }
 
 impl Cli {
@@ -158,7 +158,7 @@ impl GlobalOptions {
 }
 
 #[derive(Subcommand, Clone)]
-pub(crate) enum Commands {
+pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
     Init {
         target: Option<PathBuf>,
@@ -270,7 +270,7 @@ pub(crate) enum Commands {
 
 #[derive(Subcommand, Clone)]
 #[clap(about = "Start or stop processes. https://devenv.sh/processes/")]
-pub(crate) enum ProcessesCommand {
+pub enum ProcessesCommand {
     #[command(alias = "start", about = "Start processes in the foreground.")]
     Up {
         process: Option<String>,
@@ -286,7 +286,7 @@ pub(crate) enum ProcessesCommand {
 
 #[derive(Subcommand, Clone)]
 #[clap(about = "Run tasks. https://devenv.sh/tasks/")]
-pub(crate) enum TasksCommand {
+pub enum TasksCommand {
     #[command(about = "Run tasks.")]
     Run { tasks: Vec<String> },
 }
@@ -296,7 +296,7 @@ pub(crate) enum TasksCommand {
     about = "Build, copy, or run a container. https://devenv.sh/containers/",
     arg_required_else_help(true)
 )]
-pub(crate) enum ContainerCommand {
+pub enum ContainerCommand {
     #[command(about = "Build a container.")]
     Build { name: String },
 
@@ -309,7 +309,7 @@ pub(crate) enum ContainerCommand {
 
 #[derive(Subcommand, Clone)]
 #[clap(about = "Add an input to devenv.yaml. https://devenv.sh/inputs/")]
-pub(crate) enum InputsCommand {
+pub enum InputsCommand {
     #[command(about = "Add an input to devenv.yaml.")]
     Add {
         #[arg(help = "The name of the input.")]

@@ -1,5 +1,5 @@
-mod cli;
-pub mod cnix;
+pub mod cli;
+pub(crate) mod cnix;
 pub mod config;
 mod devenv;
 pub mod log;

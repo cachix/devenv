@@ -1,13 +1,8 @@
-mod cli;
-mod cnix;
-mod config;
-mod devenv;
-mod log;
-mod tasks;
-
-use clap::{crate_version, Parser};
-use cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand};
-use devenv::Devenv;
+use clap::crate_version;
+use devenv::{
+    cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
+    config, log, Devenv,
+};
 use miette::Result;
 
 #[tokio::main]

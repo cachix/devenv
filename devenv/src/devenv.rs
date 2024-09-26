@@ -34,28 +34,30 @@ pub struct DevenvOptions {
 }
 
 pub struct Devenv {
-    pub(crate) config: config::Config,
-    pub(crate) global_options: cli::GlobalOptions,
+    pub config: config::Config,
+    pub global_options: cli::GlobalOptions,
 
-    pub(crate) logger: log::Logger,
-    pub(crate) log_progress: log::LogProgressCreator,
+    logger: log::Logger,
+    log_progress: log::LogProgressCreator,
 
     nix: cnix::Nix<'static>,
 
     // All kinds of paths
     xdg_dirs: xdg::BaseDirectories,
-    pub(crate) devenv_root: PathBuf,
+    devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_tmp: String,
     devenv_runtime: PathBuf,
 
-    pub(crate) assembled: bool,
-    pub(crate) dirs_created: bool,
-    pub(crate) has_processes: Option<bool>,
+    assembled: bool,
+    dirs_created: bool,
+    has_processes: Option<bool>,
 
-    pub(crate) container_name: Option<String>,
+    // TODO: make private.
+    // Pass as an arg or have a setter.
+    pub container_name: Option<String>,
 }
 
 impl Devenv {
