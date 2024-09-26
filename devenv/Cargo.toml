@@ -20,7 +20,7 @@ include_dir.workspace = true
 indoc.workspace = true
 miette.workspace = true
 nix.workspace = true
-nix-cache = { path = "../nix-cache" }
+devenv-eval-cache.workspace = true
 petgraph = "0.6.5"
 regex.workspace = true
 reqwest.workspace = true

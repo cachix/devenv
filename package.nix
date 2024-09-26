@@ -11,13 +11,16 @@ pkgs.rustPlatform.buildRustPackage {
     ".*Cargo\.toml"
     ".*Cargo\.lock"
     ".*devenv(/.*)?"
-    ".*nix-cache(/.*)?"
-    ".*tasks(/.*)?"
+    ".*devenv-eval-cache(/.*)?"
     ".*devenv-run-tests(/.*)?"
     ".*xtask(/.*)?"
+    ".*tasks(/.*)?"
   ];
 
-  cargoBuildFlags = if build_tasks then [ "-p tasks" ] else [ "-p devenv -p devenv-run-tests" ];
+  cargoBuildFlags =
+    if build_tasks
+    then [ "-p tasks" ]
+    else [ "-p devenv -p devenv-run-tests" ];
 
   doCheck = !build_tasks;
 
@@ -39,10 +42,10 @@ pkgs.rustPlatform.buildRustPackage {
   # Force sqlx to use the prepared queries
   SQLX_OFFLINE = true;
   # A local database to use for preparing queries
-  DATABASE_URL = "sqlite:nix-command-cache.db";
+  DATABASE_URL = "sqlite:nix-eval-cache.db";
 
   preBuild = ''
-    cargo sqlx database setup --source nix-cache/migrations
+    cargo sqlx database setup --source devenv-eval-cache/migrations
     cargo sqlx prepare --workspace
   '';
 

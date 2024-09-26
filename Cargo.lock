@@ -538,6 +538,7 @@ dependencies = [
  "clap",
  "cli-table",
  "console",
+ "devenv-eval-cache",
  "dotlock",
  "fs2",
  "hex",
@@ -545,7 +546,6 @@ dependencies = [
  "indoc",
  "miette",
  "nix",
- "nix-cache",
  "petgraph",
  "pretty_assertions",
  "regex",
@@ -566,6 +566,23 @@ dependencies = [
  "which",
  "whoami",
  "xdg",
+]
+
+[[package]]
+name = "devenv-eval-cache"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "futures",
+ "lazy_static",
+ "miette",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "sqlx",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -1366,23 +1383,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
-]
-
-[[package]]
-name = "nix-cache"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "futures",
- "lazy_static",
- "miette",
- "regex",
- "serde",
- "serde_json",
- "serde_repr",
- "sqlx",
- "thiserror",
- "tokio",
 ]
 
 [[package]]

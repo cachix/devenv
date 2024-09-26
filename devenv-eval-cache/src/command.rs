@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::{
     db, hash,
-    nix_internal_log::{InternalLog, Verbosity},
+    internal_log::{InternalLog, Verbosity},
     op::Op,
 };
 

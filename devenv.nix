@@ -4,7 +4,7 @@
   env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
   env.RUST_LOG = "devenv=debug";
   env.RUST_LOG_SPAN_EVENTS = "full";
-  env.DATABASE_URL = "sqlite:.devenv/nix-command-cache.db";
+  env.DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
 
   packages = [
     pkgs.cairo

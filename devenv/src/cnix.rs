@@ -70,10 +70,10 @@ impl<'a> Nix<'a> {
         };
 
         let database_url = format!(
-            "sqlite:{}/nix-command-cache.db",
+            "sqlite:{}/nix-eval-cache.db",
             devenv_dotfile.to_string_lossy()
         );
-        let pool = nix_cache::db::setup_db(database_url)
+        let pool = devenv_eval_cache::db::setup_db(database_url)
             .await
             .into_diagnostic()?;
 
@@ -282,8 +282,8 @@ impl<'a> Nix<'a> {
         mut cmd: std::process::Command,
         options: &Options<'a>,
     ) -> Result<process::Output> {
-        use nix_cache::command::CachedCommand;
-        use nix_cache::nix_internal_log::{InternalLog, ResultType, Verbosity};
+        use devenv_eval_cache::internal_log::{InternalLog, ResultType, Verbosity};
+        use devenv_eval_cache::CachedCommand;
 
         let mut logger = self.logger.clone();
 

@@ -1,15 +1,14 @@
 [package]
-name = "nix-cache"
+name = "devenv-eval-cache"
+# TODO: switch to workspace version
 version = "0.1.0"
-edition = "2021"
-
-[[bin]]
-name = "nix-log-parser"
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-blake3 = "1.5.4"
+blake3.workspace = true
 futures.workspace = true
-lazy_static = "1.5.0"
+lazy_static.workspace = true
 miette.workspace = true
 regex.workspace = true
 serde.workspace = true

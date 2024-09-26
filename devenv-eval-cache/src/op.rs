@@ -1,4 +1,4 @@
-use crate::nix_internal_log::InternalLog;
+use crate::internal_log::InternalLog;
 
 use regex::Regex;
 use std::path::PathBuf;
