@@ -283,7 +283,7 @@ impl<'a> Nix<'a> {
         options: &Options<'a>,
     ) -> Result<process::Output> {
         use nix_cache::command::CachedCommand;
-        use nix_cache::nix_internal_log::{NixInternalLog, NixVerbosity};
+        use nix_cache::nix_internal_log::{InternalLog, ResultType, Verbosity};
 
         let mut logger = self.logger.clone();
 
@@ -318,12 +318,29 @@ impl<'a> Nix<'a> {
         let result = if cmd.get_program().to_string_lossy().ends_with("nix") {
             let mut cached_cmd = CachedCommand::new(&self.pool);
             if options.logging {
-                cached_cmd.on_stderr(|log| {
-                    if let NixInternalLog::Msg { msg, level, .. } = log {
-                        if *level <= NixVerbosity::Warn {
-                            eprintln!("{msg}");
+                cached_cmd.on_stderr(|log| match log {
+                    InternalLog::Msg { msg, level, .. } => {
+                        if (*level == Verbosity::Error && msg.starts_with("\\u001b[31;1merror:"))
+                            || (*level > Verbosity::Error && *level <= Verbosity::Info)
+                        {
+                            eprintln!("{}", msg);
                         }
                     }
+                    InternalLog::Start {
+                        typ, level, text, ..
+                    } if *level <= Verbosity::Info => {
+                        eprintln!("{:?}, {}", typ, text);
+                    }
+                    InternalLog::Result {
+                        typ: ResultType::BuildLogLine,
+                        fields,
+                        ..
+                    } => {
+                        for field in fields.iter() {
+                            eprintln!("{}", field);
+                        }
+                    }
+                    _ => {}
                 });
             }
             cached_cmd

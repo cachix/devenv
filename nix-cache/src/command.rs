@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::{
     db, hash,
-    nix_internal_log::{NixInternalLog, NixVerbosity},
+    nix_internal_log::{InternalLog, Verbosity},
     op::Op,
 };
 
@@ -27,7 +27,7 @@ pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
     force: bool,
     extra_paths: Vec<PathBuf>,
-    on_stderr: Option<Box<dyn Fn(&NixInternalLog) + Send>>,
+    on_stderr: Option<Box<dyn Fn(&InternalLog) + Send>>,
 }
 
 impl<'a> CachedCommand<'a> {
@@ -54,7 +54,7 @@ impl<'a> CachedCommand<'a> {
 
     pub fn on_stderr<F>(&mut self, f: F) -> &mut Self
     where
-        F: Fn(&NixInternalLog) + Send + 'static,
+        F: Fn(&InternalLog) + Send + 'static,
     {
         self.on_stderr = Some(Box::new(f));
         self
@@ -99,7 +99,7 @@ impl<'a> CachedCommand<'a> {
             reader
                 .lines()
                 .map_while(Result::ok)
-                .filter_map(|line| NixInternalLog::parse(line).and_then(|log| log.ok()))
+                .filter_map(|line| InternalLog::parse(line).and_then(|log| log.ok()))
                 .inspect(|log| {
                     if let Some(ref f) = &on_stderr {
                         f(&log);
@@ -119,12 +119,12 @@ impl<'a> CachedCommand<'a> {
         let output = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
         let mut files = stderr_thread.await.unwrap();
 
-        eprintln!("files: {:?}", files);
-
         // Watch additional paths
         files.extend(self.extra_paths.iter().cloned());
 
-        let path_hashes = join_all(files.into_iter().map(|path| {
+        eprintln!("files: {:?}", files);
+
+        let path_hashes = join_all(files.into_iter().filter(|path| path.is_file()).map(|path| {
             tokio::spawn(async move {
                 let hash = hash::compute_file_hash(&path)
                     .await
@@ -223,9 +223,9 @@ async fn query_cached_output(
     }
 }
 
-fn extract_op_from_log_line(log: NixInternalLog) -> Option<PathBuf> {
+fn extract_op_from_log_line(log: InternalLog) -> Option<PathBuf> {
     match log {
-        NixInternalLog::Msg { .. } => Op::from_internal_log(&log).and_then(|op| match op {
+        InternalLog::Msg { .. } => Op::from_internal_log(&log).and_then(|op| match op {
             Op::EvaluatedFile { source }
             | Op::ReadFile { source }
             | Op::CopiedSource { source, .. }

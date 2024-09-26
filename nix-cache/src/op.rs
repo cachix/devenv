@@ -1,4 +1,4 @@
-use crate::nix_internal_log::NixInternalLog;
+use crate::nix_internal_log::InternalLog;
 
 use regex::Regex;
 use std::path::PathBuf;
@@ -17,8 +17,8 @@ pub enum Op {
 }
 
 impl Op {
-    /// Extract an `Op` from a `NixInternalLog`.
-    pub fn from_internal_log(log: &NixInternalLog) -> Option<Self> {
+    /// Extract an `Op` from a `InternalLog`.
+    pub fn from_internal_log(log: &InternalLog) -> Option<Self> {
         lazy_static::lazy_static! {
             static ref EVALUATED_FILE: Regex =
                Regex::new("^evaluating file '(?P<source>.*)'$").expect("invalid regex");
@@ -31,7 +31,7 @@ impl Op {
         }
 
         match log {
-            NixInternalLog::Msg { msg, .. } => {
+            InternalLog::Msg { msg, .. } => {
                 if let Some(matches) = COPIED_SOURCE.captures(msg) {
                     let source = PathBuf::from(&matches["source"]);
                     let target = PathBuf::from(&matches["target"]);
@@ -61,13 +61,13 @@ impl Op {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nix_internal_log::NixVerbosity;
+    use crate::nix_internal_log::Verbosity;
 
-    fn create_log(msg: &str) -> NixInternalLog {
-        NixInternalLog::Msg {
+    fn create_log(msg: &str) -> InternalLog {
+        InternalLog::Msg {
             msg: msg.to_string(),
             raw_msg: None,
-            level: NixVerbosity::Warn,
+            level: Verbosity::Warn,
         }
     }
 
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_non_msg_log() {
-        let log = NixInternalLog::Stop { id: 1 };
+        let log = InternalLog::Stop { id: 1 };
         let op = Op::from_internal_log(&log);
         assert_eq!(op, None);
     }
