@@ -313,9 +313,11 @@ impl<'a> Nix<'a> {
             }
         }
 
-        // TODO: add devenv.yaml to the list of cached files
         let result = if cmd.get_program().to_string_lossy().ends_with("nix") {
             let mut cached_cmd = CachedCommand::new(&self.pool);
+
+            cached_cmd.watch_path("devenv.yaml");
+
             if options.logging {
                 cached_cmd.on_stderr(|log| match log {
                     InternalLog::Msg { msg, level, .. } => {
