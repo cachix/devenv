@@ -78,7 +78,6 @@ impl<'a> CachedCommand<'a> {
         cmd.arg("-vv")
             .arg("--log-format")
             .arg("internal-json")
-            .arg("--json")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
