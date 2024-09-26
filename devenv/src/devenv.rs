@@ -496,6 +496,7 @@ impl Devenv {
     }
 
     pub async fn tasks_run(&mut self, roots: Vec<String>) -> Result<()> {
+        self.assemble(false)?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
