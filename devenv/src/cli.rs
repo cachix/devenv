@@ -72,7 +72,7 @@ pub struct GlobalOptions {
     #[arg(
         long,
         global = true,
-        help = "Force refresh of the Nix evaluation cache."
+        help = "Force a refresh of the Nix evaluation cache."
     )]
     pub refresh_eval_cache: bool,
 
