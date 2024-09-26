@@ -1,4 +1,4 @@
-use clap::{crate_version, ArgAction, Parser, Subcommand};
+use clap::{crate_version, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -18,7 +18,16 @@ pub(crate) struct Cli {
     pub(crate) global_options: GlobalOptions,
 }
 
-#[derive(Parser, Clone)]
+impl Cli {
+    /// Parse the CLI arguments with clap and resolve any conflicting options.
+    pub fn parse_and_resolve_options() -> Self {
+        let mut cli = Self::parse();
+        cli.global_options.resolve_overrides();
+        cli
+    }
+}
+
+#[derive(Clone, Debug, Parser)]
 pub struct GlobalOptions {
     #[arg(short, long, global = true, help = "Enable debug log level.")]
     pub verbose: bool,
@@ -60,14 +69,13 @@ pub struct GlobalOptions {
     #[arg(
         long_help = "Cache the results of Nix evaluation. Use --no-eval-cache to disable caching."
     )]
-    #[arg(default_value_t = true, action = ArgAction::Set)]
-    #[arg(value_name = "BOOL")]
+    #[arg(default_value_t = true, overrides_with = "no_eval_cache")]
     pub eval_cache: bool,
 
     /// Disable the evaluation cache. Sets `eval_cache` to false.
     #[arg(long, global = true, hide = true)]
-    #[arg(action = ArgAction::SetTrue, overrides_with = "eval_cache")]
-    _no_eval_cache: (),
+    #[arg(overrides_with = "eval_cache")]
+    no_eval_cache: bool,
 
     #[arg(
         long,
@@ -128,13 +136,23 @@ impl Default for GlobalOptions {
             system: default_system(),
             impure: false,
             eval_cache: true,
-            _no_eval_cache: (),
+            no_eval_cache: false,
             refresh_eval_cache: false,
             offline: false,
             clean: None,
             nix_debugger: false,
             nix_option: vec![],
             override_input: vec![],
+        }
+    }
+}
+
+impl GlobalOptions {
+    /// Resolve conflicting options.
+    // TODO: https://github.com/clap-rs/clap/issues/815
+    pub fn resolve_overrides(&mut self) {
+        if self.no_eval_cache {
+            self.eval_cache = false;
         }
     }
 }

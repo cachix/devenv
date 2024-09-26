@@ -12,7 +12,7 @@ use miette::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_and_resolve_options();
 
     if let Commands::Version { .. } = cli.command {
         println!(
