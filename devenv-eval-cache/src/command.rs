@@ -144,6 +144,11 @@ impl<'a> CachedCommand<'a> {
     }
 }
 
+/// Check whether the command supports the flags required for caching.
+pub fn supports_eval_caching(cmd: &Command) -> bool {
+    cmd.get_program().to_string_lossy().ends_with("nix")
+}
+
 /// Represents the state of a file in the cache system.
 #[derive(Debug)]
 #[allow(dead_code)]

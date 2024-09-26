@@ -29,6 +29,7 @@ pub struct Nix<'a> {
 #[derive(Clone)]
 pub struct Options<'a> {
     pub replace_shell: bool,
+    pub cache_output: bool,
     pub logging: bool,
     pub logging_stdout: bool,
     pub nix_flags: &'a [&'a str],
@@ -54,6 +55,8 @@ impl<'a> Nix<'a> {
         let cachix_caches = RefCell::new(None);
         let options = Options {
             replace_shell: false,
+            // Individual commands opt into caching
+            cache_output: false,
             logging: true,
             logging_stdout: false,
             nix_flags: &[
@@ -94,6 +97,9 @@ impl<'a> Nix<'a> {
     pub async fn develop(&self, args: &[&str], replace_shell: bool) -> Result<process::Output> {
         let options = Options {
             logging_stdout: true,
+            // Cannot cache this because we don't get the derivation back.
+            // We'd need to switch to print-dev-env and our own `nix develop`.
+            cache_output: false,
             replace_shell,
             ..self.options
         };
@@ -107,7 +113,10 @@ impl<'a> Nix<'a> {
             args.push("--json");
         }
 
-        let options = Options { ..self.options };
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
         let env = self
             .run_nix_with_substituters("nix", &args, &options)
             .await?;
@@ -159,6 +168,10 @@ impl<'a> Nix<'a> {
             return Ok(Vec::new());
         }
 
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
         // TODO: use eval underneath
         let mut args: Vec<String> = vec![
             "build".to_string(),
@@ -168,7 +181,7 @@ impl<'a> Nix<'a> {
         args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
         let output = self
-            .run_nix_with_substituters("nix", &args_str, &self.options)
+            .run_nix_with_substituters("nix", &args_str, &options)
             .await?;
         Ok(String::from_utf8_lossy(&output.stdout)
             .to_string()
@@ -178,13 +191,17 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn eval(&self, attributes: &[&str]) -> Result<String> {
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
         let mut args: Vec<String> = vec!["eval", "--json"]
             .into_iter()
             .map(String::from)
             .collect();
         args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args = &args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-        let result = self.run_nix("nix", args, &self.options).await?;
+        let result = self.run_nix("nix", args, &options).await?;
         String::from_utf8(result.stdout)
             .map_err(|err| miette::miette!("Failed to parse command output as UTF-8: {}", err))
     }
@@ -208,9 +225,14 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn metadata(&self) -> Result<String> {
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
+
         // TODO: use --json
         let metadata = self
-            .run_nix("nix", &["flake", "metadata"], &self.options)
+            .run_nix("nix", &["flake", "metadata"], &options)
             .await?;
 
         let re = regex::Regex::new(r"(Inputs:.+)$").unwrap();
@@ -221,7 +243,7 @@ impl<'a> Nix<'a> {
         };
 
         let info_ = self
-            .run_nix("nix", &["eval", "--raw", ".#info"], &self.options)
+            .run_nix("nix", &["eval", "--raw", ".#info"], &options)
             .await?;
         Ok(format!(
             "{}\n{}",
@@ -283,7 +305,7 @@ impl<'a> Nix<'a> {
         options: &Options<'a>,
     ) -> Result<process::Output> {
         use devenv_eval_cache::internal_log::{InternalLog, ResultType, Verbosity};
-        use devenv_eval_cache::CachedCommand;
+        use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
         let mut logger = self.logger.clone();
 
@@ -314,7 +336,8 @@ impl<'a> Nix<'a> {
         }
 
         let result = if self.global_options.eval_cache
-            && cmd.get_program().to_string_lossy().ends_with("nix")
+            && options.cache_output
+            && supports_eval_caching(&cmd)
         {
             let mut cached_cmd = CachedCommand::new(&self.pool);
 
