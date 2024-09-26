@@ -8,5 +8,5 @@ license.workspace = true
 clap.workspace = true
 clap_complete = "4.5.7"
 clap_mangen = "0.2.22"
-devenv = { path = "../devenv" }
+devenv.workspace = true
 miette.workspace = true
