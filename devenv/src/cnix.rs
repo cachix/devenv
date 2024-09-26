@@ -155,26 +155,26 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn build(&self, attributes: &[&str]) -> Result<Vec<PathBuf>> {
-        if !attributes.is_empty() {
-            // TODO: use eval underneath
-            let mut args: Vec<String> = vec![
-                "build".to_string(),
-                "--no-link".to_string(),
-                "--print-out-paths".to_string(),
-            ];
-            args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
-            let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
-            let output = self
-                .run_nix_with_substituters("nix", &args_str, &self.options)
-                .await?;
-            Ok(String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| PathBuf::from(s.to_string()))
-                .collect())
-        } else {
-            Ok(Vec::new())
+        if attributes.is_empty() {
+            return Ok(Vec::new());
         }
+
+        // TODO: use eval underneath
+        let mut args: Vec<String> = vec![
+            "build".to_string(),
+            "--no-link".to_string(),
+            "--print-out-paths".to_string(),
+        ];
+        args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
+        let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
+        let output = self
+            .run_nix_with_substituters("nix", &args_str, &self.options)
+            .await?;
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .to_string()
+            .split_whitespace()
+            .map(|s| PathBuf::from(s.to_string()))
+            .collect())
     }
 
     pub async fn eval(&self, attributes: &[&str]) -> Result<String> {
