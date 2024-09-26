@@ -481,10 +481,10 @@ impl<'a> Nix<'a> {
         let max_jobs = self.global_options.max_jobs.to_string();
         flags.push(&max_jobs);
 
+        // Disable the flake eval cache.
         flags.push("--option");
         flags.push("eval-cache");
-        let eval_cache = self.global_options.eval_cache.to_string();
-        flags.push(&eval_cache);
+        flags.push("false");
 
         // handle --nix-option key value
         for chunk in self.global_options.nix_option.chunks_exact(2) {
