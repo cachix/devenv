@@ -304,7 +304,6 @@ impl<'a> Nix<'a> {
             ));
             bail!("Failed to replace shell")
         }
-        let start = SystemTime::now();
 
         if options.logging {
             cmd.stdin(process::Stdio::inherit())
@@ -353,15 +352,6 @@ impl<'a> Nix<'a> {
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?
         };
-
-        // TODO: remove
-        let duration = SystemTime::now().duration_since(start).unwrap();
-        logger.info(&format!(
-            "Command `{}` took {}.{:03} seconds",
-            display_command(&cmd),
-            duration.as_secs(),
-            duration.subsec_millis()
-        ));
 
         if !result.status.success() {
             let code = match result.status.code() {

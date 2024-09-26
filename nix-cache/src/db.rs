@@ -165,13 +165,13 @@ where
 }
 
 #[derive(Debug)]
-pub struct FileRow {
+pub struct FilePathRow {
     pub path: PathBuf,
     pub content_hash: String,
     pub updated_at: SystemTime,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for FileRow {
+impl sqlx::FromRow<'_, SqliteRow> for FilePathRow {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let path: &[u8] = row.get("path");
         let content_hash: String = row.get("content_hash");
@@ -186,7 +186,7 @@ impl sqlx::FromRow<'_, SqliteRow> for FileRow {
 pub async fn get_files_by_command_id(
     pool: &SqlitePool,
     command_id: i64,
-) -> Result<Vec<FileRow>, sqlx::Error> {
+) -> Result<Vec<FilePathRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
             SELECT fp.path, fp.content_hash, fp.updated_at
@@ -204,7 +204,7 @@ pub async fn get_files_by_command_id(
 pub async fn get_files_by_command_hash(
     pool: &SqlitePool,
     command_hash: &str,
-) -> Result<Vec<FileRow>, sqlx::Error> {
+) -> Result<Vec<FilePathRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
             SELECT fp.path, fp.content_hash, fp.updated_at

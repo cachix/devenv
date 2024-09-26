@@ -122,8 +122,6 @@ impl<'a> CachedCommand<'a> {
         // Watch additional paths
         files.extend(self.extra_paths.iter().cloned());
 
-        eprintln!("files: {:?}", files);
-
         let path_hashes = join_all(files.into_iter().filter(|path| path.is_file()).map(|path| {
             tokio::spawn(async move {
                 let hash = hash::compute_file_hash(&path)
@@ -142,15 +140,6 @@ impl<'a> CachedCommand<'a> {
             db::insert_command_with_files(self.pool, &raw_cmd, &cmd_hash, &output, &path_hashes)
                 .await
                 .map_err(CommandError::Sqlx)?;
-
-        eprintln!(
-            r#"
-        id: {id}
-        command: {raw_cmd}
-        hash: {cmd_hash}
-        files: {path_hashes:?}
-        "#
-        );
 
         Ok(process::Output {
             status,
@@ -180,6 +169,10 @@ enum FileState {
     Removed { path: PathBuf },
 }
 
+/// Try to fetch the cached output for a hashed command.
+///
+/// Returns the cached output if the command has been cached and none of the file dependencies have
+/// been updated.
 async fn query_cached_output(
     pool: &SqlitePool,
     cmd_hash: &str,
@@ -209,13 +202,11 @@ async fn query_cached_output(
             })
             .collect::<Vec<_>>();
 
-        eprintln!("updated_files: {:?}", updated_files);
-
         if updated_files.is_empty() {
-            eprintln!("No files have been modified, returning cached output");
+            // No files have been modified, returning cached output
             Ok(Some(output))
         } else {
-            eprintln!("Command not cached, inserting new command and files");
+            // Command not cached
             Ok(None)
         }
     } else {
@@ -246,7 +237,7 @@ fn system_time_to_unix_timestamp(time: SystemTime) -> std::io::Result<u64> {
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
-async fn check_file_state(file: db::FileRow) -> std::io::Result<FileState> {
+async fn check_file_state(file: db::FilePathRow) -> std::io::Result<FileState> {
     let metadata = match fs::metadata(&file.path).await {
         Ok(metadata) => metadata,
         Err(_) => return Ok(FileState::Removed { path: file.path }),
@@ -272,7 +263,6 @@ async fn check_file_state(file: db::FileRow) -> std::io::Result<FileState> {
             modified_at: metadata_modified,
         })
     } else {
-        eprintln!("File modified but hash unchanged: {:?}", file.path);
         // File modified but hash unchanged
         Ok(FileState::MetadataModified {
             path: file.path,
