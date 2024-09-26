@@ -313,10 +313,16 @@ impl<'a> Nix<'a> {
             }
         }
 
-        let result = if cmd.get_program().to_string_lossy().ends_with("nix") {
+        let result = if self.global_options.eval_cache
+            && cmd.get_program().to_string_lossy().ends_with("nix")
+        {
             let mut cached_cmd = CachedCommand::new(&self.pool);
 
             cached_cmd.watch_path("devenv.yaml");
+
+            if self.global_options.refresh_eval_cache {
+                cached_cmd.refresh();
+            }
 
             if options.logging {
                 cached_cmd.on_stderr(|log| match log {

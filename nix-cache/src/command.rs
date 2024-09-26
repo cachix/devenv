@@ -25,7 +25,7 @@ pub enum CommandError {
 
 pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
-    force: bool,
+    refresh: bool,
     extra_paths: Vec<PathBuf>,
     on_stderr: Option<Box<dyn Fn(&InternalLog) + Send>>,
 }
@@ -34,7 +34,7 @@ impl<'a> CachedCommand<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
             pool,
-            force: false,
+            refresh: false,
             extra_paths: Vec::new(),
             on_stderr: None,
         }
@@ -47,8 +47,8 @@ impl<'a> CachedCommand<'a> {
     }
 
     /// Force re-evaluation of the command.
-    pub fn force(&mut self, force: bool) -> &mut Self {
-        self.force = force;
+    pub fn refresh(&mut self) -> &mut Self {
+        self.refresh = true;
         self
     }
 
@@ -69,7 +69,7 @@ impl<'a> CachedCommand<'a> {
         let cmd_hash = hash::digest(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
-        if !self.force {
+        if !self.refresh {
             if let Ok(Some(output)) = query_cached_output(self.pool, &cmd_hash).await {
                 return Ok(process::Output {
                     status: process::ExitStatus::default(),

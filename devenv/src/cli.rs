@@ -1,4 +1,4 @@
-use clap::{crate_version, Parser, Subcommand};
+use clap::{crate_version, ArgAction, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -40,7 +40,7 @@ pub struct GlobalOptions {
     #[arg(
         short = 'u',
         long,
-        help = "Maximum number CPU cores being used by a single build..",
+        help = "Maximum number CPU cores being used by a single build.",
         default_value = "2"
     )]
     pub cores: u8,
@@ -56,8 +56,25 @@ pub struct GlobalOptions {
     )]
     pub impure: bool,
 
-    #[arg(long, global = true, help = "Use flake cache for evaluation results.")]
+    #[arg(long, global = true, help = "Cache the results of Nix evaluation.")]
+    #[arg(
+        long_help = "Cache the results of Nix evaluation. Use --no-eval-cache to disable caching."
+    )]
+    #[arg(default_value_t = true, action = ArgAction::Set)]
+    #[arg(value_name = "BOOL")]
     pub eval_cache: bool,
+
+    /// Disable the evaluation cache. Sets `eval_cache` to false.
+    #[arg(long, global = true, hide = true)]
+    #[arg(action = ArgAction::SetTrue, overrides_with = "eval_cache")]
+    _no_eval_cache: (),
+
+    #[arg(
+        long,
+        global = true,
+        help = "Force refresh of the Nix evaluation cache."
+    )]
+    pub refresh_eval_cache: bool,
 
     #[arg(
         long,
@@ -110,7 +127,9 @@ impl Default for GlobalOptions {
             cores: 2,
             system: default_system(),
             impure: false,
-            eval_cache: false,
+            eval_cache: true,
+            _no_eval_cache: (),
+            refresh_eval_cache: false,
             offline: false,
             clean: None,
             nix_debugger: false,
