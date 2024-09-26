@@ -1,4 +1,3 @@
-use miette::{IntoDiagnostic, Result};
 use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};

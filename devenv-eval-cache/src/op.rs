@@ -61,7 +61,7 @@ impl Op {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nix_internal_log::Verbosity;
+    use crate::internal_log::Verbosity;
 
     fn create_log(msg: &str) -> InternalLog {
         InternalLog::Msg {

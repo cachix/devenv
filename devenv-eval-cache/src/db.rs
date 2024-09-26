@@ -351,6 +351,7 @@ mod tests {
         assert_eq!(file_ids2.len(), 2);
         assert!(file_ids1.contains(&file_ids2[0])); // file2 is shared between commands
     }
+
     #[sqlx::test]
     async fn test_insert_command_with_modified_files(pool: SqlitePool) {
         // First command
@@ -368,7 +369,7 @@ mod tests {
             ),
         ];
 
-        let (command_id1, file_ids1) =
+        let (_command_id1, file_ids1) =
             insert_command_with_files(&pool, raw_cmd, cmd_hash, output, &paths1)
                 .await
                 .unwrap();

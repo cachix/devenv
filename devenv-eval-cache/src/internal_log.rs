@@ -2,6 +2,8 @@ use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 use std::fmt::{self, Display, Formatter};
 
+/// Represents Nix's JSON structured log format (--log-format=internal-json).
+///
 /// See https://github.com/NixOS/nix/blob/a1cc362d9d249b95e4c9ad403f1e6e26ca302413/src/libutil/logging.cc#L173
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "action")]

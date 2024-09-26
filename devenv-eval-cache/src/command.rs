@@ -9,11 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tokio::fs;
 
-use crate::{
-    db, hash,
-    internal_log::{InternalLog, Verbosity},
-    op::Op,
-};
+use crate::{db, hash, internal_log::InternalLog, op::Op};
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum CommandError {
@@ -136,7 +132,7 @@ impl<'a> CachedCommand<'a> {
         .flatten()
         .collect::<Result<Vec<(Cow<'_, Path>, String)>, CommandError>>()?;
 
-        let (id, _) =
+        let _ =
             db::insert_command_with_files(self.pool, &raw_cmd, &cmd_hash, &output, &path_hashes)
                 .await
                 .map_err(CommandError::Sqlx)?;
@@ -151,6 +147,7 @@ impl<'a> CachedCommand<'a> {
 
 /// Represents the state of a file in the cache system.
 #[derive(Debug)]
+#[allow(dead_code)]
 enum FileState {
     /// The file has not been modified since it was last cached.
     Unchanged { path: PathBuf },
