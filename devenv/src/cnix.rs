@@ -325,24 +325,37 @@ impl<'a> Nix<'a> {
             }
 
             if options.logging {
-                cached_cmd.on_stderr(|log| match log {
-                    InternalLog::Msg { msg, level, .. } => {
-                        if (*level == Verbosity::Error && msg.starts_with("\\u001b[31;1merror:"))
-                            || (*level > Verbosity::Error && *level <= Verbosity::Info)
-                        {
-                            eprintln!("{}", msg);
-                        }
+                let target_log_level = if self.global_options.verbose {
+                    Verbosity::Talkative
+                } else if self.global_options.quiet {
+                    Verbosity::Error
+                } else {
+                    Verbosity::Info
+                };
+
+                cached_cmd.on_stderr(move |log| match log {
+                    // A lot of build messages are tagged as level 0 (Error), making it difficult
+                    // to filter things out. Our hunch is that these messages are coming from the
+                    // nix daemon.
+                    InternalLog::Msg { msg, level, .. }
+                        if *level == Verbosity::Error && msg.starts_with("\\u001b[31;1merror:") =>
+                    {
+                        eprintln!("{}", msg);
                     }
-                    InternalLog::Start {
-                        typ, level, text, ..
-                    } if *level <= Verbosity::Info => {
-                        eprintln!("{:?}, {}", typ, text);
+                    InternalLog::Msg { msg, level, .. }
+                        if *level > Verbosity::Error && *level <= target_log_level =>
+                    {
+                        eprintln!("{}", msg);
+                    }
+
+                    InternalLog::Start { level, text, .. } if *level <= target_log_level => {
+                        eprintln!("{}", text);
                     }
                     InternalLog::Result {
                         typ: ResultType::BuildLogLine,
                         fields,
                         ..
-                    } => {
+                    } if target_log_level >= Verbosity::Info => {
                         for field in fields.iter() {
                             eprintln!("{}", field);
                         }
