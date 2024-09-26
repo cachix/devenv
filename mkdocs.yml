@@ -46,11 +46,11 @@ exclude_docs: |
   /individual-docs/**/*.md
 
 plugins:
-  blog: {}
   search: {}
   markdownextradata: {}
   include-markdown: {}
   awesome-pages: {}
+  blog: {}
   social:
     cards_layout_options:
       background_color: "#FBFBFB"
