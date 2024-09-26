@@ -178,7 +178,11 @@ impl TaskState {
                     for (env_key, env_value) in env_obj {
                         if let Some(env_str) = env_value.as_str() {
                             command.env(env_key, env_str);
-                            devenv_env.push_str(&format!("export {}={}\n", env_key, env_str));
+                            devenv_env.push_str(&format!(
+                                "export {}={}\n",
+                                env_key,
+                                shell_escape(env_str)
+                            ));
                         }
                     }
                 }
@@ -836,6 +840,21 @@ impl TasksUi {
     }
 }
 
+/// Escape a shell variable by wrapping it in single quotes.
+/// Any single quotes within the variable are escaped.
+fn shell_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len() + 2);
+    escaped.push('\'');
+    for c in s.chars() {
+        match c {
+            '\'' => escaped.push_str("'\\''"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped.push('\'');
+    escaped
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -845,6 +864,13 @@ mod test {
     use std::fs;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn test_shell_escape() {
+        let escaped = shell_escape("foo'bar");
+        eprintln!("{escaped}");
+        assert_eq!(escaped, "'foo'\\''bar'");
+    }
 
     #[tokio::test]
     async fn test_task_name() -> Result<(), Error> {
