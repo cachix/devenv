@@ -1,0 +1,8 @@
+mkdocs
+mkdocs-material
+mkdocs-material[imaging]
+# https://github.com/Guts/mkdocs-rss-plugin/issues/257#issuecomment-2170940396
+mkdocs-rss-plugin>=1.13.1
+mkdocs-include-markdown-plugin
+mkdocs-markdownextradata-plugin
+mkdocs-awesome-pages-plugin
