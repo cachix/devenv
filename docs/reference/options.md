@@ -939,6 +939,11 @@ What caches to pull from.
 *Type:*
 list of string
 
+
+
+*Default:*
+` [ ] `
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
 
@@ -7266,6 +7271,10 @@ One CLI to format the code tree.
 **` trim-trailing-whitespace `**
 
 Trim trailing whitespace.
+
+**` trufflehog `**
+
+Secrets scanner
 
 **` typos `**
 
