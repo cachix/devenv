@@ -52,7 +52,6 @@ pub struct Devenv {
     devenv_runtime: PathBuf,
 
     assembled: bool,
-    dirs_created: bool,
     has_processes: Option<bool>,
 
     // TODO: make private.
@@ -104,6 +103,13 @@ impl Devenv {
             log::LogProgressCreator::Logging
         };
 
+        xdg_dirs
+            .create_data_directory(Path::new("devenv"))
+            .expect("Failed to create DEVENV_HOME directory");
+        std::fs::create_dir_all(&devenv_home_gc)
+            .expect("Failed to create DEVENV_HOME_GC directory");
+        std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
+
         let nix = cnix::Nix::new(
             logger.clone(),
             options.config.clone(),
@@ -131,7 +137,6 @@ impl Devenv {
             devenv_runtime,
             nix,
             assembled: false,
-            dirs_created: false,
             has_processes: None,
             container_name: None,
         }
@@ -746,23 +751,6 @@ impl Devenv {
         }
 
         std::fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
-        Ok(())
-    }
-
-    pub fn create_directories(&mut self) -> Result<()> {
-        if !self.dirs_created {
-            self.xdg_dirs
-                .create_data_directory(Path::new("devenv"))
-                .into_diagnostic()
-                .wrap_err("Failed to create DEVENV_HOME directory")?;
-            std::fs::create_dir_all(&self.devenv_home_gc)
-                .into_diagnostic()
-                .wrap_err("Failed to create DEVENV_HOME_GC directory")?;
-            std::fs::create_dir_all(&self.devenv_dot_gc)
-                .into_diagnostic()
-                .wrap_err("Failed to create .devenv/gc directory")?;
-            self.dirs_created = true;
-        }
         Ok(())
     }
 

@@ -57,7 +57,6 @@ async fn main() -> Result<()> {
     }
 
     let mut devenv = Devenv::new(options).await;
-    devenv.create_directories()?;
 
     match cli.command {
         Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true).await,
