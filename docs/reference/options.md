@@ -41534,6 +41534,27 @@ package
 
 
 
+List of tasks to run after this task.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.before
+
+
+
 List of tasks to run before this task.
 
 
