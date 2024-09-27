@@ -1,20 +1,18 @@
 use futures::future::join_all;
 use miette::Diagnostic;
 use sqlx::SqlitePool;
-use std::borrow::Cow;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use tokio::fs;
 
 use crate::{db, hash, internal_log::InternalLog, op::Op};
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum CommandError {
     #[error(transparent)]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 }
@@ -60,18 +58,14 @@ impl<'a> CachedCommand<'a> {
     ///
     /// If the command has been run before and the files it depends on have not been modified,
     /// the cached output will be returned.
-    pub async fn output(mut self, cmd: &'a mut Command) -> Result<process::Output, CommandError> {
+    pub async fn output(mut self, cmd: &'a mut Command) -> Result<Output, CommandError> {
         let raw_cmd = format!("{:?}", cmd);
         let cmd_hash = hash::digest(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
         if !self.refresh {
             if let Ok(Some(output)) = query_cached_output(self.pool, &cmd_hash).await {
-                return Ok(process::Output {
-                    status: process::ExitStatus::default(),
-                    stdout: output.into_bytes(),
-                    stderr: Vec::new(),
-                });
+                return Ok(output);
             }
         }
 
@@ -118,28 +112,25 @@ impl<'a> CachedCommand<'a> {
         files.extend(self.extra_paths.iter().cloned());
 
         let path_hashes = join_all(files.into_iter().filter(|path| path.is_file()).map(|path| {
-            tokio::spawn(async move {
-                let hash = hash::compute_file_hash(&path)
-                    .await
-                    .map_err(CommandError::Io)?;
-                let path = Cow::from(path);
+            tokio::task::spawn_blocking(|| {
+                let hash = hash::compute_file_hash(&path).map_err(CommandError::Io)?;
                 Ok((path, hash))
             })
         }))
         .await
         .into_iter()
         .flatten()
-        .collect::<Result<Vec<(Cow<'_, Path>, String)>, CommandError>>()?;
+        .collect::<Result<Vec<(PathBuf, String)>, CommandError>>()?;
 
         let _ =
             db::insert_command_with_files(self.pool, &raw_cmd, &cmd_hash, &output, &path_hashes)
                 .await
                 .map_err(CommandError::Sqlx)?;
 
-        Ok(process::Output {
+        Ok(Output {
             status,
             stdout: output,
-            stderr: Vec::new(),
+            paths: path_hashes,
         })
     }
 }
@@ -147,6 +138,15 @@ impl<'a> CachedCommand<'a> {
 /// Check whether the command supports the flags required for caching.
 pub fn supports_eval_caching(cmd: &Command) -> bool {
     cmd.get_program().to_string_lossy().ends_with("nix")
+}
+
+pub struct Output {
+    /// The status code of the command.
+    pub status: process::ExitStatus,
+    /// The standard output of the command.
+    pub stdout: Vec<u8>,
+    /// A list of paths that the command depends on and their hashes.
+    pub paths: Vec<(PathBuf, String)>,
 }
 
 /// Represents the state of a file in the cache system.
@@ -177,7 +177,7 @@ enum FileState {
 async fn query_cached_output(
     pool: &SqlitePool,
     cmd_hash: &str,
-) -> Result<Option<String>, CommandError> {
+) -> Result<Option<Output>, CommandError> {
     let cached_cmd = db::get_command_by_hash(pool, cmd_hash)
         .await
         .map_err(CommandError::Sqlx)?;
@@ -187,25 +187,16 @@ async fn query_cached_output(
             .await
             .map_err(CommandError::Sqlx)?;
 
-        let file_checks = files
-            .into_iter()
-            .map(|file| tokio::spawn(check_file_state(file)));
-
-        let updated_files = join_all(file_checks)
-            .await
-            .into_iter()
-            .filter_map(|result| result.ok().and_then(|r| r.ok()))
-            .filter(|state| {
-                matches!(
-                    state,
-                    FileState::Modified { .. } | FileState::Removed { .. }
-                )
-            })
-            .collect::<Vec<_>>();
-
-        if updated_files.is_empty() {
+        if any_files_modified(&files).await {
             // No files have been modified, returning cached output
-            Ok(Some(output))
+            Ok(Some(Output {
+                status: process::ExitStatus::default(),
+                stdout: output.into_bytes(),
+                paths: files
+                    .into_iter()
+                    .map(|f| (f.path, f.content_hash))
+                    .collect(),
+            }))
         } else {
             // Command not cached
             Ok(None)
@@ -232,14 +223,43 @@ fn extract_op_from_log_line(log: InternalLog) -> Option<PathBuf> {
     }
 }
 
-fn system_time_to_unix_timestamp(time: SystemTime) -> std::io::Result<u64> {
+fn system_time_to_unix_timestamp(time: SystemTime) -> io::Result<u64> {
     time.duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 }
 
-async fn check_file_state(file: db::FilePathRow) -> std::io::Result<FileState> {
-    let metadata = match fs::metadata(&file.path).await {
+async fn any_files_modified(files: &[db::FilePathRow]) -> bool {
+    let mut set = tokio::task::JoinSet::new();
+
+    for file in files {
+        let file = file.clone();
+        set.spawn_blocking(|| check_file_state(file));
+    }
+
+    let mut modified = false;
+
+    while let Some(res) = set.join_next().await {
+        if let Ok(Ok(file_state)) = res {
+            match file_state {
+                FileState::Modified { .. } => {
+                    modified = true;
+                    break;
+                }
+                FileState::Removed { .. } => {
+                    modified = true;
+                    break;
+                }
+                _ => (),
+            }
+        }
+    }
+
+    modified
+}
+
+fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
+    let metadata = match std::fs::metadata(&file.path) {
         Ok(metadata) => metadata,
         Err(_) => return Ok(FileState::Removed { path: file.path }),
     };
@@ -254,7 +274,7 @@ async fn check_file_state(file: db::FilePathRow) -> std::io::Result<FileState> {
     }
 
     // File has been modified, recompute the hash
-    let new_hash = hash::compute_file_hash(&file.path).await?;
+    let new_hash = hash::compute_file_hash(&file.path)?;
 
     if new_hash != file.content_hash {
         // Hash has changed, return updated information
@@ -270,9 +290,4 @@ async fn check_file_state(file: db::FilePathRow) -> std::io::Result<FileState> {
             modified_at: metadata_modified,
         })
     }
-}
-
-/// Normalize a path by stripping leading slashes.
-fn normalize_path(path: PathBuf) -> PathBuf {
-    path.strip_prefix("/").unwrap_or(&path).to_path_buf()
 }

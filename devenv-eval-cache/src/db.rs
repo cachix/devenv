@@ -59,7 +59,7 @@ pub async fn insert_command_with_files<'a, A>(
     raw_cmd: &str,
     cmd_hash: &str,
     output: &[u8],
-    paths: &[(Cow<'_, Path>, String)],
+    paths: &[(PathBuf, String)],
 ) -> Result<(i64, Vec<i64>), sqlx::Error>
 where
     A: Acquire<'a, Database = Sqlite>,
@@ -122,7 +122,7 @@ where
 
 async fn insert_files<'a, A>(
     conn: A,
-    paths: &[(Cow<'_, Path>, String)],
+    paths: &[(PathBuf, String)],
     command_id: i64,
 ) -> Result<Vec<i64>, sqlx::Error>
 where
@@ -166,7 +166,7 @@ where
     Ok(file_ids)
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FilePathRow {
     pub path: PathBuf,
     pub content_hash: String,

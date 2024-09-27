@@ -208,10 +208,10 @@ impl Devenv {
     }
 
     pub async fn print_dev_env(&mut self, json: bool) -> Result<()> {
-        let (env, _) = self.get_dev_environment(json, false).await?;
+        let env = self.get_dev_environment(json, false).await?;
         print!(
             "{}",
-            String::from_utf8(env).expect("Failed to convert env to utf-8")
+            String::from_utf8(env.output).expect("Failed to convert env to utf-8")
         );
         Ok(())
     }
@@ -239,11 +239,11 @@ impl Devenv {
         args: &[String],
     ) -> Result<Vec<String>> {
         self.assemble(false)?;
-        let (_, gc_root) = self.get_dev_environment(false, true).await?;
+        let env = self.get_dev_environment(false, true).await?;
 
         let mut develop_args = vec![
             "develop",
-            gc_root.to_str().expect("gc root should be utf-8"),
+            env.gc_root.to_str().expect("gc root should be utf-8"),
         ];
 
         let default_clean = config::Clean {
@@ -790,11 +790,11 @@ impl Devenv {
             serde_json::to_string(&self.config).unwrap(),
         )
         .expect("Failed to write devenv.json");
-        fs::write(
-            self.devenv_dotfile.join("imports.txt"),
-            self.config.imports.join("\n"),
-        )
-        .expect("Failed to write imports.txt");
+        // fs::write(
+        //     self.devenv_dotfile.join("imports.txt"),
+        //     self.config.imports.join("\n"),
+        // )
+        // .expect("Failed to write imports.txt");
 
         // create flake.devenv.nix
         let vars = indoc::formatdoc!(
@@ -829,11 +829,7 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn get_dev_environment(
-        &mut self,
-        json: bool,
-        logging: bool,
-    ) -> Result<(Vec<u8>, PathBuf)> {
+    pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
         self.assemble(false)?;
         let _logprogress = if logging {
             Some(self.log_progress.with_newline("Building shell"))
@@ -842,8 +838,29 @@ impl Devenv {
         };
         let gc_root = self.devenv_dot_gc.join("shell");
         let env = self.nix.dev_env(json, &gc_root).await?;
-        Ok((env, gc_root))
+
+        std::fs::write(
+            self.devenv_dotfile.join("input_paths.txt"),
+            env.paths
+                .iter()
+                .map(|(p, _)| p.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .expect("Failed to write input_paths.txt");
+
+        Ok(DevEnv {
+            output: env.stdout,
+            input_paths: env.paths,
+            gc_root,
+        })
     }
+}
+
+pub struct DevEnv {
+    output: Vec<u8>,
+    input_paths: Vec<(PathBuf, String)>,
+    gc_root: PathBuf,
 }
 
 #[derive(Deserialize)]

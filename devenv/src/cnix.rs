@@ -94,7 +94,11 @@ impl<'a> Nix<'a> {
         })
     }
 
-    pub async fn develop(&self, args: &[&str], replace_shell: bool) -> Result<process::Output> {
+    pub async fn develop(
+        &self,
+        args: &[&str],
+        replace_shell: bool,
+    ) -> Result<devenv_eval_cache::Output> {
         let options = Options {
             logging_stdout: true,
             // Cannot cache this because we don't get the derivation back.
@@ -106,7 +110,11 @@ impl<'a> Nix<'a> {
         self.run_nix_with_substituters("nix", args, &options).await
     }
 
-    pub async fn dev_env(&self, json: bool, gc_root: &PathBuf) -> Result<Vec<u8>> {
+    pub async fn dev_env(
+        &self,
+        json: bool,
+        gc_root: &PathBuf,
+    ) -> Result<devenv_eval_cache::Output> {
         let options = Options {
             cache_output: true,
             ..self.options
@@ -134,7 +142,8 @@ impl<'a> Nix<'a> {
             &fs::canonicalize(gc_root).expect("to resolve gc_root"),
             &self.devenv_home_gc.join(target),
         );
-        Ok(env.stdout)
+
+        Ok(env)
     }
 
     pub async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
@@ -251,7 +260,7 @@ impl<'a> Nix<'a> {
         ))
     }
 
-    pub async fn search(&self, name: &str) -> Result<process::Output> {
+    pub async fn search(&self, name: &str) -> Result<devenv_eval_cache::Output> {
         self.run_nix_with_substituters(
             "nix",
             &["search", "--inputs-from", ".", "--json", "nixpkgs", name],
@@ -281,7 +290,7 @@ impl<'a> Nix<'a> {
         command: &str,
         args: &[&str],
         options: &Options<'a>,
-    ) -> Result<process::Output> {
+    ) -> Result<devenv_eval_cache::Output> {
         let cmd = self.prepare_command(command, args, options)?;
         self.run_nix_command(cmd, options).await
     }
@@ -291,7 +300,7 @@ impl<'a> Nix<'a> {
         command: &str,
         args: &[&str],
         options: &Options<'a>,
-    ) -> Result<process::Output> {
+    ) -> Result<devenv_eval_cache::Output> {
         let cmd = self
             .prepare_command_with_substituters(command, args, options)
             .await?;
@@ -302,7 +311,7 @@ impl<'a> Nix<'a> {
         &self,
         mut cmd: std::process::Command,
         options: &Options<'a>,
-    ) -> Result<process::Output> {
+    ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::{InternalLog, ResultType, Verbosity};
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
@@ -391,9 +400,15 @@ impl<'a> Nix<'a> {
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?
         } else {
-            cmd.output()
+            let output = cmd
+                .output()
                 .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?
+                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+            devenv_eval_cache::Output {
+                status: output.status,
+                stdout: output.stdout,
+                paths: vec![],
+            }
         };
 
         if !result.status.success() {
