@@ -3,7 +3,7 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use miette::{bail, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use serde::Deserialize;
@@ -43,7 +43,6 @@ pub struct Devenv {
     nix: cnix::Nix<'static>,
 
     // All kinds of paths
-    xdg_dirs: xdg::BaseDirectories,
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
@@ -128,7 +127,6 @@ impl Devenv {
             global_options,
             logger,
             log_progress,
-            xdg_dirs,
             devenv_root,
             devenv_dotfile,
             devenv_dot_gc,
