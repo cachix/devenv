@@ -107,16 +107,15 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn dev_env(&self, json: bool, gc_root: &PathBuf) -> Result<Vec<u8>> {
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
         let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
         let mut args: Vec<&str> = vec!["print-dev-env", "--profile", gc_root_str];
         if json {
             args.push("--json");
         }
-
-        let options = Options {
-            cache_output: true,
-            ..self.options
-        };
         let env = self
             .run_nix_with_substituters("nix", &args, &options)
             .await?;
