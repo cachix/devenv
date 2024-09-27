@@ -57,6 +57,7 @@ let
               description = config.description;
               status = config.statusCommand;
               after = config.after;
+              before = config.before;
               command = config.command;
               input = config.input;
             };
@@ -72,6 +73,11 @@ let
             description = "Description of the task.";
           };
           after = lib.mkOption {
+            type = types.listOf types.str;
+            description = "List of tasks to run after this task.";
+            default = [ ];
+          };
+          before = lib.mkOption {
             type = types.listOf types.str;
             description = "List of tasks to run before this task.";
             default = [ ];

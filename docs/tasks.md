@@ -32,9 +32,10 @@ If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
 
 {
   tasks = {
-    "bash:hello".exec = "echo 'Hello world from bash!'";
-    "devenv:enterShell".after = [ "bash:hello" ];
-    "devenv:enterTest".after = [ "bash:hello" ];
+    "bash:hello" = {
+      exec = "echo 'Hello world from bash!'";
+      before = [ "devenv:enterShell" "devenv:enterTest" ];
+    };
   };
 }
 ```

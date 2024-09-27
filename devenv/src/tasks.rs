@@ -66,6 +66,8 @@ pub struct TaskConfig {
     #[serde(default)]
     after: Vec<String>,
     #[serde(default)]
+    before: Vec<String>,
+    #[serde(default)]
     command: Option<String>,
     #[serde(default)]
     status: Option<String>,
@@ -423,6 +425,14 @@ impl Tasks {
                     edges_to_add.push((*dep_idx, index));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), dep_name.clone()));
+                }
+            }
+
+            for before_name in &task_state.task.before {
+                if let Some(before_idx) = task_indices.get(before_name) {
+                    edges_to_add.push((index, *before_idx));
+                } else {
+                    unresolved.insert((task_state.task.name.clone(), before_name.clone()));
                 }
             }
         }
@@ -1116,6 +1126,56 @@ mod test {
         .await;
 
         assert!(matches!(result, Err(Error::MissingCommand(_))));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_before_tasks() -> Result<(), Error> {
+        let script1 = create_script(
+            "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
+        )?;
+        let script2 = create_script(
+            "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
+        )?;
+        let script3 = create_script(
+            "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
+        )?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                        "after": ["myapp:task_3"]
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "before": ["myapp:task_3"],
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "command": script3.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_2" && name2 == "myapp:task_3" && name3 == "myapp:task_1"
+        );
         Ok(())
     }
 
