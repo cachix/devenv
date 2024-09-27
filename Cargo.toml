@@ -51,5 +51,10 @@ xdg = "2.5.2"
 tokio = "1.39.3"
 schemars = "0.8.16"
 
+# Always build optimized sqlx-macro to speed up query checks
 [profile.dev.package.sqlx-macros]
 opt-level = 3
+
+[profile.release]
+strip = true
+lto = "fat"
