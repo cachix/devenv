@@ -10,7 +10,7 @@ let
   );
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
-  package = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
+  package = pkgs.callPackage ../../python-wrapper.nix {
     python = cfg.package;
     requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
     makeWrapperArgs = [
