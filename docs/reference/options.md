@@ -7272,6 +7272,10 @@ One CLI to format the code tree.
 
 Trim trailing whitespace.
 
+**` trufflehog `**
+
+Secrets scanner
+
 **` typos `**
 
 Source code spell checker
