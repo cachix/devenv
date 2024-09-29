@@ -843,7 +843,7 @@ impl Devenv {
             self.devenv_dotfile.join("input_paths.txt"),
             env.paths
                 .iter()
-                .map(|(p, _)| p.to_string_lossy())
+                .map(|(p, _, _)| p.to_string_lossy())
                 .collect::<Vec<_>>()
                 .join("\n"),
         )
@@ -851,7 +851,6 @@ impl Devenv {
 
         Ok(DevEnv {
             output: env.stdout,
-            input_paths: env.paths,
             gc_root,
         })
     }
@@ -859,7 +858,6 @@ impl Devenv {
 
 pub struct DevEnv {
     output: Vec<u8>,
-    input_paths: Vec<(PathBuf, String)>,
     gc_root: PathBuf,
 }
 

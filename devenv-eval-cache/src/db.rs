@@ -1,6 +1,5 @@
 use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqliteRow, SqliteSynchronous};
 use sqlx::{Acquire, Row, SqlitePool};
-use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -23,13 +22,33 @@ pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx
 
     Ok(pool)
 }
-#[derive(Debug, sqlx::FromRow)]
+
+#[derive(Clone, Debug)]
 pub struct CommandRow {
     pub id: i64,
     pub raw: String,
     pub cmd_hash: String,
-    pub output: String,
+    pub output: Vec<u8>,
+    pub run_at: SystemTime,
 }
+
+impl sqlx::FromRow<'_, SqliteRow> for CommandRow {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let id: i64 = row.get("id");
+        let raw: String = row.get("raw");
+        let cmd_hash: String = row.get("cmd_hash");
+        let output: Vec<u8> = row.get("output");
+        let run_at: u64 = row.get("run_at");
+        Ok(Self {
+            id,
+            raw,
+            cmd_hash,
+            output,
+            run_at: UNIX_EPOCH + std::time::Duration::from_secs(run_at),
+        })
+    }
+}
+
 pub async fn get_command_by_hash<'a, A>(
     conn: A,
     cmd_hash: &str,
@@ -39,15 +58,14 @@ where
 {
     let mut conn = conn.acquire().await?;
 
-    let record = sqlx::query_as!(
-        CommandRow,
+    let record = sqlx::query_as(
         r#"
             SELECT *
             FROM cached_cmd
             WHERE cmd_hash = ?
         "#,
-        cmd_hash
     )
+    .bind(cmd_hash)
     .fetch_optional(&mut *conn)
     .await?;
 
@@ -59,7 +77,7 @@ pub async fn insert_command_with_files<'a, A>(
     raw_cmd: &str,
     cmd_hash: &str,
     output: &[u8],
-    paths: &[(PathBuf, String)],
+    paths: &[(PathBuf, String, SystemTime)],
 ) -> Result<(i64, Vec<i64>), sqlx::Error>
 where
     A: Acquire<'a, Database = Sqlite>,
@@ -122,7 +140,7 @@ where
 
 async fn insert_files<'a, A>(
     conn: A,
-    paths: &[(PathBuf, String)],
+    paths: &[(PathBuf, String, SystemTime)],
     command_id: i64,
 ) -> Result<Vec<i64>, sqlx::Error>
 where
@@ -131,19 +149,22 @@ where
     let mut conn = conn.acquire().await?;
 
     let file_path_query = r#"
-        INSERT INTO file_path (path, content_hash)
-        VALUES (?, ?)
+        INSERT INTO file_path (path, content_hash, modified_at)
+        VALUES (?, ?, ?)
         ON CONFLICT (path) DO UPDATE
         SET content_hash = excluded.content_hash,
+            modified_at = excluded.modified_at,
             updated_at = strftime('%s', 'now')
         RETURNING id
     "#;
 
     let mut file_ids = Vec::with_capacity(paths.len());
-    for (path, hash) in paths {
+    for (path, hash, modified_at) in paths {
+        let modified_at = modified_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
         let id: i64 = sqlx::query(file_path_query)
             .bind(path.to_path_buf().into_os_string().as_bytes())
             .bind(hash)
+            .bind(modified_at)
             .fetch_one(&mut *conn)
             .await?
             .get(0);
@@ -170,6 +191,7 @@ where
 pub struct FilePathRow {
     pub path: PathBuf,
     pub content_hash: String,
+    pub modified_at: SystemTime,
     pub updated_at: SystemTime,
 }
 
@@ -177,21 +199,24 @@ impl sqlx::FromRow<'_, SqliteRow> for FilePathRow {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let path: &[u8] = row.get("path");
         let content_hash: String = row.get("content_hash");
+        let modified_at: u64 = row.get("modified_at");
         let updated_at: u64 = row.get("updated_at");
         Ok(Self {
             path: PathBuf::from(OsStr::from_bytes(path)),
             content_hash,
+            modified_at: UNIX_EPOCH + std::time::Duration::from_secs(modified_at),
             updated_at: UNIX_EPOCH + std::time::Duration::from_secs(updated_at),
         })
     }
 }
+
 pub async fn get_files_by_command_id(
     pool: &SqlitePool,
     command_id: i64,
 ) -> Result<Vec<FilePathRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
-            SELECT fp.path, fp.content_hash, fp.updated_at
+            SELECT fp.path, fp.content_hash, fp.modified_at, fp.updated_at
             FROM file_path fp
             JOIN cmd_input_path cip ON fp.id = cip.file_path_id
             WHERE cip.cached_cmd_id = ?
@@ -209,7 +234,7 @@ pub async fn get_files_by_command_hash(
 ) -> Result<Vec<FilePathRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
-            SELECT fp.path, fp.content_hash, fp.updated_at
+            SELECT fp.path, fp.content_hash, fp.modified_at, fp.updated_at
             FROM file_path fp
             JOIN cmd_input_path cip ON fp.id = cip.file_path_id
             JOIN cached_cmd cc ON cip.cached_cmd_id = cc.id
@@ -222,6 +247,29 @@ pub async fn get_files_by_command_hash(
 
     Ok(files)
 }
+
+pub async fn update_file_modified_at<P: AsRef<Path>>(
+    pool: &SqlitePool,
+    path: P,
+    modified_at: SystemTime,
+) -> Result<(), sqlx::Error> {
+    let modified_at = modified_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+
+    sqlx::query(
+        r#"
+        UPDATE file_path
+        SET modified_at = ?, updated_at = strftime('%s', 'now')
+        WHERE path = ?
+        "#,
+    )
+    .bind(modified_at)
+    .bind(path.as_ref().to_path_buf().into_os_string().as_bytes())
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 pub async fn delete_unreferenced_files(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
         r#"
@@ -249,15 +297,10 @@ mod tests {
         let raw_cmd = "nix-build -A hello";
         let cmd_hash = "hash123";
         let output = b"Hello, world!";
+        let modified_at = SystemTime::now();
         let paths = vec![
-            (
-                Cow::Borrowed(Path::new("/path/to/file1")),
-                "hash1".to_string(),
-            ),
-            (
-                Cow::Borrowed(Path::new("/path/to/file2")),
-                "hash2".to_string(),
-            ),
+            ("/path/to/file1".into(), "hash1".to_string(), modified_at),
+            ("/path/to/file2".into(), "hash2".to_string(), modified_at),
         ];
 
         let (command_id, file_ids) =
@@ -270,14 +313,13 @@ mod tests {
         let retrieved_command = get_command_by_hash(&pool, cmd_hash).await.unwrap().unwrap();
         assert_eq!(retrieved_command.raw, raw_cmd);
         assert_eq!(retrieved_command.cmd_hash, cmd_hash);
-        // TODO: fix conversion
-        assert_eq!(retrieved_command.output, String::from_utf8_lossy(output));
+        assert_eq!(retrieved_command.output, output);
 
         let files = get_files_by_command_id(&pool, command_id).await.unwrap();
         assert_eq!(files.len(), 2);
-        assert_eq!(files[0].path, Path::new("/path/to/file1"));
+        assert_eq!(files[0].path, PathBuf::from("/path/to/file1"));
         assert_eq!(files[0].content_hash, "hash1");
-        assert_eq!(files[1].path, Path::new("/path/to/file2"));
+        assert_eq!(files[1].path, PathBuf::from("/path/to/file2"));
         assert_eq!(files[1].content_hash, "hash2");
     }
 
@@ -287,15 +329,10 @@ mod tests {
         let raw_cmd1 = "nix-build -A hello";
         let cmd_hash1 = "hash123";
         let output1 = b"Hello, world!";
+        let modified_at = SystemTime::now();
         let paths1 = vec![
-            (
-                Cow::Borrowed(Path::new("/path/to/file1")),
-                "hash1".to_string(),
-            ),
-            (
-                Cow::Borrowed(Path::new("/path/to/file2")),
-                "hash2".to_string(),
-            ),
+            ("/path/to/file1".into(), "hash1".to_string(), modified_at),
+            ("/path/to/file2".into(), "hash2".to_string(), modified_at),
         ];
 
         let (command_id1, file_ids1) =
@@ -307,15 +344,10 @@ mod tests {
         let raw_cmd2 = "nix-build -A goodbye";
         let cmd_hash2 = "hash456";
         let output2 = b"Goodbye, world!";
+        let modified_at = SystemTime::now();
         let paths2 = vec![
-            (
-                Cow::Borrowed(Path::new("/path/to/file2")),
-                "hash2".to_string(),
-            ),
-            (
-                Cow::Borrowed(Path::new("/path/to/file3")),
-                "hash3".to_string(),
-            ),
+            ("/path/to/file2".into(), "hash2".to_string(), modified_at),
+            ("/path/to/file3".into(), "hash3".to_string(), modified_at),
         ];
 
         let (command_id2, file_ids2) =
@@ -360,15 +392,10 @@ mod tests {
         let raw_cmd = "nix-build -A hello";
         let cmd_hash = "hash123";
         let output = b"Hello, world!";
+        let modified_at = SystemTime::now();
         let paths1 = vec![
-            (
-                Cow::Borrowed(Path::new("/path/to/file1")),
-                "hash1".to_string(),
-            ),
-            (
-                Cow::Borrowed(Path::new("/path/to/file2")),
-                "hash2".to_string(),
-            ),
+            ("/path/to/file1".into(), "hash1".to_string(), modified_at),
+            ("/path/to/file2".into(), "hash2".to_string(), modified_at),
         ];
 
         let (_command_id1, file_ids1) =
@@ -378,14 +405,8 @@ mod tests {
 
         // Second command
         let paths2 = vec![
-            (
-                Cow::Borrowed(Path::new("/path/to/file2")),
-                "hash2".to_string(),
-            ),
-            (
-                Cow::Borrowed(Path::new("/path/to/file3")),
-                "hash3".to_string(),
-            ),
+            ("/path/to/file2".into(), "hash2".to_string(), modified_at),
+            ("/path/to/file3".into(), "hash3".to_string(), modified_at),
         ];
 
         let (command_id2, file_ids2) =
@@ -435,9 +456,9 @@ mod tests {
         // Verify that the new command has the correct files
         let files = get_files_by_command_id(&pool, command_id2).await.unwrap();
         assert_eq!(files.len(), 2);
-        assert_eq!(files[0].path, Path::new("/path/to/file2"));
+        assert_eq!(files[0].path, PathBuf::from("/path/to/file2"));
         assert_eq!(files[0].content_hash, "hash2");
-        assert_eq!(files[1].path, Path::new("/path/to/file3"));
+        assert_eq!(files[1].path, PathBuf::from("/path/to/file3"));
         assert_eq!(files[1].content_hash, "hash3");
 
         // Verify that file2 is reused and file3 is new

@@ -124,14 +124,18 @@ impl<'a> CachedCommand<'a> {
 
         let path_hashes = join_all(files.into_iter().filter(|path| path.is_file()).map(|path| {
             tokio::task::spawn_blocking(|| {
-                let hash = hash::compute_file_hash(&path).map_err(CommandError::Io)?;
-                Ok((path, hash))
+                {
+                    let hash = hash::compute_file_hash(&path)?;
+                    let modified_at = path.metadata()?.modified()?;
+                    Ok((path, hash, modified_at))
+                }
+                .map_err(CommandError::Io)
             })
         }))
         .await
         .into_iter()
         .flatten()
-        .collect::<Result<Vec<(PathBuf, String)>, CommandError>>()?;
+        .collect::<Result<Vec<(PathBuf, String, SystemTime)>, CommandError>>()?;
 
         let _ =
             db::insert_command_with_files(self.pool, &raw_cmd, &cmd_hash, &output, &path_hashes)
@@ -157,7 +161,7 @@ pub struct Output {
     /// The standard output of the command.
     pub stdout: Vec<u8>,
     /// A list of paths that the command depends on and their hashes.
-    pub paths: Vec<(PathBuf, String)>,
+    pub paths: Vec<(PathBuf, String, SystemTime)>,
 }
 
 /// Represents the state of a file in the cache system.
@@ -165,11 +169,15 @@ pub struct Output {
 #[allow(dead_code)]
 enum FileState {
     /// The file has not been modified since it was last cached.
-    Unchanged { path: PathBuf },
+    Unchanged {
+        path: PathBuf,
+        modified_at: SystemTime,
+    },
     /// The file's metadata, i.e. timestamp, has changed, but its content remains the same.
     MetadataModified {
         path: PathBuf,
         modified_at: SystemTime,
+        updated_at: SystemTime,
     },
     /// The file's content has been modified.
     Modified {
@@ -193,23 +201,65 @@ async fn query_cached_output(
         .await
         .map_err(CommandError::Sqlx)?;
 
-    if let Some(db::CommandRow { id, output, .. }) = cached_cmd {
+    if let Some(db::CommandRow {
+        id, output, run_at, ..
+    }) = cached_cmd
+    {
         let files = db::get_files_by_command_id(pool, id)
             .await
             .map_err(CommandError::Sqlx)?;
 
-        if any_files_modified(&files).await {
+        let mut any_modified = false;
+
+        let mut set = tokio::task::JoinSet::new();
+
+        for file in &files {
+            let file = file.clone();
+            set.spawn_blocking(|| check_file_state(file));
+        }
+
+        while let Some(res) = set.join_next().await {
+            if let Ok(Ok(file_state)) = res {
+                eprintln!("{:?}", file_state);
+                match file_state {
+                    FileState::Unchanged { modified_at, .. } if modified_at > run_at => {
+                        any_modified = true;
+                    }
+                    FileState::MetadataModified {
+                        modified_at, path, ..
+                    } => {
+                        // Check if the file has been modified since the last run
+                        if modified_at > run_at {
+                            any_modified = true;
+                        }
+
+                        // TODO: batch with query builder?
+                        db::update_file_modified_at(pool, path, modified_at)
+                            .await
+                            .map_err(CommandError::Sqlx)?;
+                    }
+                    FileState::Modified { .. } => {
+                        any_modified = true;
+                    }
+                    FileState::Removed { .. } => {
+                        any_modified = true;
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        if any_modified {
             // No files have been modified, returning cached output
             Ok(Some(Output {
                 status: process::ExitStatus::default(),
-                stdout: output.into_bytes(),
+                stdout: output,
                 paths: files
                     .into_iter()
-                    .map(|f| (f.path, f.content_hash))
+                    .map(|f| (f.path, f.content_hash, f.modified_at))
                     .collect(),
             }))
         } else {
-            // Command not cached
             Ok(None)
         }
     } else {
@@ -240,65 +290,38 @@ fn system_time_to_unix_timestamp(time: SystemTime) -> io::Result<u64> {
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 }
 
-async fn any_files_modified(files: &[db::FilePathRow]) -> bool {
-    let mut set = tokio::task::JoinSet::new();
-
-    for file in files {
-        let file = file.clone();
-        set.spawn_blocking(|| check_file_state(file));
-    }
-
-    let mut modified = false;
-
-    while let Some(res) = set.join_next().await {
-        if let Ok(Ok(file_state)) = res {
-            match file_state {
-                FileState::Modified { .. } => {
-                    modified = true;
-                    break;
-                }
-                FileState::Removed { .. } => {
-                    modified = true;
-                    break;
-                }
-                _ => (),
-            }
-        }
-    }
-
-    modified
-}
-
 fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
     let metadata = match std::fs::metadata(&file.path) {
         Ok(metadata) => metadata,
         Err(_) => return Ok(FileState::Removed { path: file.path }),
     };
 
-    let metadata_modified = metadata.modified()?;
-    let file_modified = system_time_to_unix_timestamp(metadata_modified)?;
-    let updated_at = system_time_to_unix_timestamp(file.updated_at)?;
+    let modified_at = metadata.modified()?;
 
-    if file_modified <= updated_at {
+    if modified_at == file.modified_at {
         // File has not been modified
-        return Ok(FileState::Unchanged { path: file.path });
+        return Ok(FileState::Unchanged {
+            path: file.path,
+            modified_at,
+        });
     }
 
-    // File has been modified, recompute the hash
+    // File has been touched, recompute the hash
     let new_hash = hash::compute_file_hash(&file.path)?;
 
-    if new_hash != file.content_hash {
-        // Hash has changed, return updated information
+    if new_hash == file.content_hash {
+        // File touched but hash unchanged
+        Ok(FileState::MetadataModified {
+            path: file.path,
+            modified_at,
+            updated_at: file.updated_at,
+        })
+    } else {
+        // Hash has changed, return new hash
         Ok(FileState::Modified {
             path: file.path,
             new_hash,
-            modified_at: metadata_modified,
-        })
-    } else {
-        // File modified but hash unchanged
-        Ok(FileState::MetadataModified {
-            path: file.path,
-            modified_at: metadata_modified,
+            modified_at,
         })
     }
 }

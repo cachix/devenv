@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS cached_cmd
   id             INTEGER NOT NULL PRIMARY KEY,
   raw            TEXT NOT NULL,
   cmd_hash       CHAR(64) NOT NULL UNIQUE,
-  output         TEXT NOT NULL
+  output         TEXT NOT NULL,
+  run_at         INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_cached_cmd_hash ON cached_cmd(cmd_hash);
@@ -13,6 +14,7 @@ CREATE TABLE IF NOT EXISTS file_path
   id           INTEGER NOT NULL PRIMARY KEY,
   path         BLOB NOT NULL UNIQUE,
   content_hash CHAR(64) NOT NULL,
+  modified_at  INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
@@ -22,7 +24,7 @@ CREATE TABLE IF NOT EXISTS cmd_input_path
 (
   id                     INTEGER NOT NULL PRIMARY KEY,
   cached_cmd_id          INTEGER,
-  file_path_id        INTEGER,
+  file_path_id           INTEGER,
   UNIQUE(cached_cmd_id, file_path_id),
   FOREIGN KEY(cached_cmd_id)
     REFERENCES cached_cmd(id)
