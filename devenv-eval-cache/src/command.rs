@@ -21,6 +21,7 @@ pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
     refresh: bool,
     extra_paths: Vec<PathBuf>,
+    excluded_paths: Vec<PathBuf>,
     on_stderr: Option<Box<dyn Fn(&InternalLog) + Send>>,
 }
 
@@ -30,6 +31,7 @@ impl<'a> CachedCommand<'a> {
             pool,
             refresh: false,
             extra_paths: Vec::new(),
+            excluded_paths: Vec::new(),
             on_stderr: None,
         }
     }
@@ -37,6 +39,12 @@ impl<'a> CachedCommand<'a> {
     /// Watch additional paths for changes.
     pub fn watch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.extra_paths.push(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Remove a path from being watched for changes.
+    pub fn unwatch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
+        self.excluded_paths.push(path.as_ref().to_path_buf());
         self
     }
 
@@ -91,7 +99,7 @@ impl<'a> CachedCommand<'a> {
                 .filter_map(|line| InternalLog::parse(line).and_then(|log| log.ok()))
                 .inspect(|log| {
                     if let Some(ref f) = &on_stderr {
-                        f(&log);
+                        f(log);
                     }
                 })
                 .filter_map(extract_op_from_log_line)
@@ -110,6 +118,9 @@ impl<'a> CachedCommand<'a> {
 
         // Watch additional paths
         files.extend(self.extra_paths.iter().cloned());
+
+        // Remove excluded paths
+        files.retain_mut(|path| !self.excluded_paths.contains(path));
 
         let path_hashes = join_all(files.into_iter().filter(|path| path.is_file()).map(|path| {
             tokio::task::spawn_blocking(|| {

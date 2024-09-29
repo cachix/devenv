@@ -349,7 +349,9 @@ impl<'a> Nix<'a> {
         {
             let mut cached_cmd = CachedCommand::new(&self.pool);
 
-            cached_cmd.watch_path("devenv.yaml");
+            cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
+            // TODO: exclude .devenv.flake.nix
+            cached_cmd.unwatch_path(self.devenv_root.join(".devenv.flake.nix"));
 
             if self.global_options.refresh_eval_cache {
                 cached_cmd.refresh();
