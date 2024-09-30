@@ -190,7 +190,7 @@ package
 
 
 *Default:*
-` pkgs.nodejs `
+` languages.javascript.package `
 
 
 
