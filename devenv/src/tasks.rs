@@ -9,6 +9,8 @@ use std::fmt::Display;
 use std::process::Stdio;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::sync::RwLock;
 use tokio::task::JoinSet;
@@ -200,10 +202,14 @@ impl TaskState {
         (command, outputs_file)
     }
 
-    fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
-        let output = match std::fs::File::open(outputs_file.path()) {
-            // TODO: report JSON parsing errors
-            Ok(file) => serde_json::from_reader(file).ok(),
+    async fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
+        let output = match File::open(outputs_file.path()).await {
+            Ok(mut file) => {
+                let mut contents = String::new();
+                // TODO: report JSON parsing errors
+                file.read_to_string(&mut contents).await.ok();
+                serde_json::from_str(&contents).ok()
+            }
             Err(_) => None,
         };
         Output(output)
@@ -222,9 +228,9 @@ impl TaskState {
             match result {
                 Ok(status) => {
                     if status.success() {
-                        return TaskCompleted::Skipped(Skipped::Cached(Self::get_outputs(
-                            &outputs_file,
-                        )));
+                        return TaskCompleted::Skipped(Skipped::Cached(
+                            Self::get_outputs(&outputs_file).await,
+                        ));
                     }
                 }
                 Err(e) => {
@@ -322,7 +328,7 @@ impl TaskState {
                         match result {
                             Ok(status) => {
                                 if status.success() {
-                                    return TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file));
+                                    return TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await);
                                 } else {
                                     return TaskCompleted::Failed(
                                         now.elapsed(),
@@ -535,7 +541,7 @@ impl Tasks {
                     break;
                 }
 
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
 
             if dependency_failed {
@@ -809,7 +815,7 @@ impl TasksUi {
             last_list_height = tasks_status.lines.len() as u16 + 1;
 
             // Sleep briefly to avoid excessive redraws
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
 
         let errors = {

@@ -36,5 +36,10 @@ tracing = "0.1.40"
 which = "6.0.0"
 whoami = "1.5.1"
 xdg = "2.5.2"
-tokio = "1.39.3"
+tokio = { version = "1.39.3", features = [
+    "process",
+    "fs",
+    "macros",
+    "rt-multi-thread",
+] }
 schemars = "0.8.16"
