@@ -127,6 +127,7 @@ in
       "devenv:enterShell" = {
         description = "Runs when entering the shell";
         exec = ''
+          mkdir -p "$DEVENV_DOTFILE"
           echo "$DEVENV_TASK_ENV" > "$DEVENV_DOTFILE/load-exports"
           chmod +x "$DEVENV_DOTFILE/load-exports"
         '';
