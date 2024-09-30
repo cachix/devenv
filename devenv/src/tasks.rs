@@ -12,7 +12,7 @@ use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::{Duration, Instant};
 use tokio::{
@@ -369,6 +369,8 @@ struct Tasks {
     longest_task_name: usize,
     graph: DiGraph<Arc<RwLock<TaskState>>, ()>,
     tasks_order: Vec<NodeIndex>,
+    notify_finished: Arc<Notify>,
+    notify_ui: Arc<Notify>,
 }
 
 impl Tasks {
@@ -409,6 +411,8 @@ impl Tasks {
             root_names: config.roots,
             longest_task_name,
             graph,
+            notify_finished: Arc::new(Notify::new()),
+            notify_ui: Arc::new(Notify::new()),
             tasks_order: vec![],
         };
         tasks.resolve_dependencies(task_indices).await?;
@@ -541,12 +545,14 @@ impl Tasks {
                     break;
                 }
 
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                self.notify_finished.notified().await;
             }
 
             if dependency_failed {
                 let mut task_state = task_state.write().await;
                 task_state.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
+                self.notify_finished.notify_one();
+                self.notify_ui.notify_one();
             } else {
                 let now = Instant::now();
 
@@ -555,9 +561,12 @@ impl Tasks {
                     let mut task_state = task_state.write().await;
                     task_state.status = TaskStatus::Running(now);
                 }
+                self.notify_ui.notify_one();
 
                 let task_state_clone = Arc::clone(task_state);
                 let outputs_clone = Arc::clone(&outputs);
+                let notify_finished_clone = Arc::clone(&self.notify_finished);
+                let notify_ui_clone = Arc::clone(&self.notify_ui);
                 running_tasks.spawn(async move {
                     let completed = {
                         let outputs = outputs_clone.lock().await.clone();
@@ -582,6 +591,9 @@ impl Tasks {
                         }
                         task_state.status = TaskStatus::Completed(completed);
                     }
+
+                    notify_finished_clone.notify_one();
+                    notify_ui_clone.notify_one();
                 });
             }
         }
@@ -593,6 +605,8 @@ impl Tasks {
             }
         }
 
+        self.notify_finished.notify_one();
+        self.notify_ui.notify_one();
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
     }
 }
@@ -814,8 +828,7 @@ impl TasksUi {
 
             last_list_height = tasks_status.lines.len() as u16 + 1;
 
-            // Sleep briefly to avoid excessive redraws
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            self.tasks.notify_ui.notified().await;
         }
 
         let errors = {
