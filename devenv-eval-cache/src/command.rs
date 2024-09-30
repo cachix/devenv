@@ -19,7 +19,7 @@ pub enum CommandError {
 
 pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
-    refresh: bool,
+    force_refresh: bool,
     extra_paths: Vec<PathBuf>,
     excluded_paths: Vec<PathBuf>,
     on_stderr: Option<Box<dyn Fn(&InternalLog) + Send>>,
@@ -29,7 +29,7 @@ impl<'a> CachedCommand<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
             pool,
-            refresh: false,
+            force_refresh: false,
             extra_paths: Vec::new(),
             excluded_paths: Vec::new(),
             on_stderr: None,
@@ -49,8 +49,8 @@ impl<'a> CachedCommand<'a> {
     }
 
     /// Force re-evaluation of the command.
-    pub fn refresh(&mut self) -> &mut Self {
-        self.refresh = true;
+    pub fn force_refresh(&mut self) -> &mut Self {
+        self.force_refresh = true;
         self
     }
 
@@ -71,7 +71,7 @@ impl<'a> CachedCommand<'a> {
         let cmd_hash = hash::digest(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
-        if !self.refresh {
+        if !self.force_refresh {
             if let Ok(Some(output)) = query_cached_output(self.pool, &cmd_hash).await {
                 return Ok(output);
             }
@@ -197,22 +197,18 @@ impl From<db::FilePathRow> for FilePath {
     }
 }
 
-/// Represents the state of a file in the cache system.
+/// Represents the various states of "modified" that we care about.
 #[derive(Debug)]
 #[allow(dead_code)]
 enum FileState {
     /// The file has not been modified since it was last cached.
-    Unchanged {
-        path: PathBuf,
-        modified_at: SystemTime,
-    },
+    Unchanged { path: PathBuf },
     /// The file's metadata, i.e. timestamp, has changed, but its content remains the same.
     MetadataModified {
         path: PathBuf,
         modified_at: SystemTime,
-        updated_at: SystemTime,
     },
-    /// The file's content has been modified.
+    /// The file's contents have been modified.
     Modified {
         path: PathBuf,
         new_hash: String,
@@ -328,24 +324,18 @@ fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
     };
 
     let modified_at = metadata.modified().and_then(truncate_to_seconds)?;
-
     if modified_at == file.modified_at {
         // File has not been modified
-        return Ok(FileState::Unchanged {
-            path: file.path,
-            modified_at,
-        });
+        return Ok(FileState::Unchanged { path: file.path });
     }
 
     // File has been touched, recompute the hash
     let new_hash = hash::compute_file_hash(&file.path)?;
-
     if new_hash == file.content_hash {
         // File touched but hash unchanged
         Ok(FileState::MetadataModified {
             path: file.path,
             modified_at,
-            updated_at: file.updated_at,
         })
     } else {
         // Hash has changed, return new hash

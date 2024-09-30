@@ -840,14 +840,14 @@ impl Devenv {
         let env = self.nix.dev_env(json, &gc_root).await?;
 
         std::fs::write(
-            self.devenv_dotfile.join("input_paths.txt"),
+            self.devenv_dotfile.join("input-paths.txt"),
             env.paths
                 .iter()
                 .map(|fp| fp.path.to_string_lossy())
                 .collect::<Vec<_>>()
                 .join("\n"),
         )
-        .expect("Failed to write input_paths.txt");
+        .expect("Failed to write input-paths.txt");
 
         Ok(DevEnv {
             output: env.stdout,

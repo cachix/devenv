@@ -354,7 +354,7 @@ impl<'a> Nix<'a> {
             cached_cmd.unwatch_path(self.devenv_root.join(".devenv.flake.nix"));
 
             if self.global_options.refresh_eval_cache {
-                cached_cmd.refresh();
+                cached_cmd.force_refresh();
             }
 
             if options.logging {

@@ -24,13 +24,20 @@ pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx
     Ok(pool)
 }
 
+/// The row type for the `cached_cmd` table.
 #[derive(Clone, Debug)]
 pub struct CommandRow {
+    /// The primary key
     pub id: i64,
+    /// The raw command string (for debugging)
     pub raw: String,
+    /// A hash of the command string
     pub cmd_hash: String,
+    /// A hash of the content hashes of the input files
     pub input_hash: String,
+    /// The raw output of the command
     pub output: Vec<u8>,
+    /// The time the cached command was checked or created
     pub updated_at: SystemTime,
 }
 
@@ -221,11 +228,16 @@ where
     Ok(file_ids)
 }
 
+/// The row type for the `file_path` table.
 #[derive(Clone, Debug)]
 pub struct FilePathRow {
+    /// A path
     pub path: PathBuf,
+    /// The hash of the file's content
     pub content_hash: String,
+    /// The last modified time of the file
     pub modified_at: SystemTime,
+    /// The last time the row was updated
     pub updated_at: SystemTime,
 }
 
