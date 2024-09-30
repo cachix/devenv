@@ -66,9 +66,6 @@
             { name = url; url = url; };
           options = pkgs.nixosOptionsDoc {
             options = builtins.removeAttrs eval.options [ "_module" ];
-
-            warningsAreErrors = false;
-
             transformOptions = opt: (
               opt // { declarations = map rewriteSource opt.declarations; }
             );
