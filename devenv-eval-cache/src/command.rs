@@ -114,20 +114,24 @@ impl<'a> CachedCommand<'a> {
         let status = child.wait().map_err(CommandError::Io)?;
 
         let output = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
-        let mut files = stderr_thread.await.unwrap();
+        let mut paths = stderr_thread.await.unwrap();
 
         // Watch additional paths
-        files.extend(self.extra_paths.iter().cloned());
+        paths.extend(self.extra_paths.iter().cloned());
 
         // Remove excluded paths
-        files.retain_mut(|path| !self.excluded_paths.contains(path));
+        paths.retain_mut(|path| !self.excluded_paths.contains(path));
 
-        let path_hashes = join_all(files.into_iter().filter(|path| path.is_file()).map(|path| {
+        let file_paths = join_all(paths.into_iter().filter(|path| path.is_file()).map(|path| {
             tokio::task::spawn_blocking(|| {
                 {
-                    let hash = hash::compute_file_hash(&path)?;
+                    let content_hash = hash::compute_file_hash(&path)?;
                     let modified_at = path.metadata()?.modified()?;
-                    Ok((path, hash, modified_at))
+                    Ok(FilePath {
+                        path,
+                        content_hash,
+                        modified_at,
+                    })
                 }
                 .map_err(CommandError::Io)
             })
@@ -135,17 +139,30 @@ impl<'a> CachedCommand<'a> {
         .await
         .into_iter()
         .flatten()
-        .collect::<Result<Vec<(PathBuf, String, SystemTime)>, CommandError>>()?;
+        .collect::<Result<Vec<_>, CommandError>>()?;
 
-        let _ =
-            db::insert_command_with_files(self.pool, &raw_cmd, &cmd_hash, &output, &path_hashes)
-                .await
-                .map_err(CommandError::Sqlx)?;
+        let input_hash = hash::digest(
+            &file_paths
+                .iter()
+                .map(|p| p.content_hash.clone())
+                .collect::<String>(),
+        );
+
+        let _ = db::insert_command_with_files(
+            self.pool,
+            &raw_cmd,
+            &cmd_hash,
+            &input_hash,
+            &output,
+            &file_paths,
+        )
+        .await
+        .map_err(CommandError::Sqlx)?;
 
         Ok(Output {
             status,
             stdout: output,
-            paths: path_hashes,
+            paths: file_paths,
         })
     }
 }
@@ -161,7 +178,23 @@ pub struct Output {
     /// The standard output of the command.
     pub stdout: Vec<u8>,
     /// A list of paths that the command depends on and their hashes.
-    pub paths: Vec<(PathBuf, String, SystemTime)>,
+    pub paths: Vec<FilePath>,
+}
+
+pub struct FilePath {
+    pub path: PathBuf,
+    pub content_hash: String,
+    pub modified_at: SystemTime,
+}
+
+impl From<db::FilePathRow> for FilePath {
+    fn from(row: db::FilePathRow) -> Self {
+        Self {
+            path: row.path,
+            content_hash: row.content_hash,
+            modified_at: row.modified_at,
+        }
+    }
 }
 
 /// Represents the state of a file in the cache system.
@@ -201,66 +234,70 @@ async fn query_cached_output(
         .await
         .map_err(CommandError::Sqlx)?;
 
-    if let Some(db::CommandRow {
-        id, output, run_at, ..
-    }) = cached_cmd
-    {
-        let files = db::get_files_by_command_id(pool, id)
+    if let Some(cmd) = cached_cmd {
+        let files = db::get_files_by_command_id(pool, cmd.id)
             .await
             .map_err(CommandError::Sqlx)?;
 
-        let mut any_modified = false;
+        let mut should_refresh = false;
 
-        let mut set = tokio::task::JoinSet::new();
+        let file_input_hash = hash::digest(
+            &files
+                .iter()
+                .map(|f| f.content_hash.clone())
+                .collect::<String>(),
+        );
 
-        for file in &files {
-            let file = file.clone();
-            set.spawn_blocking(|| check_file_state(file));
+        // Hash of input hashes do not match
+        if cmd.input_hash != file_input_hash {
+            should_refresh = true;
         }
 
-        while let Some(res) = set.join_next().await {
-            if let Ok(Ok(file_state)) = res {
-                eprintln!("{:?}", file_state);
-                match file_state {
-                    FileState::Unchanged { modified_at, .. } if modified_at > run_at => {
-                        any_modified = true;
-                    }
-                    FileState::MetadataModified {
-                        modified_at, path, ..
-                    } => {
-                        // Check if the file has been modified since the last run
-                        if modified_at > run_at {
-                            any_modified = true;
-                        }
+        if !should_refresh {
+            let mut set = tokio::task::JoinSet::new();
 
-                        // TODO: batch with query builder?
-                        db::update_file_modified_at(pool, path, modified_at)
-                            .await
-                            .map_err(CommandError::Sqlx)?;
+            for file in &files {
+                let file = file.clone();
+                set.spawn_blocking(|| check_file_state(file));
+            }
+
+            while let Some(res) = set.join_next().await {
+                if let Ok(Ok(file_state)) = res {
+                    eprintln!("{:?}", file_state);
+                    match file_state {
+                        FileState::MetadataModified {
+                            modified_at, path, ..
+                        } => {
+                            // TODO: batch with query builder?
+                            db::update_file_modified_at(pool, path, modified_at)
+                                .await
+                                .map_err(CommandError::Sqlx)?;
+                        }
+                        FileState::Modified { .. } => {
+                            should_refresh = true;
+                        }
+                        FileState::Removed { .. } => {
+                            should_refresh = true;
+                        }
+                        _ => (),
                     }
-                    FileState::Modified { .. } => {
-                        any_modified = true;
-                    }
-                    FileState::Removed { .. } => {
-                        any_modified = true;
-                    }
-                    _ => (),
                 }
             }
-        }
+        };
 
-        if any_modified {
+        if should_refresh {
+            Ok(None)
+        } else {
+            db::update_command_updated_at(pool, cmd.id)
+                .await
+                .map_err(CommandError::Sqlx)?;
+
             // No files have been modified, returning cached output
             Ok(Some(Output {
                 status: process::ExitStatus::default(),
-                stdout: output,
-                paths: files
-                    .into_iter()
-                    .map(|f| (f.path, f.content_hash, f.modified_at))
-                    .collect(),
+                stdout: cmd.output,
+                paths: files.into_iter().map(FilePath::from).collect(),
             }))
-        } else {
-            Ok(None)
         }
     } else {
         Ok(None)
@@ -284,19 +321,13 @@ fn extract_op_from_log_line(log: InternalLog) -> Option<PathBuf> {
     }
 }
 
-fn system_time_to_unix_timestamp(time: SystemTime) -> io::Result<u64> {
-    time.duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-}
-
 fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
     let metadata = match std::fs::metadata(&file.path) {
         Ok(metadata) => metadata,
         Err(_) => return Ok(FileState::Removed { path: file.path }),
     };
 
-    let modified_at = metadata.modified()?;
+    let modified_at = metadata.modified().and_then(truncate_to_seconds)?;
 
     if modified_at == file.modified_at {
         // File has not been modified
@@ -324,4 +355,13 @@ fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
             modified_at,
         })
     }
+}
+
+fn truncate_to_seconds(time: SystemTime) -> io::Result<SystemTime> {
+    let duration_since_epoch = time
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "SystemTime before UNIX EPOCH"))?;
+
+    let seconds = duration_since_epoch.as_secs();
+    Ok(UNIX_EPOCH + std::time::Duration::from_secs(seconds))
 }

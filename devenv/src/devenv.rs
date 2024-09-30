@@ -843,7 +843,7 @@ impl Devenv {
             self.devenv_dotfile.join("input_paths.txt"),
             env.paths
                 .iter()
-                .map(|(p, _, _)| p.to_string_lossy())
+                .map(|fp| fp.path.to_string_lossy())
                 .collect::<Vec<_>>()
                 .join("\n"),
         )

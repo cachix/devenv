@@ -3,8 +3,9 @@ CREATE TABLE IF NOT EXISTS cached_cmd
   id             INTEGER NOT NULL PRIMARY KEY,
   raw            TEXT NOT NULL,
   cmd_hash       CHAR(64) NOT NULL UNIQUE,
+  input_hash     CHAR(64) NOT NULL,
   output         TEXT NOT NULL,
-  run_at         INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  updated_at     INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_cached_cmd_hash ON cached_cmd(cmd_hash);
