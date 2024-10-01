@@ -197,27 +197,6 @@ impl From<db::FilePathRow> for FilePath {
     }
 }
 
-/// Represents the various states of "modified" that we care about.
-#[derive(Debug)]
-#[allow(dead_code)]
-enum FileState {
-    /// The file has not been modified since it was last cached.
-    Unchanged { path: PathBuf },
-    /// The file's metadata, i.e. timestamp, has changed, but its content remains the same.
-    MetadataModified {
-        path: PathBuf,
-        modified_at: SystemTime,
-    },
-    /// The file's contents have been modified.
-    Modified {
-        path: PathBuf,
-        new_hash: String,
-        modified_at: SystemTime,
-    },
-    /// The file no longer exists in the file system.
-    Removed { path: PathBuf },
-}
-
 /// Try to fetch the cached output for a hashed command.
 ///
 /// Returns the cached output if the command has been cached and none of the file dependencies have
@@ -259,7 +238,6 @@ async fn query_cached_output(
 
             while let Some(res) = set.join_next().await {
                 if let Ok(Ok(file_state)) = res {
-                    eprintln!("{:?}", file_state);
                     match file_state {
                         FileState::MetadataModified {
                             modified_at, path, ..
@@ -317,6 +295,27 @@ fn extract_op_from_log_line(log: InternalLog) -> Option<PathBuf> {
     }
 }
 
+/// Represents the various states of "modified" that we care about.
+#[derive(Debug)]
+#[allow(dead_code)]
+enum FileState {
+    /// The file has not been modified since it was last cached.
+    Unchanged { path: PathBuf },
+    /// The file's metadata, i.e. timestamp, has changed, but its content remains the same.
+    MetadataModified {
+        path: PathBuf,
+        modified_at: SystemTime,
+    },
+    /// The file's contents have been modified.
+    Modified {
+        path: PathBuf,
+        new_hash: String,
+        modified_at: SystemTime,
+    },
+    /// The file no longer exists in the file system.
+    Removed { path: PathBuf },
+}
+
 fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
     let metadata = match std::fs::metadata(&file.path) {
         Ok(metadata) => metadata,
@@ -354,4 +353,94 @@ fn truncate_to_seconds(time: SystemTime) -> io::Result<SystemTime> {
 
     let seconds = duration_since_epoch.as_secs();
     Ok(UNIX_EPOCH + std::time::Duration::from_secs(seconds))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
+
+    fn create_file_row(dir: &TempDir, content: &[u8]) -> db::FilePathRow {
+        let file_path = dir.path().join("test_file.txt");
+        let mut file = File::create(&file_path).unwrap();
+        file.write_all(content).unwrap();
+
+        let metadata = file_path.metadata().unwrap();
+        let modified_at = metadata.modified().unwrap();
+        let truncated_modified_at = truncate_to_seconds(modified_at).unwrap();
+        let content_hash = hash::compute_file_hash(&file_path).unwrap();
+
+        db::FilePathRow {
+            path: file_path,
+            content_hash,
+            modified_at: truncated_modified_at,
+            updated_at: truncated_modified_at,
+        }
+    }
+
+    #[test]
+    fn test_unchanged_file() {
+        let temp_dir = TempDir::new("test_unchanged_file").unwrap();
+        let file_row = create_file_row(&temp_dir, b"Hello, World!");
+
+        println!("{:?}", check_file_state(file_row.clone()));
+
+        assert!(matches!(
+            check_file_state(file_row),
+            Ok(FileState::Unchanged { .. })
+        ));
+    }
+
+    #[test]
+    fn test_metadata_modified_file() {
+        let temp_dir = TempDir::new("test_metadata_modified_file").unwrap();
+        let file_row = create_file_row(&temp_dir, b"Hello, World!");
+
+        // Sleep to ensure the new modification time is different
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        // Update the file's timestamp
+        let new_time = SystemTime::now();
+        let file = File::open(&file_row.path).unwrap();
+        file.set_modified(new_time).unwrap();
+        drop(file);
+
+        assert!(matches!(
+            check_file_state(file_row),
+            Ok(FileState::MetadataModified { .. })
+        ));
+    }
+
+    #[test]
+    fn test_content_modified_file() {
+        let temp_dir = TempDir::new("test_content_modified_file").unwrap();
+        let file_row = create_file_row(&temp_dir, b"Hello, World!");
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        // Modify the file contents
+        let mut file = File::create(&file_row.path).unwrap();
+        file.write_all(b"Modified content").unwrap();
+
+        assert!(matches!(
+            check_file_state(file_row),
+            Ok(FileState::Modified { .. })
+        ));
+    }
+
+    #[test]
+    fn test_removed_file() {
+        let temp_dir = TempDir::new("test_removed_file").unwrap();
+        let file_row = create_file_row(&temp_dir, b"Hello, World!");
+
+        // Remove the file
+        std::fs::remove_file(&file_row.path).unwrap();
+
+        assert!(matches!(
+            check_file_state(file_row),
+            Ok(FileState::Removed { .. })
+        ));
+    }
 }
