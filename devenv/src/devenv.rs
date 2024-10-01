@@ -790,11 +790,13 @@ impl Devenv {
             serde_json::to_string(&self.config).unwrap(),
         )
         .expect("Failed to write devenv.json");
-        // fs::write(
-        //     self.devenv_dotfile.join("imports.txt"),
-        //     self.config.imports.join("\n"),
-        // )
-        // .expect("Failed to write imports.txt");
+        // TODO: superceded by eval caching.
+        // Remove once direnvrc migration is implemented.
+        fs::write(
+            self.devenv_dotfile.join("imports.txt"),
+            self.config.imports.join("\n"),
+        )
+        .expect("Failed to write imports.txt");
 
         // create flake.devenv.nix
         let vars = indoc::formatdoc!(
