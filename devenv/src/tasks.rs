@@ -734,11 +734,6 @@ impl TasksUi {
         let mut last_list_height: u16 = 0;
 
         loop {
-            let mut finished = false;
-            if handle.is_finished() {
-                finished = true;
-            }
-
             let tasks_status = self.get_tasks_status().await;
 
             let status_summary = [
@@ -822,7 +817,7 @@ impl TasksUi {
                 term.write_line(&output.to_string())?;
             }
 
-            if finished {
+            if tasks_status.pending == 0 && tasks_status.running == 0 {
                 break;
             }
 
