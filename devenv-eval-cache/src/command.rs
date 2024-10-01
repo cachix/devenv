@@ -149,7 +149,9 @@ impl<'a> CachedCommand<'a> {
             .await
             .into_iter()
             .flatten()
-            .collect::<Result<Vec<_>, CommandError>>()?;
+            // TODO: add tracing here
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
 
         file_paths.sort_by(|a, b| a.path.cmp(&b.path));
         file_paths.dedup();
