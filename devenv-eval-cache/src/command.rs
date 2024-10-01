@@ -122,8 +122,13 @@ impl<'a> CachedCommand<'a> {
         let output = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
         let mut ops = stderr_thread.await.unwrap();
 
-        // Remove excluded paths
-        ops.retain_mut(|op| !self.excluded_paths.contains(op.source()));
+        // Remove excluded paths if any are a parent directory
+        ops.retain_mut(|op| {
+            !self
+                .excluded_paths
+                .iter()
+                .any(|path| op.source().starts_with(path))
+        });
 
         // Convert Ops to FilePaths
         let mut file_path_futures = ops

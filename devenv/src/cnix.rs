@@ -23,6 +23,7 @@ pub struct Nix<'a> {
     cachix_trusted_keys: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_dot_gc: PathBuf,
+    devenv_dotfile: PathBuf,
     devenv_root: PathBuf,
 }
 
@@ -90,6 +91,7 @@ impl<'a> Nix<'a> {
             cachix_trusted_keys,
             devenv_home_gc,
             devenv_dot_gc,
+            devenv_dotfile,
             devenv_root,
         })
     }
@@ -350,8 +352,10 @@ impl<'a> Nix<'a> {
             let mut cached_cmd = CachedCommand::new(&self.pool);
 
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
-            // TODO: exclude .devenv.flake.nix
+
             cached_cmd.unwatch_path(self.devenv_root.join(".devenv.flake.nix"));
+            // Ignore anything in .devenv.
+            cached_cmd.unwatch_path(&self.devenv_dotfile);
 
             if self.global_options.refresh_eval_cache {
                 cached_cmd.force_refresh();
