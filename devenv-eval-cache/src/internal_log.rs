@@ -116,6 +116,25 @@ impl Display for Field {
     }
 }
 
+/// Check if the log is an actual error message.
+///
+/// In additional to checking the verbosity level of the message, we look for the `error:` prefix in the message.
+/// Most messages during the builds (probably from the nix-daemon) are incorrectly logged as errors.
+pub fn is_nix_error(log: &InternalLog) -> bool {
+    if let InternalLog::Msg {
+        level: Verbosity::Error,
+        msg,
+        ..
+    } = log
+    {
+        if msg.starts_with("\u{1b}[31;1merror:") {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -189,5 +208,30 @@ mod test {
         let json = r#"0"#;
         let verbosity: Verbosity = serde_json::from_str(json).unwrap();
         assert_eq!(verbosity, Verbosity::Error);
+    }
+
+    #[test]
+    // Ensure that only messages containing the prefix `error:` are detected as error messages.
+    // See `is_nix_error` for more details.
+    fn test_is_nix_error() {
+        let log = InternalLog::Msg {
+            level: Verbosity::Error,
+            msg: "\u{1b}[31;1merror:\u{1b}[0m\nsomething went wrong".to_string(),
+            raw_msg: None,
+        };
+        eprintln!("{:?}", log);
+        assert!(is_nix_error(&log));
+    }
+
+    #[test]
+    // Ensure we don't interpret non-error messages as errors.
+    // See `is_nix_error` for more details.
+    fn test_is_nix_error_misleveled_msgs() {
+        let log = InternalLog::Msg {
+            level: Verbosity::Error,
+            msg: "not an error".to_string(),
+            raw_msg: None,
+        };
+        assert!(!is_nix_error(&log));
     }
 }

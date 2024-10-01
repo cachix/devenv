@@ -312,7 +312,7 @@ impl<'a> Nix<'a> {
         mut cmd: std::process::Command,
         options: &Options<'a>,
     ) -> Result<devenv_eval_cache::Output> {
-        use devenv_eval_cache::internal_log::{InternalLog, ResultType, Verbosity};
+        use devenv_eval_cache::internal_log::{is_nix_error, InternalLog, ResultType, Verbosity};
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
         let mut logger = self.logger.clone();
@@ -371,7 +371,7 @@ impl<'a> Nix<'a> {
                     // to filter things out. Our hunch is that these messages are coming from the
                     // nix daemon.
                     InternalLog::Msg { msg, level, .. }
-                        if *level == Verbosity::Error && msg.starts_with("\\u001b[31;1merror:") =>
+                        if *level == Verbosity::Error && is_nix_error(&log) =>
                     {
                         eprintln!("{}", msg);
                     }
