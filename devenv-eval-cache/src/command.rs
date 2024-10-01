@@ -15,6 +15,8 @@ pub enum CommandError {
     Io(#[from] io::Error),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error("Nix command failed: {0}")]
+    NonZeroExitStatus(process::ExitStatus),
 }
 
 pub struct CachedCommand<'a> {
@@ -103,7 +105,7 @@ impl<'a> CachedCommand<'a> {
                     }
                 })
                 .filter_map(extract_op_from_log_line)
-                .collect::<Vec<PathBuf>>()
+                .collect::<Vec<Op>>()
         });
 
         let stdout_thread = tokio::spawn(async move {
@@ -113,33 +115,36 @@ impl<'a> CachedCommand<'a> {
 
         let status = child.wait().map_err(CommandError::Io)?;
 
-        let output = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
-        let mut paths = stderr_thread.await.unwrap();
+        if !status.success() {
+            return Err(CommandError::NonZeroExitStatus(status));
+        }
 
-        // Watch additional paths
-        paths.extend(self.extra_paths.iter().cloned());
+        let output = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
+        let mut ops = stderr_thread.await.unwrap();
 
         // Remove excluded paths
-        paths.retain_mut(|path| !self.excluded_paths.contains(path));
+        ops.retain_mut(|op| !self.excluded_paths.contains(op.source()));
 
-        let file_paths = join_all(paths.into_iter().filter(|path| path.is_file()).map(|path| {
-            tokio::task::spawn_blocking(|| {
-                {
-                    let content_hash = hash::compute_file_hash(&path)?;
-                    let modified_at = path.metadata()?.modified()?;
-                    Ok(FilePath {
-                        path,
-                        content_hash,
-                        modified_at,
-                    })
-                }
-                .map_err(CommandError::Io)
+        // Convert Ops to FilePaths
+        let mut file_path_futures = ops
+            .into_iter()
+            .map(|op| {
+                tokio::task::spawn_blocking(move || {
+                    FilePath::new(op.source().to_path_buf()).map_err(CommandError::Io)
+                })
             })
-        }))
-        .await
-        .into_iter()
-        .flatten()
-        .collect::<Result<Vec<_>, CommandError>>()?;
+            .collect::<Vec<_>>();
+
+        // Watch additional paths
+        file_path_futures.extend(self.extra_paths.into_iter().map(|path| {
+            tokio::task::spawn_blocking(move || FilePath::new(path).map_err(CommandError::Io))
+        }));
+
+        let file_paths = join_all(file_path_futures)
+            .await
+            .into_iter()
+            .flatten()
+            .collect::<Result<Vec<_>, CommandError>>()?;
 
         let input_hash = hash::digest(
             &file_paths
@@ -183,14 +188,38 @@ pub struct Output {
 
 pub struct FilePath {
     pub path: PathBuf,
+    pub is_directory: bool,
     pub content_hash: String,
     pub modified_at: SystemTime,
+}
+
+impl FilePath {
+    pub fn new(path: PathBuf) -> Result<Self, io::Error> {
+        let is_directory = path.is_dir();
+        let content_hash = if is_directory {
+            let paths = std::fs::read_dir(&path)?
+                .filter_map(Result::ok)
+                .map(|entry| entry.path().to_string_lossy().to_string())
+                .collect::<String>();
+            hash::compute_file_hash(&paths)?
+        } else {
+            hash::compute_file_hash(&path)?
+        };
+        let modified_at = path.metadata()?.modified()?;
+        Ok(Self {
+            path,
+            is_directory,
+            content_hash,
+            modified_at,
+        })
+    }
 }
 
 impl From<db::FilePathRow> for FilePath {
     fn from(row: db::FilePathRow) -> Self {
         Self {
             path: row.path,
+            is_directory: row.is_directory,
             content_hash: row.content_hash,
             modified_at: row.modified_at,
         }
@@ -278,16 +307,19 @@ async fn query_cached_output(
     }
 }
 
-fn extract_op_from_log_line(log: InternalLog) -> Option<PathBuf> {
+/// Convert a parse log line into into an `Op`.
+/// Filters out paths that don't impact caching.
+fn extract_op_from_log_line(log: InternalLog) -> Option<Op> {
     match log {
         InternalLog::Msg { .. } => Op::from_internal_log(&log).and_then(|op| match op {
-            Op::EvaluatedFile { source }
-            | Op::ReadFile { source }
-            | Op::CopiedSource { source, .. }
-            | Op::TrackedPath { source }
+            Op::EvaluatedFile { ref source }
+            | Op::ReadFile { ref source }
+            | Op::ReadDir { ref source }
+            | Op::CopiedSource { ref source, .. }
+            | Op::TrackedPath { ref source }
                 if source.starts_with("/") && !source.starts_with("/nix/store") =>
             {
-                Some(source)
+                Some(op)
             }
             _ => None,
         }),
@@ -319,6 +351,7 @@ enum FileState {
 fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
     let metadata = match std::fs::metadata(&file.path) {
         Ok(metadata) => metadata,
+        // Fix
         Err(_) => return Ok(FileState::Removed { path: file.path }),
     };
 
@@ -328,8 +361,21 @@ fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
         return Ok(FileState::Unchanged { path: file.path });
     }
 
-    // File has been touched, recompute the hash
-    let new_hash = hash::compute_file_hash(&file.path)?;
+    // mtime has changed, check if content has changed
+    let new_hash = if file.is_directory {
+        if !metadata.is_dir() {
+            return Ok(FileState::Removed { path: file.path });
+        }
+
+        let paths = std::fs::read_dir(&file.path)?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().to_string_lossy().to_string())
+            .collect::<String>();
+        hash::compute_file_hash(&paths)
+    } else {
+        hash::compute_file_hash(&file.path)
+    }?;
+
     if new_hash == file.content_hash {
         // File touched but hash unchanged
         Ok(FileState::MetadataModified {
@@ -374,6 +420,7 @@ mod test {
 
         db::FilePathRow {
             path: file_path,
+            is_directory: false,
             content_hash,
             modified_at: truncated_modified_at,
             updated_at: truncated_modified_at,

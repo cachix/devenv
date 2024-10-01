@@ -12,6 +12,8 @@ pub enum Op {
     EvaluatedFile { source: PathBuf },
     /// Read a file's contents with `builtins.readFile`.
     ReadFile { source: PathBuf },
+    /// List a directory's contents with `builtins.readDir`.
+    ReadDir { source: PathBuf },
     /// Used a tracked devenv string path.
     TrackedPath { source: PathBuf },
 }
@@ -26,6 +28,8 @@ impl Op {
                 Regex::new("^copied source '(?P<source>.*)' -> '(?P<target>.*)'$").expect("invalid regex");
             static ref READ_FILE: Regex =
                 Regex::new("^trace: devenv readFile: '(?P<source>.*)'$").expect("invalid regex");
+            static ref READ_DIR: Regex =
+                Regex::new("^trace: devenv readDir: '(?P<source>.*)'$").expect("invalid regex");
             static ref TRACKED_PATH: Regex =
                 Regex::new("^trace: devenv path: '(?P<source>.*)'$").expect("invalid regex");
         }
@@ -46,6 +50,9 @@ impl Op {
                 } else if let Some(matches) = READ_FILE.captures(msg) {
                     let source = PathBuf::from(&matches["source"]);
                     Some(Op::ReadFile { source })
+                } else if let Some(matches) = READ_DIR.captures(msg) {
+                    let source = PathBuf::from(&matches["source"]);
+                    Some(Op::ReadDir { source })
                 } else if let Some(matches) = TRACKED_PATH.captures(msg) {
                     let source = PathBuf::from(&matches["source"]);
                     Some(Op::TrackedPath { source })
@@ -54,6 +61,16 @@ impl Op {
                 }
             }
             _ => None,
+        }
+    }
+
+    pub fn source(&self) -> &PathBuf {
+        match self {
+            Op::CopiedSource { source, .. } => source,
+            Op::EvaluatedFile { source } => source,
+            Op::ReadFile { source } => source,
+            Op::ReadDir { source } => source,
+            Op::TrackedPath { source } => source,
         }
     }
 }
@@ -104,6 +121,18 @@ mod tests {
             op,
             Some(Op::ReadFile {
                 source: PathBuf::from("/path/to/file"),
+            })
+        );
+    }
+
+    #[test]
+    fn test_read_dir() {
+        let log = create_log("trace: devenv readDir: '/path/to/dir'");
+        let op = Op::from_internal_log(&log);
+        assert_eq!(
+            op,
+            Some(Op::ReadDir {
+                source: PathBuf::from("/path/to/dir"),
             })
         );
     }

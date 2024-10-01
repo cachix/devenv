@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS file_path
 (
   id           INTEGER NOT NULL PRIMARY KEY,
   path         BLOB NOT NULL UNIQUE,
+  is_directory BOOLEAN NOT NULL,
   content_hash CHAR(64) NOT NULL,
   modified_at  INTEGER NOT NULL,
   updated_at   INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))

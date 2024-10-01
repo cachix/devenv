@@ -185,10 +185,11 @@ where
     let mut conn = conn.acquire().await?;
 
     let file_path_query = r#"
-        INSERT INTO file_path (path, content_hash, modified_at)
-        VALUES (?, ?, ?)
+        INSERT INTO file_path (path, is_directory, content_hash, modified_at)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT (path) DO UPDATE
         SET content_hash = excluded.content_hash,
+            is_directory = excluded.is_directory,
             modified_at = excluded.modified_at,
             updated_at = strftime('%s', 'now')
         RETURNING id
@@ -197,6 +198,7 @@ where
     let mut file_ids = Vec::with_capacity(paths.len());
     for FilePath {
         path,
+        is_directory,
         content_hash,
         modified_at,
     } in paths
@@ -204,6 +206,7 @@ where
         let modified_at = modified_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
         let id: i64 = sqlx::query(file_path_query)
             .bind(path.to_path_buf().into_os_string().as_bytes())
+            .bind(is_directory)
             .bind(content_hash)
             .bind(modified_at)
             .fetch_one(&mut *conn)
@@ -233,6 +236,7 @@ where
 pub struct FilePathRow {
     /// A path
     pub path: PathBuf,
+    pub is_directory: bool,
     /// The hash of the file's content
     pub content_hash: String,
     /// The last modified time of the file
@@ -244,11 +248,13 @@ pub struct FilePathRow {
 impl sqlx::FromRow<'_, SqliteRow> for FilePathRow {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let path: &[u8] = row.get("path");
+        let is_directory: bool = row.get("is_directory");
         let content_hash: String = row.get("content_hash");
         let modified_at: u64 = row.get("modified_at");
         let updated_at: u64 = row.get("updated_at");
         Ok(Self {
             path: PathBuf::from(OsStr::from_bytes(path)),
+            is_directory,
             content_hash,
             modified_at: UNIX_EPOCH + std::time::Duration::from_secs(modified_at),
             updated_at: UNIX_EPOCH + std::time::Duration::from_secs(updated_at),
@@ -262,7 +268,7 @@ pub async fn get_files_by_command_id(
 ) -> Result<Vec<FilePathRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
-            SELECT fp.path, fp.content_hash, fp.modified_at, fp.updated_at
+            SELECT fp.path, fp.is_directory, fp.content_hash, fp.modified_at, fp.updated_at
             FROM file_path fp
             JOIN cmd_input_path cip ON fp.id = cip.file_path_id
             WHERE cip.cached_cmd_id = ?
@@ -274,13 +280,14 @@ pub async fn get_files_by_command_id(
 
     Ok(files)
 }
+
 pub async fn get_files_by_command_hash(
     pool: &SqlitePool,
     command_hash: &str,
 ) -> Result<Vec<FilePathRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
-            SELECT fp.path, fp.content_hash, fp.modified_at, fp.updated_at
+            SELECT fp.path, fp.is_directory, fp.content_hash, fp.modified_at, fp.updated_at
             FROM file_path fp
             JOIN cmd_input_path cip ON fp.id = cip.file_path_id
             JOIN cached_cmd cc ON cip.cached_cmd_id = cc.id
@@ -349,11 +356,13 @@ mod tests {
         let paths = vec![
             FilePath {
                 path: "/path/to/file1".into(),
+                is_directory: false,
                 content_hash: "hash1".to_string(),
                 modified_at,
             },
             FilePath {
                 path: "/path/to/file2".into(),
+                is_directory: false,
                 content_hash: "hash2".to_string(),
                 modified_at,
             },
@@ -398,11 +407,13 @@ mod tests {
         let paths1 = vec![
             FilePath {
                 path: "/path/to/file1".into(),
+                is_directory: false,
                 content_hash: "hash1".to_string(),
                 modified_at,
             },
             FilePath {
                 path: "/path/to/file2".into(),
+                is_directory: false,
                 content_hash: "hash2".to_string(),
                 modified_at,
             },
@@ -427,11 +438,13 @@ mod tests {
         let paths2 = vec![
             FilePath {
                 path: "/path/to/file2".into(),
+                is_directory: false,
                 content_hash: "hash2".to_string(),
                 modified_at,
             },
             FilePath {
                 path: "/path/to/file3".into(),
+                is_directory: false,
                 content_hash: "hash3".to_string(),
                 modified_at,
             },
@@ -489,11 +502,13 @@ mod tests {
         let paths1 = vec![
             FilePath {
                 path: "/path/to/file1".into(),
+                is_directory: false,
                 content_hash: "hash1".to_string(),
                 modified_at,
             },
             FilePath {
                 path: "/path/to/file2".into(),
+                is_directory: false,
                 content_hash: "hash2".to_string(),
                 modified_at,
             },
@@ -514,11 +529,13 @@ mod tests {
         let paths2 = vec![
             FilePath {
                 path: "/path/to/file2".into(),
+                is_directory: false,
                 content_hash: "hash2".to_string(),
                 modified_at,
             },
             FilePath {
                 path: "/path/to/file3".into(),
+                is_directory: false,
                 content_hash: "hash3".to_string(),
                 modified_at,
             },
