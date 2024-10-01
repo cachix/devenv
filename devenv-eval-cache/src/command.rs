@@ -204,7 +204,7 @@ impl FilePath {
                 .filter_map(Result::ok)
                 .map(|entry| entry.path().to_string_lossy().to_string())
                 .collect::<String>();
-            hash::compute_file_hash(&paths)?
+            hash::digest(&paths)
         } else {
             hash::compute_file_hash(&path)?
         };
@@ -376,10 +376,10 @@ fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
             .filter_map(Result::ok)
             .map(|entry| entry.path().to_string_lossy().to_string())
             .collect::<String>();
-        hash::compute_file_hash(&paths)
+        hash::digest(&paths)
     } else {
-        hash::compute_file_hash(&file.path)
-    }?;
+        hash::compute_file_hash(&file.path)?
+    };
 
     if new_hash == file.content_hash {
         // File touched but hash unchanged
