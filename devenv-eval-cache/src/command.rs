@@ -147,6 +147,7 @@ impl<'a> CachedCommand<'a> {
             .collect::<Result<Vec<_>, CommandError>>()?;
 
         file_paths.sort_by(|a, b| a.path.cmp(&b.path));
+        file_paths.dedup();
 
         let input_hash = hash::digest(
             &file_paths
@@ -188,7 +189,7 @@ pub struct Output {
     pub paths: Vec<FilePath>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FilePath {
     pub path: PathBuf,
     pub is_directory: bool,
@@ -247,6 +248,7 @@ async fn query_cached_output(
             .map_err(CommandError::Sqlx)?;
 
         files.sort_by(|a, b| a.path.cmp(&b.path));
+        files.dedup();
 
         let mut should_refresh = false;
 

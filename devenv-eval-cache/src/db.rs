@@ -232,7 +232,7 @@ where
 }
 
 /// The row type for the `file_path` table.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FilePathRow {
     /// A path
     pub path: PathBuf,
