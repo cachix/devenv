@@ -27,9 +27,9 @@ impl Op {
             static ref COPIED_SOURCE: Regex =
                 Regex::new("^copied source '(?P<source>.*)' -> '(?P<target>.*)'$").expect("invalid regex");
             static ref READ_FILE: Regex =
-                Regex::new("^trace: devenv readFile: '(?P<source>.*)'$").expect("invalid regex");
+                Regex::new("^devenv readFile: '(?P<source>.*)'$").expect("invalid regex");
             static ref READ_DIR: Regex =
-                Regex::new("^trace: devenv readDir: '(?P<source>.*)'$").expect("invalid regex");
+                Regex::new("^devenv readDir: '(?P<source>.*)'$").expect("invalid regex");
             static ref TRACKED_PATH: Regex =
                 Regex::new("^trace: devenv path: '(?P<source>.*)'$").expect("invalid regex");
         }
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_read_file() {
-        let log = create_log("trace: devenv readFile: '/path/to/file'");
+        let log = create_log("devenv readFile: '/path/to/file'");
         let op = Op::from_internal_log(&log);
         assert_eq!(
             op,
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_read_dir() {
-        let log = create_log("trace: devenv readDir: '/path/to/dir'");
+        let log = create_log("devenv readDir: '/path/to/dir'");
         let op = Op::from_internal_log(&log);
         assert_eq!(
             op,
