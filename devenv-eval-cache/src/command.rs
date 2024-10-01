@@ -140,11 +140,13 @@ impl<'a> CachedCommand<'a> {
             tokio::task::spawn_blocking(move || FilePath::new(path).map_err(CommandError::Io))
         }));
 
-        let file_paths = join_all(file_path_futures)
+        let mut file_paths = join_all(file_path_futures)
             .await
             .into_iter()
             .flatten()
             .collect::<Result<Vec<_>, CommandError>>()?;
+
+        file_paths.sort_by(|a, b| a.path.cmp(&b.path));
 
         let input_hash = hash::digest(
             &file_paths
@@ -186,6 +188,7 @@ pub struct Output {
     pub paths: Vec<FilePath>,
 }
 
+#[derive(Clone, Debug)]
 pub struct FilePath {
     pub path: PathBuf,
     pub is_directory: bool,
@@ -239,9 +242,11 @@ async fn query_cached_output(
         .map_err(CommandError::Sqlx)?;
 
     if let Some(cmd) = cached_cmd {
-        let files = db::get_files_by_command_id(pool, cmd.id)
+        let mut files = db::get_files_by_command_id(pool, cmd.id)
             .await
             .map_err(CommandError::Sqlx)?;
+
+        files.sort_by(|a, b| a.path.cmp(&b.path));
 
         let mut should_refresh = false;
 
@@ -431,8 +436,6 @@ mod test {
     fn test_unchanged_file() {
         let temp_dir = TempDir::new("test_unchanged_file").unwrap();
         let file_row = create_file_row(&temp_dir, b"Hello, World!");
-
-        println!("{:?}", check_file_state(file_row.clone()));
 
         assert!(matches!(
             check_file_state(file_row),
