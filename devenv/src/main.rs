@@ -1,18 +1,13 @@
-mod cli;
-mod cnix;
-mod config;
-mod devenv;
-mod log;
-mod tasks;
-
-use clap::{crate_version, Parser};
-use cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand};
-use devenv::Devenv;
+use clap::crate_version;
+use devenv::{
+    cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
+    config, log, Devenv,
+};
 use miette::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_and_resolve_options();
 
     if let Commands::Version { .. } = cli.command {
         println!(
@@ -61,8 +56,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    let mut devenv = Devenv::new(options);
-    devenv.create_directories()?;
+    let mut devenv = Devenv::new(options).await;
 
     match cli.command {
         Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true).await,
@@ -129,10 +123,10 @@ async fn main() -> Result<()> {
         Commands::Init { target } => devenv.init(&target),
         Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
-        Commands::Info {} => devenv.info(),
+        Commands::Info {} => devenv.info().await,
         Commands::Repl {} => devenv.repl(),
         Commands::Build { attributes } => devenv.build(&attributes).await,
-        Commands::Update { name } => devenv.update(&name),
+        Commands::Update { name } => devenv.update(&name).await,
         Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach).await,
         Commands::Processes { command } => match command {
             ProcessesCommand::Up { process, detach } => {

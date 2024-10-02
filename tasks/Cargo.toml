@@ -6,6 +6,6 @@ license.workspace = true
 
 [dependencies]
 clap.workspace = true
-devenv = { path = "../devenv" }
+devenv.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

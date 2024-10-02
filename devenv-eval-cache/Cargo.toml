@@ -1,0 +1,22 @@
+[package]
+name = "devenv-eval-cache"
+# TODO: switch to workspace version
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+blake3.workspace = true
+futures.workspace = true
+lazy_static.workspace = true
+miette.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_repr.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempdir.workspace = true

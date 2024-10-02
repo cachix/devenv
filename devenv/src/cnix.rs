@@ -1,6 +1,7 @@
 use crate::{cli, config, log};
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use serde::Deserialize;
+use sqlx::SqlitePool;
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::env;
@@ -14,6 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct Nix<'a> {
     logger: log::Logger,
     pub options: Options<'a>,
+    pool: SqlitePool,
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
@@ -21,79 +23,109 @@ pub struct Nix<'a> {
     cachix_trusted_keys: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_dot_gc: PathBuf,
+    devenv_dotfile: PathBuf,
     devenv_root: PathBuf,
 }
 
 #[derive(Clone)]
 pub struct Options<'a> {
     pub replace_shell: bool,
+    pub cache_output: bool,
     pub logging: bool,
     pub logging_stdout: bool,
     pub nix_flags: &'a [&'a str],
 }
 
 impl<'a> Nix<'a> {
-    pub fn new<P: AsRef<Path>>(
+    pub async fn new<P: AsRef<Path>>(
         logger: log::Logger,
         config: config::Config,
         global_options: cli::GlobalOptions,
         cachix_trusted_keys: P,
         devenv_home_gc: P,
+        devenv_dotfile: P,
         devenv_dot_gc: P,
         devenv_root: P,
-    ) -> Self {
+    ) -> Result<Self> {
         let cachix_trusted_keys = cachix_trusted_keys.as_ref().to_path_buf();
         let devenv_home_gc = devenv_home_gc.as_ref().to_path_buf();
+        let devenv_dotfile = devenv_dotfile.as_ref().to_path_buf();
         let devenv_dot_gc = devenv_dot_gc.as_ref().to_path_buf();
         let devenv_root = devenv_root.as_ref().to_path_buf();
 
         let cachix_caches = RefCell::new(None);
+        let options = Options {
+            replace_shell: false,
+            // Individual commands opt into caching
+            cache_output: false,
+            logging: true,
+            logging_stdout: false,
+            nix_flags: &[
+                "--show-trace",
+                "--extra-experimental-features",
+                "nix-command",
+                "--extra-experimental-features",
+                "flakes",
+                "--option",
+                "warn-dirty",
+                "false",
+                "--keep-going",
+            ],
+        };
 
-        Self {
+        let database_url = format!(
+            "sqlite:{}/nix-eval-cache.db",
+            devenv_dotfile.to_string_lossy()
+        );
+        let pool = devenv_eval_cache::db::setup_db(database_url)
+            .await
+            .into_diagnostic()?;
+
+        Ok(Self {
             logger,
-            cachix_caches,
+            options,
+            pool,
             config,
             global_options,
-            options: Options {
-                replace_shell: false,
-                logging: true,
-                logging_stdout: false,
-                nix_flags: &[
-                    "--show-trace",
-                    "--extra-experimental-features",
-                    "nix-command",
-                    "--extra-experimental-features",
-                    "flakes",
-                    "--option",
-                    "warn-dirty",
-                    "false",
-                    "--keep-going",
-                ],
-            },
+            cachix_caches,
             cachix_trusted_keys,
             devenv_home_gc,
             devenv_dot_gc,
+            devenv_dotfile,
             devenv_root,
-        }
+        })
     }
 
-    pub async fn develop(&self, args: &[&str], replace_shell: bool) -> Result<process::Output> {
+    pub async fn develop(
+        &self,
+        args: &[&str],
+        replace_shell: bool,
+    ) -> Result<devenv_eval_cache::Output> {
         let options = Options {
             logging_stdout: true,
+            // Cannot cache this because we don't get the derivation back.
+            // We'd need to switch to print-dev-env and our own `nix develop`.
+            cache_output: false,
             replace_shell,
             ..self.options
         };
         self.run_nix_with_substituters("nix", args, &options).await
     }
 
-    pub async fn dev_env(&self, json: bool, gc_root: &PathBuf) -> Result<Vec<u8>> {
+    pub async fn dev_env(
+        &self,
+        json: bool,
+        gc_root: &PathBuf,
+    ) -> Result<devenv_eval_cache::Output> {
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
         let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
         let mut args: Vec<&str> = vec!["print-dev-env", "--profile", gc_root_str];
         if json {
             args.push("--json");
         }
-
-        let options = Options { ..self.options };
         let env = self
             .run_nix_with_substituters("nix", &args, &options)
             .await?;
@@ -104,7 +136,7 @@ impl<'a> Nix<'a> {
         };
 
         let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
-        self.run_nix("nix-env", &args, &options)?;
+        self.run_nix("nix-env", &args, &options).await?;
         let now_ns = get_now_with_nanoseconds();
         let target = format!("{}-shell", now_ns);
         symlink_force(
@@ -112,10 +144,11 @@ impl<'a> Nix<'a> {
             &fs::canonicalize(gc_root).expect("to resolve gc_root"),
             &self.devenv_home_gc.join(target),
         );
-        Ok(env.stdout)
+
+        Ok(env)
     }
 
-    pub fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
+    pub async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
         self.run_nix(
             "nix-store",
             &[
@@ -125,7 +158,8 @@ impl<'a> Nix<'a> {
                 path.to_str().unwrap(),
             ],
             &self.options,
-        )?;
+        )
+        .await?;
         let link_path = self
             .devenv_dot_gc
             .join(format!("{}-{}", name, get_now_with_nanoseconds()));
@@ -140,59 +174,76 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn build(&self, attributes: &[&str]) -> Result<Vec<PathBuf>> {
-        if !attributes.is_empty() {
-            // TODO: use eval underneath
-            let mut args: Vec<String> = vec![
-                "build".to_string(),
-                "--no-link".to_string(),
-                "--print-out-paths".to_string(),
-            ];
-            args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
-            let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
-            let output = self
-                .run_nix_with_substituters("nix", &args_str, &self.options)
-                .await?;
-            Ok(String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| PathBuf::from(s.to_string()))
-                .collect())
-        } else {
-            Ok(Vec::new())
+        if attributes.is_empty() {
+            return Ok(Vec::new());
         }
+
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
+        // TODO: use eval underneath
+        let mut args: Vec<String> = vec![
+            "build".to_string(),
+            "--no-link".to_string(),
+            "--print-out-paths".to_string(),
+        ];
+        args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
+        let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
+        let output = self
+            .run_nix_with_substituters("nix", &args_str, &options)
+            .await?;
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .to_string()
+            .split_whitespace()
+            .map(|s| PathBuf::from(s.to_string()))
+            .collect())
     }
 
     pub async fn eval(&self, attributes: &[&str]) -> Result<String> {
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
         let mut args: Vec<String> = vec!["eval", "--json"]
             .into_iter()
             .map(String::from)
             .collect();
         args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args = &args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-        let result = self.run_nix("nix", args, &self.options)?;
+        let result = self.run_nix("nix", args, &options).await?;
         String::from_utf8(result.stdout)
             .map_err(|err| miette::miette!("Failed to parse command output as UTF-8: {}", err))
     }
 
-    pub fn update(&self, input_name: &Option<String>) -> Result<()> {
+    pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
         match input_name {
             Some(input_name) => {
                 self.run_nix(
                     "nix",
                     &["flake", "lock", "--update-input", input_name],
                     &self.options,
-                )?;
+                )
+                .await?;
             }
             None => {
-                self.run_nix("nix", &["flake", "update"], &self.options)?;
+                self.run_nix("nix", &["flake", "update"], &self.options)
+                    .await?;
             }
         }
         Ok(())
     }
 
-    pub fn metadata(&self) -> Result<String> {
+    pub async fn metadata(&self) -> Result<String> {
+        let options = Options {
+            cache_output: true,
+            ..self.options
+        };
+
         // TODO: use --json
-        let metadata = self.run_nix("nix", &["flake", "metadata"], &self.options)?;
+        let metadata = self
+            .run_nix("nix", &["flake", "metadata"], &options)
+            .await?;
 
         let re = regex::Regex::new(r"(Inputs:.+)$").unwrap();
         let metadata_str = String::from_utf8_lossy(&metadata.stdout);
@@ -201,7 +252,9 @@ impl<'a> Nix<'a> {
             None => "",
         };
 
-        let info_ = self.run_nix("nix", &["eval", "--raw", ".#info"], &self.options)?;
+        let info_ = self
+            .run_nix("nix", &["eval", "--raw", ".#info"], &options)
+            .await?;
         Ok(format!(
             "{}\n{}",
             inputs,
@@ -209,7 +262,7 @@ impl<'a> Nix<'a> {
         ))
     }
 
-    pub async fn search(&self, name: &str) -> Result<process::Output> {
+    pub async fn search(&self, name: &str) -> Result<devenv_eval_cache::Output> {
         self.run_nix_with_substituters(
             "nix",
             &["search", "--inputs-from", ".", "--json", "nixpkgs", name],
@@ -234,14 +287,14 @@ impl<'a> Nix<'a> {
     }
 
     // Run Nix with debugger capability and return the output
-    pub fn run_nix(
+    pub async fn run_nix(
         &self,
         command: &str,
         args: &[&str],
         options: &Options<'a>,
-    ) -> Result<process::Output> {
+    ) -> Result<devenv_eval_cache::Output> {
         let cmd = self.prepare_command(command, args, options)?;
-        self.run_nix_command(cmd, options)
+        self.run_nix_command(cmd, options).await
     }
 
     pub async fn run_nix_with_substituters(
@@ -249,18 +302,21 @@ impl<'a> Nix<'a> {
         command: &str,
         args: &[&str],
         options: &Options<'a>,
-    ) -> Result<process::Output> {
+    ) -> Result<devenv_eval_cache::Output> {
         let cmd = self
             .prepare_command_with_substituters(command, args, options)
             .await?;
-        self.run_nix_command(cmd, options)
+        self.run_nix_command(cmd, options).await
     }
 
-    fn run_nix_command(
+    async fn run_nix_command(
         &self,
         mut cmd: std::process::Command,
         options: &Options<'a>,
-    ) -> Result<process::Output> {
+    ) -> Result<devenv_eval_cache::Output> {
+        use devenv_eval_cache::internal_log::Verbosity;
+        use devenv_eval_cache::{supports_eval_caching, CachedCommand};
+
         let mut logger = self.logger.clone();
 
         if !options.logging {
@@ -279,46 +335,90 @@ impl<'a> Nix<'a> {
                 display_command(&cmd),
             ));
             bail!("Failed to replace shell")
-        } else {
-            if options.logging {
-                cmd.stdin(process::Stdio::inherit())
-                    .stderr(process::Stdio::inherit());
-                if options.logging_stdout {
-                    cmd.stdout(std::process::Stdio::inherit());
-                }
+        }
+
+        if options.logging {
+            cmd.stdin(process::Stdio::inherit())
+                .stderr(process::Stdio::inherit());
+            if options.logging_stdout {
+                cmd.stdout(std::process::Stdio::inherit());
+            }
+        }
+
+        let result = if self.global_options.eval_cache
+            && options.cache_output
+            && supports_eval_caching(&cmd)
+        {
+            let mut cached_cmd = CachedCommand::new(&self.pool);
+
+            cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
+
+            cached_cmd.unwatch_path(self.devenv_root.join(".devenv.flake.nix"));
+            // Ignore anything in .devenv.
+            cached_cmd.unwatch_path(&self.devenv_dotfile);
+
+            if self.global_options.refresh_eval_cache {
+                cached_cmd.force_refresh();
             }
 
-            let result = cmd
+            if options.logging {
+                let target_log_level = if self.global_options.verbose {
+                    Verbosity::Talkative
+                } else if self.global_options.quiet {
+                    Verbosity::Error
+                } else {
+                    Verbosity::Info
+                };
+
+                cached_cmd.on_stderr(move |log| {
+                    if let Some(msg) = log.get_log_msg_by_level(target_log_level) {
+                        eprintln!("{msg}");
+                    }
+                });
+            }
+            cached_cmd
+                .output(&mut cmd)
+                .await
+                .into_diagnostic()
+                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?
+        } else {
+            let output = cmd
                 .output()
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
-
-            if !result.status.success() {
-                let code = match result.status.code() {
-                    Some(code) => format!("with exit code {}", code),
-                    None => "without exit code".to_string(),
-                };
-                if options.logging {
-                    eprintln!();
-                    self.logger.error(&format!(
-                        "Command produced the following output:\n{}\n{}",
-                        String::from_utf8_lossy(&result.stdout),
-                        String::from_utf8_lossy(&result.stderr),
-                    ));
-                }
-                if self.global_options.nix_debugger
-                    && cmd.get_program().to_string_lossy().ends_with("bin/nix")
-                {
-                    self.logger.info("Starting Nix debugger ...");
-                    cmd.arg("--debugger").exec();
-                }
-                bail!(format!(
-                    "Command `{}` failed with {code}",
-                    display_command(&cmd)
-                ))
-            } else {
-                Ok(result)
+            devenv_eval_cache::Output {
+                status: output.status,
+                stdout: output.stdout,
+                stderr: output.stderr,
+                paths: vec![],
             }
+        };
+
+        if !result.status.success() {
+            let code = match result.status.code() {
+                Some(code) => format!("with exit code {}", code),
+                None => "without exit code".to_string(),
+            };
+            if options.logging {
+                eprintln!();
+                self.logger.error(&format!(
+                    "Command produced the following output:\n{}\n{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                ));
+            }
+            if self.global_options.nix_debugger
+                && cmd.get_program().to_string_lossy().ends_with("bin/nix")
+            {
+                self.logger.info("Starting Nix debugger ...");
+                cmd.arg("--debugger").exec();
+            }
+            bail!(format!(
+                "Command `{}` failed with {code}",
+                display_command(&cmd)
+            ))
+        } else {
+            Ok(result)
         }
     }
 
@@ -414,10 +514,10 @@ impl<'a> Nix<'a> {
         let max_jobs = self.global_options.max_jobs.to_string();
         flags.push(&max_jobs);
 
+        // Disable the flake eval cache.
         flags.push("--option");
         flags.push("eval-cache");
-        let eval_cache = self.global_options.eval_cache.to_string();
-        flags.push(&eval_cache);
+        flags.push("false");
 
         // handle --nix-option key value
         for chunk in self.global_options.nix_option.chunks_exact(2) {
@@ -517,7 +617,9 @@ impl<'a> Nix<'a> {
             }
 
             if !caches.caches.pull.is_empty() {
-                let store = self.run_nix("nix", &["store", "ping", "--json"], &no_logging)?;
+                let store = self
+                    .run_nix("nix", &["store", "ping", "--json"], &no_logging)
+                    .await?;
                 let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
                     .expect("Failed to parse JSON")
                     .trusted;
