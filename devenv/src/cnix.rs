@@ -314,7 +314,7 @@ impl<'a> Nix<'a> {
         mut cmd: std::process::Command,
         options: &Options<'a>,
     ) -> Result<devenv_eval_cache::Output> {
-        use devenv_eval_cache::internal_log::{is_nix_error, InternalLog, ResultType, Verbosity};
+        use devenv_eval_cache::internal_log::Verbosity;
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
         let mut logger = self.logger.clone();
@@ -370,34 +370,10 @@ impl<'a> Nix<'a> {
                     Verbosity::Info
                 };
 
-                cached_cmd.on_stderr(move |log| match log {
-                    // A lot of build messages are tagged as level 0 (Error), making it difficult
-                    // to filter things out. Our hunch is that these messages are coming from the
-                    // nix daemon.
-                    InternalLog::Msg { msg, level, .. }
-                        if *level == Verbosity::Error && is_nix_error(&log) =>
-                    {
-                        eprintln!("{}", msg);
+                cached_cmd.on_stderr(move |log| {
+                    if let Some(msg) = log.get_log_msg_by_level(target_log_level) {
+                        eprintln!("{msg}");
                     }
-                    InternalLog::Msg { msg, level, .. }
-                        if *level > Verbosity::Error && *level <= target_log_level =>
-                    {
-                        eprintln!("{}", msg);
-                    }
-
-                    InternalLog::Start { level, text, .. } if *level <= target_log_level => {
-                        eprintln!("{}", text);
-                    }
-                    InternalLog::Result {
-                        typ: ResultType::BuildLogLine,
-                        fields,
-                        ..
-                    } if target_log_level >= Verbosity::Info => {
-                        for field in fields.iter() {
-                            eprintln!("{}", field);
-                        }
-                    }
-                    _ => {}
                 });
             }
             cached_cmd
@@ -413,6 +389,7 @@ impl<'a> Nix<'a> {
             devenv_eval_cache::Output {
                 status: output.status,
                 stdout: output.stdout,
+                stderr: output.stderr,
                 paths: vec![],
             }
         };
@@ -427,7 +404,7 @@ impl<'a> Nix<'a> {
                 self.logger.error(&format!(
                     "Command produced the following output:\n{}\n{}",
                     String::from_utf8_lossy(&result.stdout),
-                    "oops" // String::from_utf8_lossy(&result.stderr),
+                    String::from_utf8_lossy(&result.stderr),
                 ));
             }
             if self.global_options.nix_debugger

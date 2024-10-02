@@ -48,10 +48,65 @@ impl InternalLog {
             .strip_prefix("@nix ")
             .map(serde_json::from_str)
     }
+
+    pub fn get_log_msg_by_level(&self, target_log_level: Verbosity) -> Option<String> {
+        use std::fmt::Write;
+
+        match self {
+            // A lot of build messages are tagged as level 0 (Error), making it difficult
+            // to filter things out. Our hunch is that these messages are coming from the
+            // nix daemon.
+            InternalLog::Msg { msg, level, .. }
+                if *level == Verbosity::Error && self.is_nix_error() =>
+            {
+                Some(msg.clone())
+            }
+            InternalLog::Msg { msg, level, .. }
+                if *level > Verbosity::Error && *level <= target_log_level =>
+            {
+                Some(msg.clone())
+            }
+
+            InternalLog::Start { level, text, .. } if *level <= target_log_level => {
+                Some(text.clone())
+            }
+            InternalLog::Result {
+                typ: ResultType::BuildLogLine,
+                fields,
+                ..
+            } if target_log_level >= Verbosity::Info => {
+                let mut msg = String::new();
+                for field in fields {
+                    writeln!(msg, "{}", field).ok();
+                }
+                Some(msg.trim_end().to_string())
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if the log is an actual error message.
+    ///
+    /// In additional to checking the verbosity level of the message, we look for the `error:` prefix in the message.
+    /// Most messages during the builds (probably from the nix-daemon) are incorrectly logged as errors.
+    pub fn is_nix_error(&self) -> bool {
+        if let InternalLog::Msg {
+            level: Verbosity::Error,
+            msg,
+            ..
+        } = self
+        {
+            if msg.starts_with("\u{1b}[31;1merror:") {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 /// See https://github.com/NixOS/nix/blob/322d2c767f2a3f8ef2ac3d1ba46c19caf9a1ffce/src/libutil/error.hh#L33-L42
-#[derive(Clone, Debug, Default, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Default, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum Verbosity {
     Error = 0,
@@ -66,7 +121,7 @@ pub enum Verbosity {
 }
 
 /// See https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L11-L26
-#[derive(Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum ActivityType {
     Unknown = 0,
@@ -86,7 +141,7 @@ pub enum ActivityType {
 }
 
 /// See https://github.com/NixOS/nix/blob/a5959aa12170fc75cafc9e2416fae9aa67f91e6b/src/libutil/logging.hh#L28-L38
-#[derive(Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, Deserialize_repr, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum ResultType {
     FileLinked = 100,
@@ -114,25 +169,6 @@ impl Display for Field {
             Field::String(s) => write!(f, "{}", s),
         }
     }
-}
-
-/// Check if the log is an actual error message.
-///
-/// In additional to checking the verbosity level of the message, we look for the `error:` prefix in the message.
-/// Most messages during the builds (probably from the nix-daemon) are incorrectly logged as errors.
-pub fn is_nix_error(log: &InternalLog) -> bool {
-    if let InternalLog::Msg {
-        level: Verbosity::Error,
-        msg,
-        ..
-    } = log
-    {
-        if msg.starts_with("\u{1b}[31;1merror:") {
-            return true;
-        }
-    }
-
-    false
 }
 
 #[cfg(test)]
@@ -220,7 +256,7 @@ mod test {
             raw_msg: None,
         };
         eprintln!("{:?}", log);
-        assert!(is_nix_error(&log));
+        assert!(log.is_nix_error());
     }
 
     #[test]
@@ -232,6 +268,6 @@ mod test {
             msg: "not an error".to_string(),
             raw_msg: None,
         };
-        assert!(!is_nix_error(&log));
+        assert!(!log.is_nix_error());
     }
 }

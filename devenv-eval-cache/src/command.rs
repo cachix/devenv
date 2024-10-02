@@ -7,7 +7,11 @@ use std::process::{self, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
-use crate::{db, hash, internal_log::InternalLog, op::Op};
+use crate::{
+    db, hash,
+    internal_log::{InternalLog, Verbosity},
+    op::Op,
+};
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum CommandError {
@@ -94,18 +98,28 @@ impl<'a> CachedCommand<'a> {
 
         let stderr_thread = tokio::spawn(async move {
             let reader = BufReader::new(stderr);
+            let mut raw_lines: Vec<u8> = Vec::new();
+            let mut ops = Vec::new();
 
-            reader
-                .lines()
-                .map_while(Result::ok)
-                .filter_map(|line| InternalLog::parse(line).and_then(|log| log.ok()))
-                .inspect(|log| {
+            let mut lines = reader.lines();
+            while let Some(Ok(line)) = lines.next() {
+                if let Some(log) = InternalLog::parse(&line).and_then(Result::ok) {
                     if let Some(ref f) = &on_stderr {
-                        f(log);
+                        f(&log);
                     }
-                })
-                .filter_map(extract_op_from_log_line)
-                .collect::<Vec<Op>>()
+
+                    // FIX: verbosity
+                    if let Some(msg) = log.get_log_msg_by_level(Verbosity::Info) {
+                        raw_lines.extend_from_slice(msg.as_bytes());
+                    }
+
+                    if let Some(op) = extract_op_from_log_line(log) {
+                        ops.push(op);
+                    }
+                }
+            }
+
+            (ops, raw_lines)
         });
 
         let stdout_thread = tokio::spawn(async move {
@@ -119,8 +133,8 @@ impl<'a> CachedCommand<'a> {
             return Err(CommandError::NonZeroExitStatus(status));
         }
 
-        let output = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
-        let mut ops = stderr_thread.await.unwrap();
+        let stdout = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
+        let (mut ops, stderr) = stderr_thread.await.unwrap();
 
         // Remove excluded paths if any are a parent directory
         ops.retain_mut(|op| {
@@ -168,7 +182,7 @@ impl<'a> CachedCommand<'a> {
             &raw_cmd,
             &cmd_hash,
             &input_hash,
-            &output,
+            &stdout,
             &file_paths,
         )
         .await
@@ -176,7 +190,8 @@ impl<'a> CachedCommand<'a> {
 
         Ok(Output {
             status,
-            stdout: output,
+            stdout,
+            stderr,
             paths: file_paths,
         })
     }
@@ -190,8 +205,10 @@ pub fn supports_eval_caching(cmd: &Command) -> bool {
 pub struct Output {
     /// The status code of the command.
     pub status: process::ExitStatus,
-    /// The standard output of the command.
+    /// The data that the process wrote to stdout.
     pub stdout: Vec<u8>,
+    /// The data that the process wrote to stderr.
+    pub stderr: Vec<u8>,
     /// A list of paths that the command depends on and their hashes.
     pub paths: Vec<FilePath>,
 }
@@ -313,6 +330,7 @@ async fn query_cached_output(
             Ok(Some(Output {
                 status: process::ExitStatus::default(),
                 stdout: cmd.output,
+                stderr: Vec::new(),
                 paths: files.into_iter().map(FilePath::from).collect(),
             }))
         }
