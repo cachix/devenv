@@ -1823,7 +1823,7 @@ string
 
 
 *Default:*
-` "1.2.0" `
+` "1.3.0" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
