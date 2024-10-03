@@ -38,7 +38,7 @@ The caching process works as follows:
    - A hash of the file contents
    - The last modification timestamp
 
-This information is then saved in a SQLite database for quick retrieval.
+Metadata is then saved in a SQLite database for quick retrieval.
 
 When you run a devenv command, we:
 
@@ -86,9 +86,9 @@ use devenv
 
 ## What's next?
 
-`nix develop` currently remains the last bit that's rather slow and uncachable,
+`nix develop` currently remains the last bit that's rather slow and uncacheable,
 we're aiming to rewrite it to bring down overhead of cached results to sub 100ms.
 
-Pop up on [Discord](https://discord.gg/naMgvexb6q) if you have any questions,
+Join us on [Discord](https://discord.gg/naMgvexb6q) if you have any questions,
 
 Sander
