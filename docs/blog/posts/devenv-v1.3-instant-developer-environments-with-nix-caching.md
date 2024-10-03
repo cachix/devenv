@@ -3,6 +3,7 @@ draft: false
 date: 2024-10-03
 authors:
   - sandydoo
+  - domenkozar
 ---
 
 # devenv 1.3: Instant developer environments with Nix caching
@@ -12,7 +13,7 @@ Hot on the heels of the [previous release of tasks](/blog/2024/09/24/devenv-12-t
 
 This release brings precise caching to Nix evaluation, significantly speeding up developer environments.
 
-Once cached, the results of a Nix eval/build can be recalled in single-digit milliseconds.
+Once cached, the results of a Nix eval or build can be recalled in single-digit milliseconds.
 
 If any of the automatically-detected inputs change, the cache is invalidated and the build is performed.
 
@@ -27,18 +28,17 @@ If any of the automatically-detected inputs change, the cache is invalidated and
 
 Behind the scenes, devenv now parses Nix's internal logs to determine which files and directories were accessed during evaluation.
 
-This approach is very much inspired by [lorri](https://github.com/nix-community/lorri) and instead of running a daemon;
-the paths, the hash of their contents, and their last-modified timestamp are stored in a SQLite database.
+This approach is very much inspired by [lorri](https://github.com/nix-community/lorri), but doesn't require a daemon running in the background.
 
 The caching process works as follows:
 
-1. During Nix evaluation, devenv parses Nix logs for which files and directories are accessed.
+1. During Nix evaluation, devenv parses the Nix logs for any files and directories that are accessed.
 2. For each accessed path, we store:
-   - The full path
-   - A hash of the file contents
-   - The last modification timestamp
+   - the full path
+   - a hash of the file contents
+   - the last modification timestamp
 
-Metadata is then saved in a SQLite database for quick retrieval.
+This metadata is then saved to a SQLite database for quick retrieval.
 
 When you run a devenv command, we:
 
@@ -51,7 +51,7 @@ This approach allows us to efficiently detect changes in your project, including
 
 - Direct modifications to Nix files
 - Changes to imported files or directories
-- Updates to files read using Nix built-ins like `readFile` or `readDir`
+- Updates to files read using Nix built-ins, like `readFile` or `readDir`
 
 ## Comparison with Nix's built-in flake evaluation cache
 
@@ -60,7 +60,8 @@ ignoring changes to Nix evaluation that often happen during development workflow
 
 ## Comparison with existing tools
 
-Let's take a closer look at how devenv's new caching system compares to other popular tools in the Nix ecosystem:
+Let's take a closer look at how devenv's new caching system compares to other popular tools in the Nix ecosystem.
+Running our own cache gives us more control and visibility over the caching process, and allows us to improve our integration with other tools, like direnv.
 
 ### lorri
 
@@ -76,7 +77,7 @@ These tools excel at caching evaluated Nix environments, but have limitations in
 
 To leverage devenv's caching capabilities with direnv, we've updated the `.envrc` file to utilize devenv's new caching logic.
 
-If you enjoy the convenience of direnv integration into editors and reloading of your development environment make sure to update `.envrc` to:
+If you currently enjoy the convenience of our direnv integration to reload your development environment, make sure to update your `.envrc` to:
 
 ```
 source_url "https://raw.githubusercontent.com/cachix/devenv/82c0147677e510b247d8b9165c54f73d32dfd899/direnvrc" "sha256-7u4iDd1nZpxL4tCzmPG0dQgC5V+/44Ba+tHkPob1v2k="
@@ -84,11 +85,13 @@ source_url "https://raw.githubusercontent.com/cachix/devenv/82c0147677e510b247d8
 use devenv
 ```
 
+to benefit from the new caching system.
+
 ## What's next?
 
-`nix develop` currently remains the last bit that's rather slow and uncacheable,
-we're aiming to rewrite it to bring down overhead of cached results to sub 100ms.
+`nix develop` currently remains the last bit that's rather slow and uncacheable, particularly on macOS.
+We're working on bringing its functionality in-house to further bring down the overhead of launching a cached shell to under 100ms.
 
 Join us on [Discord](https://discord.gg/naMgvexb6q) if you have any questions,
 
-Sander
+Domen & Sander
