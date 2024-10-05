@@ -46,10 +46,7 @@ let
               if [ -x "$prg" ]; then
                 if [ -f ".$prg-wrapped" ]; then
                   echo "#!${pythonExecutable}" > "$out/bin/$prg"
-                  sed \
-                      -e '/^#!\/nix\/store\//d' \
-                      -e '/^import sys;import site;import functools;sys\.argv\[0\] = /d' \
-                      ".$prg-wrapped" >> "$out/bin/$prg"
+                  sed -e '1d' -e '3d' ".$prg-wrapped" >> "$out/bin/$prg"
                   chmod +x "$out/bin/$prg"
                 else
                   makeWrapper "$path/bin/$prg" "$out/bin/$prg" --inherit-argv0 --resolve-argv0 ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true"''} ${lib.concatStringsSep " " makeWrapperArgs}
