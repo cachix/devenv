@@ -41,7 +41,3 @@ tracing.workspace = true
 which.workspace = true
 whoami.workspace = true
 xdg.workspace = true
-
-[dev-dependencies]
-pretty_assertions = { version = "1.4.0", features = ["unstable"] }
-test-log = { version = "0.2.16", features = ["trace"] }
