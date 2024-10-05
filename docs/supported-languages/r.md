@@ -39,3 +39,44 @@ package
 
 *Default:*
 ` pkgs.R `
+
+
+
+## languages\.r\.radian\.enable
+
+
+
+Whether to enable a 21 century R console\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## languages\.r\.radian\.package
+
+
+
+The radian package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.radianWrapper `

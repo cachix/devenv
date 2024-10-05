@@ -5226,6 +5226,53 @@ package
 
 
 
+## languages.r.radian.enable
+
+
+
+Whether to enable a 21 century R console.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
+
+
+## languages.r.radian.package
+
+
+
+The radian package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.radianWrapper `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
+
+
 ## languages.racket.enable
 
 
@@ -7675,8 +7722,6 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 ## pre-commit.hooks.\<name>.types
 
-
-
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
 
@@ -7721,6 +7766,8 @@ list of string
 
 
 ## pre-commit.hooks.\<name>.verbose
+
+
 
 forces the output of the hook to be printed even when the hook passes.
 
