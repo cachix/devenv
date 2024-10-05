@@ -13,13 +13,13 @@ pkgs.rustPlatform.buildRustPackage {
     ".*devenv(/.*)?"
     ".*devenv-eval-cache(/.*)?"
     ".*devenv-run-tests(/.*)?"
+    ".*devenv-tasks(/.*)?"
     ".*xtask(/.*)?"
-    ".*tasks(/.*)?"
   ];
 
   cargoBuildFlags =
     if build_tasks
-    then [ "-p tasks" ]
+    then [ "-p devenv-tasks" ]
     else [ "-p devenv -p devenv-run-tests" ];
 
   doCheck = !build_tasks;
@@ -32,8 +32,7 @@ pkgs.rustPlatform.buildRustPackage {
     pkgs.makeWrapper
     pkgs.pkg-config
     pkgs.installShellFiles
-    pkgs.sqlx-cli
-  ];
+  ] ++ pkgs.lib.optional (!build_tasks) pkgs.sqlx-cli;
 
   buildInputs = [ pkgs.openssl ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
     pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
@@ -44,7 +43,7 @@ pkgs.rustPlatform.buildRustPackage {
   # A local database to use for preparing queries
   DATABASE_URL = "sqlite:nix-eval-cache.db";
 
-  preBuild = ''
+  preBuild = pkgs.lib.optionalString (!build_tasks) ''
     cargo sqlx database setup --source devenv-eval-cache/migrations
     cargo sqlx prepare --workspace
   '';

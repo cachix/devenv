@@ -597,6 +597,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "devenv-tasks"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2557,16 +2566,6 @@ checksum = "a75fb188eb626b924683e3b95e3a48e63551fcfb51949de2f06a9d91dbee93c9"
 dependencies = [
  "core-foundation-sys",
  "libc",
-]
-
-[[package]]
-name = "tasks"
-version = "0.1.0"
-dependencies = [
- "clap",
- "devenv",
- "serde_json",
- "tokio",
 ]
 
 [[package]]

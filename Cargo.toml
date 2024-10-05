@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["devenv", "devenv-eval-cache", "devenv-run-tests", "tasks", "xtask"]
+members = ["devenv", "devenv-eval-cache", "devenv-run-tests", "devenv-tasks", "xtask"]
 
 [workspace.package]
 edition = "2021"
