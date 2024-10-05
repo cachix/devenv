@@ -539,6 +539,7 @@ dependencies = [
  "cli-table",
  "console",
  "devenv-eval-cache",
+ "devenv-tasks",
  "dotlock",
  "fs2",
  "hex",
@@ -601,8 +602,15 @@ name = "devenv-tasks"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "console",
+ "miette",
+ "petgraph",
+ "serde",
  "serde_json",
+ "tempfile",
+ "thiserror",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
