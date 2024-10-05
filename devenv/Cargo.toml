@@ -17,7 +17,6 @@ clap.workspace = true
 cli-table.workspace = true
 console.workspace = true
 dotlock.workspace = true
-fs2.workspace = true
 hex.workspace = true
 include_dir.workspace = true
 indoc.workspace = true
