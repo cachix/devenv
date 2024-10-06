@@ -212,7 +212,7 @@ in
 
         packages = [
           (combine "rust-mixed" (
-            (map (c: cfg.toolchain.${c}) cfg.components) ++
+            (map (c: cfg.toolchain.${c}) (cfg.components ++ [ "rust-std" ])) ++
             (map (t: toolchain._components.${t}.rust-std) cfg.targets)
           ))
         ];
