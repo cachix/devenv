@@ -3,30 +3,7 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## process-managers\.overmind\.enable
-
-Whether to enable overmind as process-manager\.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
-*Example:*
-` true `
-
-
-
-## process-managers\.overmind\.package
-
-
+## process\.managers\.overmind\.package
 
 The overmind package to use\.
 
