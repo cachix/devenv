@@ -10,18 +10,19 @@ default-run = "devenv"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+devenv-eval-cache.workspace = true
+devenv-tasks.workspace = true
+
 clap.workspace = true
 cli-table.workspace = true
-console = "0.15.8"
+console.workspace = true
 dotlock.workspace = true
-fs2.workspace = true
 hex.workspace = true
 include_dir.workspace = true
 indoc.workspace = true
 miette.workspace = true
 nix.workspace = true
-devenv-eval-cache.workspace = true
-petgraph = "0.6.5"
+petgraph.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 schemars.workspace = true
@@ -32,14 +33,10 @@ serde_yaml.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 tempdir.workspace = true
-tempfile = "3.12.0"
-thiserror = "1.0.63"
+tempfile.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 which.workspace = true
 whoami.workspace = true
 xdg.workspace = true
-
-[dev-dependencies]
-pretty_assertions = { version = "1.4.0", features = ["unstable"] }
-test-log = { version = "0.2.16", features = ["trace"] }

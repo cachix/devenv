@@ -12,7 +12,7 @@ let
             pkgs.writeScript name ''
               #!${pkgs.lib.getBin config.package}/bin/${config.binary}
               ${command}
-              ${lib.optionalString (config.exports != []) "${devenv}/bin/tasks export ${lib.concatStringsSep " " config.exports}"}
+              ${lib.optionalString (config.exports != []) "${devenv}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in
       {
@@ -137,13 +137,13 @@ in
       };
     };
     enterShell = ''
-      ${devenv}/bin/tasks run devenv:enterShell
+      ${devenv}/bin/devenv-tasks run devenv:enterShell
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi
     '';
     enterTest = ''
-      ${devenv}/bin/tasks run devenv:enterTest
+      ${devenv}/bin/devenv-tasks run devenv:enterTest
     '';
   };
 }

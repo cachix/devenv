@@ -8,4 +8,4 @@ license.workspace = true
 clap.workspace = true
 devenv.workspace = true
 tempdir.workspace = true
-tokio = "1.39.3"
+tokio.workspace = true
