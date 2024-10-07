@@ -25,7 +25,7 @@ in
 
     process.manager.command = lib.mkDefault ''
       OVERMIND_ENV=${config.procfileEnv} ${cfg.package}/bin/overmind start \
-        ${lib.concatStringsSep " " (lib.cli.toGNUCommandLine {} config.process.manager.args)} \
+        ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
         "$@" &
     '';
 

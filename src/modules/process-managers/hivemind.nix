@@ -23,7 +23,7 @@ in
 
     process.manager.command = lib.mkDefault ''
       ${cfg.package}/bin/hivemind \
-        ${lib.concatStringsSep " " (lib.cli.toGNUCommandLine {} config.process.manager.args)} \
+        ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
         "$@" ${config.procfile} &
     '';
 
