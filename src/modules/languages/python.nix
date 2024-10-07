@@ -464,13 +464,15 @@ in
       "devenv:python:poetry" = lib.mkIf cfg.poetry.install.enable {
         description = "Initialize Poetry";
         exec = initPoetryScript;
-        exports = [ "PATH" "VIRTUAL_ENV" ];
+        exports = [ "PATH" ] ++ lib.optional cfg.poetry.activate.enable "VIRTUAL_ENV";
+        after = lib.optional cfg.venv.enable "devenv:python:virtualenv";
       };
 
       "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
         description = "Initialize uv sync";
         exec = initUvScript;
-        exports = [ "PATH" "VIRTUAL_ENV" ];
+        exports = [ "PATH" ];
+        after = lib.optional cfg.venv.enable "devenv:python:virtualenv";
       };
 
       "devenv:enterShell".after = lib.optional cfg.venv.enable "devenv:python:virtualenv"
