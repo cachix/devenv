@@ -78,13 +78,14 @@ in
       "config" = cfg.configFile;
       # -U enables automatic UDS mode, creating the socket in $TMP.
       "U" = cfg.unixSocket.enable && cfg.unixSocket.path == null;
-      "unix-socket" = cfg.unixSocket.path;
-      "tui" = "\${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}";
+      "unix-socket" = "'${cfg.unixSocket.path}'";
+      # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
     };
 
     process.manager.command = lib.mkDefault ''
       ${cfg.package}/bin/process-compose \
-        ${lib.concatStringsSep " " (lib.cli.toGNUCommandLine {} config.process.manager.args)} \
+        ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
+        -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
         up "$@" &
     '';
 
