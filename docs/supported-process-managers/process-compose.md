@@ -85,7 +85,7 @@ YAML value
 
 
 
-Enable the TUI
+Enable the TUI (Terminal User Interface)
 
 
 
@@ -131,7 +131,7 @@ Override the path to the unix socket\.
 
 
 *Type:*
-null or string
+string
 
 
 
