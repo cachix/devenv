@@ -32,7 +32,7 @@ in
       };
 
       path = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
+        type = lib.types.str;
         default = "${config.devenv.runtime}/pc.sock";
         defaultText = lib.literalExpression "\${config.devenv.runtime}/pc.sock";
         description = "Override the path to the unix socket.";
@@ -76,9 +76,11 @@ in
   config = lib.mkIf cfg.enable {
     process.manager.args = {
       "config" = cfg.configFile;
-      # -U enables automatic UDS mode, creating the socket in $TMP.
-      "U" = cfg.unixSocket.enable && cfg.unixSocket.path == null;
-      "unix-socket" = "'${cfg.unixSocket.path}'";
+      "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
+      "unix-socket" =
+        if cfg.unixSocket.enable
+        then cfg.unixSocket.path
+        else null;
       # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
     };
 
