@@ -23,7 +23,7 @@ struct Args {
     )]
     override_input: Vec<String>,
 
-    #[clap(value_parser, required = true)]
+    #[clap(value_parser, default_values = vec!["examples", "tests"])]
     directories: Vec<PathBuf>,
 }
 
