@@ -37,6 +37,12 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    env = {
+      PC_CONFIG_FILES = toString cfg.configFile;
+      PC_SOCKET_PATH = toString config.process.process-compose.unix-socket;
+      PC_DISABLE_TUI = lib.mkIf (!config.process.process-compose.tui) "1";
+    };
+
     processManagerCommand = ''
       ${cfg.package}/bin/process-compose --config ${cfg.configFile} \
         --unix-socket ''${PC_SOCKET_PATH:-${toString config.process.process-compose.unix-socket}} \
