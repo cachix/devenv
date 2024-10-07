@@ -470,7 +470,7 @@ in
       "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
         description = "Initialize uv sync";
         exec = initUvScript;
-        exports = [ "PATH" "VIRTUAL_ENV" ];
+        exports = [ "VIRTUAL_ENV" ];
       };
 
       "devenv:enterShell".after = lib.optional cfg.venv.enable "devenv:python:virtualenv"
