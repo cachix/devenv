@@ -3,7 +3,7 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use miette::{bail, IntoDiagnostic, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use serde::Deserialize;
@@ -34,32 +34,32 @@ pub struct DevenvOptions {
 }
 
 pub struct Devenv {
-    pub(crate) config: config::Config,
-    pub(crate) global_options: cli::GlobalOptions,
+    pub config: config::Config,
+    pub global_options: cli::GlobalOptions,
 
-    pub(crate) logger: log::Logger,
-    pub(crate) log_progress: log::LogProgressCreator,
+    logger: log::Logger,
+    log_progress: log::LogProgressCreator,
 
     nix: cnix::Nix<'static>,
 
     // All kinds of paths
-    xdg_dirs: xdg::BaseDirectories,
-    pub(crate) devenv_root: PathBuf,
+    devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
     devenv_tmp: String,
     devenv_runtime: PathBuf,
 
-    pub(crate) assembled: bool,
-    pub(crate) dirs_created: bool,
-    pub(crate) has_processes: Option<bool>,
+    assembled: bool,
+    has_processes: Option<bool>,
 
-    pub(crate) container_name: Option<String>,
+    // TODO: make private.
+    // Pass as an arg or have a setter.
+    pub container_name: Option<String>,
 }
 
 impl Devenv {
-    pub fn new(options: DevenvOptions) -> Self {
+    pub async fn new(options: DevenvOptions) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
         let devenv_home = xdg_dirs.get_data_home();
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
@@ -102,22 +102,31 @@ impl Devenv {
             log::LogProgressCreator::Logging
         };
 
+        xdg_dirs
+            .create_data_directory(Path::new("devenv"))
+            .expect("Failed to create DEVENV_HOME directory");
+        std::fs::create_dir_all(&devenv_home_gc)
+            .expect("Failed to create DEVENV_HOME_GC directory");
+        std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
+
         let nix = cnix::Nix::new(
             logger.clone(),
             options.config.clone(),
             global_options.clone(),
             cachix_trusted_keys,
             devenv_home_gc.clone(),
+            devenv_dotfile.clone(),
             devenv_dot_gc.clone(),
             devenv_root.clone(),
-        );
+        )
+        .await
+        .unwrap(); // TODO: handle error
 
         Self {
             config: options.config,
             global_options,
             logger,
             log_progress,
-            xdg_dirs,
             devenv_root,
             devenv_dotfile,
             devenv_dot_gc,
@@ -126,7 +135,6 @@ impl Devenv {
             devenv_runtime,
             nix,
             assembled: false,
-            dirs_created: false,
             has_processes: None,
             container_name: None,
         }
@@ -203,8 +211,6 @@ impl Devenv {
         let nixpkgs_rev = "";
         let devenv_rev = "";
 
-        self.logger
-            .info("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
         let client = reqwest::Client::new();
         let mut request = client
             .post(host)
@@ -222,6 +228,8 @@ impl Devenv {
                 .body(body)
                 .header(reqwest::header::CONTENT_TYPE, "application/zip");
         }
+        self.logger
+            .info("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
 
         let response = request
             .send()
@@ -265,10 +273,10 @@ impl Devenv {
     }
 
     pub async fn print_dev_env(&mut self, json: bool) -> Result<()> {
-        let (env, _) = self.get_dev_environment(json, false).await?;
+        let env = self.get_dev_environment(json, false).await?;
         print!(
             "{}",
-            String::from_utf8(env).expect("Failed to convert env to utf-8")
+            String::from_utf8(env.output).expect("Failed to convert env to utf-8")
         );
         Ok(())
     }
@@ -296,11 +304,11 @@ impl Devenv {
         args: &[String],
     ) -> Result<Vec<String>> {
         self.assemble(false)?;
-        let (_, gc_root) = self.get_dev_environment(false, true).await?;
+        let env = self.get_dev_environment(false, true).await?;
 
         let mut develop_args = vec![
             "develop",
-            gc_root.to_str().expect("gc root should be utf-8"),
+            env.gc_root.to_str().expect("gc root should be utf-8"),
         ];
 
         let default_clean = config::Clean {
@@ -342,7 +350,7 @@ impl Devenv {
         Ok(develop_args.into_iter().map(|s| s.to_string()).collect())
     }
 
-    pub fn update(&mut self, input_name: &Option<String>) -> Result<()> {
+    pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
@@ -350,7 +358,7 @@ impl Devenv {
         let _logprogress = self.log_progress.with_newline(&msg);
         self.assemble(false)?;
 
-        self.nix.update(input_name)?;
+        self.nix.update(input_name).await?;
         Ok(())
     }
 
@@ -561,6 +569,7 @@ impl Devenv {
     }
 
     pub async fn tasks_run(&mut self, roots: Vec<String>) -> Result<()> {
+        self.assemble(false)?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
@@ -637,9 +646,9 @@ impl Devenv {
         }
     }
 
-    pub fn info(&mut self) -> Result<()> {
+    pub async fn info(&mut self) -> Result<()> {
         self.assemble(false)?;
-        let output = self.nix.metadata()?;
+        let output = self.nix.metadata().await?;
         println!("{}", output);
         Ok(())
     }
@@ -704,7 +713,7 @@ impl Devenv {
                 .to_str()
                 .expect("Failed to get proc script path")
                 .to_string();
-            self.nix.add_gc("procfilescript", &proc_script[0])?;
+            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
         }
         {
             let _logprogress = self.log_progress.with_newline("Starting processes");
@@ -808,23 +817,6 @@ impl Devenv {
         Ok(())
     }
 
-    pub fn create_directories(&mut self) -> Result<()> {
-        if !self.dirs_created {
-            self.xdg_dirs
-                .create_data_directory(Path::new("devenv"))
-                .into_diagnostic()
-                .wrap_err("Failed to create DEVENV_HOME directory")?;
-            std::fs::create_dir_all(&self.devenv_home_gc)
-                .into_diagnostic()
-                .wrap_err("Failed to create DEVENV_HOME_GC directory")?;
-            std::fs::create_dir_all(&self.devenv_dot_gc)
-                .into_diagnostic()
-                .wrap_err("Failed to create .devenv/gc directory")?;
-            self.dirs_created = true;
-        }
-        Ok(())
-    }
-
     pub fn assemble(&mut self, is_testing: bool) -> Result<()> {
         if self.assembled {
             return Ok(());
@@ -863,6 +855,8 @@ impl Devenv {
             serde_json::to_string(&self.config).unwrap(),
         )
         .expect("Failed to write devenv.json");
+        // TODO: superceded by eval caching.
+        // Remove once direnvrc migration is implemented.
         fs::write(
             self.devenv_dotfile.join("imports.txt"),
             self.config.imports.join("\n"),
@@ -902,11 +896,7 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn get_dev_environment(
-        &mut self,
-        json: bool,
-        logging: bool,
-    ) -> Result<(Vec<u8>, PathBuf)> {
+    pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
         self.assemble(false)?;
         let _logprogress = if logging {
             Some(self.log_progress.with_newline("Building shell"))
@@ -915,7 +905,21 @@ impl Devenv {
         };
         let gc_root = self.devenv_dot_gc.join("shell");
         let env = self.nix.dev_env(json, &gc_root).await?;
-        Ok((env, gc_root))
+
+        std::fs::write(
+            self.devenv_dotfile.join("input-paths.txt"),
+            env.paths
+                .iter()
+                .map(|fp| fp.path.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .expect("Failed to write input-paths.txt");
+
+        Ok(DevEnv {
+            output: env.stdout,
+            gc_root,
+        })
     }
 }
 
@@ -979,6 +983,11 @@ fn create_zip_from_directory() -> Result<Vec<u8>> {
 struct GenerateResponse {
     devenv_nix: String,
     devenv_yaml: String,
+}
+
+pub struct DevEnv {
+    output: Vec<u8>,
+    gc_root: PathBuf,
 }
 
 #[derive(Deserialize)]

@@ -18,7 +18,7 @@ in
   };
 
   config = lib.mkIf (domainList != "") {
-    process.before = ''
+    process.manager.before = ''
       mkdir -p "${config.env.DEVENV_STATE}/mkcert"
 
       if [[ ! -f "$DEVENV_STATE/mkcert/rootCA.pem" ]]; then

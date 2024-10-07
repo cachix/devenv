@@ -9,69 +9,76 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: cachix/install-nix-action@V28
-      with:
-        extra_nix_config: |
-          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@v15
-      with:
-        name: devenv
-    - run: nix profile install . -L --accept-flake-config
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v15
+        with:
+          name: devenv
 
-    - name: Generate doc options
-      run: devenv shell devenv-generate-doc-options
-    - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
-      with:
-        default_author: github_actions
-        add: docs/reference/options.md
-        message: 'Auto generate docs/reference/options.md'
+      - name: Install devenv
+        run: nix profile install . -L --accept-flake-config
 
-    - name: Verify individual docs
-      run: devenv shell devenv-verify-individual-docs
-    - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
-      with:
-        default_author: github_actions
-        message: 'Auto generate missing individual markdowns'
+      - name: Disable pre-commit hooks
+        run: |
+          echo '{ pre-commit.default_stages = ["manual"]; }' > devenv.local.nix
 
-    - name: Generate docs and supported-languages example
-      run: |
-        devenv shell devenv-generate-docs
-        devenv shell devenv-generate-languages-example
-        devenv shell devenv-generate-individual-docs
-    - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
-      with:
-        default_author: github_actions
-        add: docs examples/supported-languages/devenv.nix
-        message: 'Auto generate docs and examples'
+      - name: Generate doc options
+        run: devenv shell devenv-generate-doc-options
+      - uses: EndBug/add-and-commit@v9
+        if: ${{ github.event_name == 'push' }}
+        with:
+          default_author: github_actions
+          add: docs/reference/options.md
+          message: "Auto generate docs/reference/options.md"
 
-    - name: Generate JSON schema
-      run: devenv generate-json-schema
-    - uses: EndBug/add-and-commit@v9
-      if: ${{ github.event_name == 'push' }}
-      with:
-        default_author: github_actions
-        add: docs/devenv.schema.json
-        message: 'Auto generate docs/devenv.schema.json'
+      - name: Verify individual docs
+        run: devenv shell devenv-verify-individual-docs
+      - uses: EndBug/add-and-commit@v9
+        if: ${{ github.event_name == 'push' }}
+        with:
+          default_author: github_actions
+          add: docs
+          message: "Auto generate missing individual markdowns"
 
-    - name: Check for uncommitted changes
-      run: |
-        diff=$(git diff --stat)
-        if [[ -n "$diff" ]]; then
-          message="There are uncommitted doc changes in the repository.
+      - name: Generate docs and supported-languages example
+        run: |
+          devenv shell devenv-generate-docs
+          devenv shell devenv-generate-languages-example
+          devenv shell devenv-generate-individual-docs
+      - uses: EndBug/add-and-commit@v9
+        if: ${{ github.event_name == 'push' }}
+        with:
+          default_author: github_actions
+          add: docs examples/supported-languages/devenv.nix
+          message: "Auto generate docs and examples"
 
-        ${diff}
+      - name: Generate JSON schema
+        run: devenv generate-json-schema
+      - uses: EndBug/add-and-commit@v9
+        if: ${{ github.event_name == 'push' }}
+        with:
+          default_author: github_actions
+          add: docs/devenv.schema.json
+          message: "Auto generate docs/devenv.schema.json"
 
-        To resolve this, you can:
-          a. Run the failing devenv-generate-* commands locally and commit the changes.
-          b. Let CI auto-commit the changes to your fork of the repo. You may need to enable this workflow on your fork."
+      - name: Check for uncommitted changes
+        run: |
+          diff=$(git diff --stat)
+          if [[ -n "$diff" ]]; then
+            message="There are uncommitted doc changes in the repository.
 
-          echo "::error::${message//$'\n'/%0A}"
-          exit 1
-        else
-          echo "No uncommitted doc changes found."
-        fi
+          ${diff}
+
+          To resolve this, you can:
+            a. Run the failing devenv-generate-* commands locally and commit the changes.
+            b. Let CI auto-commit the changes to your fork of the repo. You may need to enable this workflow on your fork."
+
+            echo "::error::${message//$'\n'/%0A}"
+            exit 1
+          else
+            echo "No uncommitted doc changes found."
+          fi

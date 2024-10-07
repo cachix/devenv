@@ -9,8 +9,10 @@ use std::fmt::Display;
 use std::process::Stdio;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::{Duration, Instant};
 use tokio::{
@@ -65,6 +67,8 @@ pub struct TaskConfig {
     name: String,
     #[serde(default)]
     after: Vec<String>,
+    #[serde(default)]
+    before: Vec<String>,
     #[serde(default)]
     command: Option<String>,
     #[serde(default)]
@@ -178,7 +182,11 @@ impl TaskState {
                     for (env_key, env_value) in env_obj {
                         if let Some(env_str) = env_value.as_str() {
                             command.env(env_key, env_str);
-                            devenv_env.push_str(&format!("export {}={}\n", env_key, env_str));
+                            devenv_env.push_str(&format!(
+                                "export {}={}\n",
+                                env_key,
+                                shell_escape(env_str)
+                            ));
                         }
                     }
                 }
@@ -194,10 +202,14 @@ impl TaskState {
         (command, outputs_file)
     }
 
-    fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
-        let output = match std::fs::File::open(outputs_file.path()) {
-            // TODO: report JSON parsing errors
-            Ok(file) => serde_json::from_reader(file).ok(),
+    async fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
+        let output = match File::open(outputs_file.path()).await {
+            Ok(mut file) => {
+                let mut contents = String::new();
+                // TODO: report JSON parsing errors
+                file.read_to_string(&mut contents).await.ok();
+                serde_json::from_str(&contents).ok()
+            }
             Err(_) => None,
         };
         Output(output)
@@ -216,9 +228,9 @@ impl TaskState {
             match result {
                 Ok(status) => {
                     if status.success() {
-                        return TaskCompleted::Skipped(Skipped::Cached(Self::get_outputs(
-                            &outputs_file,
-                        )));
+                        return TaskCompleted::Skipped(Skipped::Cached(
+                            Self::get_outputs(&outputs_file).await,
+                        ));
                     }
                 }
                 Err(e) => {
@@ -316,7 +328,7 @@ impl TaskState {
                         match result {
                             Ok(status) => {
                                 if status.success() {
-                                    return TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file));
+                                    return TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await);
                                 } else {
                                     return TaskCompleted::Failed(
                                         now.elapsed(),
@@ -357,6 +369,8 @@ struct Tasks {
     longest_task_name: usize,
     graph: DiGraph<Arc<RwLock<TaskState>>, ()>,
     tasks_order: Vec<NodeIndex>,
+    notify_finished: Arc<Notify>,
+    notify_ui: Arc<Notify>,
 }
 
 impl Tasks {
@@ -397,6 +411,8 @@ impl Tasks {
             root_names: config.roots,
             longest_task_name,
             graph,
+            notify_finished: Arc::new(Notify::new()),
+            notify_ui: Arc::new(Notify::new()),
             tasks_order: vec![],
         };
         tasks.resolve_dependencies(task_indices).await?;
@@ -419,6 +435,14 @@ impl Tasks {
                     edges_to_add.push((*dep_idx, index));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), dep_name.clone()));
+                }
+            }
+
+            for before_name in &task_state.task.before {
+                if let Some(before_idx) = task_indices.get(before_name) {
+                    edges_to_add.push((index, *before_idx));
+                } else {
+                    unresolved.insert((task_state.task.name.clone(), before_name.clone()));
                 }
             }
         }
@@ -521,12 +545,14 @@ impl Tasks {
                     break;
                 }
 
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                self.notify_finished.notified().await;
             }
 
             if dependency_failed {
                 let mut task_state = task_state.write().await;
                 task_state.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
+                self.notify_finished.notify_one();
+                self.notify_ui.notify_one();
             } else {
                 let now = Instant::now();
 
@@ -535,9 +561,12 @@ impl Tasks {
                     let mut task_state = task_state.write().await;
                     task_state.status = TaskStatus::Running(now);
                 }
+                self.notify_ui.notify_one();
 
                 let task_state_clone = Arc::clone(task_state);
                 let outputs_clone = Arc::clone(&outputs);
+                let notify_finished_clone = Arc::clone(&self.notify_finished);
+                let notify_ui_clone = Arc::clone(&self.notify_ui);
                 running_tasks.spawn(async move {
                     let completed = {
                         let outputs = outputs_clone.lock().await.clone();
@@ -562,6 +591,9 @@ impl Tasks {
                         }
                         task_state.status = TaskStatus::Completed(completed);
                     }
+
+                    notify_finished_clone.notify_one();
+                    notify_ui_clone.notify_one();
                 });
             }
         }
@@ -573,6 +605,8 @@ impl Tasks {
             }
         }
 
+        self.notify_finished.notify_one();
+        self.notify_ui.notify_one();
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
     }
 }
@@ -689,7 +723,7 @@ impl TasksUi {
     pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
         let names = console::style(self.tasks.root_names.join(", ")).bold();
         let term = Term::stderr();
-        console::Term::stderr().write_line(&format!("{:17} {}", "Running tasks", names))?;
+        term.write_line(&format!("{:17} {}\n", "Running tasks", names))?;
 
         // start processing tasks
         let started = std::time::Instant::now();
@@ -700,11 +734,6 @@ impl TasksUi {
         let mut last_list_height: u16 = 0;
 
         loop {
-            let mut finished = false;
-            if handle.is_finished() {
-                finished = true;
-            }
-
             let tasks_status = self.get_tasks_status().await;
 
             let status_summary = [
@@ -771,7 +800,7 @@ impl TasksUi {
             let elapsed_time = format!("{:.2?}", started.elapsed());
 
             let output = format!(
-                "{}\n{status_summary}{}{elapsed_time}\n",
+                "{}\n{status_summary}{}{elapsed_time}",
                 tasks_status.lines.join("\n"),
                 " ".repeat(
                     (19 + self.tasks.longest_task_name)
@@ -779,19 +808,22 @@ impl TasksUi {
                         .max(1)
                 )
             );
-            let output = console::Style::new().apply_to(output);
-            term.move_cursor_up(last_list_height as usize)?;
-            term.clear_to_end_of_screen()?;
-            term.write_str(&output.to_string())?;
+            if tasks_status.lines.len() > 0 {
+                let output = console::Style::new().apply_to(output);
+                if last_list_height > 0 {
+                    term.move_cursor_up(last_list_height as usize)?;
+                    term.clear_to_end_of_screen()?;
+                }
+                term.write_line(&output.to_string())?;
+            }
 
-            if finished {
+            if tasks_status.pending == 0 && tasks_status.running == 0 {
                 break;
             }
 
             last_list_height = tasks_status.lines.len() as u16 + 1;
 
-            // Sleep briefly to avoid excessive redraws
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            self.tasks.notify_ui.notified().await;
         }
 
         let errors = {
@@ -832,6 +864,21 @@ impl TasksUi {
     }
 }
 
+/// Escape a shell variable by wrapping it in single quotes.
+/// Any single quotes within the variable are escaped.
+fn shell_escape(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len() + 2);
+    escaped.push('\'');
+    for c in s.chars() {
+        match c {
+            '\'' => escaped.push_str("'\\''"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped.push('\'');
+    escaped
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -841,6 +888,13 @@ mod test {
     use std::fs;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn test_shell_escape() {
+        let escaped = shell_escape("foo'bar");
+        eprintln!("{escaped}");
+        assert_eq!(escaped, "'foo'\\''bar'");
+    }
 
     #[tokio::test]
     async fn test_task_name() -> Result<(), Error> {
@@ -1086,6 +1140,56 @@ mod test {
         .await;
 
         assert!(matches!(result, Err(Error::MissingCommand(_))));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_before_tasks() -> Result<(), Error> {
+        let script1 = create_script(
+            "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
+        )?;
+        let script2 = create_script(
+            "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
+        )?;
+        let script3 = create_script(
+            "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
+        )?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                        "after": ["myapp:task_3"]
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "before": ["myapp:task_3"],
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "command": script3.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_2" && name2 == "myapp:task_3" && name3 == "myapp:task_1"
+        );
         Ok(())
     }
 

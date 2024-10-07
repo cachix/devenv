@@ -20,7 +20,7 @@ Tasks allow you to form dependencies between code, executed in parallel.
 $ devenv tasks run myapp:hello
 Running tasks     myapp:hello
 Succeeded         myapp:hello         9ms
-1 Succeeded                           50.14ms
+1 Succeeded                           10.14ms
 ```
 
 ## enterShell / enterTest
@@ -32,9 +32,10 @@ If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
 
 {
   tasks = {
-    "bash:hello".exec = "echo 'Hello world from bash!'";
-    "devenv:enterShell".after = [ "bash:hello" ];
-    "devenv:enterTest".after = [ "bash:hello" ];
+    "bash:hello" = {
+      exec = "echo 'Hello world from bash!'";
+      before = [ "devenv:enterShell" "devenv:enterTest" ];
+    };
   };
 }
 ```
@@ -45,8 +46,8 @@ $ devenv shell
 Running tasks     devenv:enterShell
 Succeeded         devenv:pre-commit:install 25ms
 Succeeded         bash:hello                 9ms
-Succeeded         devenv:enterShell         23ms
-3 Succeeded                                 103.14ms
+Succeeded         devenv:enterShell         13ms
+3 Succeeded                                 28.14ms
 ```
 
 ## Using your favourite language

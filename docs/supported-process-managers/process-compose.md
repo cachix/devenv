@@ -3,30 +3,7 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## process-managers\.process-compose\.enable
-
-Whether to enable process-compose as process-manager\.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
-*Example:*
-` true `
-
-
-
-## process-managers\.process-compose\.package
-
-
+## process\.managers\.process-compose\.package
 
 The process-compose package to use\.
 
@@ -42,11 +19,31 @@ package
 
 
 
-## process-managers\.process-compose\.settings
+## process\.managers\.process-compose\.port
 
 
 
-process-compose\.yaml specific process attributes\.
+The port to bind the process-compose server to\.
+
+Not used when ` unixSocket.enable ` is true\.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 8080 `
+
+
+
+## process\.managers\.process-compose\.settings
+
+
+
+Top-level process-compose\.yaml options
 
 Example: https://github\.com/F1bonacc1/process-compose/blob/main/process-compose\.yaml\`
 
@@ -81,3 +78,62 @@ YAML value
   ];
 }
 ```
+
+
+
+## process\.managers\.process-compose\.tui\.enable
+
+
+
+Enable the TUI (Terminal User Interface)
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## process\.managers\.process-compose\.unixSocket\.enable
+
+
+
+Whether to enable running the process-compose server over unix domain sockets instead of tcp\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+
+
+## process\.managers\.process-compose\.unixSocket\.path
+
+
+
+Override the path to the unix socket\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` ${config.devenv.runtime}/pc.sock `

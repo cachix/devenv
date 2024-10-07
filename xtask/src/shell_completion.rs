@@ -1,5 +1,5 @@
-use crate::cli::Cli;
 use clap::CommandFactory;
+use devenv::cli::Cli;
 use miette::{IntoDiagnostic, Result};
 use std::fs;
 use std::path::{Path, PathBuf};

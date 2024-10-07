@@ -171,8 +171,8 @@ in
       enable = lib.mkEnableOption "install npm";
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.nodejs;
-        defaultText = lib.literalExpression "pkgs.nodejs";
+        default = cfg.package;
+        defaultText = lib.literalExpression "languages.javascript.package";
         description = "The Node.js package to use.";
       };
       install.enable = lib.mkEnableOption "npm install during devenv initialisation";
@@ -182,7 +182,9 @@ in
       enable = lib.mkEnableOption "install pnpm";
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.nodePackages.pnpm;
+        default = pkgs.nodePackages.pnpm.override {
+          nodejs = cfg.package;
+        };
         defaultText = lib.literalExpression "pkgs.nodePackages.pnpm";
         description = "The pnpm package to use.";
       };
@@ -193,7 +195,9 @@ in
       enable = lib.mkEnableOption "install yarn";
       package = lib.mkOption {
         type = lib.types.package;
-        default = pkgs.yarn;
+        default = pkgs.yarn.override {
+          nodejs = cfg.package;
+        };
         defaultText = lib.literalExpression "pkgs.yarn";
         description = "The yarn package to use.";
       };
@@ -241,7 +245,3 @@ in
     );
   };
 }
-
-
-
-

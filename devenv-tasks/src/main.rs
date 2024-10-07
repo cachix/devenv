@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use devenv::tasks::{Config, TaskConfig, TasksUi};
+use devenv_tasks::{Config, TaskConfig, TasksUi};
 use std::env;
 
 #[derive(Parser)]

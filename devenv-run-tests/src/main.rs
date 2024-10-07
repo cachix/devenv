@@ -23,7 +23,7 @@ struct Args {
     )]
     override_input: Vec<String>,
 
-    #[clap(value_parser, required = true)]
+    #[clap(value_parser, default_values = vec!["examples", "tests"])]
     directories: Vec<PathBuf>,
 }
 
@@ -95,8 +95,7 @@ async fn run_tests_in_directory(
                     devenv_dotfile: Some(tmpdir.path().to_path_buf()),
                     ..Default::default()
                 };
-                let mut devenv = Devenv::new(options);
-                devenv.create_directories()?;
+                let mut devenv = Devenv::new(options).await;
 
                 // A script to patch files in the working directory before the shell.
                 let patch_script = ".patch.sh";

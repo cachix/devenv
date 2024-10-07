@@ -20,7 +20,6 @@ nav:
       - Containers: containers.md
       - Binary Caching: binary-caching.md
       - Pre-Commit Hooks: pre-commit-hooks.md
-      - Outputs: outputs.md
       - Tests: tests.md
       - Outputs: outputs.md
       - Common Patterns: common-patterns.md
