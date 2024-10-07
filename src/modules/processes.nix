@@ -45,6 +45,7 @@ in
   imports =
     (map (name: lib.mkRenamedOptionModule [ "process" name ] [ "process" "manager" name ]) [ "after" "before" "implementation" ])
     ++ [
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "port" ] [ "process" "managers" "process-compose" "port" ])
       (lib.mkRenamedOptionModule [ "process" "process-compose" "tui" ] [ "process" "managers" "process-compose" "tui" "enable" ])
       (lib.mkRenamedOptionModule [ "process" "process-compose" "unix-socket" ] [ "process" "managers" "process-compose" "unixSocket" "path" ])
       (lib.mkRenamedOptionModule [ "processManagerCommand" ] [ "process" "manager" "command" ])
