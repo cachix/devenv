@@ -57,7 +57,7 @@ impl InternalLog {
             // to filter things out. Our hunch is that these messages are coming from the
             // nix daemon.
             InternalLog::Msg { msg, level, .. }
-                if *level == Verbosity::Error && self.is_nix_error() =>
+                if *level == Verbosity::Error && (self.is_nix_error() || self.is_builtin_trace()) =>
             {
                 Some(msg.clone())
             }
@@ -97,6 +97,22 @@ impl InternalLog {
         } = self
         {
             if msg.starts_with("\u{1b}[31;1merror:") {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if the log is a trace message from `builtins.trace`.
+    pub fn is_builtin_trace(&self) -> bool {
+        if let InternalLog::Msg {
+            level: Verbosity::Error,
+            msg,
+            ..
+        } = self
+        {
+            if msg.starts_with("trace:") {
                 return true;
             }
         }
