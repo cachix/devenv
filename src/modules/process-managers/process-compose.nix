@@ -43,7 +43,7 @@ in
       enable = lib.mkOption {
         type = lib.types.bool;
         default = true;
-        description = "Enable the TUI";
+        description = "Enable the TUI (Terminal User Interface)";
       };
     };
 
@@ -96,8 +96,8 @@ in
     process.managers.process-compose = {
       configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
       settings = {
-        version = "0.5";
-        is_strict = true;
+        version = lib.mkDefault "0.5";
+        is_strict = lib.mkDefault true;
         environment = lib.mapAttrsToList
           (name: value: "${name}=${toString value}")
           config.env;
