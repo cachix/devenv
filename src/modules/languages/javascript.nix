@@ -171,7 +171,9 @@ in
       enable = lib.mkEnableOption "install npm";
       package = lib.mkOption {
         type = lib.types.package;
-        default = cfg.package;
+        default = cfg.package.override {
+          enableNpm = true;
+        };
         defaultText = lib.literalExpression "languages.javascript.package";
         description = "The Node.js package to use.";
       };
@@ -217,14 +219,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [
-      cfg.package
-    ]
-    ++ lib.optional cfg.npm.enable (cfg.npm.package)
-    ++ lib.optional cfg.pnpm.enable (cfg.pnpm.package)
-    ++ lib.optional cfg.yarn.enable (cfg.yarn.package.override { nodejs = cfg.package; })
-    ++ lib.optional cfg.bun.enable (cfg.bun.package)
-    ++ lib.optional cfg.corepack.enable (pkgs.runCommand "corepack-enable" { } ''
+    packages
+      # Node ships with npm. If npm is enabled, use its package instead.
+      = lib.optional (!cfg.npm.enable) cfg.package
+      ++ lib.optional cfg.npm.enable (cfg.npm.package)
+      ++ lib.optional cfg.pnpm.enable (cfg.pnpm.package)
+      ++ lib.optional cfg.yarn.enable (cfg.yarn.package.override { nodejs = cfg.package; })
+      ++ lib.optional cfg.bun.enable (cfg.bun.package)
+      ++ lib.optional cfg.corepack.enable (pkgs.runCommand "corepack-enable" { } ''
       mkdir -p $out/bin
       ${cfg.package}/bin/corepack enable --install-directory $out/bin
     '');
