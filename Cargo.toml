@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["devenv", "devenv-eval-cache", "devenv-run-tests", "devenv-tasks", "nix-conf-parser", "xtask"]
+members = [
+    "devenv",
+    "devenv-eval-cache",
+    "devenv-run-tests",
+    "devenv-tasks",
+    "nix-conf-parser",
+    "xtask",
+]
 
 [workspace.package]
 edition = "2021"
@@ -51,6 +58,7 @@ tempdir = "0.3.7"
 tempfile = "3.12.0"
 thiserror = "1.0.63"
 tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
 tokio = { version = "1.39.3", features = [
     "process",
     "fs",

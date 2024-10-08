@@ -12,9 +12,9 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::{event, Level};
 
 pub struct Nix<'a> {
-    logger: log::Logger,
     pub options: Options<'a>,
     pool: SqlitePool,
     // TODO: all these shouldn't be here
@@ -70,7 +70,6 @@ impl Default for Options<'_> {
 
 impl<'a> Nix<'a> {
     pub async fn new<P: AsRef<Path>>(
-        logger: log::Logger,
         config: config::Config,
         global_options: cli::GlobalOptions,
         cachix_trusted_keys: P,
@@ -97,7 +96,6 @@ impl<'a> Nix<'a> {
             .into_diagnostic()?;
 
         Ok(Self {
-            logger,
             options,
             pool,
             config,
@@ -156,7 +154,6 @@ impl<'a> Nix<'a> {
         let now_ns = get_now_with_nanoseconds();
         let target = format!("{}-shell", now_ns);
         symlink_force(
-            &self.logger,
             &fs::canonicalize(gc_root).expect("to resolve gc_root"),
             &self.devenv_home_gc.join(target),
         );
@@ -179,7 +176,7 @@ impl<'a> Nix<'a> {
         let link_path = self
             .devenv_dot_gc
             .join(format!("{}-{}", name, get_now_with_nanoseconds()));
-        symlink_force(&self.logger, path, &link_path);
+        symlink_force(path, &link_path);
         Ok(())
     }
 
@@ -287,7 +284,7 @@ impl<'a> Nix<'a> {
             .filter_map(|path_buf| path_buf.to_str())
             .collect();
         for path in paths {
-            self.logger.info(&format!("Deleting {}...", path));
+            event!(Level::INFO, "Deleting {}...", path);
             let args: Vec<&str> = ["store", "delete", path].to_vec();
             let cmd = self.prepare_command("nix", &args, &self.options);
             // we ignore if this command fails, because root might be in use
@@ -327,11 +324,12 @@ impl<'a> Nix<'a> {
         use devenv_eval_cache::internal_log::Verbosity;
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
-        let mut logger = self.logger.clone();
+        // TODO: change logging level using structured attrs?
+        // let mut logger = self.logger.clone();
 
-        if !options.logging {
-            logger.level = log::Level::Error;
-        }
+        // if !options.logging {
+        //     logger.level = log::Level::Error;
+        // }
 
         if options.replace_shell {
             if self.global_options.nix_debugger
@@ -340,10 +338,11 @@ impl<'a> Nix<'a> {
                 cmd.arg("--debugger");
             }
             let error = cmd.exec();
-            self.logger.error(&format!(
+            event!(
+                Level::ERROR,
                 "Failed to replace shell with `{}`: {error}",
                 display_command(&cmd),
-            ));
+            );
             bail!("Failed to replace shell")
         }
 
@@ -411,23 +410,24 @@ impl<'a> Nix<'a> {
                 None => "without exit code".to_string(),
             };
 
+            if options.logging {
+                eprintln!();
+                event!(
+                    Level::ERROR,
+                    "Command produced the following output:\n{}\n{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                );
+            }
+
             if self.global_options.nix_debugger
                 && cmd.get_program().to_string_lossy().ends_with("bin/nix")
             {
-                self.logger.info("Starting Nix debugger ...");
+                event!(Level::INFO, "Starting Nix debugger ...");
                 cmd.arg("--debugger").exec();
             }
 
             if options.bail_on_error {
-                if options.logging {
-                    eprintln!();
-                    self.logger.error(&format!(
-                        "Command produced the following output:\n{}\n{}",
-                        String::from_utf8_lossy(&result.stdout),
-                        String::from_utf8_lossy(&result.stderr),
-                    ));
-                }
-
                 bail!(format!(
                     "Command `{}` failed with {code}",
                     display_command(&cmd)
@@ -455,9 +455,11 @@ impl<'a> Nix<'a> {
 
             match cachix_caches {
                 Err(e) => {
-                    self.logger
-                        .warn("Failed to get cachix caches due to evaluation error");
-                    self.logger.debug(&format!("{}", e));
+                    event!(
+                        Level::WARN,
+                        "Failed to get cachix caches due to evaluation error"
+                    );
+                    event!(Level::DEBUG, "{}", e);
                 }
                 Ok(cachix_caches) => {
                     push_cache = cachix_caches.caches.push.clone();
@@ -516,10 +518,11 @@ impl<'a> Nix<'a> {
                 new_cmd.current_dir(cmd.get_current_dir().unwrap_or_else(|| Path::new(".")));
                 return Ok(new_cmd);
             } else {
-                self.logger.warn(&format!(
+                event!(
+                    Level::WARN,
                     "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
                     push_cache
-                ));
+                );
             }
         }
         Ok(cmd)
@@ -553,11 +556,13 @@ impl<'a> Nix<'a> {
         let mut cmd = match env::var("DEVENV_NIX") {
             Ok(devenv_nix) => std::process::Command::new(format!("{devenv_nix}/bin/{command}")),
             Err(_) => {
-                self.logger.error(
+                event!(Level::ERROR,
             "$DEVENV_NIX is not set, but required as devenv doesn't work without a few Nix patches."
             );
-                self.logger
-                    .error("Please follow https://devenv.sh/getting-started/ to install devenv.");
+                event!(
+                    Level::ERROR,
+                    "Please follow https://devenv.sh/getting-started/ to install devenv."
+                );
                 bail!("$DEVENV_NIX is not set")
             }
         };
@@ -583,8 +588,7 @@ impl<'a> Nix<'a> {
         cmd.current_dir(&self.devenv_root);
 
         if self.global_options.verbose {
-            self.logger
-                .debug(&format!("Running command: {}", display_command(&cmd)));
+            event!(Level::DEBUG, "Running command: {}", display_command(&cmd));
         }
         Ok(cmd)
     }
@@ -631,12 +635,14 @@ impl<'a> Nix<'a> {
                     }
                     let resp = request.send().await.expect("Failed to get cache");
                     if resp.status().is_client_error() {
-                        self.logger.error(&format!(
+                        event!(Level::ERROR,
                         "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
                         name
-                    ));
-                        self.logger
-                            .error("To create a cache, go to https://app.cachix.org/.");
+                    );
+                        event!(
+                            Level::ERROR,
+                            "To create a cache, go to https://app.cachix.org/."
+                        );
                         bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
                     } else {
                         let resp_json =
@@ -656,7 +662,7 @@ impl<'a> Nix<'a> {
                     .expect("Failed to parse JSON")
                     .trusted;
                 if trusted.is_none() {
-                    self.logger.warn(
+                    event!(Level::WARN,
                     "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
                 );
                 }
@@ -666,14 +672,19 @@ impl<'a> Nix<'a> {
                     "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
                 };
 
-                self.logger
-                    .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
+                event!(
+                    Level::INFO,
+                    "Using Cachix: {}",
+                    caches.caches.pull.join(", ")
+                );
                 if !new_known_keys.is_empty() {
                     for (name, pubkey) in new_known_keys.iter() {
-                        self.logger.info(&format!(
+                        event!(
+                            Level::INFO,
                             "Trusting {}.cachix.org on first use with the public key {}",
-                            name, pubkey
-                        ));
+                            name,
+                            pubkey
+                        );
                     }
                     caches.known_keys.extend(new_known_keys);
                 }
@@ -720,7 +731,7 @@ impl<'a> Nix<'a> {
 
                     if !missing_caches.is_empty() || !missing_public_keys.is_empty() {
                         if !Path::new("/etc/NIXOS").exists() {
-                            self.logger.error(&indoc::formatdoc!(
+                            event!(Level::ERROR, "{}", indoc::formatdoc!(
                         "Failed to set up binary caches:
 
                            {}
@@ -754,7 +765,7 @@ impl<'a> Nix<'a> {
                     , missing_public_keys.join(" ")
                     ));
                         } else {
-                            self.logger.error(&indoc::formatdoc!(
+                            event!(Level::ERROR, "{}", indoc::formatdoc!(
                         "Failed to set up binary caches:
 
                            {}
@@ -813,13 +824,15 @@ impl<'a> Nix<'a> {
     }
 }
 
-fn symlink_force(logger: &log::Logger, link_path: &Path, target: &Path) {
+fn symlink_force(link_path: &Path, target: &Path) {
     let _lock = dotlock::Dotlock::create(target.with_extension("lock")).unwrap();
-    logger.debug(&format!(
+
+    event!(
+        Level::DEBUG,
         "Creating symlink {} -> {}",
         link_path.display(),
         target.display()
-    ));
+    );
 
     if target.exists() {
         fs::remove_file(target).unwrap_or_else(|_| panic!("Failed to remove {}", target.display()));

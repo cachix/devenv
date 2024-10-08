@@ -15,6 +15,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use tracing::{event, Level};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -28,7 +29,6 @@ const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
-    pub logger: Option<log::Logger>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
 }
@@ -37,7 +37,6 @@ pub struct Devenv {
     pub config: config::Config,
     pub global_options: cli::GlobalOptions,
 
-    logger: log::Logger,
     log_progress: log::LogProgressCreator,
 
     nix: cnix::Nix<'static>,
@@ -89,13 +88,6 @@ impl Devenv {
 
         let global_options = options.global_options.unwrap_or_default();
 
-        let level = if global_options.verbose {
-            log::Level::Debug
-        } else {
-            log::Level::Info
-        };
-        let logger = options.logger.unwrap_or_else(|| log::Logger::new(level));
-
         let log_progress = if global_options.quiet {
             log::LogProgressCreator::Silent
         } else {
@@ -110,7 +102,6 @@ impl Devenv {
         std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
 
         let nix = cnix::Nix::new(
-            logger.clone(),
             options.config.clone(),
             global_options.clone(),
             cachix_trusted_keys,
@@ -125,7 +116,6 @@ impl Devenv {
         Self {
             config: options.config,
             global_options,
-            logger,
             log_progress,
             devenv_root,
             devenv_dotfile,
@@ -167,7 +157,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            self.logger.info(&format!("Creating {}", filename));
+            event!(Level::INFO, "Creating {}", filename);
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -281,7 +271,7 @@ impl Devenv {
                 develop_args.extend_from_slice(&args);
             }
             None => {
-                self.logger.info("Entering shell");
+                event!(Level::INFO, "Entering shell");
             }
         };
 
@@ -347,10 +337,11 @@ impl Devenv {
             copy_args.join(" "),
         ];
 
-        self.logger.info(&format!(
+        event!(
+            Level::INFO,
             "Running {copy_script_string} {}",
             copy_args.join(" ")
-        ));
+        );
 
         let status = std::process::Command::new(copy_script)
             .args(copy_args)
@@ -373,8 +364,10 @@ impl Devenv {
         registry: Option<&str>,
     ) -> Result<()> {
         if registry.is_some() {
-            self.logger
-                .warn("Ignoring --registry flag when running container");
+            event!(
+                Level::WARN,
+                "Ignoring --registry flag when running container"
+            );
         };
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
@@ -416,18 +409,18 @@ impl Devenv {
         };
         let to_gc_len = to_gc.len();
 
-        self.logger
-            .info(&format!("Found {} active environments.", to_gc_len));
-        self.logger.info(&format!(
+        event!(Level::INFO, "Found {} active environments.", to_gc_len);
+        event!(
+            Level::INFO,
             "Deleted {} dangling environments (most likely due to previous GC).",
             removed_symlinks.len()
-        ));
+        );
 
         {
             let _logprogress = self
                 .log_progress
                 .with_newline("Running garbage collection (this process will take some time) ...");
-            self.logger.warn("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
+            event!(Level::WARN, "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
             self.nix.gc(to_gc)?;
         }
 
@@ -435,11 +428,12 @@ impl Devenv {
         let end = std::time::Instant::now();
 
         eprintln!();
-        self.logger.info(&format!(
+        event!(
+            Level::INFO,
             "Done. Successfully removed {} symlinks in {}s.",
             to_gc_len - after_gc.len(),
             (end - start).as_secs_f32()
-        ));
+        );
         Ok(())
     }
 
@@ -494,7 +488,7 @@ impl Devenv {
             print_stderr(options_results.with_title()).expect("Failed to print options results");
         }
 
-        self.logger.info(&format!("Found {search_results_count} packages and {results_options_count} options for '{name}'."));
+        event!(Level::INFO, "Found {search_results_count} packages and {results_options_count} options for '{name}'.");
         Ok(())
     }
 
@@ -522,10 +516,11 @@ impl Devenv {
             serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
         // run tasks
         let config = tasks::Config { roots, tasks };
-        self.logger.debug(&format!(
+        event!(
+            Level::DEBUG,
             "Tasks config: {}",
             serde_json::to_string_pretty(&config).unwrap()
-        ));
+        );
         let mut tui = tasks::TasksUi::new(config).await?;
         let (tasks_status, outputs) = tui.run().await?;
 
@@ -556,8 +551,7 @@ impl Devenv {
 
         let result = {
             let _logprogress = self.log_progress.with_newline("Running tests");
-            self.logger
-                .debug(&format!("Running command: {test_script}"));
+            event!(Level::DEBUG, "Running command: {test_script}");
             let develop_args = self.prepare_develop_args(&Some(test_script), &[]).await?;
             // TODO: replace_shell?
             self.nix
@@ -576,10 +570,10 @@ impl Devenv {
         }
 
         if !result.status.success() {
-            self.logger.error("Tests failed :(");
+            event!(Level::ERROR, "Tests failed :(");
             bail!("Tests failed");
         } else {
-            self.logger.info("Tests passed :)");
+            event!(Level::INFO, "Tests passed :)");
             Ok(())
         }
     }
@@ -638,8 +632,10 @@ impl Devenv {
     ) -> Result<()> {
         self.assemble(false)?;
         if !self.has_processes().await? {
-            self.logger
-                .error("No 'processes' option defined: https://devenv.sh/processes/");
+            event!(
+                Level::ERROR,
+                "No 'processes' option defined: https://devenv.sh/processes/"
+            );
             bail!("No processes defined");
         }
 
@@ -711,14 +707,15 @@ impl Devenv {
 
                 std::fs::write(self.processes_pid(), process.id().to_string())
                     .expect("Failed to write PROCESSES_PID");
-                self.logger.info(&format!("PID is {}", process.id()));
+                event!(Level::INFO, "PID is {}", process.id());
                 if *log_to_file {
-                    self.logger.info(&format!(
+                    event!(
+                        Level::INFO,
                         "See logs:  $ tail -f {}",
                         self.processes_log().display()
-                    ));
+                    );
                 }
-                self.logger.info("Stop:      $ devenv processes stop");
+                event!(Level::INFO, "Stop:      $ devenv processes stop");
             } else {
                 let err = cmd.exec();
                 bail!(err);
@@ -729,7 +726,7 @@ impl Devenv {
 
     pub fn down(&self) -> Result<()> {
         if !PathBuf::from(&self.processes_pid()).exists() {
-            self.logger.error("No processes running.");
+            event!(Level::ERROR, "No processes running.");
             bail!("No processes running");
         }
 
@@ -738,15 +735,13 @@ impl Devenv {
             .parse::<i32>()
             .expect("Failed to parse PROCESSES_PID");
 
-        self.logger
-            .info(&format!("Stopping process with PID {}", pid));
+        event!(Level::INFO, "Stopping process with PID {}", pid);
 
         let pid = Pid::from_raw(pid);
         match signal::kill(pid, signal::Signal::SIGTERM) {
             Ok(_) => {}
             Err(_) => {
-                self.logger
-                    .error(&format!("Process with PID {} not found.", pid));
+                event!(Level::ERROR, "Process with PID {} not found.", pid);
                 bail!("Process not found");
             }
         }
@@ -777,8 +772,7 @@ impl Devenv {
                     flake_inputs.insert(input.clone(), flake_input);
                 }
                 Err(e) => {
-                    self.logger
-                        .error(&format!("Failed to parse input {}: {}", input, e));
+                    event!(Level::ERROR, "Failed to parse input {}: {}", input, e);
                     bail!("Failed to parse inputs");
                 }
             }
