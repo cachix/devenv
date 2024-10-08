@@ -137,7 +137,7 @@ in
               if cfg.toolchain ? rust-src
               then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
               else pkgs.rustPlatform.rustLibSrc;
-            RUSTFLAGS = optionalEnv (moldFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [moldFlags cfg.rustflags]));
+            RUSTFLAGS = optionalEnv (moldFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags cfg.rustflags ]));
             RUSTDOCFLAGS = optionalEnv (moldFlags != "") moldFlags;
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
