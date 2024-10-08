@@ -202,6 +202,7 @@ pub fn supports_eval_caching(cmd: &Command) -> bool {
     cmd.get_program().to_string_lossy().ends_with("nix")
 }
 
+#[derive(Debug)]
 pub struct Output {
     /// The status code of the command.
     pub status: process::ExitStatus,

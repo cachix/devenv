@@ -29,11 +29,42 @@ pub struct Nix<'a> {
 
 #[derive(Clone)]
 pub struct Options<'a> {
+    /// Run `exec` to replace the shell with the command.
     pub replace_shell: bool,
+    /// Error out if the command returns a non-zero status code.
+    pub bail_on_error: bool,
+    /// Cache the output of the command. This is opt-in per command.
     pub cache_output: bool,
+    /// Enable logging.
     pub logging: bool,
+    /// Log the stdout of the command.
     pub logging_stdout: bool,
+    /// Extra flags to pass to nix commands.
     pub nix_flags: &'a [&'a str],
+}
+
+impl Default for Options<'_> {
+    fn default() -> Self {
+        Self {
+            replace_shell: false,
+            bail_on_error: true,
+            // Individual commands opt into caching
+            cache_output: false,
+            logging: true,
+            logging_stdout: false,
+            nix_flags: &[
+                "--show-trace",
+                "--extra-experimental-features",
+                "nix-command",
+                "--extra-experimental-features",
+                "flakes",
+                "--option",
+                "warn-dirty",
+                "false",
+                "--keep-going",
+            ],
+        }
+    }
 }
 
 impl<'a> Nix<'a> {
@@ -54,24 +85,7 @@ impl<'a> Nix<'a> {
         let devenv_root = devenv_root.as_ref().to_path_buf();
 
         let cachix_caches = RefCell::new(None);
-        let options = Options {
-            replace_shell: false,
-            // Individual commands opt into caching
-            cache_output: false,
-            logging: true,
-            logging_stdout: false,
-            nix_flags: &[
-                "--show-trace",
-                "--extra-experimental-features",
-                "nix-command",
-                "--extra-experimental-features",
-                "flakes",
-                "--option",
-                "warn-dirty",
-                "false",
-                "--keep-going",
-            ],
-        };
+        let options = Options::default();
 
         let database_url = format!(
             "sqlite:{}/nix-eval-cache.db",
@@ -106,6 +120,7 @@ impl<'a> Nix<'a> {
             // Cannot cache this because we don't get the derivation back.
             // We'd need to switch to print-dev-env and our own `nix develop`.
             cache_output: false,
+            bail_on_error: false,
             replace_shell,
             ..self.options
         };
@@ -393,27 +408,32 @@ impl<'a> Nix<'a> {
                 Some(code) => format!("with exit code {}", code),
                 None => "without exit code".to_string(),
             };
-            if options.logging {
-                eprintln!();
-                self.logger.error(&format!(
-                    "Command produced the following output:\n{}\n{}",
-                    String::from_utf8_lossy(&result.stdout),
-                    String::from_utf8_lossy(&result.stderr),
-                ));
-            }
+
             if self.global_options.nix_debugger
                 && cmd.get_program().to_string_lossy().ends_with("bin/nix")
             {
                 self.logger.info("Starting Nix debugger ...");
                 cmd.arg("--debugger").exec();
             }
-            bail!(format!(
-                "Command `{}` failed with {code}",
-                display_command(&cmd)
-            ))
-        } else {
-            Ok(result)
+
+            if options.bail_on_error {
+                if options.logging {
+                    eprintln!();
+                    self.logger.error(&format!(
+                        "Command produced the following output:\n{}\n{}",
+                        String::from_utf8_lossy(&result.stdout),
+                        String::from_utf8_lossy(&result.stderr),
+                    ));
+                }
+
+                bail!(format!(
+                    "Command `{}` failed with {code}",
+                    display_command(&cmd)
+                ))
+            }
         }
+
+        Ok(result)
     }
 
     // We have a separate function to avoid recursion as this needs to call self.prepare_command
