@@ -1,5 +1,4 @@
 use serde_json::{Map, Value};
-use tracing::debug;
 
 fn filter_attr(json_value: &mut Value, key: &str) {
     match json_value {

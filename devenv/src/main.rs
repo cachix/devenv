@@ -1,7 +1,7 @@
 use clap::crate_version;
 use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
-    config, log, Devenv,
+    config, log, Devenv, utils
 };
 use miette::Result;
 use std::fs::File;

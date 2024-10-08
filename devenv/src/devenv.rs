@@ -401,6 +401,19 @@ impl Devenv {
     }
 
     pub async fn lsp(&mut self, completion_json: &Value) -> Result<()> {
+        // self.assemble(false)?;
+        let options = self.nix.build(&["optionsJSON"]).await?;
+        let options_path = options[0]
+            .join("share")
+            .join("doc")
+            .join("nixos")
+            .join("options.json");
+        let options_contents = fs::read(options_path).expect("Failed to read options.json");
+        let options_json: serde_json::Value =
+            serde_json::from_slice(&options_contents).expect("Failed to parse options.json");
+
+        info!("Options JSON: {:?}", options_json);
+
         let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
         info!("Inside the tokio main async lsp");
         let (service, socket) = LspService::new(|client| lsp::Backend {
