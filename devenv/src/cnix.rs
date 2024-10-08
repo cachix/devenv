@@ -217,20 +217,14 @@ impl<'a> Nix<'a> {
     }
 
     pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
-        match input_name {
-            Some(input_name) => {
-                self.run_nix(
-                    "nix",
-                    &["flake", "lock", "--update-input", input_name],
-                    &self.options,
-                )
-                .await?;
-            }
-            None => {
-                self.run_nix("nix", &["flake", "update"], &self.options)
-                    .await?;
-            }
+        let mut args = vec!["flake", "update"];
+
+        if let Some(input_name) = input_name {
+            args.push(input_name);
         }
+
+        self.run_nix("nix", &args, &self.options).await?;
+
         Ok(())
     }
 

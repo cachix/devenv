@@ -57,7 +57,8 @@ impl InternalLog {
             // to filter things out. Our hunch is that these messages are coming from the
             // nix daemon.
             InternalLog::Msg { msg, level, .. }
-                if *level == Verbosity::Error && (self.is_nix_error() || self.is_builtin_trace()) =>
+                if *level == Verbosity::Error
+                    && (self.is_nix_error() || self.is_builtin_trace()) =>
             {
                 Some(msg.clone())
             }
