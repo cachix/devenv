@@ -563,7 +563,7 @@ impl Devenv {
                         .iter()
                         .map(|s| s.as_str())
                         .collect::<Vec<&str>>(),
-                    false,
+                    false, // replace_shell
                 )
                 .await?
         };

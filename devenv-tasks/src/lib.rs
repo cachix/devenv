@@ -613,6 +613,7 @@ impl Tasks {
     }
 }
 
+#[derive(Debug)]
 pub struct TasksStatus {
     lines: Vec<String>,
     pub pending: usize,
