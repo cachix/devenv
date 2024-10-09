@@ -1,6 +1,76 @@
 use console::style;
+use std::fmt;
 use std::io::Write;
 use std::time::Instant;
+use tracing::level_filters::LevelFilter;
+use tracing::{Event, Subscriber};
+use tracing_subscriber::{
+    fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
+    registry::LookupSpan,
+};
+
+#[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Level {
+    Silent,
+    Error,
+    Warn,
+    #[default]
+    Info,
+    Debug,
+}
+
+impl Into<LevelFilter> for Level {
+    fn into(self) -> LevelFilter {
+        match self {
+            Level::Silent => LevelFilter::OFF,
+            Level::Error => LevelFilter::ERROR,
+            Level::Warn => LevelFilter::WARN,
+            Level::Info => LevelFilter::INFO,
+            Level::Debug => LevelFilter::DEBUG,
+        }
+    }
+}
+
+pub struct DevenvFormat {
+    pub verbose: bool,
+}
+
+impl<S, N> FormatEvent<S, N> for DevenvFormat
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> fmt::Result {
+        let meta = event.metadata();
+        let ansi = writer.has_ansi_escapes();
+
+        let level = meta.level();
+        match *level {
+            tracing::Level::ERROR => {
+                write!(writer, "{} ", style("✖").red())?;
+            }
+            tracing::Level::WARN => {
+                write!(writer, "{} ", style("•").yellow())?;
+            }
+            tracing::Level::INFO => {
+                write!(writer, "{} ", style("•").blue())?;
+            }
+            tracing::Level::DEBUG => {
+                write!(writer, "{} ", style("•").italic())?;
+            }
+            _ => {}
+        }
+
+        ctx.field_format().format_fields(writer.by_ref(), event)?;
+
+        writeln!(writer)
+    }
+}
 
 pub enum LogProgressCreator {
     Silent,
@@ -61,66 +131,5 @@ impl Drop for LogProgress {
             self.message,
             duration.as_secs_f32()
         );
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub enum Level {
-    Silent,
-    Error,
-    Warn,
-    Info,
-    Debug,
-}
-
-#[derive(Clone)]
-pub struct Logger {
-    pub level: Level,
-}
-
-impl Logger {
-    pub fn new(level: Level) -> Logger {
-        Logger { level }
-    }
-
-    pub fn info(&self, message: &str) {
-        self.log(message, Level::Info);
-    }
-
-    pub fn error(&self, message: &str) {
-        self.log(message, Level::Error);
-    }
-
-    pub fn debug(&self, message: &str) {
-        self.log(message, Level::Debug);
-    }
-
-    pub fn warn(&self, message: &str) {
-        self.log(message, Level::Warn);
-    }
-
-    pub fn log(&self, message: &str, level: Level) {
-        if level > self.level {
-            return;
-        }
-        match level {
-            Level::Info => {
-                let prefix = style("•").blue();
-                eprintln!("{} {}", prefix, message);
-            }
-            Level::Error => {
-                let prefix = style("✖").red();
-                eprintln!("{} {}", prefix, message);
-            }
-            Level::Warn => {
-                let prefix = style("•").yellow();
-                eprintln!("{} {}", prefix, message);
-            }
-            Level::Debug => {
-                let prefix = style("•").italic();
-                eprintln!("{} {}", prefix, message);
-            }
-            Level::Silent => {}
-        }
     }
 }
