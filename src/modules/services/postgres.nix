@@ -47,7 +47,7 @@ let
             if [ 1 -ne "$dbAlreadyExists" ]; then
               echo "Creating database: ${database.name}"
               echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
-              ${lib.optionalString (database.schema != null && database.user != null && database.pass != null) ''
+              ${lib.optionalString (database.user != null && database.pass != null) ''
               echo "Creating role ${database.user}..."
               psql --dbname postgres <<'EOF'
               DO $$
