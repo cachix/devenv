@@ -13,6 +13,7 @@ in
     pull = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       description = "What caches to pull from.";
+      default = [ ];
     };
 
     push = lib.mkOption {

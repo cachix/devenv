@@ -2,6 +2,9 @@
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
   # ignore annoying browserlists warning that breaks pre-commit hooks
   env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
+  env.RUST_LOG = "devenv=debug";
+  env.RUST_LOG_SPAN_EVENTS = "full";
+  env.DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
 
   packages = [
     pkgs.cairo
@@ -11,6 +14,7 @@
     pkgs.tesh
     pkgs.watchexec
     pkgs.openssl
+    pkgs.sqlx-cli
   ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
     frameworks.SystemConfiguration
   ]);

@@ -6,6 +6,6 @@ license.workspace = true
 
 [dependencies]
 clap.workspace = true
+devenv.workspace = true
 tempdir.workspace = true
-
-devenv= { path = "../devenv" }
+tokio.workspace = true

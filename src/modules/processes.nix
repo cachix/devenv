@@ -1,6 +1,7 @@
-{ config, lib, pkgs, ... }:
+{ config, options, lib, pkgs, ... }:
 let
   types = lib.types;
+
   processType = types.submodule ({ config, ... }: {
     options = {
       exec = lib.mkOption {
@@ -8,7 +9,6 @@ let
         description = "Bash code to run the process.";
       };
 
-      # TODO: Deprecate this option in favor of `process-managers.process-compose.settings.processes.${name}`.
       process-compose = lib.mkOption {
         type = types.attrs; # TODO: type this explicitly?
         default = { };
@@ -17,7 +17,7 @@ let
 
           Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml`
 
-          Only used when using ``process.implementation = "process-compose";``
+          Only used when using ``process.manager.implementation = "process-compose";``
         '';
         example = {
           environment = [ "ENVVAR_FOR_THIS_PROCESS_ONLY=foobar" ];
@@ -33,53 +33,39 @@ let
     };
   });
 
-  implementation = config.process.implementation;
+  supportedImplementations = builtins.attrNames options.process.managers;
+
+  implementation = config.process.manager.implementation;
   envList =
     lib.mapAttrsToList
       (name: value: "${name}=${builtins.toJSON value}")
       config.env;
 in
 {
+  imports =
+    (map (name: lib.mkRenamedOptionModule [ "process" name ] [ "process" "manager" name ]) [ "after" "before" "implementation" ])
+    ++ [
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "port" ] [ "process" "managers" "process-compose" "port" ])
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "tui" ] [ "process" "managers" "process-compose" "tui" "enable" ])
+      (lib.mkRenamedOptionModule [ "process" "process-compose" "unix-socket" ] [ "process" "managers" "process-compose" "unixSocket" "path" ])
+      (lib.mkRenamedOptionModule [ "processManagerCommand" ] [ "process" "manager" "command" ])
+      (lib.mkRenamedOptionModule [ "process-managers" ] [ "process" "managers" ])
+    ];
+
   options = {
     processes = lib.mkOption {
       type = types.attrsOf processType;
       default = { };
       description =
-        "Processes can be started with ``devenv up`` and run in foreground mode.";
+        "Processes can be started with ``devenv up`` and run in the foreground.";
     };
 
-    # TODO: Rename this from `process.${option}` to `process-manager.${option}` or `devenv.up.${option}`.
-    process = {
+    process.manager = {
       implementation = lib.mkOption {
-        type = types.enum [ "honcho" "overmind" "process-compose" "hivemind" ];
-        description = "The implementation used when performing ``devenv up``.";
+        type = types.enum supportedImplementations;
+        description = "The process manager to use when running processes with ``devenv up``.";
         default = "process-compose";
         example = "overmind";
-      };
-
-      process-compose = lib.mkOption {
-        # NOTE: https://github.com/F1bonacc1/process-compose/blob/1c706e7c300df2455de7a9b259dd35dea845dcf3/src/app/config.go#L11-L16
-        type = types.attrs;
-        description = ''
-          Top-level process-compose.yaml options when that implementation is used.
-        '';
-        default = {
-          version = "0.5";
-          unix-socket = "${config.devenv.runtime}/pc.sock";
-          tui = true;
-        };
-        defaultText = lib.literalExpression ''
-          {
-            version = "0.5";
-            unix-socket = "''${config.devenv.runtime}/pc.sock";
-            tui = true;
-          }
-        '';
-        example = {
-          version = "0.5";
-          log_location = "/path/to/combined/output/logfile.log";
-          log_level = "fatal";
-        };
       };
 
       before = lib.mkOption {
@@ -93,17 +79,27 @@ in
         description = "Bash code to execute after stopping processes.";
         default = "";
       };
+
+      command = lib.mkOption {
+        type = types.str;
+        internal = true;
+        description = ''
+          The command to run the process manager.
+
+          This is meant to be set by the process.manager.''${implementation}.
+          If overriding this, ``process.manager.args`` will not be applied.
+        '';
+      };
+
+      args = lib.mkOption {
+        type = types.attrs;
+        description = ''
+          Additional arguments to pass to the process manager.
+        '';
+      };
     };
 
     # INTERNAL
-    # TODO: Rename these to `process-manager.${option}`
-    processManagerCommand = lib.mkOption {
-      type = types.str;
-      internal = true;
-      description = ''
-        The command to run the process-manager. This is meant to be set by the process-manager.''${implementation}.
-      '';
-    };
 
     procfile = lib.mkOption {
       type = types.package;
@@ -111,8 +107,8 @@ in
     };
 
     procfileEnv = lib.mkOption {
-      internal = true;
       type = types.package;
+      internal = true;
     };
 
     procfileScript = lib.mkOption {
@@ -123,7 +119,22 @@ in
   };
 
   config = lib.mkIf (config.processes != { }) {
-    process-managers.${implementation}.enable = lib.mkDefault true;
+    assertions = [{
+      assertion =
+        let
+          enabledImplementations =
+            lib.pipe supportedImplementations [
+              (map (name: config.process.managers.${name}.enable))
+              (lib.filter lib.id)
+            ];
+        in
+        lib.length enabledImplementations == 1;
+      message = ''
+        Only a single process manager can be enabled at a time.
+      '';
+    }];
+
+    process.managers.${implementation}.enable = lib.mkDefault true;
 
     procfile =
       pkgs.writeText "procfile" (lib.concatStringsSep "\n"
@@ -134,9 +145,9 @@ in
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
     procfileScript = pkgs.writeShellScript "devenv-up" ''
-      ${config.process.before}
+      ${config.process.manager.before}
 
-      ${config.processManagerCommand}
+      ${config.process.manager.command}
 
       backgroundPID=$!
 
@@ -144,7 +155,7 @@ in
         echo "Stopping processes..."
         kill -TERM $backgroundPID
         wait $backgroundPID
-        ${config.process.after}
+        ${config.process.manager.after}
         echo "Processes stopped."
       }
 

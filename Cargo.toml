@@ -1,10 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "devenv",
-    "devenv-run-tests",
-    "xtask",
-]
+members = ["devenv", "devenv-eval-cache", "devenv-run-tests", "devenv-tasks", "xtask"]
 
 [workspace.package]
 edition = "2021"
@@ -13,27 +9,63 @@ homepage = "https://devenv.sh/"
 repository = "https://github.com/cachix/devenv/"
 
 [workspace.dependencies]
+devenv = { path = "devenv" }
+devenv-eval-cache = { path = "devenv-eval-cache" }
+devenv-run-tests = { path = "devenv-run-tests" }
+devenv-tasks = { path = "devenv-tasks" }
+xtask = { path = "xtask" }
+
 ansiterm = "0.12.2"
+blake3 = "1.5.4"
 clap = { version = "4.5.1", features = ["derive", "cargo"] }
 cli-table = "0.4.7"
+console = "0.15.8"
 dotlock = "0.5.0"
-fs2 = "0.4.3"
+futures = "0.3.30"
 hex = "0.4.3"
 include_dir = "0.7.3"
 indoc = "2.0.4"
+lazy_static = "1.5.0"
 miette = { version = "7.1.0", features = ["fancy"] }
 nix = { version = "0.28.0", features = ["signal"] }
+petgraph = "0.6.5"
+pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 regex = "1.10.3"
 reqwest = "0.11.26"
-schematic = { version = "0.14.3", features = ["schema", "yaml", "renderer_template", "renderer_json_schema"] }
-serde = "1.0.197"
+schemars = "0.8.16"
+schematic = { version = "0.14.3", features = [
+    "schema",
+    "yaml",
+    "renderer_template",
+    "renderer_json_schema",
+] }
+serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
+serde_repr = "0.1.19"
 serde_yaml = "0.9.32"
 sha2 = "0.10.8"
+sqlx = { version = "0.8.2", features = ["time", "sqlite", "runtime-tokio"] }
 tempdir = "0.3.7"
+tempfile = "3.12.0"
+thiserror = "1.0.63"
 tracing = "0.1.40"
+tokio = { version = "1.39.3", features = [
+    "process",
+    "fs",
+    "io-util",
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
 which = "6.0.0"
 whoami = "1.5.1"
 xdg = "2.5.2"
 
-schemars = "0.8.16"
+# Always build optimized sqlx-macro to speed up query checks
+[profile.dev.package.sqlx-macros]
+opt-level = 3
+
+[profile.release]
+strip = true
+lto = "fat"

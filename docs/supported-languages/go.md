@@ -24,6 +24,24 @@ boolean
 
 
 
+## languages\.go\.enableHardeningWorkaround
+
+
+
+Enable hardening workaround required for Delve debugger (https://github\.com/go-delve/delve/issues/3085)
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
 ## languages\.go\.package
 
 

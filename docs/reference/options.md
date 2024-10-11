@@ -939,6 +939,11 @@ What caches to pull from.
 *Type:*
 list of string
 
+
+
+*Default:*
+` [ ] `
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
 
@@ -1818,7 +1823,7 @@ string
 
 
 *Default:*
-` "1.0.8" `
+` "1.3.0" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -2695,6 +2700,27 @@ boolean
 
 
 
+## languages.go.enableHardeningWorkaround
+
+
+
+Enable hardening workaround required for Delve debugger (https://github.com/go-delve/delve/issues/3085)
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
 ## languages.go.package
 
 
@@ -3219,7 +3245,7 @@ package
 
 
 *Default:*
-` pkgs.nodejs `
+` languages.javascript.package `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
@@ -4799,8 +4825,6 @@ list of string
 
 ## languages.python.poetry.install.groups
 
-
-
 Which dependency groups to install. See ` --with `.
 
 
@@ -4819,6 +4843,8 @@ list of string
 
 
 ## languages.python.poetry.install.ignoredGroups
+
+
 
 Which dependency groups to ignore. See ` --without `.
 
@@ -4989,6 +5015,74 @@ package
 
 
 
+## languages.python.uv.sync.enable
+
+
+
+Whether to enable uv sync during devenv initialisation.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.uv.sync.allExtras
+
+
+
+Whether to install all extras. See ` --all-extras `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.uv.sync.extras
+
+
+
+Which extras to install. See ` --extra `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.venv.enable
 
 
@@ -5126,6 +5220,53 @@ package
 
 *Default:*
 ` pkgs.R `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
+
+
+## languages.r.radian.enable
+
+
+
+Whether to enable a 21 century R console.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
+
+
+## languages.r.radian.package
+
+
+
+The radian package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.radianWrapper `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
@@ -7178,6 +7319,10 @@ One CLI to format the code tree.
 
 Trim trailing whitespace.
 
+**` trufflehog `**
+
+Secrets scanner
+
 **` typos `**
 
 Source code spell checker
@@ -7577,8 +7722,6 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 ## pre-commit.hooks.\<name>.types
 
-
-
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
 
@@ -7744,6 +7887,8 @@ list of string
 
 
 ## pre-commit.hooks.alejandra.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -34824,7 +34969,7 @@ lazy attribute set of (null or package)
 
 
 
-## process.after
+## process.manager.after
 
 
 
@@ -34845,7 +34990,23 @@ strings concatenated with “\\n”
 
 
 
-## process.before
+## process.manager.args
+
+
+
+Additional arguments to pass to the process manager.
+
+
+
+*Type:*
+attribute set
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## process.manager.before
 
 
 
@@ -34866,16 +35027,16 @@ strings concatenated with “\\n”
 
 
 
-## process.implementation
+## process.manager.implementation
 
 
 
-The implementation used when performing ` devenv up `.
+The process manager to use when running processes with ` devenv up `.
 
 
 
 *Type:*
-one of “honcho”, “overmind”, “process-compose”, “hivemind”
+one of “hivemind”, “honcho”, “overmind”, “process-compose”
 
 
 
@@ -34892,74 +35053,7 @@ one of “honcho”, “overmind”, “process-compose”, “hivemind”
 
 
 
-## process.process-compose
-
-
-
-Top-level process-compose.yaml options when that implementation is used.
-
-
-
-*Type:*
-attribute set
-
-
-
-*Default:*
-
-```
-{
-  version = "0.5";
-  unix-socket = "${config.devenv.runtime}/pc.sock";
-  tui = true;
-}
-
-```
-
-
-
-*Example:*
-
-```
-{
-  log_level = "fatal";
-  log_location = "/path/to/combined/output/logfile.log";
-  version = "0.5";
-}
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
-
-
-
-## process-managers.hivemind.enable
-
-
-
-Whether to enable hivemind as process-manager.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
-*Example:*
-` true `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/hivemind.nix)
-
-
-
-## process-managers.hivemind.package
+## process.managers.hivemind.package
 
 
 
@@ -34980,33 +35074,7 @@ package
 
 
 
-## process-managers.honcho.enable
-
-
-
-Whether to enable honcho as process-manager.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
-*Example:*
-` true `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
-
-
-
-## process-managers.honcho.package
+## process.managers.honcho.package
 
 
 
@@ -35027,33 +35095,7 @@ package
 
 
 
-## process-managers.overmind.enable
-
-
-
-Whether to enable overmind as process-manager.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
-*Example:*
-` true `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)
-
-
-
-## process-managers.overmind.package
+## process.managers.overmind.package
 
 
 
@@ -35074,33 +35116,7 @@ package
 
 
 
-## process-managers.process-compose.enable
-
-
-
-Whether to enable process-compose as process-manager.
-
-
-
-*Type:*
-boolean
-
-
-
-*Default:*
-` false `
-
-
-
-*Example:*
-` true `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
-
-
-
-## process-managers.process-compose.package
+## process.managers.process-compose.package
 
 
 
@@ -35121,11 +35137,34 @@ package
 
 
 
-## process-managers.process-compose.settings
+## process.managers.process-compose.port
 
 
 
-process-compose.yaml specific process attributes.
+The port to bind the process-compose server to.
+
+Not used when ` unixSocket.enable ` is true.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 8080 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.settings
+
+
+
+Top-level process-compose.yaml options
 
 Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml\`
 
@@ -35166,11 +35205,79 @@ YAML value
 
 
 
+## process.managers.process-compose.tui.enable
+
+
+
+Enable the TUI (Terminal User Interface)
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.unixSocket.enable
+
+
+
+Whether to enable running the process-compose server over unix domain sockets instead of tcp.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
+## process.managers.process-compose.unixSocket.path
+
+
+
+Override the path to the unix socket.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` ${config.devenv.runtime}/pc.sock `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
+
+
 ## processes
 
 
 
-Processes can be started with ` devenv up ` and run in foreground mode.
+Processes can be started with ` devenv up ` and run in the foreground.
 
 
 
@@ -35211,7 +35318,7 @@ process-compose.yaml specific process attributes.
 
 Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.yaml\`
 
-Only used when using ` process.implementation = "process-compose"; `
+Only used when using ` process.manager.implementation = "process-compose"; `
 
 
 
@@ -35771,7 +35878,7 @@ path
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/caddy" `
+` "${config.env.DEVENV_STATE}/caddy" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
@@ -39191,6 +39298,27 @@ string
 
 
 
+## services.postgres.initialDatabases.\*.pass
+
+
+
+Password of owner of the database (only takes effect if ` user ` is not ` null `).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+
+
+
 ## services.postgres.initialDatabases.\*.schema
 
 
@@ -39202,6 +39330,27 @@ an empty database is created.
 
 *Type:*
 null or path
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/postgres.nix)
+
+
+
+## services.postgres.initialDatabases.\*.user
+
+
+
+Username of owner of the database (if null, the default $USER is used).
+
+
+
+*Type:*
+null or string
 
 
 
@@ -40116,7 +40265,7 @@ package
 
 
 *Default:*
-` <derivation trafficserver-9.2.3> `
+` pkgs.trafficserver `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
@@ -40445,28 +40594,6 @@ File layout used by Traffic Server
 *Type:*
 unspecified value *(read only)*
 
-
-
-*Default:*
-
-```
-{
-  bindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
-  cachedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache";
-  datadir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/share";
-  exec_prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
-  includedir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/include";
-  libdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/lib";
-  libexecdir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/libexec";
-  localstatedir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/state";
-  logdir = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/log";
-  prefix = "/home/runner/work/devenv/devenv/.devenv/state/trafficserver";
-  runtimedir = "/run/user/1001/devenv-0957646/trafficserver";
-  sbindir = "/nix/store/p4vjvd38l79jsxzxlv9q2hbajm7g2js9-trafficserver-9.2.3/bin";
-  sysconfdir = <derivation trafficserver-config>;
-}
-```
-
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
@@ -40593,7 +40720,7 @@ strings concatenated with “\\n”
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/trafficserver/cache 256M" `
+` "${config.services.traffic-server.runroot.cachedir} 256M" `
 
 
 
@@ -41372,6 +41499,211 @@ package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## tasks
+
+
+
+A set of tasks.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.package
+
+
+
+Package to install for this task.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` <derivation bash-5.2p26> `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.after
+
+
+
+List of tasks to run after this task.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.before
+
+
+
+List of tasks to run before this task.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.binary
+
+
+
+Override the binary name if it doesn’t match package name
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "bash" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.description
+
+
+
+Description of the task.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.exec
+
+
+
+Command to execute the task.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.exports
+
+
+
+List of environment variables to export.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.input
+
+
+
+Input values for the task, encoded as JSON.
+
+
+
+*Type:*
+attribute set of anything
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.status
+
+
+
+Check if the command should be ran
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
 
 
 

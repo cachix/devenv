@@ -38,13 +38,13 @@ of source code directory by calling `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/dev
 - Examples are automatically tested on CI and are the best way to work on developing new modules, see `examples/` and `tests/`
 - Documentation is in `docs/`.
 - To run a development server, run `devenv up`.
-- To run a test, run `devenv-run-tests --only <example-name> examples`.
+- To run a test from `examples/` or `tests/`, run `devenv-run-tests --only <name>`.
 
 ## Contributing language improvements
 
 Language integration happens in stages. We welcome even the most basic support for getting started.
 
-The most basic language support starts with the `languages.*.enable` flag, which turns on basic tooling. 
+The most basic language support starts with the `languages.*.enable` flag, which turns on basic tooling.
 For an example, see `src/modules/languages/elm.nix`.
 
 The next step is to make the tooling customizable, so the versions can be overridden.

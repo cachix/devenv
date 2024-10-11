@@ -136,6 +136,17 @@ in
       '';
     };
 
+    hardeningDisable = lib.mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      default = [ ];
+      example = [ "fortify" ];
+      description = ''
+        This options allows modules to disable selected hardening modules.
+        Currently used only for Go
+      '';
+    };
+
     warnings = lib.mkOption {
       type = types.listOf types.str;
       internal = true;
@@ -210,6 +221,7 @@ in
     ./info.nix
     ./outputs.nix
     ./processes.nix
+    ./outputs.nix
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
@@ -217,6 +229,7 @@ in
     ./lib.nix
     ./tests.nix
     ./cachix.nix
+    ./tasks.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -285,6 +298,7 @@ in
 
     shell = performAssertions (
       (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
+        hardeningDisable = config.hardeningDisable;
         name = "devenv-shell";
         packages = config.packages;
         shellHook = ''

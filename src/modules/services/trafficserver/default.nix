@@ -95,12 +95,12 @@ in
     package = lib.mkOption {
       type = types.package;
       default = pkgs.trafficserver;
+      defaultText = lib.literalExpression "pkgs.trafficserver";
       description = "Apache Traffic Server package";
     };
 
     runroot = lib.mkOption {
       readOnly = true;
-      default = runroot;
       description = "File layout used by Traffic Server";
     };
 
@@ -298,6 +298,7 @@ in
     storage = lib.mkOption {
       type = types.lines;
       default = "${runroot.cachedir} 256M";
+      defaultText = lib.literalExpression "\"\${config.services.traffic-server.runroot.cachedir} 256M\"";
       example = "/dev/disk/by-id/XXXXX volume=1";
       description = ''
         List all the storage that make up the Traffic Server cache.
@@ -358,5 +359,7 @@ in
 
     services.trafficserver.records.proxy.config.body_factory.template_sets_dir =
       lib.mkDefault "${cfg.package}/etc/trafficserver/body_factory";
+
+    services.trafficserver.runroot = runroot;
   };
 }

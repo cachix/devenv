@@ -1,17 +1,16 @@
-use super::{cli, command, config, log};
+use super::{cli, cnix, config, log, tasks};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use miette::{bail, Result};
+use nix::sys::signal;
+use nix::unistd::Pid;
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
-use std::os::unix::fs::symlink;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
-use std::str::FromStr;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -35,14 +34,15 @@ pub struct DevenvOptions {
 }
 
 pub struct Devenv {
-    pub(crate) config: config::Config,
-    pub(crate) global_options: cli::GlobalOptions,
+    pub config: config::Config,
+    pub global_options: cli::GlobalOptions,
 
-    pub(crate) logger: log::Logger,
-    pub(crate) log_progress: log::LogProgressCreator,
+    logger: log::Logger,
+    log_progress: log::LogProgressCreator,
+
+    nix: cnix::Nix<'static>,
 
     // All kinds of paths
-    xdg_dirs: xdg::BaseDirectories,
     devenv_root: PathBuf,
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
@@ -50,21 +50,19 @@ pub struct Devenv {
     devenv_tmp: String,
     devenv_runtime: PathBuf,
 
-    // Caching
-    pub cachix_caches: Option<command::CachixCaches>,
-    pub cachix_trusted_keys: PathBuf,
+    assembled: bool,
+    has_processes: Option<bool>,
 
-    pub(crate) assembled: bool,
-    pub(crate) dirs_created: bool,
-    pub(crate) has_processes: Option<bool>,
-
-    pub(crate) container_name: Option<String>,
+    // TODO: make private.
+    // Pass as an arg or have a setter.
+    pub container_name: Option<String>,
 }
 
 impl Devenv {
-    pub fn new(options: DevenvOptions) -> Self {
+    pub async fn new(options: DevenvOptions) -> Self {
         let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
         let devenv_home = xdg_dirs.get_data_home();
+        let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
         let devenv_home_gc = devenv_home.join("gc");
 
         let devenv_root = options
@@ -88,7 +86,6 @@ impl Devenv {
         };
         let devenv_runtime =
             Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
-        let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
 
         let global_options = options.global_options.unwrap_or_default();
 
@@ -105,39 +102,42 @@ impl Devenv {
             log::LogProgressCreator::Logging
         };
 
+        xdg_dirs
+            .create_data_directory(Path::new("devenv"))
+            .expect("Failed to create DEVENV_HOME directory");
+        std::fs::create_dir_all(&devenv_home_gc)
+            .expect("Failed to create DEVENV_HOME_GC directory");
+        std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
+
+        let nix = cnix::Nix::new(
+            logger.clone(),
+            options.config.clone(),
+            global_options.clone(),
+            cachix_trusted_keys,
+            devenv_home_gc.clone(),
+            devenv_dotfile.clone(),
+            devenv_dot_gc.clone(),
+            devenv_root.clone(),
+        )
+        .await
+        .unwrap(); // TODO: handle error
+
         Self {
             config: options.config,
             global_options,
             logger,
             log_progress,
-            xdg_dirs,
             devenv_root,
             devenv_dotfile,
             devenv_dot_gc,
             devenv_home_gc,
             devenv_tmp,
             devenv_runtime,
-            cachix_caches: None,
-            cachix_trusted_keys,
+            nix,
             assembled: false,
-            dirs_created: false,
             has_processes: None,
             container_name: None,
         }
-    }
-
-    pub fn devenv_root(&self) -> &Path {
-        self.devenv_root.as_ref()
-    }
-
-    // TODO: refactor test to be able to remove this
-    pub fn update_devenv_dotfile<P>(&mut self, devenv_dotfile: P)
-    where
-        P: AsRef<Path>,
-    {
-        let devenv_dotfile = devenv_dotfile.as_ref();
-        self.devenv_dotfile = devenv_dotfile.to_path_buf();
-        self.devenv_dot_gc = devenv_dotfile.join("gc");
     }
 
     pub fn processes_log(&self) -> PathBuf {
@@ -207,44 +207,43 @@ impl Devenv {
         Ok(())
     }
 
-    pub fn print_dev_env(&mut self, json: bool) -> Result<()> {
-        let (env, _) = self.get_dev_environment(json, false)?;
+    pub async fn print_dev_env(&mut self, json: bool) -> Result<()> {
+        let env = self.get_dev_environment(json, false).await?;
         print!(
             "{}",
-            String::from_utf8(env).expect("Failed to convert env to utf-8")
+            String::from_utf8(env.output).expect("Failed to convert env to utf-8")
         );
         Ok(())
     }
 
-    pub fn shell(
+    pub async fn shell(
         &mut self,
         cmd: &Option<String>,
         args: &[String],
         replace_shell: bool,
     ) -> Result<()> {
-        let develop_args = self.prepare_shell(cmd, args)?;
-
-        let options = command::Options {
-            replace_shell,
-            ..command::Options::default()
-        };
+        let develop_args = self.prepare_develop_args(cmd, args).await?;
 
         let develop_args = develop_args
             .iter()
             .map(|s| s.as_str())
             .collect::<Vec<&str>>();
 
-        self.run_nix("nix", &develop_args, &options)?;
+        self.nix.develop(&develop_args, replace_shell).await?;
         Ok(())
     }
 
-    pub fn prepare_shell(&mut self, cmd: &Option<String>, args: &[String]) -> Result<Vec<String>> {
+    pub async fn prepare_develop_args(
+        &mut self,
+        cmd: &Option<String>,
+        args: &[String],
+    ) -> Result<Vec<String>> {
         self.assemble(false)?;
-        let (_, gc_root) = self.get_dev_environment(false, true)?;
+        let env = self.get_dev_environment(false, true).await?;
 
         let mut develop_args = vec![
             "develop",
-            gc_root.to_str().expect("gc root should be utf-8"),
+            env.gc_root.to_str().expect("gc root should be utf-8"),
         ];
 
         let default_clean = config::Clean {
@@ -286,7 +285,7 @@ impl Devenv {
         Ok(develop_args.into_iter().map(|s| s.to_string()).collect())
     }
 
-    pub fn update(&mut self, input_name: &Option<String>) -> Result<()> {
+    pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
@@ -294,22 +293,11 @@ impl Devenv {
         let _logprogress = self.log_progress.with_newline(&msg);
         self.assemble(false)?;
 
-        match input_name {
-            Some(input_name) => {
-                self.run_nix(
-                    "nix",
-                    &["flake", "lock", "--update-input", input_name],
-                    &command::Options::default(),
-                )?;
-            }
-            None => {
-                self.run_nix("nix", &["flake", "update"], &command::Options::default())?;
-            }
-        }
+        self.nix.update(input_name).await?;
         Ok(())
     }
 
-    pub fn container_build(&mut self, name: &str) -> Result<String> {
+    pub async fn container_build(&mut self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
             bail!("Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430");
         }
@@ -320,52 +308,35 @@ impl Devenv {
 
         self.assemble(false)?;
 
-        let container_store_path = self.run_nix(
-            "nix",
-            &[
-                "build",
-                "--print-out-paths",
-                "--no-link",
-                &format!(".#devenv.containers.{name}.derivation"),
-            ],
-            &command::Options::default(),
-        )?;
-
-        let container_store_path_string = String::from_utf8_lossy(&container_store_path.stdout)
-            .to_string()
-            .trim()
-            .to_string();
-        println!("{}", container_store_path_string);
-        Ok(container_store_path_string)
+        let container_store_path = self
+            .nix
+            .build(&[&format!("devenv.containers.{name}.derivation")])
+            .await?;
+        let container_store_path = container_store_path[0]
+            .to_str()
+            .expect("Failed to get container store path");
+        println!("{}", &container_store_path);
+        Ok(container_store_path.to_string())
     }
 
-    pub fn container_copy(
+    pub async fn container_copy(
         &mut self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
     ) -> Result<()> {
-        let spec = self.container_build(name)?;
+        let spec = self.container_build(name).await?;
 
         let _logprogress = self
             .log_progress
             .without_newline(&format!("Copying {name} container"));
 
-        let copy_script = self.run_nix(
-            "nix",
-            &[
-                "build",
-                "--print-out-paths",
-                "--no-link",
-                &format!(".#devenv.containers.{name}.copyScript"),
-            ],
-            &command::Options::default(),
-        )?;
-
-        let copy_script = String::from_utf8_lossy(&copy_script.stdout)
-            .to_string()
-            .trim()
-            .to_string();
+        let copy_script = self
+            .nix
+            .build(&[&format!("devenv.containers.{name}.copyScript")])
+            .await?;
+        let copy_script = &copy_script[0];
+        let copy_script_string = &copy_script.to_string_lossy();
 
         let copy_args = [
             spec,
@@ -373,8 +344,10 @@ impl Devenv {
             copy_args.join(" "),
         ];
 
-        self.logger
-            .info(&format!("Running {copy_script} {}", copy_args.join(" ")));
+        self.logger.info(&format!(
+            "Running {copy_script_string} {}",
+            copy_args.join(" ")
+        ));
 
         let status = std::process::Command::new(copy_script)
             .args(copy_args)
@@ -390,7 +363,7 @@ impl Devenv {
         }
     }
 
-    pub fn container_run(
+    pub async fn container_run(
         &mut self,
         name: &str,
         copy_args: &[String],
@@ -400,29 +373,19 @@ impl Devenv {
             self.logger
                 .warn("Ignoring --registry flag when running container");
         };
-        self.container_copy(name, copy_args, Some("docker-daemon:"))?;
+        self.container_copy(name, copy_args, Some("docker-daemon:"))
+            .await?;
 
         let _logprogress = self
             .log_progress
             .without_newline(&format!("Running {name} container"));
 
-        let run_script = self.run_nix(
-            "nix",
-            &[
-                "build",
-                "--print-out-paths",
-                "--no-link",
-                &format!(".#devenv.containers.{name}.dockerRun"),
-            ],
-            &command::Options::default(),
-        )?;
+        let run_script = self
+            .nix
+            .build(&[&format!("devenv.containers.{name}.dockerRun")])
+            .await?;
 
-        let run_script = String::from_utf8_lossy(&run_script.stdout)
-            .to_string()
-            .trim()
-            .to_string();
-
-        let status = std::process::Command::new(run_script)
+        let status = std::process::Command::new(&run_script[0])
             .status()
             .expect("Failed to run container script");
 
@@ -435,10 +398,7 @@ impl Devenv {
 
     pub fn repl(&mut self) -> Result<()> {
         self.assemble(false)?;
-
-        let mut cmd = self.prepare_command("nix", &["repl", "."])?;
-        cmd.exec();
-        Ok(())
+        self.nix.repl()
     }
 
     pub fn gc(&mut self) -> Result<()> {
@@ -451,9 +411,10 @@ impl Devenv {
             ));
             cleanup_symlinks(&self.devenv_home_gc)
         };
+        let to_gc_len = to_gc.len();
 
         self.logger
-            .info(&format!("Found {} active environments.", to_gc.len()));
+            .info(&format!("Found {} active environments.", to_gc_len));
         self.logger.info(&format!(
             "Deleted {} dangling environments (most likely due to previous GC).",
             removed_symlinks.len()
@@ -464,17 +425,7 @@ impl Devenv {
                 .log_progress
                 .with_newline("Running garbage collection (this process will take some time) ...");
             self.logger.warn("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
-            let paths: std::collections::HashSet<&str> = to_gc
-                .iter()
-                .filter_map(|path_buf| path_buf.to_str())
-                .collect();
-            for path in paths {
-                self.logger.info(&format!("Deleting {}...", path));
-                let args: Vec<&str> = ["store", "delete", path].iter().copied().collect();
-                let cmd = self.prepare_command("nix", &args);
-                // we ignore if this command fails, because root might be in use
-                let _ = cmd?.output();
-            }
+            self.nix.gc(to_gc)?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
@@ -483,24 +434,17 @@ impl Devenv {
         eprintln!();
         self.logger.info(&format!(
             "Done. Successfully removed {} symlinks in {}s.",
-            to_gc.len() - after_gc.len(),
+            to_gc_len - after_gc.len(),
             (end - start).as_secs_f32()
         ));
         Ok(())
     }
 
-    pub fn search(&mut self, name: &str) -> Result<()> {
+    pub async fn search(&mut self, name: &str) -> Result<()> {
         self.assemble(false)?;
 
-        let options = self.run_nix(
-            "nix",
-            &["build", "--no-link", "--print-out-paths", ".#optionsJSON"],
-            &command::Options::default(),
-        )?;
-
-        let options_str = std::str::from_utf8(&options.stdout).unwrap().trim();
-        let options_path = PathBuf::from_str(options_str)
-            .expect("options store path should be a utf-8")
+        let options = self.nix.build(&["optionsJSON"]).await?;
+        let options_path = options[0]
             .join("share")
             .join("doc")
             .join("nixos")
@@ -522,11 +466,7 @@ impl Devenv {
             .collect::<Vec<_>>();
         let results_options_count = options_results.len();
 
-        let search = self.run_nix(
-            "nix",
-            &["search", "--json", "nixpkgs", name],
-            &command::Options::default(),
-        )?;
+        let search = self.nix.search(name).await?;
         let search_json: PackageResults =
             serde_json::from_slice(&search.stdout).expect("Failed to parse search results");
         let search_results = search_json
@@ -555,64 +495,80 @@ impl Devenv {
         Ok(())
     }
 
-    pub fn has_processes(&mut self) -> Result<bool> {
+    pub async fn has_processes(&mut self) -> Result<bool> {
         if self.has_processes.is_none() {
-            let result = self.run_nix(
-                "nix",
-                &["eval", ".#devenv.processes", "--json"],
-                &command::Options::default(),
-            )?;
-            let processes = String::from_utf8_lossy(&result.stdout).to_string();
+            let processes = self.nix.eval(&["devenv.processes"]).await?;
             self.has_processes = Some(processes.trim() != "{}");
         }
         Ok(self.has_processes.unwrap())
     }
 
-    pub fn test(&mut self) -> Result<()> {
+    pub async fn tasks_run(&mut self, roots: Vec<String>) -> Result<()> {
+        self.assemble(false)?;
+        if roots.is_empty() {
+            bail!("No tasks specified.");
+        }
+        let tasks_json_file = {
+            let _logprogress = self.log_progress.without_newline("Evaluating tasks");
+            self.nix.build(&["devenv.task.config"]).await?
+        };
+        // parse tasks config
+        let tasks_json =
+            std::fs::read_to_string(&tasks_json_file[0]).expect("Failed to read config file");
+        let tasks: Vec<tasks::TaskConfig> =
+            serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
+        // run tasks
+        let config = tasks::Config { roots, tasks };
+        self.logger.debug(&format!(
+            "Tasks config: {}",
+            serde_json::to_string_pretty(&config).unwrap()
+        ));
+        let mut tui = tasks::TasksUi::new(config).await?;
+        let (tasks_status, outputs) = tui.run().await?;
+
+        if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
+            miette::bail!("Some tasks failed");
+        }
+
+        println!(
+            "{}",
+            serde_json::to_string(&outputs).expect("parsing of outputs failed")
+        );
+        Ok(())
+    }
+
+    pub async fn test(&mut self) -> Result<()> {
         self.assemble(true)?;
 
         // collect tests
         let test_script = {
             let _logprogress = self.log_progress.with_newline("Building tests");
-            self.run_nix(
-                "nix",
-                &["build", ".#devenv.test", "--no-link", "--print-out-paths"],
-                &command::Options::default(),
-            )?
+            self.nix.build(&["devenv.test"]).await?
         };
+        let test_script = test_script[0].to_string_lossy().to_string();
 
-        let test_script_string = String::from_utf8_lossy(&test_script.stdout)
-            .to_string()
-            .trim()
-            .to_string();
-        if test_script_string.is_empty() {
-            self.logger.error("No tests found.");
-            bail!("No tests found");
-        }
-
-        if self.has_processes()? {
-            self.up(None, &true, &false)?;
+        if self.has_processes().await? {
+            self.up(None, &true, &false).await?;
         }
 
         let result = {
             let _logprogress = self.log_progress.with_newline("Running tests");
-
             self.logger
-                .debug(&format!("Running command: {test_script_string}"));
-
-            let develop_args = self.prepare_shell(&Some(test_script_string), &[])?;
-            let develop_args = develop_args
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<&str>>();
-            let mut cmd = self.prepare_command("nix", &develop_args)?;
-            cmd.stdin(std::process::Stdio::inherit());
-            cmd.stderr(std::process::Stdio::inherit());
-            cmd.stdout(std::process::Stdio::inherit());
-            cmd.output().expect("Failed to run tests")
+                .debug(&format!("Running command: {test_script}"));
+            let develop_args = self.prepare_develop_args(&Some(test_script), &[]).await?;
+            // TODO: replace_shell?
+            self.nix
+                .develop(
+                    &develop_args
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<&str>>(),
+                    false, // replace_shell
+                )
+                .await?
         };
 
-        if self.has_processes()? {
+        if self.has_processes().await? {
             self.down()?;
         }
 
@@ -625,39 +581,19 @@ impl Devenv {
         }
     }
 
-    pub fn info(&mut self) -> Result<()> {
+    pub async fn info(&mut self) -> Result<()> {
         self.assemble(false)?;
-
-        // TODO: use --json
-        let metadata = self.run_nix("nix", &["flake", "metadata"], &command::Options::default())?;
-
-        let re = regex::Regex::new(r"(Inputs:.+)$").unwrap();
-        let metadata_str = String::from_utf8_lossy(&metadata.stdout);
-        let inputs = match re.captures(&metadata_str) {
-            Some(captures) => captures.get(1).unwrap().as_str(),
-            None => "",
-        };
-
-        let info_ = self.run_nix(
-            "nix",
-            &["eval", "--raw", ".#info"],
-            &command::Options::default(),
-        )?;
-        println!("{}\n{}", inputs, &String::from_utf8_lossy(&info_.stdout));
+        let output = self.nix.metadata().await?;
+        println!("{}", output);
         Ok(())
     }
 
-    pub fn build(&mut self, attributes: &[String]) -> Result<()> {
+    pub async fn build(&mut self, attributes: &[String]) -> Result<()> {
         self.assemble(false)?;
-
-        let build_attrs: Vec<String> = if attributes.is_empty() {
+        let attributes: Vec<String> = if attributes.is_empty() {
             // construct dotted names of all attributes that we need to build
-            let build_output = self.run_nix(
-                "nix",
-                &["eval", ".#build", "--json"],
-                &command::Options::default(),
-            )?;
-            serde_json::from_slice::<serde_json::Value>(&build_output.stdout)
+            let build_output = self.nix.eval(&["build"]).await?;
+            serde_json::from_str::<serde_json::Value>(&build_output)
                 .map_err(|e| miette::miette!("Failed to parse build output: {}", e))?
                 .as_object()
                 .ok_or_else(|| miette::miette!("Build output is not an object"))?
@@ -669,7 +605,7 @@ impl Devenv {
                                 .iter()
                                 .flat_map(|(k, v)| flatten_object(&format!("{}.{}", prefix, k), v))
                                 .collect(),
-                            _ => vec![format!(".#devenv.{}", prefix)],
+                            _ => vec![format!("devenv.{}", prefix)],
                         }
                     }
                     flatten_object(key, value)
@@ -678,40 +614,27 @@ impl Devenv {
         } else {
             attributes
                 .iter()
-                .map(|attr| format!(".#devenv.{}", attr))
+                .map(|attr| format!("devenv.{}", attr))
                 .collect()
         };
-
-        let mut args = vec!["build", "--print-out-paths", "--no-link"];
-        if !build_attrs.is_empty() {
-            args.extend(build_attrs.iter().map(|s| s.as_str()));
-            let output = self.run_nix("nix", &args, &command::Options::default())?;
-            println!("{}", String::from_utf8_lossy(&output.stdout));
+        let paths = self
+            .nix
+            .build(&attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>())
+            .await?;
+        for path in paths {
+            println!("{}", path.display());
         }
         Ok(())
     }
 
-    pub fn add_gc(&mut self, name: &str, path: &Path) -> Result<()> {
-        self.run_nix(
-            "nix-store",
-            &[
-                "--add-root",
-                self.devenv_dot_gc.join(name).to_str().unwrap(),
-                "-r",
-                path.to_str().unwrap(),
-            ],
-            &command::Options::default(),
-        )?;
-        let link_path = self
-            .devenv_dot_gc
-            .join(format!("{}-{}", name, get_now_with_nanoseconds()));
-        symlink_force(&self.logger, path, &link_path);
-        Ok(())
-    }
-
-    pub fn up(&mut self, process: Option<&str>, detach: &bool, log_to_file: &bool) -> Result<()> {
+    pub async fn up(
+        &mut self,
+        process: Option<&str>,
+        detach: &bool,
+        log_to_file: &bool,
+    ) -> Result<()> {
         self.assemble(false)?;
-        if !self.has_processes()? {
+        if !self.has_processes().await? {
             self.logger
                 .error("No 'processes' option defined: https://devenv.sh/processes/");
             bail!("No processes defined");
@@ -720,25 +643,13 @@ impl Devenv {
         let proc_script_string: String;
         {
             let _logprogress = self.log_progress.with_newline("Building processes");
-
-            let proc_script = self.run_nix(
-                "nix",
-                &[
-                    "build",
-                    "--no-link",
-                    "--print-out-paths",
-                    ".#procfileScript",
-                ],
-                &command::Options::default(),
-            )?;
-
-            proc_script_string = String::from_utf8_lossy(&proc_script.stdout)
-                .to_string()
-                .trim()
+            let proc_script = self.nix.build(&["procfileScript"]).await?;
+            proc_script_string = proc_script[0]
+                .to_str()
+                .expect("Failed to get proc script path")
                 .to_string();
-            self.add_gc("procfilescript", Path::new(&proc_script_string))?;
+            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
         }
-
         {
             let _logprogress = self.log_progress.with_newline("Starting processes");
 
@@ -764,10 +675,21 @@ impl Devenv {
             std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
                 .expect("Failed to set permissions");
 
-            let args =
-                self.prepare_shell(&Some(processes_script.to_str().unwrap().to_string()), &[])?;
-            let args = args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            let mut cmd = self.prepare_command("nix", &args)?;
+            let develop_args = self
+                .prepare_develop_args(&Some(processes_script.to_str().unwrap().to_string()), &[])
+                .await?;
+
+            let mut cmd = self
+                .nix
+                .prepare_command_with_substituters(
+                    "nix",
+                    &develop_args
+                        .iter()
+                        .map(AsRef::as_ref)
+                        .collect::<Vec<&str>>(),
+                    &self.nix.options,
+                )
+                .await?;
 
             if *detach {
                 let log_file = std::fs::File::create(self.processes_log())
@@ -795,7 +717,8 @@ impl Devenv {
                 }
                 self.logger.info("Stop:      $ devenv processes stop");
             } else {
-                cmd.exec();
+                let err = cmd.exec();
+                bail!(err);
             }
             Ok(())
         }
@@ -815,8 +738,8 @@ impl Devenv {
         self.logger
             .info(&format!("Stopping process with PID {}", pid));
 
-        let pid = nix::unistd::Pid::from_raw(pid);
-        match nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGTERM) {
+        let pid = Pid::from_raw(pid);
+        match signal::kill(pid, signal::Signal::SIGTERM) {
             Ok(_) => {}
             Err(_) => {
                 self.logger
@@ -826,23 +749,6 @@ impl Devenv {
         }
 
         std::fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
-        Ok(())
-    }
-
-    pub fn create_directories(&mut self) -> Result<()> {
-        if !self.dirs_created {
-            self.xdg_dirs
-                .create_data_directory(Path::new("devenv"))
-                .into_diagnostic()
-                .wrap_err("Failed to create DEVENV_HOME directory")?;
-            std::fs::create_dir_all(&self.devenv_home_gc)
-                .into_diagnostic()
-                .wrap_err("Failed to create DEVENV_HOME_GC directory")?;
-            std::fs::create_dir_all(&self.devenv_dot_gc)
-                .into_diagnostic()
-                .wrap_err("Failed to create .devenv/gc directory")?;
-            self.dirs_created = true;
-        }
         Ok(())
     }
 
@@ -884,6 +790,8 @@ impl Devenv {
             serde_json::to_string(&self.config).unwrap(),
         )
         .expect("Failed to write devenv.json");
+        // TODO: superceded by eval caching.
+        // Remove once direnvrc migration is implemented.
         fs::write(
             self.devenv_dotfile.join("imports.txt"),
             self.config.imports.join("\n"),
@@ -923,7 +831,7 @@ impl Devenv {
         Ok(())
     }
 
-    pub fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<(Vec<u8>, PathBuf)> {
+    pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
         self.assemble(false)?;
         let _logprogress = if logging {
             Some(self.log_progress.with_newline("Building shell"))
@@ -931,53 +839,28 @@ impl Devenv {
             None
         };
         let gc_root = self.devenv_dot_gc.join("shell");
-        let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
+        let env = self.nix.dev_env(json, &gc_root).await?;
 
-        let mut args: Vec<&str> = vec!["print-dev-env", "--profile", gc_root_str];
-        if json {
-            args.push("--json");
-        }
+        std::fs::write(
+            self.devenv_dotfile.join("input-paths.txt"),
+            env.paths
+                .iter()
+                .map(|fp| fp.path.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .expect("Failed to write input-paths.txt");
 
-        let env = self.run_nix("nix", &args, &command::Options::default())?;
-
-        let options = command::Options {
-            logging: false,
-            ..command::Options::default()
-        };
-
-        let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
-        self.run_nix("nix-env", &args, &options)?;
-        let now_ns = get_now_with_nanoseconds();
-        let target = format!("{}-shell", now_ns);
-        symlink_force(
-            &self.logger,
-            &fs::canonicalize(&gc_root).expect("to resolve gc_root"),
-            &self.devenv_home_gc.join(target),
-        );
-
-        Ok((env.stdout, gc_root))
+        Ok(DevEnv {
+            output: env.stdout,
+            gc_root,
+        })
     }
 }
 
-fn symlink_force(logger: &log::Logger, link_path: &Path, target: &Path) {
-    let _lock = dotlock::Dotlock::create(target.with_extension("lock")).unwrap();
-    logger.debug(&format!(
-        "Creating symlink {} -> {}",
-        link_path.display(),
-        target.display()
-    ));
-
-    if target.exists() {
-        fs::remove_file(target).unwrap_or_else(|_| panic!("Failed to remove {}", target.display()));
-    }
-
-    symlink(link_path, target).unwrap_or_else(|_| {
-        panic!(
-            "Failed to create symlink: {} -> {}",
-            link_path.display(),
-            target.display()
-        )
-    });
+pub struct DevEnv {
+    output: Vec<u8>,
+    gc_root: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -1020,14 +903,6 @@ struct DevenvPackageResult {
     version: String,
     #[table(title = "Description")]
     description: String,
-}
-
-fn get_now_with_nanoseconds() -> String {
-    let now = SystemTime::now();
-    let duration = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-    format!("{}.{}", secs, nanos)
 }
 
 fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {

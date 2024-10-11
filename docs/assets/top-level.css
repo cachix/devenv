@@ -1,0 +1,21 @@
+/*
+This file is intended for site-wide, top-level CSS properties.
+It should not be used in conjunction with Tailwind CSS,
+as mixing both caused UI anomalies.
+*/
+
+body {
+    /* Override the mkdocs default of 0.5rem */
+    font-size: 0.8rem; /* 16px */
+}
+
+/* hide site name */
+/* Explicitly specifying what we want to hide to fix certain UI elements */
+.md-nav--lifted > label:nth-child(1) {
+    font-size: 0;
+}
+
+/* hide site name */
+.md-header__topic {
+    visibility: hidden;
+}
