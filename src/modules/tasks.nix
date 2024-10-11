@@ -5,14 +5,15 @@ let
   taskType = types.submodule
     ({ name, config, ... }:
       let
-        mkCommand = command:
+        mkCommand = command: isStatus:
           if builtins.isNull command
           then null
           else
             pkgs.writeScript name ''
               #!${pkgs.lib.getBin config.package}/bin/${config.binary}
+              ${lib.optionalString (!isStatus) "set -e"}
               ${command}
-              ${lib.optionalString (config.exports != []) "${devenv}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
+              ${lib.optionalString (config.exports != [] && !isStatus) "${devenv}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in
       {
@@ -35,7 +36,7 @@ let
           command = lib.mkOption {
             type = types.nullOr types.package;
             internal = true;
-            default = mkCommand config.exec;
+            default = mkCommand config.exec false;
             description = "Path to the script to run.";
           };
           status = lib.mkOption {
@@ -46,7 +47,7 @@ let
           statusCommand = lib.mkOption {
             type = types.nullOr types.package;
             internal = true;
-            default = mkCommand config.status;
+            default = mkCommand config.status true;
             description = "Path to the script to run.";
           };
           config = lib.mkOption {
