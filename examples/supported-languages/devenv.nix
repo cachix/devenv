@@ -1,3 +1,5 @@
+# DO NOT MODIFY.
+# This file was generated bu devenv-generate-languages-example.
 { pkgs, ... }: {
 
   # Enable all languages tooling!
