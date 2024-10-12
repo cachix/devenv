@@ -6857,7 +6857,7 @@ Ensure that links to VCS websites are permalinks.
 
 **` check-xml `**
 
-Check syntax of TOML files.
+Check syntax of XML files.
 
 **` check-yaml `**
 
