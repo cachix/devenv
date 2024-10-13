@@ -61,4 +61,4 @@ unspecified value
 
 
 *Default:*
-` pkgs.texlive `
+` pkgs.texliveSmall `
