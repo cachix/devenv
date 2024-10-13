@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ ... }:
 
 {
   languages.texlive = {
