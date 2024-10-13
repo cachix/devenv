@@ -77,7 +77,6 @@ in
     env = {
       PC_CONFIG_FILES = toString cfg.configFile;
       PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
-      PC_DISABLE_TUI = if (!cfg.tui.enable) then "1" else null;
     };
 
     process.manager.args = {
