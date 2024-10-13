@@ -6312,7 +6312,7 @@ unspecified value
 
 
 *Default:*
-` pkgs.texlive `
+` pkgs.texliveSmall `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
