@@ -76,8 +76,8 @@ in
   config = lib.mkIf cfg.enable {
     env = {
       PC_CONFIG_FILES = toString cfg.configFile;
-      PC_SOCKET_PATH = toString config.process.process-compose.unix-socket;
-      PC_DISABLE_TUI = lib.mkIf (!config.process.process-compose.tui) "1";
+      PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
+      PC_DISABLE_TUI = if (!cfg.tui.enable) then "1" else null;
     };
 
     process.manager.args = {
@@ -104,9 +104,12 @@ in
       settings = {
         version = lib.mkDefault "0.5";
         is_strict = lib.mkDefault true;
+        # Filter out the recursive PC_CONFIG_FILES env.
+        # Otherwise, we would get a loop:
+        #   PC_CONFIG_FILES -> configFile -> settings -> PC_CONFIG_FILES -> ...
         environment = lib.mapAttrsToList
           (name: value: "${name}=${toString value}")
-          config.env;
+          (builtins.removeAttrs config.env [ "PC_CONFIG_FILES" ]);
         processes = lib.mapAttrs
           (name: value:
             let
