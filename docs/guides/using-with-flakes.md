@@ -62,6 +62,7 @@ Here's a minimal `flake.nix` file that includes:
     in
     {
       packages.${system}.devenv-up = self.devShells.${system}.default.config.procfileScript;
+      packages.${system}.devenv-test = self.devShells.${system}.default.config.test;
 
       devShells.${system}.default = devenv.lib.mkShell {
         inherit inputs pkgs;
@@ -90,6 +91,21 @@ $ devenv up
 17:34:37 run.1  | Hello, world!
 17:34:37 system | run.1 stopped (rc=0)
 ```
+
+And run [tests with `devenv test`](/tests).
+```console
+$ devenv test
+Running tasks     devenv:enterShell
+Succeeded         devenv:pre-commit:install 10ms
+Succeeded         devenv:enterShell         4ms
+2 Succeeded                                 14.75ms
+• Testing ...
+Running tasks     devenv:enterTest
+Succeeded         devenv:pre-commit:run     474ms
+Not implemented   devenv:enterTest
+1 Skipped, 1 Succeeded                      474.62ms
+```
+
 
 ## Automatic shell switching with direnv
 
