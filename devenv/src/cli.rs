@@ -351,7 +351,7 @@ fn max_jobs() -> u8 {
         eprintln!("Failed to get number of logical CPUs: {}", e);
         std::num::NonZeroUsize::new(4).unwrap()
     });
-    num_cpus.get().div_ceil(2) as u8
+    std::cmp::max(num_cpus.get().div_ceil(2), 2) as u8
 }
 
 #[cfg(test)]
