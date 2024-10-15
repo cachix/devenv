@@ -40,7 +40,8 @@ async fn main() -> Result<()> {
         ..Default::default()
     };
 
-    if let Commands::Test {
+    // we let Drop delete the dir after all commands have ran
+    let _tmpdir = if let Commands::Test {
         dont_override_dotfile,
     } = cli.command
     {
@@ -54,7 +55,10 @@ async fn main() -> Result<()> {
             ));
             options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
         }
-    }
+        Some(tmpdir)
+    } else {
+        None
+    };
 
     let mut devenv = Devenv::new(options).await;
 
