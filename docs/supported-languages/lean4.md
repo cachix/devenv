@@ -38,4 +38,4 @@ package
 
 
 *Default:*
-` "pkgs.lean4" `
+` pkgs.lean4 `

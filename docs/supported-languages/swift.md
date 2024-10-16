@@ -38,4 +38,4 @@ package
 
 
 *Default:*
-` "pkgs.swift" `
+` pkgs.swift `
