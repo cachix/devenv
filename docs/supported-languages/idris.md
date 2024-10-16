@@ -38,9 +38,9 @@ package
 
 
 *Default:*
-` "pkgs.idris2" `
+` pkgs.idris2 `
 
 
 
 *Example:*
-` "pkgs.idris" `
+` pkgs.idris `

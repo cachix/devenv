@@ -39,7 +39,7 @@ unspecified value
 
 
 *Default:*
-` "pkgs.cockroachdb-bin" `
+` pkgs.cockroachdb-bin `
 
 
 

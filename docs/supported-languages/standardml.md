@@ -38,4 +38,4 @@ package
 
 
 *Default:*
-` "pkgs.mlton" `
+` pkgs.mlton `

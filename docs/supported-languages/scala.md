@@ -38,7 +38,7 @@ package
 
 
 *Default:*
-` "pkgs.scala_3" `
+` pkgs.scala_3 `
 
 
 
