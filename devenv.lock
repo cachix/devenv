@@ -124,10 +124,10 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1728980750,
+        "lastModified": 1729078744,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "dea2c6565d78ec2c49055e34150f9488a9370b6d",
+        "rev": "e001b2334526f3aaf32b4a264f6bf274b3859135",
         "type": "github"
       },
       "original": {
@@ -169,10 +169,10 @@
     },
     "nixpkgs-stable": {
       "locked": {
-        "lastModified": 1728740863,
+        "lastModified": 1728909085,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "a3f9ad65a0bf298ed5847629a57808b97e6e8077",
+        "rev": "c0b1da36f7c34a7146501f684e9ebdf15d2bebf8",
         "type": "github"
       },
       "original": {
@@ -184,15 +184,15 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1716977621,
+        "lastModified": 1728972312,
         "owner": "cachix",
         "repo": "devenv-nixpkgs",
-        "rev": "4267e705586473d3e5c8d50299e71503f16a6fb6",
+        "rev": "60a1d9cc7b914fa2c043c6005390ca7236e863de",
         "type": "github"
       },
       "original": {
         "owner": "cachix",
-        "ref": "rolling",
+        "ref": "bump-rolling",
         "repo": "devenv-nixpkgs",
         "type": "github"
       }
@@ -215,10 +215,10 @@
         ]
       },
       "locked": {
-        "lastModified": 1728778939,
+        "lastModified": 1729087992,
         "owner": "cachix",
         "repo": "pre-commit-hooks.nix",
-        "rev": "ff68f91754be6f3427e4986d7949e6273659be1d",
+        "rev": "43983c5976fef25e774e3f1c9bd04f658e9481c3",
         "type": "github"
       },
       "original": {
@@ -237,10 +237,10 @@
         "nixpkgs-stable": "nixpkgs-stable"
       },
       "locked": {
-        "lastModified": 1728778939,
+        "lastModified": 1729087992,
         "owner": "cachix",
         "repo": "pre-commit-hooks.nix",
-        "rev": "ff68f91754be6f3427e4986d7949e6273659be1d",
+        "rev": "43983c5976fef25e774e3f1c9bd04f658e9481c3",
         "type": "github"
       },
       "original": {
