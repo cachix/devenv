@@ -2783,7 +2783,7 @@ package
 
 
 *Default:*
-` "pkgs.ghc" `
+` pkgs.ghc `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -2804,7 +2804,7 @@ null or package
 
 
 *Default:*
-` "pkgs.haskell-language-server" `
+` pkgs.haskell-language-server `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
@@ -2825,7 +2825,7 @@ null or package
 
 
 *Default:*
-` "pkgs.stack" `
+` pkgs.stack `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
