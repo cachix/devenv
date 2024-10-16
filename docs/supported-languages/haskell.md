@@ -38,7 +38,7 @@ package
 
 
 *Default:*
-` "pkgs.ghc" `
+` pkgs.ghc `
 
 
 
@@ -56,7 +56,7 @@ null or package
 
 
 *Default:*
-` "pkgs.haskell-language-server" `
+` pkgs.haskell-language-server `
 
 
 
@@ -74,4 +74,4 @@ null or package
 
 
 *Default:*
-` "pkgs.stack" `
+` pkgs.stack `
