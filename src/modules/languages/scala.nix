@@ -12,7 +12,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.scala_3;
-      defaultText = "pkgs.scala_3";
+      defaultText = lib.literalExpression "pkgs.scala_3";
       description = ''
         The Scala package to use.
       '';

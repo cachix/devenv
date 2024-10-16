@@ -8,16 +8,16 @@ in {
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.idris2;
-      defaultText = "pkgs.idris2";
+      defaultText = lib.literalExpression "pkgs.idris2";
       description = ''
         The Idris package to use.
       '';
-      example = "pkgs.idris";
+      example = lib.literalExpression "pkgs.idris";
     };
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
+    packages = [
       cfg.package
     ];
   };
