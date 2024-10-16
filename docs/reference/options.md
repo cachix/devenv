@@ -115,12 +115,7 @@ package
 
 
 *Default:*
-` "pkgs.android-studio" `
-
-
-
-*Example:*
-` "pkgs.android-studio" `
+` pkgs.android-studio `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -343,12 +338,7 @@ package
 
 
 *Default:*
-` "pkgs.flutter" `
-
-
-
-*Example:*
-` "pkgs.flutter" `
+` pkgs.flutter `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/android.nix)
@@ -1086,7 +1076,7 @@ path or list of path
 
 
 *Default:*
-` "self" `
+` self `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/containers.nix](https://github.com/cachix/devenv/blob/main/src/modules/containers.nix)
@@ -2872,12 +2862,12 @@ package
 
 
 *Default:*
-` "pkgs.idris2" `
+` pkgs.idris2 `
 
 
 
 *Example:*
-` "pkgs.idris" `
+` pkgs.idris `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
@@ -3026,7 +3016,7 @@ package
 
 
 *Default:*
-` "pkgs.maven.override { jdk_headless = cfg.jdk.package; }" `
+` pkgs.maven.override { jdk_headless = cfg.jdk.package; } `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
@@ -3564,7 +3554,7 @@ package
 
 
 *Default:*
-` "pkgs.lean4" `
+` pkgs.lean4 `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)
@@ -5852,7 +5842,7 @@ package
 
 
 *Default:*
-` "pkgs.scala_3" `
+` pkgs.scala_3 `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
@@ -6118,7 +6108,7 @@ package
 
 
 *Default:*
-` "pkgs.mlton" `
+` pkgs.mlton `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/standardml.nix)
@@ -6165,7 +6155,7 @@ package
 
 
 *Default:*
-` "pkgs.swift" `
+` pkgs.swift `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
@@ -36375,7 +36365,7 @@ unspecified value
 
 
 *Default:*
-` "pkgs.cockroachdb-bin" `
+` pkgs.cockroachdb-bin `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
@@ -38564,7 +38554,7 @@ package
 
 
 *Default:*
-` "pkgs.nginx" `
+` pkgs.nginx `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
