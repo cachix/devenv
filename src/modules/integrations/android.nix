@@ -217,12 +217,11 @@ in
     android-studio.package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.android-studio;
-      defaultText = "pkgs.android-studio";
+      defaultText = lib.literalExpression "pkgs.android-studio";
       description = ''
         The Android Studio package to use.
         By default, the Android Studio package from nixpkgs is used.
       '';
-      example = "pkgs.android-studio";
     };
 
     flutter.enable = lib.mkOption {
@@ -236,12 +235,11 @@ in
     flutter.package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.flutter;
-      defaultText = "pkgs.flutter";
+      defaultText = lib.literalExpression "pkgs.flutter";
       description = ''
         The Flutter package to use.
         By default, the Flutter package from nixpkgs is used.
       '';
-      example = "pkgs.flutter";
     };
 
     reactNative.enable = lib.mkOption {
@@ -258,7 +256,9 @@ in
       androidSdk
       platformTools
       androidEmulator
-    ] ++ (lib.optional cfg.flutter.enable cfg.flutter.package) ++ (lib.optional cfg.android-studio.enable cfg.android-studio.package);
+    ]
+    ++ lib.optional cfg.flutter.enable cfg.flutter.package
+    ++ lib.optional cfg.android-studio.enable cfg.android-studio.package;
 
     # Nested conditional for flutter
     languages = lib.mkMerge [

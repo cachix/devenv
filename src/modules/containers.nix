@@ -202,7 +202,7 @@ let
         type = types.either types.path (types.listOf types.path);
         description = "Add a path to the container. Defaults to the whole git repo.";
         default = self;
-        defaultText = "self";
+        defaultText = lib.literalExpression "self";
       };
 
       startupCommand = lib.mkOption {
