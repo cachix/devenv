@@ -1,4 +1,29 @@
-## Using `nixpkgs-unstable` instead of `devenv-nixpkgs`
+## Getting a recent version of a package from `nixpkgs-unstable`
+
+By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/devenv-10-rewrite-in-rust/#devenv-nixpkgs) with additional fixes. This fork can be several months behind `nixpkgs-unstable`. You can still get a more recently updated package from `nixpkgs-unstable` into your devenv.
+
+1. Add `nixpkgs-unstable` input to `devenv.yaml`:
+
+```yaml
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  nixpkgs-unstable:
+    url: github:nixos/nixpkgs/nixpkgs-unstable
+```
+
+2. Use the package in your `devenv.nix`:
+
+```nix
+{ ... }:
+
+{
+  packages = [
+    pkgs-unstable.elmPackages.elm-test-rs
+  ];
+}
+```
+
 
 ### In the file `devenv.yaml` edit the `nixpkgs` input to point to nixpkgs-unstable
 
