@@ -24,7 +24,6 @@ inputs:
 }
 ```
 
-
 ## Nix patterns
 
 ### Add a directory to `$PATH`
