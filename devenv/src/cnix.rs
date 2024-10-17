@@ -361,6 +361,7 @@ impl<'a> Nix<'a> {
             let mut cached_cmd = CachedCommand::new(&self.pool);
 
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
+            cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
 
             cached_cmd.unwatch_path(self.devenv_root.join(".devenv.flake.nix"));
             // Ignore anything in .devenv.
