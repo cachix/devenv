@@ -73,7 +73,7 @@ in
     package = mkOption {
       type = types.package;
       description = "Which MongoDB package to use.";
-      default = pkgs.mongodb;
+      default = pkgs.mongodb-6_0;
       defaultText = lib.literalExpression "pkgs.mongodb";
     };
 
