@@ -708,14 +708,20 @@ impl<'a> Nix<'a> {
                         b) Add binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
                         {{
                             nix.extraOptions = ''
-                                extra-substituters = {};
-                                extra-trusted-public-keys = {};
+                                extra-substituters = {}
+                                extra-trusted-public-keys = {}
                             '';
                         }}
 
-                        Lastly rebuild your system
+                        Disable automatic cache configuration in `devenv.nix`:
 
-                        $ sudo nixos-rebuild switch
+                        {{
+                            cachix.enable = false;
+                        }}
+
+                        Lastly, rebuild your system:
+
+                          $ sudo nixos-rebuild switch
                     ", whoami::username()
                     , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                     , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
