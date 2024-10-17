@@ -86,10 +86,10 @@
     "libgit2": {
       "flake": false,
       "locked": {
-        "lastModified": 1728645207,
+        "lastModified": 1729159177,
         "owner": "libgit2",
         "repo": "libgit2",
-        "rev": "a9aa21476e34679fb7e381d04356c7a94bc698fe",
+        "rev": "215aafbd6d424dcb3401ad9903b203208a9ed923",
         "type": "github"
       },
       "original": {
@@ -124,10 +124,10 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1729101357,
+        "lastModified": 1729153142,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "945fecb357f60fa2264165b86453b1084db9740d",
+        "rev": "bc8d6370f78e3d9888d2bc077d043cded27abe7a",
         "type": "github"
       },
       "original": {
