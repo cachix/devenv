@@ -76,13 +76,17 @@ ncdu 2.2
 ✔ Tests passed. in 0.0s.
 ```
 
-## Changing environment only for tests
+## Changing environment if testing
 
 !!! info "New in version 1.0.6"
 
 ```nix title="devenv.nix"
 { pkgs, lib, config, ... }: {
-  processes.myprocess.exec = lib.mkIf (!config.devenv.isTesting!) "myexecutable";
+  processes = {
+    backend.exec = "cargo watch";
+  } // lib.optionalAttrs (!config.devenv.isTesting) {
+    frontend.exec = "parcel serve";
+  };
 }
 ```
 
