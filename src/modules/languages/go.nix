@@ -49,6 +49,7 @@ in
 
     env.GOROOT = cfg.package + "/share/go/";
     env.GOPATH = config.env.DEVENV_STATE + "/go";
+    env.GOTOOLCHAIN = "local";
 
     enterShell = ''
       export PATH=$GOPATH/bin:$PATH
