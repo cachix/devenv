@@ -81,8 +81,8 @@ ncdu 2.2
 !!! info "New in version 1.0.6"
 
 ```nix title="devenv.nix"
-{ pkgs, config, ... }: {
-  services.postgres.enable = config.devenv.isTesting;
+{ pkgs, lib, config, ... }: {
+  processes.myprocess.exec = lib.mkIf (!config.devenv.isTesting!) "myexecutable";
 }
 ```
 
