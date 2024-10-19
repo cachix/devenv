@@ -10,21 +10,7 @@ let
   );
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
-  package = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
-    python = cfg.package;
-    requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
-    makeWrapperArgs = [
-      "--prefix"
-      "LD_LIBRARY_PATH"
-      ":"
-      libraries
-    ] ++ lib.optionals pkgs.stdenv.isDarwin [
-      "--prefix"
-      "DYLD_LIBRARY_PATH"
-      ":"
-      libraries
-    ];
-  };
+  package = cfg.finalPackage;
 
   requirements = pkgs.writeText "requirements.txt" (toString (
     if lib.isPath cfg.venv.requirements
@@ -239,6 +225,12 @@ in
       description = "The Python package to use.";
     };
 
+    finalPackage = lib.mkOption {
+      type = lib.types.package;
+      description = "The final Python package to use.";
+      internal = true;
+    };
+
     manylinux.enable = lib.mkOption {
       type = lib.types.bool;
       default = pkgs.stdenv.isLinux;
@@ -428,6 +420,23 @@ in
       (lib.mkIf (cfg.version != null)
         (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
     ];
+    languages.python.finalPackage = lib.mkDefault (
+      pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
+        python = cfg.package;
+        requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
+        makeWrapperArgs = [
+          "--prefix"
+          "LD_LIBRARY_PATH"
+          ":"
+          libraries
+        ] ++ lib.optionals pkgs.stdenv.isDarwin [
+          "--prefix"
+          "DYLD_LIBRARY_PATH"
+          ":"
+          libraries
+        ];
+      }
+    );
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
