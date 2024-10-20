@@ -74,6 +74,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    env = {
+      PC_CONFIG_FILES = toString cfg.configFile;
+      PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
+    };
+
     process.manager.args = {
       "config" = cfg.configFile;
       "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
@@ -98,9 +103,12 @@ in
       settings = {
         version = lib.mkDefault "0.5";
         is_strict = lib.mkDefault true;
+        # Filter out the recursive PC_CONFIG_FILES env.
+        # Otherwise, we would get a loop:
+        #   PC_CONFIG_FILES -> configFile -> settings -> PC_CONFIG_FILES -> ...
         environment = lib.mapAttrsToList
           (name: value: "${name}=${toString value}")
-          config.env;
+          (builtins.removeAttrs config.env [ "PC_CONFIG_FILES" ]);
         processes = lib.mapAttrs
           (name: value:
             let
