@@ -811,7 +811,7 @@ impl TasksUi {
                         .max(1)
                 )
             );
-            if tasks_status.lines.len() > 0 {
+            if !tasks_status.lines.is_empty() {
                 let output = console::Style::new().apply_to(output);
                 if last_list_height > 0 {
                     term.move_cursor_up(last_list_height as usize)?;
