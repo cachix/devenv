@@ -4816,6 +4816,8 @@ list of string
 
 ## languages.python.poetry.install.groups
 
+
+
 Which dependency groups to install. See ` --with `.
 
 
@@ -7723,6 +7725,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## pre-commit.hooks.\<name>.types
+
+
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 

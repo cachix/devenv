@@ -33,7 +33,7 @@ nav:
     - Integrations: integrations
     - Examples: examples.md
     - Editor Support: editor-support
-    - Roadmap: roadmap.md
+  - Roadmap: blog/posts/2024/10/22/devenv-is-switching-nix-implementation-to-tvix
   - Reference: reference
   - Blog: blog
   - Community: community
