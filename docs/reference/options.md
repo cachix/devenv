@@ -6346,6 +6346,53 @@ boolean
 
 
 
+## languages.typst.enable
+
+
+
+Whether to enable tools for Typst development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
+
+
+
+## languages.typst.package
+
+
+
+Which package of Typst to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typst `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
+
+
+
 ## languages.unison.enable
 
 
@@ -7682,8 +7729,6 @@ attribute set of unspecified value
 
 ## pre-commit.hooks.\<name>.require_serial
 
-
-
 if true this hook will execute using a single process instead of in parallel.
 
 
@@ -7723,6 +7768,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## pre-commit.hooks.\<name>.types
+
+
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -9798,8 +9845,6 @@ boolean
 
 
 ## pre-commit.hooks.black
-
-
 
 black hook
 
@@ -11894,8 +11939,6 @@ list of string
 
 ## pre-commit.hooks.deadnix.extraPackages
 
-
-
 Additional packages required to run the hook.
 
 These are propagated to ` enabledPackages ` for constructing developer
@@ -13980,8 +14023,6 @@ string
 
 
 ## pre-commit.hooks.eclint.language
-
-
 
 The language of the hook - tells pre-commit how to install the hook.
 
@@ -16076,8 +16117,6 @@ string
 
 ## pre-commit.hooks.headache.exclude_types
 
-
-
 List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
 
@@ -18139,8 +18178,6 @@ boolean
 
 
 ## pre-commit.hooks.lacheck.stages
-
-
 
 Confines the hook to run at a particular stage.
 
@@ -20239,8 +20276,6 @@ string
 
 
 ## pre-commit.hooks.mdl.exclude_types
-
-
 
 List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -22358,8 +22393,6 @@ boolean
 
 ## pre-commit.hooks.nixfmt-rfc-style.args
 
-
-
 List of additional parameters to pass to the hook.
 
 
@@ -24449,8 +24482,6 @@ string
 
 ## pre-commit.hooks.phpcbf.name
 
-
-
 The name of the hook. Shown during hook execution.
 
 
@@ -26536,8 +26567,6 @@ one of “as-needed”, “consistent”, “preserve”
 
 
 ## pre-commit.hooks.prettier.settings.require-pragma
-
-
 
 Require either ‘@prettier’ or ‘@format’ to be present in the file’s first docblock comment.
 
@@ -28636,8 +28665,6 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## pre-commit.hooks.pyupgrade.types
-
-
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -30739,8 +30766,6 @@ list of string
 
 ## pre-commit.hooks.shfmt.extraPackages
 
-
-
 Additional packages required to run the hook.
 
 These are propagated to ` enabledPackages ` for constructing developer
@@ -32823,8 +32848,6 @@ boolean
 
 
 ## pre-commit.hooks.typos.settings.binary
-
-
 
 Whether to search binary files.
 
