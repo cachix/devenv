@@ -5,7 +5,7 @@ authors:
   - domenkozar
 ---
 
-# devenv is switching Nix implementation to Tvix
+# devenv is switching its Nix implementation to Tvix
 
 In February 2020, I went on a 16-day, 1200km moped trip across northern Thailand with a couple of friends.
 
