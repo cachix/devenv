@@ -6346,6 +6346,53 @@ boolean
 
 
 
+## languages.typst.enable
+
+
+
+Whether to enable tools for Typst development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
+
+
+
+## languages.typst.package
+
+
+
+Which package of Typst to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typst `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
+
+
+
 ## languages.unison.enable
 
 
@@ -7682,8 +7729,6 @@ attribute set of unspecified value
 
 ## pre-commit.hooks.\<name>.require_serial
 
-
-
 if true this hook will execute using a single process instead of in parallel.
 
 
@@ -7723,6 +7768,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## pre-commit.hooks.\<name>.types
+
+
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
