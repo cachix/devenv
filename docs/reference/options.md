@@ -37568,6 +37568,27 @@ boolean
 
 
 
+## services.meilisearch.package
+
+
+
+Which Meilisearch package to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.meilisearch" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
+
+
 ## services.meilisearch.environment
 
 
