@@ -89,7 +89,7 @@ in
   config = lib.mkIf cfg.enable (lib.mkMerge [
     (
       let
-        mkOverrideTools = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
+        mkOverrideTools = package: lib.mkIf (package != null) (lib.mkOverride (lib.modules.defaultOverridePriority - 1) package);
       in
       {
         assertions = [
@@ -145,6 +145,16 @@ in
         pre-commit.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
         pre-commit.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
         pre-commit.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
+
+        pre-commit.hooks.clippy.packageOverrides = {
+          cargo = mkOverrideTools cfg.toolchain.cargo or null;
+          clippy = mkOverrideTools cfg.toolchain.clippy or null;
+        };
+
+        pre-commit.hooks.rustfmt.packageOverrides = {
+          cargo = mkOverrideTools cfg.toolchain.cargo or null;
+          rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
+        };
       }
     )
 
