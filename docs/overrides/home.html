@@ -159,9 +159,9 @@ ncdu 2.3
 
   scripts.build.exec = "yarn build";
 
-  tasks = {
-    "myapp:build".exec = "build";
-    "devenv:enterShell".after = [ "myapp:build" ];
+  tasks."myapp:build" = {
+    exec = "build";
+    before = [ "devenv:enterShell" ];
   };
 
   # Runs on `git commit` and `devenv test`
