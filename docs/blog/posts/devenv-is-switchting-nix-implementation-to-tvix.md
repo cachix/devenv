@@ -33,7 +33,7 @@ We needed to remove things to reduce the cognitive load when using Nix.
 
 ## The negative feedback loop
 
-Over the years at [Cachix](https://www.cachix.org) we've talked team after team
+Over the years at [Cachix](https://www.cachix.org) we've talked to team after team
 abandoning Nix and have observed a surprisingly consistent pattern.
 
 Nix is initially introduced by someone enthusiastic about the technology. Then, faced with
