@@ -26,6 +26,7 @@
   services.redis.enable = true;
   services.sqld.enable = true;
   services.temporal.enable = true;
+  services.tideways.enable = true;
   services.trafficserver.enable = true;
   services.typesense.enable = true;
   services.varnish.enable = true;
