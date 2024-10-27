@@ -12,7 +12,7 @@ use std::path::PathBuf;
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 
     #[command(flatten)]
     pub global_options: GlobalOptions,
@@ -29,6 +29,15 @@ impl Cli {
 
 #[derive(Clone, Debug, Parser)]
 pub struct GlobalOptions {
+    #[arg(
+        short = 'V',
+        long,
+        global = true,
+        help = "Print version information",
+        long_help = "Print version information and exit"
+    )]
+    pub version: bool,
+
     #[arg(short, long, global = true, help = "Enable debug log level.")]
     pub verbose: bool,
 
@@ -129,6 +138,7 @@ pub struct GlobalOptions {
 impl Default for GlobalOptions {
     fn default() -> Self {
         Self {
+            version: false,
             verbose: false,
             quiet: false,
             max_jobs: max_jobs(),
