@@ -41,8 +41,6 @@ async fn main() -> Result<()> {
         verbose: cli.global_options.verbose,
     };
 
-    // let field_format = log::DevenvFieldFormatter {};
-
     let devenv_layer = log::DevenvLayer::new(tracing_subscriber::fmt::layer().compact());
 
     use std::io::IsTerminal;
@@ -51,10 +49,8 @@ async fn main() -> Result<()> {
         .with(devenv_layer)
         .with(
             tracing_subscriber::fmt::layer()
-                .pretty()
-                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+                // .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
                 .event_format(event_format)
-                // .fmt_fields(field_format)
                 .with_writer(std::io::stderr)
                 .with_ansi(std::io::stderr().is_terminal())
                 .with_filter(filter),
