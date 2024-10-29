@@ -15,7 +15,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::{debug, error, info, warn, Level};
+use tracing::{debug, error, info, warn, Instrument, Level};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -812,14 +812,20 @@ impl Devenv {
     }
 
     pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
+        let span = tracing::info_span!("building_shell", user_message = "Building shell");
+        span.in_scope(|| {
+            eprintln!("Running");
+        });
+        drop(span);
+
         self.assemble(false)?;
-        let _logprogress = if logging {
-            Some(self.log_progress.with_newline("Building shell"))
-        } else {
-            None
-        };
+        // let _logprogress = if logging {
+        //     Some(self.log_progress.with_newline("Building shell"))
+        // } else {
+        //     None
+        // };
         let gc_root = self.devenv_dot_gc.join("shell");
-        let env = self.nix.dev_env(json, &gc_root).await?;
+        let env = { self.nix.dev_env(json, &gc_root).await? };
 
         std::fs::write(
             self.devenv_dotfile.join("input-paths.txt"),
