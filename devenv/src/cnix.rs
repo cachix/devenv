@@ -1,4 +1,4 @@
-use crate::{cli, config, log};
+use crate::{cli, config};
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
 use serde::Deserialize;
@@ -12,7 +12,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, info, warn, Level};
+use tracing::{debug, error, info, warn};
 
 pub struct Nix<'a> {
     pub options: Options<'a>,
@@ -381,7 +381,7 @@ impl<'a> Nix<'a> {
 
                 cached_cmd.on_stderr(move |log| {
                     if let Some(msg) = log.get_log_msg_by_level(target_log_level) {
-                        eprintln!("{msg}");
+                        info!("{msg}");
                     }
                 });
             }
@@ -410,9 +410,8 @@ impl<'a> Nix<'a> {
             };
 
             if options.logging {
-                eprintln!();
                 error!(
-                    "Command produced the following output:\n{}\n{}",
+                    "\nCommand produced the following output:\n{}\n{}",
                     String::from_utf8_lossy(&result.stdout),
                     String::from_utf8_lossy(&result.stderr),
                 );

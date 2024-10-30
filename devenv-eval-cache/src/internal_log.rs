@@ -272,7 +272,6 @@ mod test {
             msg: "\u{1b}[31;1merror:\u{1b}[0m\nsomething went wrong".to_string(),
             raw_msg: None,
         };
-        eprintln!("{:?}", log);
         assert!(log.is_nix_error());
     }
 

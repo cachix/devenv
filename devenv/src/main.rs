@@ -5,7 +5,6 @@ use devenv::{
 };
 use miette::Result;
 use tracing::{error, info, warn, Level};
-use tracing_subscriber::{fmt::format::FmtSpan, prelude::*, EnvFilter, Registry};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,37 +33,7 @@ async fn main() -> Result<()> {
         log::Level::Info
     };
 
-    let filter = EnvFilter::from_default_env().add_directive(
-        <log::Level as Into<tracing::level_filters::LevelFilter>>::into(level).into(),
-    );
-    let event_format = log::DevenvFormat {
-        verbose: cli.global_options.verbose,
-    };
-
-    let devenv_layer = log::DevenvLayer::new(tracing_subscriber::fmt::layer().compact());
-
-    use std::io::IsTerminal;
-
-    tracing_subscriber::registry()
-        .with(devenv_layer)
-        .with(
-            tracing_subscriber::fmt::layer()
-                // .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-                .event_format(event_format)
-                .with_writer(std::io::stderr)
-                .with_ansi(std::io::stderr().is_terminal())
-                .with_filter(filter),
-        )
-        .init();
-
-    // .with(
-    //     tracing_subscriber::fmt::layer()
-    //         .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-    //         .event_format(format)
-    //         .with_writer(std::io::stderr)
-    //         // .with_ansi(ansi)
-    //         .with_filter(filter),
-    // )
+    log::init_tracing(level);
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {

@@ -1,20 +1,21 @@
 use console::style;
-use schematic::color::owo::OwoColorize;
 use std::fmt;
+use std::io::IsTerminal;
 use std::marker::PhantomData;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
-use tracing::{info, Event};
-use tracing_subscriber::fmt::format::DefaultFields;
-use tracing_subscriber::layer::{self};
-use tracing_subscriber::{
-    field::RecordFields,
-    fmt::{format::Writer, FmtContext, FormatEvent, FormatFields, FormattedFields},
-    registry::LookupSpan,
+use tracing::{
+    field::{Field, Visit},
+    info, Event,
 };
-
-use core::time::Duration;
 use tracing_core::{span, Subscriber};
+use tracing_subscriber::{
+    fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
+    layer,
+    prelude::*,
+    registry::LookupSpan,
+    EnvFilter, Layer,
+};
 
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
@@ -38,33 +39,40 @@ impl From<Level> for LevelFilter {
     }
 }
 
-pub struct DevenvLayer<S, L, F = DefaultFields>
-where
-    L: layer::Layer<S> + Sized,
-    S: Subscriber,
-{
-    pub verbose: bool,
-    formatter: F,
-    inner: L,
-    _subscriber: PhantomData<S>,
+pub fn init_tracing(level: Level) {
+    let devenv_layer = DevenvLayer::new();
+
+    let filter = EnvFilter::from_default_env()
+        .add_directive(tracing::level_filters::LevelFilter::from(level.clone()).into());
+
+    let subscriber = tracing_subscriber::registry().with(devenv_layer);
+
+    use tracing_subscriber::fmt::format::FmtSpan;
+
+    if level == Level::Debug {
+        subscriber
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_ansi(std::io::stderr().is_terminal())
+                    .with_filter(filter),
+            )
+            .init();
+    } else {
+        subscriber
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_span_events(FmtSpan::CLOSE | FmtSpan::NEW)
+                    .event_format(DevenvFormat::new())
+                    .with_writer(std::io::stderr)
+                    .with_ansi(std::io::stderr().is_terminal())
+                    .with_filter(filter),
+            )
+            .init();
+    };
 }
 
-impl<S, L> DevenvLayer<S, L>
-where
-    L: layer::Layer<S> + Sized,
-    S: Subscriber,
-{
-    pub fn new(inner: L) -> Self {
-        Self {
-            verbose: false,
-            inner,
-            formatter: DefaultFields::new(),
-            _subscriber: PhantomData,
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SpanTimings {
     idle: Duration,
     busy: Duration,
@@ -99,32 +107,75 @@ impl SpanTimings {
     fn busy_duration(&self) -> HumanReadableDuration {
         HumanReadableDuration(self.busy)
     }
+
+    fn total_duration(&self) -> HumanReadableDuration {
+        HumanReadableDuration(self.idle + self.busy)
+    }
 }
 
 struct HumanReadableDuration(Duration);
 
-impl fmt::Display for HumanReadableDuration {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let secs = self.0.as_secs();
-        let millis = self.0.subsec_millis();
-        write!(f, "{}.{:03}s", secs, millis)
+impl std::fmt::Display for HumanReadableDuration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let nanos = self.0.as_nanos();
+        let mut t = nanos as f64;
+        for unit in ["ns", "µs", "ms", "s"].iter() {
+            if t < 10.0 {
+                return write!(f, "{:.2}{}", t, unit);
+            } else if t < 100.0 {
+                return write!(f, "{:.1}{}", t, unit);
+            } else if t < 1000.0 {
+                return write!(f, "{:.0}{}", t, unit);
+            }
+            t /= 1000.0;
+        }
+        write!(f, "{:.0}s", t * 1000.0)
     }
 }
 
 struct SpanMessage(String);
 
-impl<S, L, F> layer::Layer<S> for DevenvLayer<S, L, F>
+pub struct DevenvLayer<S>
+where
+    S: Subscriber,
+{
+    _subscriber: PhantomData<S>,
+}
+
+impl<S> DevenvLayer<S>
+where
+    S: Subscriber,
+{
+    pub fn new() -> Self {
+        Self {
+            _subscriber: PhantomData,
+        }
+    }
+}
+
+impl<S> layer::Layer<S> for DevenvLayer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
-    F: for<'writer> FormatFields<'writer> + 'static,
-    L: layer::Layer<S>,
 {
     fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: layer::Context<'_, S>) {
         let span = ctx
             .span(id)
             .expect("Span not found in context, this is a bug");
 
-        let mut visitor = MessageVisitor(None);
+        #[derive(Default)]
+        struct UserMessageVisitor(Option<String>);
+
+        impl Visit for UserMessageVisitor {
+            fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                if field.name() == "user_message" {
+                    self.0 = Some(value.to_string());
+                }
+            }
+        }
+
+        let mut visitor = UserMessageVisitor::default();
         attrs.record(&mut visitor);
 
         let mut ext = span.extensions_mut();
@@ -157,12 +208,30 @@ where
             timings.exit();
         }
     }
+
+    fn on_close(&self, id: span::Id, ctx: layer::Context<'_, S>) {
+        let span = ctx
+            .span(&id)
+            .expect("Span not found in context, this is a bug");
+        let mut extensions = span.extensions_mut();
+
+        if let Some(timings) = extensions.get_mut::<SpanTimings>() {
+            timings.enter();
+        }
+    }
 }
 
 pub struct DevenvFormat {
     pub verbose: bool,
 }
 
+impl DevenvFormat {
+    pub fn new() -> Self {
+        Self { verbose: false }
+    }
+}
+
+#[derive(Debug)]
 enum Progress {
     New,
     Close,
@@ -179,6 +248,7 @@ where
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> fmt::Result {
+        #[derive(Debug)]
         enum LogEntry {
             Message(String),
             LogProgress {
@@ -220,13 +290,6 @@ where
 
         impl Visit for EventVisitor {
             fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-                // eprintln!("record_debug event: {} {:?}", field.name(), value);
-                // if field.name() == "message" {
-                //     match format!("{:?}", value).as_str() {
-                //         "\"new\"" | "\"exit\"" | "\"close\"" => {}
-                //         _ => {}
-                //     }
-                // }
                 match field.name() {
                     "time.idle" => self.idle_time = Some(format!("{:?}", value)),
                     "time.busy" => self.busy_time = Some(format!("{:?}", value)),
@@ -244,9 +307,7 @@ where
         let mut visitor = EventVisitor::default();
         event.record(&mut visitor);
 
-        let log_entry = visitor.finalize();
-
-        if let Some(log_entry) = log_entry {
+        if let Some(log_entry) = visitor.finalize() {
             let meta = event.metadata();
             let ansi = writer.has_ansi_escapes();
 
@@ -278,27 +339,21 @@ where
                     idle_time,
                     busy_time,
                 } => {
-                    let mut user_message: Option<String> = None;
+                    let mut span_message: Option<String> = None;
+                    let mut span_timings: Option<SpanTimings> = None;
+
                     for span in ctx
                         .event_scope()
                         .into_iter()
                         .flat_map(tracing_subscriber::registry::Scope::from_root)
                     {
-                        let ext = span.extensions();
-
+                        let mut ext = span.extensions();
                         if let Some(timings) = ext.get::<SpanTimings>() {
-                            eprintln!("Timings: {:?}", timings);
+                            span_timings = Some(timings.clone());
                         }
                         if let Some(msg) = ext.get::<SpanMessage>() {
-                            user_message = Some(msg.0.clone());
+                            span_message = Some(msg.0.clone());
                         }
-                        // if let Some(fields) = &ext.get::<FormattedFields<F>>() {
-                        //     // eprintln!("Fields: {}", fields);
-                        //     // Skip formatting the fields if the span had no fields.
-                        //     if !fields.is_empty() {
-                        //         writeln!(writer, "{}", fields)?;
-                        //     }
-                        // }
                     }
 
                     match progress {
@@ -308,17 +363,19 @@ where
                                 writer,
                                 "{} {} ...",
                                 prefix,
-                                user_message.unwrap_or_default()
+                                span_message.unwrap_or_default()
                             )?;
                         }
                         Progress::Close => {
+                            let prefix = style("✔").green();
                             writeln!(
                                 writer,
                                 "{} {} in {}",
-                                style("✔").green(),
-                                user_message.unwrap_or_default(),
-                                idle_time,
-                                // busy_time
+                                prefix,
+                                span_message.unwrap_or_default(),
+                                span_timings
+                                    .map(|t| t.total_duration())
+                                    .unwrap_or(HumanReadableDuration(Duration::ZERO))
                             )?;
                         }
                     }
@@ -326,28 +383,7 @@ where
             }
         }
 
-        // ctx.field_format().format_fields(writer.by_ref(), event)?;
-
-        // writeln!(writer)
         Ok(())
-    }
-}
-
-use tracing::field::{Field, Visit};
-
-#[derive(Debug)]
-struct MessageVisitor(Option<String>);
-
-impl Visit for MessageVisitor {
-    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-        eprintln!("record_debug span: {} {:?}", field.name(), value);
-    }
-
-    fn record_str(&mut self, field: &Field, value: &str) {
-        // eprint!("record_str: {}: {}", field.name(), value);
-        if field.name() == "user_message" {
-            self.0 = Some(value.to_string());
-        }
     }
 }
 
@@ -398,11 +434,11 @@ impl LogProgress {
 impl Drop for LogProgress {
     fn drop(&mut self) {
         let duration = self.start.unwrap_or_else(Instant::now).elapsed();
-        // let prefix = if self.failed {
-        //     style("✖").red()
-        // } else {
-        //     style("✔").green()
-        // };
+        let prefix = if self.failed {
+            style("✖").red()
+        } else {
+            style("✔").green()
+        };
         let prefix = "";
         info!(
             "{} {} in {:.1}s.", // \r
@@ -410,90 +446,5 @@ impl Drop for LogProgress {
             self.message,
             duration.as_secs_f32()
         );
-    }
-}
-
-// REMOVE
-
-pub struct DevenvFieldFormatter {}
-
-impl<'a> FormatFields<'a> for DevenvFieldFormatter {
-    fn format_fields<R: RecordFields>(&self, writer: Writer<'_>, fields: R) -> fmt::Result {
-        let mut visitor = FieldFormatterVisitor {
-            writer,
-            result: Ok(()),
-        };
-        fields.record(&mut visitor);
-        visitor.result
-    }
-}
-
-struct FieldFormatterVisitor<'a> {
-    writer: Writer<'a>,
-    result: fmt::Result,
-}
-
-impl<'a> FieldFormatterVisitor<'a> {
-    fn record_display(&mut self, field: &tracing::field::Field, value: &dyn fmt::Display) {
-        if self.result.is_err() {
-            return;
-        }
-
-        write!(self.writer, "{}", value);
-    }
-}
-
-impl<'a> Visit for FieldFormatterVisitor<'a> {
-    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
-        self.record_display(field, &value)
-    }
-
-    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-        self.record_display(field, &value)
-    }
-
-    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
-        self.record_display(field, &format_args!("{:#x}", value))
-    }
-
-    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
-        self.record_display(field, &value)
-    }
-
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        if field.name() == "message" {
-            match value.to_string().as_str() {
-                "new" | "exit" | "close" => return,
-                _ => {}
-            }
-        }
-
-        self.record_display(field, &format_args!("{}", value));
-    }
-
-    fn record_error(
-        &mut self,
-        field: &tracing::field::Field,
-        mut value: &(dyn std::error::Error + 'static),
-    ) {
-        self.record_debug(field, &format_args!("{}", value));
-        while let Some(s) = value.source() {
-            value = s;
-            if self.result.is_err() {
-                return;
-            }
-            self.result = write!(self.writer, ": {}", value);
-        }
-    }
-
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn fmt::Debug) {
-        eprintln!("debug: {} {:?}", field.name(), value);
-        if field.name() == "message" {
-            match format!("{:?}", value).as_str() {
-                "new" | "exit" | "close" => {}
-                _ => self.record_display(field, &format_args!("{:?}", value)),
-            }
-        }
-        // self.record_display(field, &format_args!("{:x?}", value))
     }
 }

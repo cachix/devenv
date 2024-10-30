@@ -15,7 +15,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::{debug, error, info, warn, Instrument, Level};
+use tracing::{debug, error, info, warn, Instrument};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -822,7 +822,7 @@ impl Devenv {
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::info_span!("building_shell", user_message = "Building shell");
-        let env = { self.nix.dev_env(json, &gc_root).instrument(span).await? };
+        let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
         std::fs::write(
             self.devenv_dotfile.join("input-paths.txt"),

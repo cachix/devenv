@@ -600,7 +600,7 @@ impl Tasks {
         while let Some(res) = running_tasks.join_next().await {
             match res {
                 Ok(_) => (),
-                Err(e) => eprintln!("Task crashed: {}", e),
+                Err(e) => error!("Task crashed: {}", e),
             }
         }
 

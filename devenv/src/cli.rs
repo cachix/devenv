@@ -1,5 +1,6 @@
 use clap::{crate_version, Parser, Subcommand};
 use std::path::PathBuf;
+use tracing::error;
 
 #[derive(Parser)]
 #[command(
@@ -358,7 +359,7 @@ pub fn default_system() -> String {
 
 fn max_jobs() -> u8 {
     let num_cpus = std::thread::available_parallelism().unwrap_or_else(|e| {
-        eprintln!("Failed to get number of logical CPUs: {}", e);
+        error!("Failed to get number of logical CPUs: {}", e);
         std::num::NonZeroUsize::new(4).unwrap()
     });
     std::cmp::max(num_cpus.get().div_ceil(2), 2) as u8
