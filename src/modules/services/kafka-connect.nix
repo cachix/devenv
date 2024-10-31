@@ -9,6 +9,19 @@ in
 {
   options.services.kafka.connect = {
     enable = lib.mkEnableOption "Kafka Connect";
+
+    plugins = lib.mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      description = ''
+        List of Kafka Connect plugins to install
+        The list should consist of top level directories that include any combination of:
+        a) directories immediately containing jars with plugins and their dependencies
+        b) uber-jars with plugins and their dependencies
+        c) directories immediately containing the package directory structure of classes of plugins and their dependencies
+        Note: symlinks will be followed to discover dependencies or plugins.
+      '';
+    };
   };
 
   config =
@@ -25,6 +38,7 @@ in
         value.converter.schemas.enable=true
         offset.storage.file.filename=${storageFile}
         offset.flush.interval.ms=10000
+        ${lib.optionalString (lib.lists.length cfg.plugins <= 0) "plugin.path=${lib.concatStringsSep "," cfg.plugins}"}
       '';
 
       startKafkaConnect = pkgs.writeShellScriptBin "start-kafka-connect" ''
