@@ -73,6 +73,7 @@ in
             description = ''
               Kafka Listener List.
               See [listeners](https://kafka.apache.org/documentation/#brokerconfigs_listeners).
+              If you change this, you should also update the readiness probe.
             '';
             type = lib.types.listOf lib.types.str;
             default = [ "PLAINTEXT://localhost:9092" ];
@@ -183,7 +184,7 @@ in
       '';
     in
     lib.mkMerge [
-      (lib.mkIf (cfg.mode == "kraft") {
+      (lib.mkIf (cfg.defaultMode == "kraft") {
         services.kafka.settings = {
           "process.roles" = lib.mkDefault [ "broker" "controller" ];
           "broker.id" = lib.mkDefault 1;
@@ -211,15 +212,36 @@ in
           "offsets.topic.replication.factor" = lib.mkDefault 1;
           "transaction.state.log.replication.factor" = lib.mkDefault 1;
           "transaction.state.log.min.isr" = lib.mkDefault 1;
+
+          "log.retention.hours" = lib.mkDefault 168;
+          "log.segment.bytes" = lib.mkDefault 1073741824;
+          "log.retention.check.interval.ms" = lib.mkDefault 300000;
         };
       })
       (lib.mkIf cfg.enable {
         packages = [ cfg.package ];
         services.kafka.configFiles.serverProperties = generator "server.properties" stringlySettings;
 
-        # processes.kafka-setup.exec = ''
-        # '';
-        processes.kafka.exec = "${startKafka}/bin/start-kafka";
+        processes.kafka = {
+          exec = "${startKafka}/bin/start-kafka";
+
+          # process-compose = {
+          #   readiness_probe = {
+          #     # exec.command = "${pkgs.curl}/bin/curl -f -k http://localhost:9092/topics";
+          #     http_get = {
+          #       host = "localhost";
+          #       scheme = "http";
+          #       path = "/topics";
+          #       port = 9092;
+          #     };
+          #     initial_delay_seconds = 5;
+          #     period_seconds = 10;
+          #     timeout_seconds = 5;
+          #     success_threshold = 1;
+          #     failure_threshold = 3;
+          #   };
+          # };
+        };
       })
     ];
 }
