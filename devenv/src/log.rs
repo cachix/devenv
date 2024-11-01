@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
     field::{Field, Visit},
-    info, Event,
+    Event,
 };
 use tracing_core::{span, Subscriber};
 use tracing_subscriber::{
@@ -384,67 +384,5 @@ where
         }
 
         Ok(())
-    }
-}
-
-pub enum LogProgressCreator {
-    Silent,
-    Logging,
-}
-
-impl LogProgressCreator {
-    pub fn with_newline(&self, message: &str) -> Option<LogProgress> {
-        use LogProgressCreator::*;
-        match self {
-            Silent => None,
-            Logging => Some(LogProgress::new(message, true)),
-        }
-    }
-
-    pub fn without_newline(&self, message: &str) -> Option<LogProgress> {
-        use LogProgressCreator::*;
-        match self {
-            Silent => None,
-            Logging => Some(LogProgress::new(message, false)),
-        }
-    }
-}
-
-pub struct LogProgress {
-    message: String,
-    start: Option<Instant>,
-    pub failed: bool,
-}
-
-impl LogProgress {
-    pub fn new(message: &str, newline: bool) -> LogProgress {
-        let prefix = style("•").blue();
-        info!("{} {} ...", prefix, message);
-        // if newline {
-        //     eprintln!();
-        // }
-        LogProgress {
-            message: message.to_string(),
-            start: Some(Instant::now()),
-            failed: false,
-        }
-    }
-}
-
-impl Drop for LogProgress {
-    fn drop(&mut self) {
-        let duration = self.start.unwrap_or_else(Instant::now).elapsed();
-        let prefix = if self.failed {
-            style("✖").red()
-        } else {
-            style("✔").green()
-        };
-        let prefix = "";
-        info!(
-            "{} {} in {:.1}s.", // \r
-            prefix,
-            self.message,
-            duration.as_secs_f32()
-        );
     }
 }

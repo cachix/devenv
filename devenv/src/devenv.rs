@@ -15,7 +15,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::{debug, error, info, warn, Instrument};
+use tracing::{debug, error, info, info_span, warn, Instrument};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -36,8 +36,6 @@ pub struct DevenvOptions {
 pub struct Devenv {
     pub config: config::Config,
     pub global_options: cli::GlobalOptions,
-
-    log_progress: log::LogProgressCreator,
 
     nix: cnix::Nix<'static>,
 
@@ -88,12 +86,6 @@ impl Devenv {
 
         let global_options = options.global_options.unwrap_or_default();
 
-        let log_progress = if global_options.quiet {
-            log::LogProgressCreator::Silent
-        } else {
-            log::LogProgressCreator::Logging
-        };
-
         xdg_dirs
             .create_data_directory(Path::new("devenv"))
             .expect("Failed to create DEVENV_HOME directory");
@@ -116,7 +108,6 @@ impl Devenv {
         Self {
             config: options.config,
             global_options,
-            log_progress,
             devenv_root,
             devenv_dotfile,
             devenv_dot_gc,
@@ -279,14 +270,16 @@ impl Devenv {
     }
 
     pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
+        self.assemble(false)?;
+
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
         };
-        let _logprogress = self.log_progress.with_newline(&msg);
-        self.assemble(false)?;
 
-        self.nix.update(input_name).await?;
+        let span = info_span!("update", user_message = msg);
+        self.nix.update(input_name).instrument(span).await?;
+
         Ok(())
     }
 
@@ -295,21 +288,26 @@ impl Devenv {
             bail!("Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430");
         }
 
-        let _logprogress = self
-            .log_progress
-            .with_newline(&format!("Building {name} container"));
+        let span = info_span!(
+            "building_container",
+            user_message = format!("Building {name} container")
+        );
 
-        self.assemble(false)?;
+        async move {
+            self.assemble(false)?;
 
-        let container_store_path = self
-            .nix
-            .build(&[&format!("devenv.containers.{name}.derivation")])
-            .await?;
-        let container_store_path = container_store_path[0]
-            .to_str()
-            .expect("Failed to get container store path");
-        println!("{}", &container_store_path);
-        Ok(container_store_path.to_string())
+            let container_store_path = self
+                .nix
+                .build(&[&format!("devenv.containers.{name}.derivation")])
+                .await?;
+            let container_store_path = container_store_path[0]
+                .to_str()
+                .expect("Failed to get container store path");
+            println!("{}", &container_store_path);
+            Ok(container_store_path.to_string())
+        }
+        .instrument(span)
+        .await
     }
 
     pub async fn container_copy(
@@ -320,37 +318,42 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        let _logprogress = self
-            .log_progress
-            .without_newline(&format!("Copying {name} container"));
+        let span = info_span!(
+            "copying_container",
+            user_message = format!("Copying {name} container")
+        );
 
-        let copy_script = self
-            .nix
-            .build(&[&format!("devenv.containers.{name}.copyScript")])
-            .await?;
-        let copy_script = &copy_script[0];
-        let copy_script_string = &copy_script.to_string_lossy();
+        async move {
+            let copy_script = self
+                .nix
+                .build(&[&format!("devenv.containers.{name}.copyScript")])
+                .await?;
+            let copy_script = &copy_script[0];
+            let copy_script_string = &copy_script.to_string_lossy();
 
-        let copy_args = [
-            spec,
-            registry.unwrap_or("false").to_string(),
-            copy_args.join(" "),
-        ];
+            let copy_args = [
+                spec,
+                registry.unwrap_or("false").to_string(),
+                copy_args.join(" "),
+            ];
 
-        info!("Running {copy_script_string} {}", copy_args.join(" "));
+            info!("Running {copy_script_string} {}", copy_args.join(" "));
 
-        let status = std::process::Command::new(copy_script)
-            .args(copy_args)
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .expect("Failed to run copy script");
+            let status = std::process::Command::new(copy_script)
+                .args(copy_args)
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .expect("Failed to run copy script");
 
-        if !status.success() {
-            bail!("Failed to copy container")
-        } else {
-            Ok(())
+            if !status.success() {
+                bail!("Failed to copy container")
+            } else {
+                Ok(())
+            }
         }
+        .instrument(span)
+        .await
     }
 
     pub async fn container_run(
@@ -365,24 +368,29 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        let _logprogress = self
-            .log_progress
-            .without_newline(&format!("Running {name} container"));
+        let span = info_span!(
+            "running_container",
+            user_message = format!("Running {name} container")
+        );
 
-        let run_script = self
-            .nix
-            .build(&[&format!("devenv.containers.{name}.dockerRun")])
-            .await?;
+        async move {
+            let run_script = self
+                .nix
+                .build(&[&format!("devenv.containers.{name}.dockerRun")])
+                .await?;
 
-        let status = std::process::Command::new(&run_script[0])
-            .status()
-            .expect("Failed to run container script");
+            let status = std::process::Command::new(&run_script[0])
+                .status()
+                .expect("Failed to run container script");
 
-        if !status.success() {
-            bail!("Failed to run container")
-        } else {
-            Ok(())
+            if !status.success() {
+                bail!("Failed to run container")
+            } else {
+                Ok(())
+            }
         }
+        .instrument(span)
+        .await
     }
 
     pub fn repl(&mut self) -> Result<()> {
@@ -394,11 +402,15 @@ impl Devenv {
         let start = std::time::Instant::now();
 
         let (to_gc, removed_symlinks) = {
-            let _logprogress = self.log_progress.without_newline(&format!(
-                "Removing non-existing symlinks in {} ...",
-                &self.devenv_home_gc.display()
-            ));
-            cleanup_symlinks(&self.devenv_home_gc)
+            // TODO: No newline
+            let span = info_span!(
+                "cleanup_symlinks",
+                user_message = format!(
+                    "Removing non-existing symlinks in {} ...",
+                    &self.devenv_home_gc.display()
+                )
+            );
+            span.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
         };
         let to_gc_len = to_gc.len();
 
@@ -409,19 +421,19 @@ impl Devenv {
         );
 
         {
-            let _logprogress = self
-                .log_progress
-                .with_newline("Running garbage collection (this process will take some time) ...");
-            warn!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
-            self.nix.gc(to_gc)?;
+            let span = info_span!(
+                "nix_gc",
+                user_message = "Running garbage collection (this process will take some time) ..."
+            );
+            info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
+            span.in_scope(|| self.nix.gc(to_gc))?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
         let end = std::time::Instant::now();
 
-        eprintln!();
         info!(
-            "Done. Successfully removed {} symlinks in {}s.",
+            "\nDone. Successfully removed {} symlinks in {}s.",
             to_gc_len - after_gc.len(),
             (end - start).as_secs_f32()
         );
@@ -497,8 +509,11 @@ impl Devenv {
             bail!("No tasks specified.");
         }
         let tasks_json_file = {
-            let _logprogress = self.log_progress.without_newline("Evaluating tasks");
-            self.nix.build(&["devenv.task.config"]).await?
+            let span = info_span!("tasks_run", user_message = "Evaluating tasks");
+            self.nix
+                .build(&["devenv.task.config"])
+                .instrument(span)
+                .await?
         };
         // parse tasks config
         let tasks_json =
@@ -530,8 +545,8 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let _logprogress = self.log_progress.with_newline("Building tests");
-            self.nix.build(&["devenv.test"]).await?
+            let span = info_span!("test", user_message = "Building tests");
+            self.nix.build(&["devenv.test"]).instrument(span).await?
         };
         let test_script = test_script[0].to_string_lossy().to_string();
 
@@ -539,8 +554,8 @@ impl Devenv {
             self.up(None, &true, &false).await?;
         }
 
-        let result = {
-            let _logprogress = self.log_progress.with_newline("Running tests");
+        let span = info_span!("test", user_message = "Running tests");
+        let result = async {
             debug!("Running command: {test_script}");
             let develop_args = self.prepare_develop_args(&Some(test_script), &[]).await?;
             // TODO: replace_shell?
@@ -552,8 +567,10 @@ impl Devenv {
                         .collect::<Vec<&str>>(),
                     false, // replace_shell
                 )
-                .await?
-        };
+                .await
+        }
+        .instrument(span)
+        .await?;
 
         if self.has_processes().await? {
             self.down()?;
@@ -626,19 +643,21 @@ impl Devenv {
             bail!("No processes defined");
         }
 
+        let span = info_span!("build_processes", user_message = "Building processes");
         let proc_script_string: String;
-        {
-            let _logprogress = self.log_progress.with_newline("Building processes");
+        async {
             let proc_script = self.nix.build(&["procfileScript"]).await?;
             proc_script_string = proc_script[0]
                 .to_str()
                 .expect("Failed to get proc script path")
                 .to_string();
-            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
+            self.nix.add_gc("procfilescript", &proc_script[0]).await
         }
-        {
-            let _logprogress = self.log_progress.with_newline("Starting processes");
+        .instrument(span)
+        .await?;
 
+        let span = info_span!("up", user_message = "Starting processes");
+        async {
             let process = process.unwrap_or("");
 
             let processes_script = self.devenv_dotfile.join("processes");
@@ -705,6 +724,8 @@ impl Devenv {
             }
             Ok(())
         }
+        .instrument(span)
+        .await
     }
 
     pub fn down(&self) -> Result<()> {
@@ -813,12 +834,7 @@ impl Devenv {
 
     pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
         self.assemble(false)?;
-
-        // let _logprogress = if logging {
-        //     Some(self.log_progress.with_newline("Building shell"))
-        // } else {
-        //     None
-        // };
+        // TODO: figure out logging bool usage
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::info_span!("building_shell", user_message = "Building shell");
