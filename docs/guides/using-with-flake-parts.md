@@ -11,7 +11,7 @@ A Nix flake needs to consist of at least the input declarations from `devenv.yam
 To quickly set a project up with Nix flakes, use `nix flake init`:
 
 ```console
-$ nix flake init --template github:cachix/devenv#flake-parts
+nix flake init --template github:cachix/devenv#flake-parts
 ```
 
 This will create a `flake.nix` file with `devenv` configuration and a `.envrc` file with direnv configuration.
@@ -19,10 +19,15 @@ This will create a `flake.nix` file with `devenv` configuration and a `.envrc` f
 Open the `devenv` shell using:
 
 ```console
-$ nix develop --impure
+nix develop --no-pure-eval
 ```
 
 This will also create a lock file and open a new shell that adheres to the `devenv` configuration contained in `flake.nix`.
+
+!!! note "Why do I need to use the `--no-pure-eval` flag?"
+    devenv needs to know the path to the current working directory to create and manage mutable state.
+    Flakes use "pure evaluation" by default, which prevents devenv from accessing external data, like the `$PWD` environment variable.
+    The `--no-pure-eval` flag relaxes this restriction.
 
 ## The `flake.nix` file
 
@@ -31,7 +36,7 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
     devenv.url = "github:cachix/devenv";
   };
 
@@ -74,10 +79,8 @@ To use direnv in your Nix flake project, you'll need [nix-direnv](https://github
 To configure direnv, ensure your project has a `.envrc` file that includes the following line:
 
 ```text
-use flake . --impure
+use flake . --no-pure-eval
 ```
-
-In a standard Nix flake project, the `--impure` flag is not needed. However, using `devenv` in your flake _requires_ the `--impure` flag.
 
 ## Import a devenv module
 
@@ -180,7 +183,7 @@ Here we have defined two shells, each with a `devenv` configuration and differen
 To enter the shell of `projectA`:
 
 ```console
-$ nix develop --impure .#projectA
+$ nix develop --no-pure-eval .#projectA
 this is project A
 (devenv) $ 
 ```
@@ -188,7 +191,7 @@ this is project A
 To enter the shell of `projectB`:
 
 ```console
-$ nix develop --impure .#projectB
+$ nix develop --no-pure-eval .#projectB
 this is project B
 (devenv) $ 
 ```
@@ -196,7 +199,7 @@ this is project B
 The last line makes `projectA` the default shell:
 
 ```console
-$ nix develop --impure .
+$ nix develop --no-pure-eval .
 this is project A
 (devenv) $ 
 ```
@@ -208,7 +211,7 @@ If you cannot or don't want to add a `flake.nix` file to your project repository
 You can create a repository with a `flake.nix` file as in the example above. You can now refer to this flake in a different project:
 
 ```console
-$ nix develop --impure file:/path/to/central/flake#projectA
+$ nix develop --no-pure-eval file:/path/to/central/flake#projectA
 this is project A
 (devenv) $ 
 ```
@@ -216,7 +219,7 @@ this is project A
 You can also add this to the direnv configuration of the project. Just make sure the following line is in `.envrc`:
 
 ```text
-nix flake --impure file:/path/to/central/flake#projectA
+nix flake --no-pure-eval file:/path/to/central/flake#projectA
 ```
 
 Note that instead of referring to a directory on a local file system that includes the `flake.nix`, like `/path/to/central/flake`, it is also possible to use different references to a flake, for instance, `github:` or `git:`. See [Nix flake references](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html#flake-references) for more information.
