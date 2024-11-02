@@ -7,8 +7,8 @@
   };
 
   inputs.nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
-  inputs.pre-commit-hooks = {
-    url = "github:cachix/pre-commit-hooks.nix";
+  inputs.git-hooks = {
+    url = "github:cachix/git-hooks.nix";
     inputs = {
       nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
@@ -30,13 +30,13 @@
     url = "github:cachix/cachix";
     inputs = {
       nixpkgs.follows = "nixpkgs";
-      git-hooks.follows = "pre-commit-hooks";
+      git-hooks.follows = "git-hooks";
       flake-compat.follows = "flake-compat";
     };
   };
 
 
-  outputs = { self, nixpkgs, pre-commit-hooks, nix, ... }@inputs:
+  outputs = { self, nixpkgs, git-hooks, nix, ... }@inputs:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
@@ -50,11 +50,11 @@
               ./src/modules/top-level.nix
               { devenv.warnOnNewVersion = false; }
             ];
-            specialArgs = { inherit pre-commit-hooks pkgs inputs; };
+            specialArgs = { inherit git-hooks pkgs inputs; };
           };
           sources = [
             { name = "${self}"; url = "https://github.com/cachix/devenv/blob/main"; }
-            { name = "${pre-commit-hooks}"; url = "https://github.com/cachix/pre-commit-hooks.nix/blob/master"; }
+            { name = "${git-hooks}"; url = "https://github.com/cachix/git-hooks.nix/blob/master"; }
           ];
           rewriteSource = decl:
             let
@@ -85,7 +85,7 @@
             modules = [
               ./src/modules/top-level.nix
             ];
-            specialArgs = { inherit pre-commit-hooks pkgs inputs; };
+            specialArgs = { inherit git-hooks pkgs inputs; };
           };
           generateKeyOptions = key:
             filterOptions
@@ -219,7 +219,7 @@
           (self.lib.mkEval args).config;
         mkEval = { pkgs, inputs, modules }:
           let
-            moduleInputs = { inherit pre-commit-hooks; } // inputs;
+            moduleInputs = { inherit git-hooks; } // inputs;
             project = inputs.nixpkgs.lib.evalModules {
               specialArgs = moduleInputs // {
                 inherit pkgs;
