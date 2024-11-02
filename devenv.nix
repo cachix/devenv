@@ -154,7 +154,7 @@
     exec = ''
       mkdir -p docs/{supported-languages,supported-services,supported-process-managers}
 
-      nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
+      nix build --no-pure-eval --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
       cp -r --no-preserve=all result/docs/individual-docs/* docs/
     '';
   };
