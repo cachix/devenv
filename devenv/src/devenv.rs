@@ -647,14 +647,14 @@ impl Devenv {
         }
 
         let span = info_span!("build_processes", user_message = "Building processes");
-        let proc_script_string: String;
-        async {
+        let proc_script_string = async {
             let proc_script = self.nix.build(&["procfileScript"]).await?;
-            proc_script_string = proc_script[0]
+            let proc_script_string = proc_script[0]
                 .to_str()
                 .expect("Failed to get proc script path")
                 .to_string();
-            self.nix.add_gc("procfilescript", &proc_script[0]).await
+            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
+            Ok::<String, miette::Report>(proc_script_string)
         }
         .instrument(span)
         .await?;
