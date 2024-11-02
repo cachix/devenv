@@ -12,7 +12,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.ghc;
-      defaultText = "pkgs.ghc";
+      defaultText = lib.literalExpression "pkgs.ghc";
       description = ''
         Haskell compiler to use.
       '';
@@ -24,7 +24,7 @@ in
         {
           supportedGhcVersions = [ ghcVersion ];
         };
-      defaultText = "pkgs.haskell-language-server";
+      defaultText = lib.literalExpression "pkgs.haskell-language-server";
       description = ''
         Haskell language server to use.
       '';
@@ -33,7 +33,7 @@ in
     stack = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default = pkgs.stack;
-      defaultText = "pkgs.stack";
+      defaultText = lib.literalExpression "pkgs.stack";
       description = ''
         Haskell stack to use.
       '';

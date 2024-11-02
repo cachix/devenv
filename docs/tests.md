@@ -76,6 +76,20 @@ ncdu 2.2
 ✔ Tests passed. in 0.0s.
 ```
 
+## Changing environment if testing
+
+!!! info "New in version 1.0.6"
+
+```nix title="devenv.nix"
+{ pkgs, lib, config, ... }: {
+  processes = {
+    backend.exec = "cargo watch";
+  } // lib.optionalAttrs (!config.devenv.isTesting) {
+    frontend.exec = "parcel serve";
+  };
+}
+```
+
 ## Provided functions for enterTest
 
 - `wait_for_port <port> <timeout>`: waits for a port to be open

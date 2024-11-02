@@ -7,6 +7,12 @@
       description = "Bash code to execute to run the test.";
     };
 
+    devenv.isTesting = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Whether the environment is being used for testing.";
+    };
+
     test = lib.mkOption {
       type = lib.types.package;
       internal = true;
@@ -27,7 +33,7 @@
       wait_for_port() {
         local port=$1
         local timeout=''${2:-15}
-        
+
         timeout $timeout bash -c "until echo > /dev/tcp/localhost/$port; do sleep 0.5; done"
       }
 

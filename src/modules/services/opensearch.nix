@@ -58,9 +58,9 @@ let
 in
 {
   options.services.opensearch = {
-    enable = mkEnableOption (lib.mdDoc "OpenSearch");
+    enable = mkEnableOption "OpenSearch";
 
-    package = lib.mkPackageOptionMD pkgs "OpenSearch" {
+    package = lib.mkPackageOption pkgs "OpenSearch" {
       default = [ "opensearch" ];
     };
 
@@ -71,7 +71,7 @@ in
         options."network.host" = lib.mkOption {
           type = lib.types.str;
           default = "127.0.0.1";
-          description = lib.mdDoc ''
+          description = ''
             Which port this service should listen on.
           '';
         };
@@ -79,7 +79,7 @@ in
         options."cluster.name" = lib.mkOption {
           type = lib.types.str;
           default = "opensearch";
-          description = lib.mdDoc ''
+          description = ''
             The name of the cluster.
           '';
         };
@@ -87,7 +87,7 @@ in
         options."discovery.type" = lib.mkOption {
           type = lib.types.str;
           default = "single-node";
-          description = lib.mdDoc ''
+          description = ''
             The type of discovery to use.
           '';
         };
@@ -95,7 +95,7 @@ in
         options."http.port" = lib.mkOption {
           type = lib.types.port;
           default = 9200;
-          description = lib.mdDoc ''
+          description = ''
             The port to listen on for HTTP traffic.
           '';
         };
@@ -103,7 +103,7 @@ in
         options."transport.port" = lib.mkOption {
           type = lib.types.port;
           default = 9300;
-          description = lib.mdDoc ''
+          description = ''
             The port to listen on for transport traffic.
           '';
         };
@@ -111,13 +111,13 @@ in
 
       default = { };
 
-      description = lib.mdDoc ''
+      description = ''
         OpenSearch configuration.
       '';
     };
 
     logging = lib.mkOption {
-      description = lib.mdDoc "OpenSearch logging configuration.";
+      description = "OpenSearch logging configuration.";
 
       default = ''
         logger.action.name = org.opensearch.action
@@ -156,7 +156,7 @@ in
       process-compose = {
         readiness_probe = {
           exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.settings."network.host"}:${toString cfg.settings."http.port"}";
-          initial_delay_seconds = 15;
+          initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 2;
           success_threshold = 1;

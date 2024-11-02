@@ -9,8 +9,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [
-      pkgs.typescript
+    packages = with pkgs; [
+      typescript
+      nodePackages.typescript-language-server
     ];
   };
 }

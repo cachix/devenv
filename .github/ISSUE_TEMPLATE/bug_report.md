@@ -17,4 +17,4 @@ Make sure to include full logs and what you expected to happen.
 
 **Version**
  
-Paste the output of `$ devenv version` here.
+Paste the output of `$ devenv version` here or tell us if you're using flakes.

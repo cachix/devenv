@@ -1,5 +1,9 @@
 authors:
   domenkozar:
     name: Domen Kožar
-    description: Cachix founder
+    description: Maintainer
     avatar: https://github.com/domenkozar.png
+  sandydoo:
+    name: Sander
+    description: Maintainer
+    avatar: https://github.com/sandydoo.png

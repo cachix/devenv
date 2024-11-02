@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.swift;
-      defaultText = "pkgs.swift";
+      defaultText = lib.literalExpression "pkgs.swift";
       description = ''
         The Swift package to use.
       '';
@@ -18,7 +18,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
+    packages = [
       cfg.package
       pkgs.clang
     ];

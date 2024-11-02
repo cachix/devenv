@@ -6,9 +6,16 @@ result
 .direnv*
 /.cache
 /.pre-commit-config.yaml
+man
+
+# mkdocs
+site/
 
 # examples
 examples/rust/app/target
 
 # Rust
 target
+
+# JavaScript
+/node_modules

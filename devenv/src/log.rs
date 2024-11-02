@@ -1,6 +1,29 @@
-use ansiterm::Colour::{Blue, DarkGray, Green, Red, Yellow};
+use console::style;
 use std::io::Write;
 use std::time::Instant;
+
+pub enum LogProgressCreator {
+    Silent,
+    Logging,
+}
+
+impl LogProgressCreator {
+    pub fn with_newline(&self, message: &str) -> Option<LogProgress> {
+        use LogProgressCreator::*;
+        match self {
+            Silent => None,
+            Logging => Some(LogProgress::new(message, true)),
+        }
+    }
+
+    pub fn without_newline(&self, message: &str) -> Option<LogProgress> {
+        use LogProgressCreator::*;
+        match self {
+            Silent => None,
+            Logging => Some(LogProgress::new(message, false)),
+        }
+    }
+}
 
 pub struct LogProgress {
     message: String,
@@ -10,7 +33,7 @@ pub struct LogProgress {
 
 impl LogProgress {
     pub fn new(message: &str, newline: bool) -> LogProgress {
-        let prefix = Blue.paint("•");
+        let prefix = style("•").blue();
         eprint!("{} {} ...", prefix, message);
         if newline {
             eprintln!();
@@ -28,9 +51,9 @@ impl Drop for LogProgress {
     fn drop(&mut self) {
         let duration = self.start.unwrap_or_else(Instant::now).elapsed();
         let prefix = if self.failed {
-            Red.paint("✖")
+            style("✖").red()
         } else {
-            Green.paint("✔")
+            style("✔").green()
         };
         eprintln!(
             "\r{} {} in {:.1}s.",
@@ -43,6 +66,7 @@ impl Drop for LogProgress {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Level {
+    Silent,
     Error,
     Warn,
     Info,
@@ -51,7 +75,7 @@ pub enum Level {
 
 #[derive(Clone)]
 pub struct Logger {
-    level: Level,
+    pub level: Level,
 }
 
 impl Logger {
@@ -75,27 +99,28 @@ impl Logger {
         self.log(message, Level::Warn);
     }
 
-    fn log(&self, message: &str, level: Level) {
+    pub fn log(&self, message: &str, level: Level) {
         if level > self.level {
             return;
         }
         match level {
             Level::Info => {
-                let prefix = Blue.paint("•");
+                let prefix = style("•").blue();
                 eprintln!("{} {}", prefix, message);
             }
             Level::Error => {
-                let prefix = Red.paint("✖");
+                let prefix = style("✖").red();
                 eprintln!("{} {}", prefix, message);
             }
             Level::Warn => {
-                let prefix = Yellow.paint("•");
+                let prefix = style("•").yellow();
                 eprintln!("{} {}", prefix, message);
             }
             Level::Debug => {
-                let prefix = DarkGray.paint("•");
+                let prefix = style("•").italic();
                 eprintln!("{} {}", prefix, message);
             }
+            Level::Silent => {}
         }
     }
 }

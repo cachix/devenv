@@ -71,6 +71,9 @@
                 devenv.tmpdir = devenv_tmpdir;
                 devenv.runtime = devenv_runtime;
               })
+              (pkgs.lib.optionalAttrs (inputs.devenv.hasIsTesting or false) {
+                devenv.isTesting = devenv_istesting;
+              })
               (pkgs.lib.optionalAttrs (container_name != null) {
                 container.isBuilding = pkgs.lib.mkForce true;
                 containers.${container_name}.isBuilding = true;
@@ -85,6 +88,7 @@
 
           options = pkgs.nixosOptionsDoc {
             options = builtins.removeAttrs project.options [ "_module" ];
+            warningsAreErrors = false;
             # Unpack Nix types, e.g. literalExpression, mDoc.
             transformOptions =
               let isDocType = v: builtins.elem v [ "literalDocBook" "literalExpression" "literalMD" "mdDoc" ];
@@ -97,14 +101,31 @@
                   v
               );
           };
+
+          build = options: config:
+            lib.concatMapAttrs
+              (name: option:
+                if builtins.hasAttr "type" option then
+                  if option.type.name == "output" || option.type.name == "outputOf" then {
+                    ${name} = config.${name};
+                  } else { }
+                else
+                  let v = build option config.${name};
+                  in if v != { } then {
+                    ${name} = v;
+                  } else { }
+              )
+              options;
         in
         {
           packages."${system}" = {
             optionsJSON = options.optionsJSON;
+            # deprecated
             inherit (config) info procfileScript procfileEnv procfile;
             ci = config.ciDerivation;
           };
           devenv = config;
+          build = build project.options project.config;
           devShell."${system}" = config.shell;
         };
       }

@@ -6,6 +6,7 @@
       url = "file+file:///dev/null";
       flake = false;
     };
+    flake-parts.url = "github:hercules-ci/flake-parts";
     nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
     devenv.url = "github:cachix/devenv";
     nix2container.url = "github:nlewo/nix2container";
@@ -29,9 +30,6 @@
         # Per-system attributes can be defined here. The self' and inputs'
         # module parameters provide easy access to attributes of the same
         # system.
-
-        # needed for devenv up
-        packages.devenv-up = self'.devShells.default.config.procfileScript;
 
         # Equivalent to  inputs'.nixpkgs.legacyPackages.hello;
         packages.default = pkgs.hello;
@@ -57,6 +55,8 @@
           enterShell = ''
             hello
           '';
+
+          processes.hello.exec = "hello";
         };
 
       };

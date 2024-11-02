@@ -8,13 +8,21 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
           config = {
             # Add flake-parts-specific config here if necessary
           };
-        }];
+        }] ++ config.devenv.modules;
       }).type;
 
       shellPrefix = shellName: if shellName == "default" then "" else "${shellName}-";
     in
 
     {
+      options.devenv.modules = lib.mkOption {
+        type = lib.types.listOf lib.types.deferredModule;
+        description = ''
+          Extra modules to import into every shell.
+          Allows flakeModules to add options to devenv for example.
+        '';
+        default = [ ];
+      };
       options.devenv.shells = lib.mkOption {
         type = lib.types.lazyAttrsOf devenvType;
         description = ''

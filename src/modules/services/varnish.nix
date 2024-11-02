@@ -47,7 +47,7 @@ in
       type = types.listOf types.package;
       default = [ ];
       example = literalExpression "[ pkgs.varnish73Packages.modules ]";
-      description = lib.mdDoc ''
+      description = ''
         Varnish modules (except 'std').
       '';
     };

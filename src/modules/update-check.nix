@@ -5,7 +5,7 @@ let
   action = {
     "0" = "";
     "1" = ''
-      echo "✨ devenv ${cfg.cliVersion} is newer than devenv input in devenv.lock. Run \`devenv update\` to sync."
+      echo "✨ devenv ${cfg.cliVersion} is newer than devenv input (${cfg.latestVersion}) in devenv.lock. Run 'devenv update' to sync."
     '';
     "-1" = ''
       echo "✨ devenv ${cfg.cliVersion} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2

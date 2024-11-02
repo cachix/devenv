@@ -1,8 +1,14 @@
 { pkgs, ... }:
 
 {
+  # https://nixos.org/manual/nixpkgs/stable/#sec-language-texlive
   languages.texlive = {
     enable = true;
-    packages = [ "scheme-small" "biblatex" "latexmk" ];
+
+    # Choose a base package set.
+    base = pkgs.texliveSmall;
+
+    # Add extra packages to the base set.
+    packages = [ "latexmk" ];
   };
 }

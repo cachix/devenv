@@ -1,4 +1,4 @@
-{ pkgs, config, lib, self, ... }:
+{ config, lib, self, ... }:
 
 let
   cfg = config.dotenv;
@@ -9,12 +9,11 @@ let
 
   parseLine = line:
     let
-      parts = builtins.match "([^[:space:]=#]+)[[:space:]]*=[[:space:]]*(.*)" line;
+      parts = builtins.match "([[:space:]]*export[[:space:]]+)?([^[:space:]=#]+)[[:space:]]*=[[:space:]]*(.*)" line;
     in
-    if (!builtins.isNull parts) && (builtins.length parts) == 2 then
-      { name = builtins.elemAt parts 0; value = builtins.elemAt parts 1; }
-    else
-      null;
+    if parts != null && builtins.length parts == 3
+    then { name = builtins.elemAt parts 1; value = builtins.elemAt parts 2; }
+    else null;
 
   parseEnvFile = content: builtins.listToAttrs (lib.filter (x: !builtins.isNull x) (map parseLine (lib.splitString "\n" content)));
 

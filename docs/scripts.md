@@ -31,6 +31,14 @@ Entering shell ...
 }
 ```
 
+### Aliases & args
+Here's an example that shows how to define an alias & forward arguments:
+```
+scripts.foo.exec = ''
+  npx @foo/cli "$@";
+'';
+```
+
 ## Pinning packages inside scripts
 
 Sometimes we don't want to expose the tools to the shell but still make sure they are pinned in a script:
@@ -58,29 +66,43 @@ Entering shell ...
 }
 ```
 
-Scripts can also have an optional description, which can be useful in your `enterShell`.
+## Using your favourite language
+
+Scripts can also execute using a package and have a description, which can be useful in your `enterShell`.
 
 ```nix title="devenv.nix"
 { pkgs, config, lib, ... }:
 
 {
-  packages = [ pkgs.curl pkgs.jq ];
+  scripts.python-hello = {
+    exec = ''
+      print("Hello, world!")
+    '';
+    package = config.languages.python.package;
+    description = "hello world in Python";
+  };
 
-  scripts.silly-example.exec = ''curl "https://httpbin.org/get?$1" | jq .args'';
-  scripts.silly-example.description = "curls httpbin with provided arg";
-
-  scripts.serious-example.exec = ''${pkgs.cowsay}/bin/cowsay "$*"'';
-  scripts.serious-example.description = ''echoes args in a very serious manner'';
+  scripts.nushell-greet = {
+    exec = ''
+      def greet [name] {
+        ["hello" $name]
+      }
+      greet "world"
+    '';
+    package = pkgs.nushell;
+    binary = "nu";
+    description = "Greet in Nu Shell";
+  };
 
   enterShell = ''
-      echo
-      echo 🦾 Helper scripts you can run to make your development richer:
-      echo 🦾
-      ${pkgs.gnused}/bin/sed -e 's| |••|g' -e 's|=| |' <<EOF | ${pkgs.util-linuxMinimal}/bin/column -t | ${pkgs.gnused}/bin/sed -e 's|^|🦾 |' -e 's|••| |g'
-      ${lib.generators.toKeyValue {} (lib.mapAttrs (name: value: value.description) config.scripts)}
-      EOF
-      echo
-    '';
+    echo
+    echo 🦾 Helper scripts you can run to make your development richer:
+    echo 🦾
+    ${pkgs.gnused}/bin/sed -e 's| |••|g' -e 's|=| |' <<EOF | ${pkgs.util-linuxMinimal}/bin/column -t | ${pkgs.gnused}/bin/sed -e 's|^|🦾 |' -e 's|••| |g'
+    ${lib.generators.toKeyValue {} (lib.mapAttrs (name: value: value.description) config.scripts)}
+    EOF
+    echo
+  '';
 }
 ```
 
@@ -91,8 +113,8 @@ Entering shell ...
 
 🦾 Helper scripts you can run to make your development richer:
 🦾
-🦾 serious-example  echoes args in a very serious manner
-🦾 silly-example    curls httpbin with provided arg
+🦾 python-hello     Hello world in Python
+🦾 nushell-greet    Greet in Nu Shell
 
 (devenv) $
 ```

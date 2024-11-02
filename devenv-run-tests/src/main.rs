@@ -1,4 +1,7 @@
 use clap::Parser;
+use devenv::log::Level;
+use devenv::log::Logger;
+use devenv::{Devenv, DevenvOptions};
 use std::fs;
 use std::path::PathBuf;
 
@@ -20,7 +23,7 @@ struct Args {
     )]
     override_input: Vec<String>,
 
-    #[clap(value_parser, required = true)]
+    #[clap(value_parser, default_values = vec!["examples", "tests"])]
     directories: Vec<PathBuf>,
 }
 
@@ -29,9 +32,14 @@ struct TestResult {
     passed: bool,
 }
 
-fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
+async fn run_tests_in_directory(
+    args: &Args,
+) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
+    let logger = Logger::new(Level::Info);
+
+    logger.info("Running Tests");
+
     let cwd = std::env::current_dir()?;
-    let cwd = cwd.display();
 
     let mut test_results = vec![];
 
@@ -41,6 +49,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
 
         for path in paths {
             let path = path?.path();
+            let path = path.as_path();
             if path.is_dir() {
                 let dir_name_path = path.file_name().unwrap();
                 let dir_name = dir_name_path.to_str().unwrap();
@@ -48,7 +57,7 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                 if !args.only.is_empty() {
                     let mut found = false;
                     for only in &args.only {
-                        if path.as_path().ends_with(only) {
+                        if path.ends_with(only) {
                             found = true;
                             break;
                         }
@@ -58,45 +67,68 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
                     }
                 } else {
                     for exclude in &args.exclude {
-                        if path.as_path().ends_with(exclude) {
+                        if path.ends_with(exclude) {
                             println!("Skipping {}", dir_name);
                             continue;
                         }
                     }
                 }
 
+                let mut config = devenv::config::Config::load_from(path)?;
+                for input in args.override_input.chunks_exact(2) {
+                    config.add_input(&input[0].clone(), &input[1].clone(), &[]);
+                }
+
+                // Override the input for the devenv module
+                config.add_input(
+                    "devenv",
+                    &format!("path:{:}?dir=src/modules", cwd.to_str().unwrap()),
+                    &[],
+                );
+
+                let tmpdir = tempdir::TempDir::new_in(path, ".devenv")
+                    .expect("Failed to create temporary directory");
+
+                let options = DevenvOptions {
+                    config,
+                    devenv_root: Some(cwd.join(path)),
+                    devenv_dotfile: Some(tmpdir.path().to_path_buf()),
+                    ..Default::default()
+                };
+                let mut devenv = Devenv::new(options).await;
+
+                // A script to patch files in the working directory before the shell.
+                let patch_script = ".patch.sh";
+                let patch_script_path = path.join(patch_script);
+
+                // A script to run inside the shell before the test.
+                let setup_script = ".setup.sh";
+                let setup_script_path = path.join(setup_script);
+
                 println!("  Running {}", dir_name);
-                // if .setup.sh exists, run it
-                let setup_script = path.join(".setup.sh");
-                if setup_script.exists() {
-                    println!("    Running .setup.sh");
+
+                // Run .patch.sh if it exists
+                if patch_script_path.exists() {
+                    println!("    Running {patch_script}");
                     let _ = std::process::Command::new("bash")
-                        .arg(".setup.sh")
-                        .current_dir(&path)
+                        .arg("./.patch.sh")
+                        .current_dir(path)
                         .status()?;
                 }
-                let overrides = args.override_input.iter().enumerate().flat_map(|(i, arg)| {
-                    if i % 2 == 0 {
-                        vec!["--override-input", arg.as_str()]
-                    } else {
-                        vec![arg.as_str()]
-                    }
-                });
-                // TODO: use as a library
-                let status = std::process::Command::new("devenv")
-                    .args([
-                        "--override-input",
-                        "devenv",
-                        &format!("path:{cwd}?dir=src/modules"),
-                    ])
-                    .args(overrides)
-                    .arg("test")
-                    .current_dir(&path)
-                    .status()?;
 
+                // Run .setup.sh if it exists
+                if setup_script_path.exists() {
+                    println!("    Running {setup_script}");
+                    devenv
+                        .shell(&Some(format!("./{setup_script}")), &[], false)
+                        .await?;
+                }
+
+                // TODO: wait for processes to shut down before exiting
+                let status = devenv.test().await;
                 let result = TestResult {
                     name: dir_name.to_string(),
-                    passed: status.success(),
+                    passed: status.is_ok(),
                 };
                 test_results.push(result);
             }
@@ -106,10 +138,22 @@ fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>, Box<dyn std::e
     Ok(test_results)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let test_results = run_tests_in_directory(&args)?;
+    let executable_path = std::env::current_exe()?;
+    let executable_dir = executable_path.parent().unwrap();
+    std::env::set_var(
+        "PATH",
+        format!(
+            "{}:{}",
+            executable_dir.display(),
+            std::env::var("PATH").unwrap_or_default()
+        ),
+    );
+
+    let test_results = run_tests_in_directory(&args).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
 

@@ -1,11 +1,12 @@
 use miette::{IntoDiagnostic, Result};
-use schematic::{schema::JsonSchemaRenderer, schema::SchemaGenerator, ConfigLoader};
+use schemars::{schema_for, JsonSchema};
+use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, fmt, path::Path};
 
 const YAML_CONFIG: &str = "devenv.yaml";
 
-#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct Input {
@@ -34,20 +35,47 @@ impl Input {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, JsonSchema)]
 pub struct FlakeInput {
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub follows: Option<String>,
+    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     pub inputs: HashMap<String, Input>,
+    #[serde(skip_serializing_if = "is_true", default = "true_default")]
     pub flake: bool,
 }
 
-impl From<&Input> for FlakeInput {
-    fn from(input: &Input) -> Self {
-        FlakeInput {
+#[derive(Debug, Eq, PartialEq)]
+pub enum FlakeInputError {
+    UrlAndFollowsBothSet,
+}
+
+impl fmt::Display for FlakeInputError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FlakeInputError::UrlAndFollowsBothSet => {
+                write!(f, "url and follows cannot both be set for the same input")
+            }
+        }
+    }
+}
+
+impl TryFrom<&Input> for FlakeInput {
+    type Error = FlakeInputError;
+
+    fn try_from(input: &Input) -> Result<Self, Self::Error> {
+        if input.url.is_some() && input.follows.is_some() {
+            return Err(Self::Error::UrlAndFollowsBothSet);
+        }
+
+        Ok(FlakeInput {
             url: input.url.clone(),
+            follows: input.follows.clone(),
             inputs: input.inputs.clone(),
             flake: input.flake,
-        }
+        })
     }
 }
 
@@ -66,14 +94,14 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Clean {
     pub enabled: bool,
     pub keep: Vec<String>,
     // TODO: executables?
 }
 
-#[derive(schematic::Config, Clone, Serialize, Debug)]
+#[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
 #[config(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
@@ -88,25 +116,33 @@ pub struct Config {
     pub imports: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub permitted_insecure_packages: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default = "std::option::None")]
     #[setting(nested)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub clean: Option<Clean>,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub impure: bool,
 }
 
+// TODO: https://github.com/moonrepo/schematic/issues/105
 pub fn write_json_schema() {
-    let mut generator = SchemaGenerator::default();
-    generator.add::<Config>();
-    generator
-        .generate("devenv.schema.json", JsonSchemaRenderer::default())
-        .expect("can't generate schema");
+    let schema = schema_for!(Config);
+    let schema = serde_json::to_string_pretty(&schema).unwrap();
+    let path = Path::new("docs/devenv.schema.json");
+    std::fs::write(path, schema)
+        .unwrap_or_else(|_| panic!("Failed to write json schema to {}", path.display()));
 }
 
 impl Config {
     pub fn load() -> Result<Self> {
+        Self::load_from("./")
+    }
+
+    pub fn load_from<P>(path: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let file = path.as_ref().join(YAML_CONFIG);
         let mut loader = ConfigLoader::<Config>::new();
-        let file = Path::new(YAML_CONFIG);
         let _ = loader.file_optional(file);
         let result = loader.load().into_diagnostic();
         Ok(result?.config)
@@ -141,5 +177,22 @@ impl Config {
         input.url = Some(url.to_string());
         input.inputs = inputs;
         self.inputs.insert(name.to_string(), input);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_flake_input_from_input_with_url_and_follows() {
+        let input = Input {
+            url: Some("github:NixOS/nixpkgs".to_string()),
+            follows: Some("nixpkgs".to_string()),
+            ..Default::default()
+        };
+        let result = FlakeInput::try_from(&input);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), FlakeInputError::UrlAndFollowsBothSet);
     }
 }

@@ -20,6 +20,7 @@ in
     hostsProfileName = lib.mkOption {
       type = lib.types.str;
       default = "devenv-${builtins.hashString "sha256" config.env.DEVENV_ROOT}";
+      defaultText = "devenv-<hash>";
       description = "Profile name to use.";
     };
 
@@ -35,7 +36,7 @@ in
   };
 
   config = lib.mkIf (hostContent != "") {
-    process.before = ''
+    process.manager.before = ''
       if [[ ! -f "$DEVENV_STATE/hostctl" || "$(cat "$DEVENV_STATE/hostctl")" != "${hostHash}" ]]; then
         sudo ${pkgs.hostctl}/bin/hostctl replace ${config.hostsProfileName} --from ${file}
         mkdir -p "$DEVENV_STATE"
@@ -43,7 +44,7 @@ in
       fi
     '';
 
-    process.after = ''
+    process.manager.after = ''
       rm -f "$DEVENV_STATE/hostctl"
       sudo ${pkgs.hostctl}/bin/hostctl remove ${config.hostsProfileName}
     '';

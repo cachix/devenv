@@ -1,5 +1,5 @@
-- write a blog post
 - bump version in devenv/Cargo.toml
+- `cargo build`
 - bump version in package.nix
 - git commit
 - git tag
@@ -8,5 +8,5 @@
 
 # Once nixpkgs has been updated
 
-- bump version in mkdocs.yml
+- write a blog post
 - src/modules/latest-version

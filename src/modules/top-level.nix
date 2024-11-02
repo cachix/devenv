@@ -136,6 +136,17 @@ in
       '';
     };
 
+    hardeningDisable = lib.mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      default = [ ];
+      example = [ "fortify" ];
+      description = ''
+        This options allows modules to disable selected hardening modules.
+        Currently used only for Go
+      '';
+    };
+
     warnings = lib.mkOption {
       type = types.listOf types.str;
       internal = true;
@@ -175,12 +186,16 @@ in
         # - free to create as an unprivileged user across OSes
         default =
           let
+            runtimeEnv = builtins.getEnv "DEVENV_RUNTIME";
+
             hashedRoot = builtins.hashString "sha256" config.devenv.state;
 
             # same length as git's abbreviated commit hashes
             shortHash = builtins.substring 0 7 hashedRoot;
           in
-          "${config.devenv.tmpdir}/devenv-${shortHash}";
+          if runtimeEnv != ""
+          then runtimeEnv
+          else "${config.devenv.tmpdir}/devenv-${shortHash}";
       };
 
       tmpdir = lib.mkOption {
@@ -204,7 +219,9 @@ in
 
   imports = [
     ./info.nix
+    ./outputs.nix
     ./processes.nix
+    ./outputs.nix
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
@@ -212,6 +229,7 @@ in
     ./lib.nix
     ./tests.nix
     ./cachix.nix
+    ./tasks.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -270,16 +288,17 @@ in
       mkdir -p "$DEVENV_STATE"
       if [ ! -L "$DEVENV_DOTFILE/profile" ] || [ "$(${pkgs.coreutils}/bin/readlink $DEVENV_DOTFILE/profile)" != "${profile}" ]
       then
-        ln -nsf ${profile} "$DEVENV_DOTFILE/profile"
+        ln -snf ${profile} "$DEVENV_DOTFILE/profile"
       fi
       unset ${lib.concatStringsSep " " config.unsetEnvVars}
 
       mkdir -p ${lib.escapeShellArg config.devenv.runtime}
-      ln -fs ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
+      ln -snf ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 
     shell = performAssertions (
       (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
+        hardeningDisable = config.hardeningDisable;
         name = "devenv-shell";
         packages = config.packages;
         shellHook = ''

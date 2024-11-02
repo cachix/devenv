@@ -1,7 +1,11 @@
 [package]
 name = "devenv-run-tests"
 version = "0.1.0"
-edition = "2018"
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-clap = { version = "3", features = ["derive"] }
+clap.workspace = true
+devenv.workspace = true
+tempdir.workspace = true
+tokio.workspace = true

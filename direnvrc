@@ -115,8 +115,8 @@ use_devenv() {
         exit 0
       fi
 
-      if [[ -f "$flake_dir/.devenv/imports.txt" ]]; then
-        for file in $(cat "$flake_dir/.devenv/imports.txt"); do
+      if [[ -f "$flake_dir/.devenv/input-paths.txt" ]]; then
+        for file in $(cat "$flake_dir/.devenv/input-paths.txt"); do
             files_to_watch+=("$file")
         done
       fi
