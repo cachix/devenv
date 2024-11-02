@@ -40,7 +40,7 @@ impl From<Level> for LevelFilter {
 }
 
 pub fn init_tracing(level: Level) {
-    let devenv_layer = DevenvLayer::new();
+    let devenv_layer = DevenvLayer::default();
 
     let filter = EnvFilter::from_default_env()
         .add_directive(tracing::level_filters::LevelFilter::from(level.clone()).into());
@@ -63,7 +63,7 @@ pub fn init_tracing(level: Level) {
             .with(
                 tracing_subscriber::fmt::layer()
                     .with_span_events(FmtSpan::CLOSE | FmtSpan::NEW)
-                    .event_format(DevenvFormat::new())
+                    .event_format(DevenvFormat::default())
                     .with_writer(std::io::stderr)
                     .with_ansi(std::io::stderr().is_terminal())
                     .with_filter(filter),
@@ -72,6 +72,7 @@ pub fn init_tracing(level: Level) {
     };
 }
 
+/// A structure to capture span timings, similar to what is available internally in tracing_subscriber.
 #[derive(Debug, Clone)]
 struct SpanTimings {
     idle: Duration,
@@ -100,14 +101,6 @@ impl SpanTimings {
         self.last = now;
     }
 
-    fn idle_duration(&self) -> HumanReadableDuration {
-        HumanReadableDuration(self.idle)
-    }
-
-    fn busy_duration(&self) -> HumanReadableDuration {
-        HumanReadableDuration(self.busy)
-    }
-
     fn total_duration(&self) -> HumanReadableDuration {
         HumanReadableDuration(self.idle + self.busy)
     }
@@ -117,8 +110,7 @@ struct HumanReadableDuration(Duration);
 
 impl std::fmt::Display for HumanReadableDuration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let nanos = self.0.as_nanos();
-        let mut t = nanos as f64;
+        let mut t = self.0.as_nanos() as f64;
         for unit in ["ns", "µs", "ms", "s"].iter() {
             if t < 10.0 {
                 return write!(f, "{:.2}{}", t, unit);
@@ -133,24 +125,15 @@ impl std::fmt::Display for HumanReadableDuration {
     }
 }
 
+/// A newtype to capture and expose span `user_message`s in subsequent events.
 struct SpanMessage(String);
 
+#[derive(Default)]
 pub struct DevenvLayer<S>
 where
     S: Subscriber,
 {
     _subscriber: PhantomData<S>,
-}
-
-impl<S> DevenvLayer<S>
-where
-    S: Subscriber,
-{
-    pub fn new() -> Self {
-        Self {
-            _subscriber: PhantomData,
-        }
-    }
 }
 
 impl<S> layer::Layer<S> for DevenvLayer<S>
@@ -221,14 +204,9 @@ where
     }
 }
 
+#[derive(Default)]
 pub struct DevenvFormat {
     pub verbose: bool,
-}
-
-impl DevenvFormat {
-    pub fn new() -> Self {
-        Self { verbose: false }
-    }
 }
 
 #[derive(Debug)]
@@ -347,7 +325,7 @@ where
                         .into_iter()
                         .flat_map(tracing_subscriber::registry::Scope::from_root)
                     {
-                        let mut ext = span.extensions();
+                        let ext = span.extensions();
                         if let Some(timings) = ext.get::<SpanTimings>() {
                             span_timings = Some(timings.clone());
                         }
