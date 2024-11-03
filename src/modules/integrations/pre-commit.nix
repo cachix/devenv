@@ -1,5 +1,11 @@
-{ pkgs, self, lib, git-hooks, config, ... }:
+{ pkgs, self, lib, config, inputs, ... }:
 
+let
+  git-hooks-module =
+    inputs.git-hooks
+      or inputs.pre-commit-hooks
+      or (throw "git-hooks or pre-commit-hooks input required");
+in
 {
   imports = [
     (lib.mkAliasOptionModule [ "pre-commit" ] [ "git-hooks" ])
@@ -8,11 +14,11 @@
   options.git-hooks = lib.mkOption {
     type = lib.types.submoduleWith {
       modules = [
-        (git-hooks + "/modules/all-modules.nix")
+        (git-hooks-module + "/modules/all-modules.nix")
         {
           rootSrc = self;
           package = pkgs.pre-commit;
-          tools = import (git-hooks + "/nix/call-tools.nix") pkgs;
+          tools = import (git-hooks-module + "/nix/call-tools.nix") pkgs;
         }
       ];
       specialArgs = { inherit pkgs; };

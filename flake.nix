@@ -50,7 +50,7 @@
               ./src/modules/top-level.nix
               { devenv.warnOnNewVersion = false; }
             ];
-            specialArgs = { inherit git-hooks pkgs inputs; };
+            specialArgs = { inherit pkgs inputs; };
           };
           sources = [
             { name = "${self}"; url = "https://github.com/cachix/devenv/blob/main"; }
@@ -85,7 +85,7 @@
             modules = [
               ./src/modules/top-level.nix
             ];
-            specialArgs = { inherit git-hooks pkgs inputs; };
+            specialArgs = { inherit pkgs inputs; };
           };
           generateKeyOptions = key:
             filterOptions
