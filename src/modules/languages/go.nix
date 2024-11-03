@@ -3,13 +3,9 @@
 let
   cfg = config.languages.go;
 
-  goVersion = (lib.versions.major cfg.package.version) + (lib.versions.minor cfg.package.version);
-
-  buildWithSpecificGo = pkg: pkg.override {
-    buildGoModule = pkgs."buildGo${goVersion}Module".override {
-      go = cfg.package;
-    };
-  };
+  # Override the buildGoModule function to use the specified Go package.
+  buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
+  buildWithSpecificGo = pkg: pkg.override { inherit buildGoModule; };
 in
 {
   options.languages.go = {
@@ -45,7 +41,7 @@ in
       (buildWithSpecificGo pkgs.gotests)
     ];
 
-    hardeningDisable = (lib.optional (cfg.enableHardeningWorkaround) "fortify");
+    hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
 
     env.GOROOT = cfg.package + "/share/go/";
     env.GOPATH = config.env.DEVENV_STATE + "/go";
