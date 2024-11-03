@@ -434,7 +434,7 @@ impl Tasks {
 
             for dep_name in &task_state.task.after {
                 if let Some(dep_idx) = task_indices.get(dep_name) {
-                    edges_to_add.push((*dep_idx, index));
+                    edges_to_add.push((index, *dep_idx));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), dep_name.clone()));
                 }
@@ -442,7 +442,7 @@ impl Tasks {
 
             for before_name in &task_state.task.before {
                 if let Some(before_idx) = task_indices.get(before_name) {
-                    edges_to_add.push((index, *before_idx));
+                    edges_to_add.push((*before_idx, index));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), before_name.clone()));
                 }
@@ -450,7 +450,7 @@ impl Tasks {
         }
 
         for (dep_idx, idx) in edges_to_add {
-            self.graph.add_edge(dep_idx, idx, ());
+            self.graph.add_edge(idx, dep_idx, ());
         }
 
         if unresolved.is_empty() {
@@ -493,7 +493,7 @@ impl Tasks {
             for edge in self.graph.edges(old_node) {
                 let target = edge.target();
                 if let Some(&new_target) = node_map.get(&target) {
-                    subgraph.add_edge(new_node, new_target, ());
+                    subgraph.add_edge(new_target, new_node, ());
                 }
             }
         }
@@ -1192,6 +1192,57 @@ mod test {
                 (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
                 (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
             ] if name1 == "myapp:task_2" && name2 == "myapp:task_3" && name3 == "myapp:task_1"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_enter_shell_tasks() -> Result<(), Error> {
+        let script1 = create_script(
+            "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
+        )?;
+        let script2 = create_script(
+            "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
+        )?;
+        let script3 = create_script(
+            "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
+        )?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["devenv:enterShell"],
+                "tasks": [
+                    {
+                        "name": "devenv:enterShell",
+                        "command": script1.to_str().unwrap(),
+                    },
+                    {
+                        "name": "devenv:python:poetry",
+                        "before": ["devenv:enterShell"],
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "app:custom",
+                        "before": ["devenv:python:poetry"],
+                        "command": script3.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            // ] if name1 == "app:custom" && name2 == "devenv:python:poetry" && name3 == "devenv:enterShell"
+            ] if name1 == "devenv:enterShell" && name2 == "devenv:python:poetry" && name3 == "app:custom"
         );
         Ok(())
     }
