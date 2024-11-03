@@ -4,7 +4,7 @@
   languages.rust = {
     enable = true;
     # https://devenv.sh/reference/options/#languagesrustchannel
-    channel = "nightly";
+    channel = "stable";
 
     targets = [ "wasm32-unknown-unknown" ];
 
