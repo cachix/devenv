@@ -11,7 +11,8 @@
     url = "github:cachix/git-hooks.nix";
     inputs = {
       nixpkgs.follows = "nixpkgs";
-      flake-compat.follows = "flake-compat";
+      nixpkgs-stable.follows = "";
+      flake-compat.follows = "";
     };
   };
   inputs.flake-compat = {
@@ -22,19 +23,23 @@
     url = "github:domenkozar/nix/devenv-2.24";
     inputs = {
       # disabled until we fix https://github.com/cachix/devenv-nixpkgs/issues/2
-      #nixpkgs.follows = "nixpkgs";
-      flake-compat.follows = "flake-compat";
+      # nixpkgs.follows = "nixpkgs";
+      flake-compat.follows = "";
+      pre-commit-hooks.follows = "";
+      nixpkgs-23-11.follows = "";
+      nixpkgs-regression.follows = "";
     };
   };
   inputs.cachix = {
-    url = "github:cachix/cachix";
+    url = "github:cachix/cachix/latest";
     inputs = {
-      nixpkgs.follows = "nixpkgs";
-      git-hooks.follows = "git-hooks";
-      flake-compat.follows = "flake-compat";
+      # needs hnix-store-nar
+      # nixpkgs.follows = "nixpkgs";
+      flake-compat.follows = "";
+      git-hooks.follows = "";
+      devenv.follows = "";
     };
   };
-
 
   outputs = { self, nixpkgs, git-hooks, nix, ... }@inputs:
     let
