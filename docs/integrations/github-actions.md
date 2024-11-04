@@ -62,7 +62,7 @@ It builds the shell and runs any defined [git hooks](../git-hooks.md) against yo
 This is a quick and easy way to test that your development environment works as expected and lint your code at the same time.
 
 ```yaml
-- name: Build the devenv shell and run any pre-commit hooks
+- name: Build the devenv shell and run any git hooks
   run: devenv test
 ```
 

@@ -97,12 +97,12 @@ And run [tests with `devenv test`](/tests).
 ```console
 $ devenv test
 Running tasks     devenv:enterShell
-Succeeded         devenv:pre-commit:install 10ms
+Succeeded         devenv:git-hooks:install 10ms
 Succeeded         devenv:enterShell         4ms
 2 Succeeded                                 14.75ms
 • Testing ...
 Running tasks     devenv:enterTest
-Succeeded         devenv:pre-commit:run     474ms
+Succeeded         devenv:git-hooks:run     474ms
 Not implemented   devenv:enterTest
 1 Skipped, 1 Succeeded                      474.62ms
 ```
