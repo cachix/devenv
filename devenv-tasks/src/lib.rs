@@ -434,7 +434,7 @@ impl Tasks {
 
             for dep_name in &task_state.task.after {
                 if let Some(dep_idx) = task_indices.get(dep_name) {
-                    edges_to_add.push((index, *dep_idx));
+                    edges_to_add.push((*dep_idx, index));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), dep_name.clone()));
                 }
@@ -442,15 +442,15 @@ impl Tasks {
 
             for before_name in &task_state.task.before {
                 if let Some(before_idx) = task_indices.get(before_name) {
-                    edges_to_add.push((*before_idx, index));
+                    edges_to_add.push((index, *before_idx));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), before_name.clone()));
                 }
             }
         }
 
-        for (dep_idx, idx) in edges_to_add {
-            self.graph.add_edge(idx, dep_idx, ());
+        for (from, to) in edges_to_add {
+            self.graph.update_edge(from, to, ());
         }
 
         if unresolved.is_empty() {
@@ -479,10 +479,7 @@ impl Tasks {
                 node_map.insert(node, new_node);
 
                 // Add dependencies to visit
-                for neighbor in self
-                    .graph
-                    .neighbors_directed(node, petgraph::Direction::Incoming)
-                {
+                for neighbor in self.graph.neighbors_undirected(node) {
                     to_visit.push(neighbor);
                 }
             }
@@ -493,7 +490,7 @@ impl Tasks {
             for edge in self.graph.edges(old_node) {
                 let target = edge.target();
                 if let Some(&new_target) = node_map.get(&target) {
-                    subgraph.add_edge(new_target, new_node, ());
+                    subgraph.add_edge(new_node, new_target, ());
                 }
             }
         }
