@@ -96,7 +96,7 @@ in
         up "$@" &
     '';
 
-    packages = [ cfg.package ] ++ lib.optional cfg.tui.enable pkgs.ncurses;
+    packages = [ cfg.package ];
 
     process.managers.process-compose = {
       configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
