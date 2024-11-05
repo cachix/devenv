@@ -22,7 +22,7 @@ pkgs.rustPlatform.buildRustPackage {
     then [ "-p devenv-tasks" ]
     else [ "-p devenv -p devenv-run-tests" ];
 
-  doCheck = false; #!build_tasks;
+  doCheck = !build_tasks;
 
   cargoLock = {
     lockFile = ./Cargo.lock;
