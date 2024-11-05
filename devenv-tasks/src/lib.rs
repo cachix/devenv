@@ -1194,7 +1194,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_enter_shell_tasks() -> Result<(), Error> {
+    async fn test_before_and_after_tasks() -> Result<(), Error> {
         let script1 = create_script(
             "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
         )?;
@@ -1207,22 +1207,23 @@ mod test {
 
         let tasks = Tasks::new(
             Config::try_from(json!({
-                "roots": ["devenv:enterShell"],
+                "roots": ["myapp:task_1"],
                 "tasks": [
                     {
-                        "name": "devenv:enterShell",
+                        "name": "myapp:task_1",
                         "command": script1.to_str().unwrap(),
                     },
                     {
-                        "name": "devenv:python:poetry",
-                        "before": ["devenv:enterShell"],
-                        "command": script2.to_str().unwrap()
+                        "name": "myapp:task_3",
+                         "after": ["myapp:task_1"],
+                        "command": script3.to_str().unwrap()
                     },
                     {
-                        "name": "app:custom",
-                        "before": ["devenv:python:poetry"],
-                        "command": script3.to_str().unwrap()
-                    }
+                        "name": "myapp:task_2",
+                        "before": ["myapp:task_3"],
+                        "after": ["myapp:task_1"],
+                        "command": script2.to_str().unwrap()
+                    },
                 ]
             }))
             .unwrap(),
@@ -1238,8 +1239,7 @@ mod test {
                 (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
                 (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
                 (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
-            // ] if name1 == "app:custom" && name2 == "devenv:python:poetry" && name3 == "devenv:enterShell"
-            ] if name1 == "devenv:enterShell" && name2 == "devenv:python:poetry" && name3 == "app:custom"
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
         );
         Ok(())
     }
