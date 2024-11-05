@@ -459,25 +459,24 @@ in
         description = "Initialize Python virtual environment";
         exec = initVenvScript;
         exports = [ "PATH" "VIRTUAL_ENV" ];
+        after = [ "devenv:enterShell" ];
       };
 
       "devenv:python:poetry" = lib.mkIf cfg.poetry.install.enable {
         description = "Initialize Poetry";
         exec = initPoetryScript;
         exports = [ "PATH" ] ++ lib.optional cfg.poetry.activate.enable "VIRTUAL_ENV";
-        after = lib.optional cfg.venv.enable "devenv:python:virtualenv";
+        after = [ "devenv:enterShell" ];
+        before = lib.optional cfg.venv.enable "devenv:python:virtualenv";
       };
 
       "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
         description = "Initialize uv sync";
         exec = initUvScript;
         exports = [ "PATH" ];
-        after = lib.optional cfg.venv.enable "devenv:python:virtualenv";
+        after = [ "devenv:enterShell" ];
+        before = lib.optional cfg.venv.enable "devenv:python:virtualenv";
       };
-
-      "devenv:enterShell".after = lib.optional cfg.venv.enable "devenv:python:virtualenv"
-        ++ lib.optional cfg.poetry.install.enable "devenv:python:poetry"
-        ++ lib.optional cfg.uv.sync.enable "devenv:python:uv";
     };
 
     enterShell = ''
