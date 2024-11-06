@@ -245,7 +245,7 @@ in
         source ${initBunScript}
       '') ++ [
         ''
-        export PATH="${nodeModulesPath}/.bin:$PATH"
+          export PATH="${nodeModulesPath}/.bin:$PATH"
         ''
       ]
     );
