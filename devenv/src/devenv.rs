@@ -222,7 +222,7 @@ impl Devenv {
         if let Some(desc) = description {
             request = request.query(&[("q", desc)]);
         } else {
-            self.logger.info("Zipping source code for upload...");
+            self.logger.info("Zipping source code ...");
             let body = create_zip_from_directory()?;
             request = request
                 .body(body)
@@ -230,6 +230,7 @@ impl Devenv {
         }
         self.logger
             .info("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
+        // TODO: render hourglass
 
         let response = request
             .send()
@@ -250,19 +251,16 @@ impl Devenv {
         std::fs::write("devenv.yaml", response_json.devenv_yaml)
             .expect("Failed to write devenv.yaml");
 
-        if std::fs::metadata(".envrc").is_err() {
-            let path = PROJECT_DIR
-                .get_file(".envrc")
-                .unwrap_or_else(|| panic!("missing .envrc in the executable"));
-            std::fs::write(".envrc", path.contents()).expect("Failed to write .envrc");
-            self.logger.info("Created .envrc");
-        }
         self.logger.info(
-                    &indoc::formatdoc!("
-                      Generated devenv.nix and devenv.yaml 🎉
+            &indoc::formatdoc!("
+              Generated devenv.nix and devenv.yaml 🎉
 
-                      Treat these as templates and open an issue at https://github.com/cachix/devenv/issues if you think we can do better!
-                    "));
+              Treat these as templates and open an issue at https://github.com/cachix/devenv/issues if you think we can do better!
+             
+              Start by running:
+              
+                $ devenv shell
+            "));
         Ok(())
     }
 

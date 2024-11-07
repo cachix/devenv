@@ -171,7 +171,8 @@ pub enum Commands {
         #[clap(long, default_value = "https://generate.devenv.sh")]
         host: String,
 
-        #[clap(long, action = clap::ArgAction::SetTrue)]
+        // https://consoledonottrack.com/
+        #[clap(long, env = "DO_NOT_TRACK", action = clap::ArgAction::SetTrue)]
         disable_telemetry: bool,
     },
 
