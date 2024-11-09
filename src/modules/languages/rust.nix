@@ -142,9 +142,9 @@ in
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
 
-        pre-commit.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
-        pre-commit.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
-        pre-commit.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
+        git-hooks.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
+        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
+        git-hooks.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
       }
     )
 

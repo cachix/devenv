@@ -9,8 +9,8 @@ If you omit `devenv.yaml`, it defaults to:
 inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
-  pre-commit-hooks:
-    url: github:cachix/pre-commit-hooks.nix
+  git-hooks:
+    url: github:cachix/git-hooks.nix
 ```
 
 The dependencies you mention as `inputs` are passed as an argument to the function.

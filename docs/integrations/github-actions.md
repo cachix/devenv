@@ -58,11 +58,11 @@ you can pre-install both Nix and devenv, and skip the associated steps.
 ### `devenv test`
 
 Devenv provides a convenient built-in `devenv test` command.
-It builds the shell and runs any defined [pre-commit hooks](../pre-commit-hooks.md) against your repository.
+It builds the shell and runs any defined [git hooks](../git-hooks.md) against your repository.
 This is a quick and easy way to test that your development environment works as expected and lint your code at the same time.
 
 ```yaml
-- name: Build the devenv shell and run any pre-commit hooks
+- name: Build the devenv shell and run any git hooks
   run: devenv test
 ```
 

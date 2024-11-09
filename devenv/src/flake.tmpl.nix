@@ -3,8 +3,9 @@
     let
       __DEVENV_VARS__
         in {
-        pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
-      pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
+        git-hooks.url = "github:cachix/git-hooks.nix";
+      git-hooks.inputs.nixpkgs.follows = "nixpkgs";
+      pre-commit-hooks.follows = "git-hooks";
       nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
       devenv.url = "github:cachix/devenv?dir=src/modules";
       } // (if builtins.pathExists (devenv_dotfile + "/flake.json")
