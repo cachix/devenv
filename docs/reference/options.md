@@ -35156,7 +35156,7 @@ package
 
 
 *Default:*
-` pkgs.elixir `
+` pkgs.solc `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
