@@ -110,11 +110,17 @@ in
           "offset.storage.file.filename" = lib.mkOption {
             type = types.str;
             default = storageFile;
+            description = ''
+              The file to store connector offsets in. By storing offsets on disk, a standalone process can be stopped and started on a single node and resume where it previously left off.
+            '';
           };
 
           "offset.flush.interval.ms" = lib.mkOption {
             type = types.int;
             default = 10000;
+            description = ''
+              Interval at which to try committing offsets for tasks
+            '';
           };
 
           "key.converter" = lib.mkOption {
