@@ -57,6 +57,7 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
               devenv.containers
             ) // {
               "${shellPrefix shellName}devenv-up" = devenv.procfileScript;
+              "${shellPrefix shellName}devenv-test" = devenv.test;
             }
           )
           config.devenv.shells;
