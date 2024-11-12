@@ -31,6 +31,7 @@ nav:
       - Garbage Collection: garbage-collection.md
     - Guides: guides
     - Integrations: integrations
+    - Tutorial: https://github.com/cachix/nixcon-2024-workshop
     - Examples: examples.md
     - Editor Support: editor-support
   - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix
