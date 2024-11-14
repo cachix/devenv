@@ -380,11 +380,21 @@ impl<'a> Nix<'a> {
                 };
 
                 cached_cmd.on_stderr(move |log| {
-                    if let Some(msg) = log.get_log_msg_by_level(target_log_level) {
-                        info!("{msg}");
+                    if let Some(log) = log.filter_by_level(target_log_level) {
+                        if let Some(msg) = log.get_msg() {
+                            use devenv_eval_cache::internal_log::InternalLog;
+                            // TODO: don't use macro
+                            match log {
+                                InternalLog::Msg { level, .. } if *level == Verbosity::Error => {
+                                    error!("{msg}");
+                                }
+                                _ => info!("{msg}"),
+                            }
+                        }
                     }
                 });
             }
+
             cached_cmd
                 .output(&mut cmd)
                 .await
@@ -395,6 +405,7 @@ impl<'a> Nix<'a> {
                 .output()
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+
             devenv_eval_cache::Output {
                 status: output.status,
                 stdout: output.stdout,
@@ -409,9 +420,9 @@ impl<'a> Nix<'a> {
                 None => "without exit code".to_string(),
             };
 
-            if options.logging {
+            if !options.logging {
                 error!(
-                    "\nCommand produced the following output:\n{}\n{}",
+                    "Command produced the following output:\n{}\n{}",
                     String::from_utf8_lossy(&result.stdout),
                     String::from_utf8_lossy(&result.stderr),
                 );

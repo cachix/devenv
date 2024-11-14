@@ -4,7 +4,7 @@ use devenv::{
     config, log, Devenv,
 };
 use miette::Result;
-use tracing::{error, info, warn, Level};
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {

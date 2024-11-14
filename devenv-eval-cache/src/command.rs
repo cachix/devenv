@@ -19,8 +19,6 @@ pub enum CommandError {
     Io(#[from] io::Error),
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
-    #[error("Nix command failed: {0}")]
-    NonZeroExitStatus(process::ExitStatus),
 }
 
 pub struct CachedCommand<'a> {
@@ -108,13 +106,17 @@ impl<'a> CachedCommand<'a> {
                         f(&log);
                     }
 
-                    // FIX: verbosity
-                    if let Some(msg) = log.get_log_msg_by_level(Verbosity::Info) {
-                        raw_lines.extend_from_slice(msg.as_bytes());
+                    if let Some(op) = extract_op_from_log_line(&log) {
+                        ops.push(op);
                     }
 
-                    if let Some(op) = extract_op_from_log_line(log) {
-                        ops.push(op);
+                    // FIX: verbosity
+                    if let Some(msg) = log
+                        .filter_by_level(Verbosity::Info)
+                        .and_then(InternalLog::get_msg)
+                    {
+                        raw_lines.extend_from_slice(msg.as_bytes());
+                        raw_lines.push(b'\n');
                     }
                 }
             }
@@ -129,12 +131,17 @@ impl<'a> CachedCommand<'a> {
 
         let status = child.wait().map_err(CommandError::Io)?;
 
-        if !status.success() {
-            return Err(CommandError::NonZeroExitStatus(status));
-        }
-
         let stdout = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
         let (mut ops, stderr) = stderr_thread.await.unwrap();
+
+        if !status.success() {
+            return Ok(Output {
+                status,
+                stdout,
+                stderr,
+                ..Default::default()
+            });
+        }
 
         // Remove excluded paths if any are a parent directory
         ops.retain_mut(|op| {
@@ -202,7 +209,7 @@ pub fn supports_eval_caching(cmd: &Command) -> bool {
     cmd.get_program().to_string_lossy().ends_with("nix")
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Output {
     /// The status code of the command.
     pub status: process::ExitStatus,
@@ -342,9 +349,9 @@ async fn query_cached_output(
 
 /// Convert a parse log line into into an `Op`.
 /// Filters out paths that don't impact caching.
-fn extract_op_from_log_line(log: InternalLog) -> Option<Op> {
+fn extract_op_from_log_line(log: &InternalLog) -> Option<Op> {
     match log {
-        InternalLog::Msg { .. } => Op::from_internal_log(&log).and_then(|op| match op {
+        InternalLog::Msg { .. } => Op::from_internal_log(log).and_then(|op| match op {
             Op::EvaluatedFile { ref source }
             | Op::ReadFile { ref source }
             | Op::ReadDir { ref source }

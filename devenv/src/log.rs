@@ -126,13 +126,19 @@ impl std::fmt::Display for HumanReadableDuration {
 }
 
 /// A newtype to capture and expose span `user_message`s in subsequent events.
-struct SpanMessage(String);
+struct SpanContext {
+    msg: String,
+    has_error: bool,
+}
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Default)]
 pub struct DevenvLayer<S>
 where
     S: Subscriber,
 {
+    has_error: AtomicBool,
     _subscriber: PhantomData<S>,
 }
 
@@ -164,7 +170,10 @@ where
         let mut ext = span.extensions_mut();
 
         if let Some(msg) = visitor.0 {
-            ext.insert(SpanMessage(msg));
+            ext.insert(SpanContext {
+                msg,
+                has_error: false,
+            });
         }
 
         if ext.get_mut::<SpanTimings>().is_none() {
@@ -200,6 +209,18 @@ where
 
         if let Some(timings) = extensions.get_mut::<SpanTimings>() {
             timings.enter();
+        }
+
+        if let Some(span_ctx) = extensions.get_mut::<SpanContext>() {
+            if self.has_error.load(Ordering::SeqCst) {
+                span_ctx.has_error = true;
+            }
+        }
+    }
+
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: layer::Context<'_, S>) {
+        if event.metadata().level() == &tracing::Level::ERROR {
+            self.has_error.store(true, Ordering::SeqCst);
         }
     }
 }
@@ -271,6 +292,7 @@ where
                 match field.name() {
                     "time.idle" => self.idle_time = Some(format!("{:?}", value)),
                     "time.busy" => self.busy_time = Some(format!("{:?}", value)),
+                    "message" => self.message = Some(format!("{:?}", value)),
                     _ => {}
                 }
             }
@@ -319,6 +341,7 @@ where
                 } => {
                     let mut span_message: Option<String> = None;
                     let mut span_timings: Option<SpanTimings> = None;
+                    let mut has_error = false;
 
                     for span in ctx
                         .event_scope()
@@ -329,8 +352,9 @@ where
                         if let Some(timings) = ext.get::<SpanTimings>() {
                             span_timings = Some(timings.clone());
                         }
-                        if let Some(msg) = ext.get::<SpanMessage>() {
-                            span_message = Some(msg.0.clone());
+                        if let Some(span_ctx) = ext.get::<SpanContext>() {
+                            span_message = Some(span_ctx.msg.clone());
+                            has_error = span_ctx.has_error;
                         }
                     }
 
@@ -345,7 +369,11 @@ where
                             )?;
                         }
                         Progress::Close => {
-                            let prefix = style("✔").green();
+                            let prefix = if has_error {
+                                style("✖").red()
+                            } else {
+                                style("✔").green()
+                            };
                             writeln!(
                                 writer,
                                 "{} {} in {}",

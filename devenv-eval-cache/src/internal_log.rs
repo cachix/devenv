@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 
 /// Represents Nix's JSON structured log format (--log-format=internal-json).
@@ -49,38 +50,49 @@ impl InternalLog {
             .map(serde_json::from_str)
     }
 
-    pub fn get_log_msg_by_level(&self, target_log_level: Verbosity) -> Option<String> {
-        use std::fmt::Write;
-
+    pub fn filter_by_level(&self, target_log_level: Verbosity) -> Option<&Self> {
         match self {
             // A lot of build messages are tagged as level 0 (Error), making it difficult
             // to filter things out. Our hunch is that these messages are coming from the
             // nix daemon.
-            InternalLog::Msg { msg, level, .. }
+            InternalLog::Msg { level, .. }
                 if *level == Verbosity::Error
                     && (self.is_nix_error() || self.is_builtin_trace()) =>
             {
-                Some(msg.clone())
+                Some(self)
             }
-            InternalLog::Msg { msg, level, .. }
+            InternalLog::Msg { level, .. }
                 if *level > Verbosity::Error && *level <= target_log_level =>
             {
-                Some(msg.clone())
+                Some(self)
             }
 
-            InternalLog::Start { level, text, .. } if *level <= target_log_level => {
-                Some(text.clone())
-            }
+            InternalLog::Start { level, .. } if *level <= target_log_level => Some(self),
+            InternalLog::Result {
+                typ: ResultType::BuildLogLine,
+                ..
+            } if target_log_level >= Verbosity::Info => Some(self),
+            _ => None,
+        }
+    }
+
+    pub fn get_msg(&self) -> Option<Cow<'_, String>> {
+        use std::fmt::Write;
+
+        match self {
+            InternalLog::Msg { ref msg, .. } => Some(Cow::Borrowed(msg)),
+
+            InternalLog::Start { ref text, .. } => Some(Cow::Borrowed(text)),
             InternalLog::Result {
                 typ: ResultType::BuildLogLine,
                 fields,
                 ..
-            } if target_log_level >= Verbosity::Info => {
+            } => {
                 let mut msg = String::new();
                 for field in fields {
                     writeln!(msg, "{}", field).ok();
                 }
-                Some(msg.trim_end().to_string())
+                Some(Cow::Owned(msg.trim_end().to_string()))
             }
             _ => None,
         }
