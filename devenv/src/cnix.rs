@@ -670,7 +670,11 @@ impl<'a> Nix<'a> {
                     "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
                 };
 
-                info!("Using Cachix: {}", caches.caches.pull.join(", "));
+                info!(
+                    devenv.is_user_message = true,
+                    "Using Cachix: {}",
+                    caches.caches.pull.join(", "),
+                );
                 if !new_known_keys.is_empty() {
                     for (name, pubkey) in new_known_keys.iter() {
                         info!(
