@@ -1989,6 +1989,153 @@ lazy attribute set of anything
 
 
 
+## files
+
+
+
+A set of files that will be linked into devenv root.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
+## files.\<name>.executable
+
+
+
+Make the file executable
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
+## files.\<name>.ini
+
+
+
+ini contents
+
+
+
+*Type:*
+null or (attribute set of section of an INI file (attrs of INI atom (null, bool, int, float or string)))
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
+## files.\<name>.json
+
+
+
+json contents
+
+
+
+*Type:*
+null or JSON value
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
+## files.\<name>.text
+
+
+
+text contents
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
+## files.\<name>.toml
+
+
+
+toml contents
+
+
+
+*Type:*
+null or TOML value
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
+## files.\<name>.yaml
+
+
+
+yaml contents
+
+
+
+*Type:*
+null or YAML value
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
 ## git-hooks
 
 
@@ -2836,8 +2983,6 @@ boolean
 
 ## git-hooks.hooks.\<name>.args
 
-
-
 List of additional parameters to pass to the hook.
 
 
@@ -2959,6 +3104,8 @@ list of package
 
 
 ## git-hooks.hooks.\<name>.fail_fast
+
+
 
 if true pre-commit will stop running hooks if this hook fails.
 
@@ -4925,8 +5072,6 @@ boolean
 
 ## git-hooks.hooks.biome.files
 
-
-
 The pattern of files to run on.
 
 
@@ -5048,6 +5193,8 @@ boolean
 
 
 ## git-hooks.hooks.biome.settings.binPath
+
+
 
 ` biome ` binary path. E.g. if you want to use the ` biome ` in ` node_modules `, use ` ./node_modules/.bin/biome `.
 
@@ -6986,8 +7133,6 @@ boolean
 
 ## git-hooks.hooks.credo.raw
 
-
-
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
 
@@ -7135,6 +7280,8 @@ boolean
 
 
 ## git-hooks.hooks.deadnix
+
+
 
 deadnix hook
 
