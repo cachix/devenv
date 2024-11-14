@@ -75,8 +75,14 @@ let
     mkdir -p "${dirOf filename}"
     if [ -L "${filename}" ]
     then
+      echo "Overwriting ${filename}"
       ln -sf ${fileOption.file} "${filename}"
+    elif [ -f "${filename}" ]
+    then
+      echo "Conflicting file ${filename}" >&2
+      exit 1
     else
+      echo "Creating ${filename}"
       ln -s ${fileOption.file} "${filename}"
     fi
   '';
