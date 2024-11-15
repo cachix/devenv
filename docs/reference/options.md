@@ -9213,8 +9213,6 @@ list of package
 
 ## git-hooks.hooks.dune-fmt.stages
 
-
-
 Confines the hook to run at a particular stage.
 
 
@@ -11310,8 +11308,6 @@ null or signed integer
 
 
 ## git-hooks.hooks.flynt.settings.no-multiline
-
-
 
 Convert only single line expressions.
 
@@ -13442,8 +13438,6 @@ list of string
 
 ## git-hooks.hooks.isort.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -15481,8 +15475,6 @@ internal name, same as ` id `
 
 
 ## git-hooks.hooks.lychee.pass_filenames
-
-
 
 Whether to pass filenames as arguments to the entry point.
 
@@ -17591,8 +17583,6 @@ list of package
 
 ## git-hooks.hooks.mypy.fail_fast
 
-
-
 if true pre-commit will stop running hooks if this hook fails.
 
 
@@ -19681,8 +19671,6 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## git-hooks.hooks.ormolu.types
-
-
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -21801,8 +21789,6 @@ list of package
 
 ## git-hooks.hooks.prettier.fail_fast
 
-
-
 if true pre-commit will stop running hooks if this hook fails.
 
 
@@ -23825,8 +23811,6 @@ submodule
 
 
 ## git-hooks.hooks.pyright.enable
-
-
 
 Whether to enable this pre-commit hook.
 
@@ -34947,7 +34931,7 @@ string
 
 
 
-List of extra [targets](https://github.com/nix-community/fenix\#supported-platforms-and-targets)
+List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
 to install. Defaults to only the native target.
 
 
@@ -35085,6 +35069,28 @@ null or package
 
 *Default:*
 ` pkgs.rustfmt `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.version
+
+
+
+Which version of rust to use, this value could be ` latest `,` 1.81.0 `, ` 2021-01-01 `.
+Only works when languages.rust.channel is NOT nixpkgs.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "latest" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
