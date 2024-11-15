@@ -67327,6 +67327,659 @@ strings concatenated with “\\n”
 
 
 
+## services.kafka.enable
+
+
+
+Whether to enable Apache Kafka.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.package
+
+
+
+The apacheKafka package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.apacheKafka `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.configFiles.log4jProperties
+
+
+
+Kafka log4j property configuration file path
+
+
+
+*Type:*
+path
+
+
+
+*Default:*
+` "pkgs.writeText \"log4j.properties\" cfg.log4jProperties" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.configFiles.serverProperties
+
+
+
+Kafka server.properties configuration file path.
+Defaults to the rendered ` settings `.
+
+
+
+*Type:*
+path
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.connect.enable
+
+
+
+Whether to enable Kafka Connect.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.initialConnectors
+
+
+
+List of Kafka Connect connectors to set up initially
+
+
+
+*Type:*
+list of (lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string)))
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.initialConnectors.\*.config
+
+
+
+Initial configuration for the connector
+
+
+
+*Type:*
+attribute set
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.initialConnectors.\*.name
+
+
+
+Name of the connector
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings
+
+
+
+` connect-standalone.properties `.
+
+Note that .properties files contain mappings from string to string.
+Keys with dots are NOT represented by nested attrs in these settings,
+but instead as quoted strings (ie. ` settings."broker.id" `, NOT
+` settings.broker.id `).
+
+
+
+*Type:*
+lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."bootstrap.servers"
+
+
+
+A list of host/port pairs to use for establishing the initial connection to the Kafka cluster.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "localhost:9092"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."key.converter"
+
+
+
+The key converter to use for the connector.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "org.apache.kafka.connect.json.JsonConverter" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."key.converter.schemas.enable"
+
+
+
+Whether the key converter should include schema information in the message.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings.listeners
+
+
+
+List of listeners for Kafka Connect
+(By default Kafka Connect listens on http://localhost:8083)
+
+
+
+*Type:*
+null or (list of string)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+[
+  "http://localhost:8080"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."offset.flush.interval.ms"
+
+
+
+Interval at which to try committing offsets for tasks
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 10000 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."offset.storage.file.filename"
+
+
+
+The file to store connector offsets in. By storing offsets on disk, a standalone process can be stopped and started on a single node and resume where it previously left off.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/home/runner/work/devenv/devenv/.devenv/state/kafka/connect/connect.offsets" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."plugin.path"
+
+
+
+The list should consist of top level directories that include any combination of:
+a) directories immediately containing jars with plugins and their dependencies
+b) uber-jars with plugins and their dependencies
+c) directories immediately containing the package directory structure of classes of plugins and their dependencies
+Note: symlinks will be followed to discover dependencies or plugins.
+
+
+
+*Type:*
+null or (list of (string or path))
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."value.converter"
+
+
+
+The value converter to use for the connector.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "org.apache.kafka.connect.json.JsonConverter" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.connect.settings."value.converter.schemas.enable"
+
+
+
+Whether the value converter should include schema information in the message.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
+
+
+
+## services.kafka.defaultMode
+
+
+
+Which defaults to set for the mode Kafka should run in
+
+ - ` kraft ` (default): Run Kafka in KRaft mode, Which requires no extra configuration.
+ - ` zookeeper `: Run Kafka in Zookeeper mode, this requires more configuration.
+
+
+
+*Type:*
+one of “zookeeper”, “kraft”
+
+
+
+*Default:*
+` "kraft" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.formatLogDirs
+
+
+
+Whether to format log dirs in KRaft mode if all log dirs are
+unformatted, ie. they contain no meta.properties.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.formatLogDirsIgnoreFormatted
+
+
+
+Whether to ignore already formatted log dirs when formatting log dirs,
+instead of failing. Useful when replacing or adding disks.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.jre
+
+
+
+The JRE with which to run Kafka
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.apacheKafka.passthru.jre `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.jvmOptions
+
+
+
+Extra command line options for the JVM running Kafka.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "-Djava.net.preferIPv4Stack=true"
+  "-Dcom.sun.management.jmxremote"
+  "-Dcom.sun.management.jmxremote.local.only=true"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.log4jProperties
+
+
+
+Kafka log4j property configuration.
+
+
+
+*Type:*
+strings concatenated with “\\n”
+
+
+
+*Default:*
+
+```
+''
+  log4j.rootLogger=INFO, stdout
+  
+  log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+  log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+  log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.settings
+
+
+
+[Kafka broker configuration](https://kafka.apache.org/documentation.html\#brokerconfigs)
+` server.properties `.
+
+Note that .properties files contain mappings from string to string.
+Keys with dots are NOT represented by nested attrs in these settings,
+but instead as quoted strings (ie. ` settings."broker.id" `, NOT
+` settings.broker.id `).
+
+
+
+*Type:*
+lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.settings."broker.id"
+
+
+
+Broker ID. -1 or null to auto-allocate in zookeeper mode.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.settings.listeners
+
+
+
+Kafka Listener List.
+See [listeners](https://kafka.apache.org/documentation/\#brokerconfigs_listeners).
+If you change this, you should also update the readiness probe.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "PLAINTEXT://localhost:9092"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
+## services.kafka.settings."log.dirs"
+
+
+
+Log file directories.
+
+
+
+*Type:*
+list of path
+
+
+
+*Default:*
+
+```
+[
+  "/home/runner/work/devenv/devenv/.devenv/state/kafka/logs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
+
+
+
 ## services.mailhog.enable
 
 
