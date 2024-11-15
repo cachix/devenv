@@ -185,7 +185,7 @@ in
             initial_delay_seconds = 2;
             http_get = {
               path = "/connectors";
-              port = "8083";
+              port = 8083;
             };
           };
 
