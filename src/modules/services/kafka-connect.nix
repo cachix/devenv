@@ -98,6 +98,7 @@ in
 
           "plugin.path" = lib.mkOption {
             type = types.nullOr (types.listOf (types.either types.str types.path));
+            default = null;
             description = ''
               The list should consist of top level directories that include any combination of:
               a) directories immediately containing jars with plugins and their dependencies
@@ -176,6 +177,19 @@ in
       '';
     in
     (lib.mkIf cfg.enable (lib.mkIf kafkaCfg.enable {
-      processes.kafka-connect.exec = "${startKafkaConnect}/bin/start-kafka-connect";
+      processes.kafka-connect = {
+        exec = "${startKafkaConnect}/bin/start-kafka-connect";
+
+        process-compose = {
+          readiness_probe = {
+            initial_delay_seconds = 2;
+            http_get = {
+              path = "/connectors";
+              port = "8083";
+            };
+          };
+        };
+      };
+
     }));
 }
