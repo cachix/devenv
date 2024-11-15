@@ -188,6 +188,12 @@ in
               port = "8083";
             };
           };
+
+          depends_on = {
+            kafka = {
+              condition = "process_healthy";
+            };
+          };
         };
       };
 

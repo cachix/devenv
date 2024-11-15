@@ -225,22 +225,16 @@ in
         processes.kafka = {
           exec = "${startKafka}/bin/start-kafka";
 
-          # process-compose = {
-          #   readiness_probe = {
-          #     # exec.command = "${pkgs.curl}/bin/curl -f -k http://localhost:9092/topics";
-          #     http_get = {
-          #       host = "localhost";
-          #       scheme = "http";
-          #       path = "/topics";
-          #       port = 9092;
-          #     };
-          #     initial_delay_seconds = 5;
-          #     period_seconds = 10;
-          #     timeout_seconds = 5;
-          #     success_threshold = 1;
-          #     failure_threshold = 3;
-          #   };
-          # };
+          process-compose = {
+            readiness_probe = {
+              exec.command = "${cfg.package}/bin/kafka-topics.sh --list --bootstrap-server localhost:9092";
+              initial_delay_seconds = 5;
+              period_seconds = 10;
+              timeout_seconds = 5;
+              success_threshold = 1;
+              failure_threshold = 3;
+            };
+          };
         };
       })
     ];
