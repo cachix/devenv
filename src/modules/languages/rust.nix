@@ -203,7 +203,7 @@ in
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        toolchain = (rust-overlay.lib.mkRustBin {} pkgs.buildPackages)."${cfg.channel}"."${cfg.version}";
+        toolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages)."${cfg.channel}"."${cfg.version}";
         filteredToolchain = (lib.filterAttrs (n: _: builtins.elem n toolchain._manifest.profiles.complete) toolchain);
       in
       {
