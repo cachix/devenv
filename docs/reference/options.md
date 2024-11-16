@@ -29217,10 +29217,10 @@ string
 ''
   [files]
   ignore-dot = true
-
+  
   [default]
   binary = false
-
+  
   [type.py]
   extend-glob = []
 ''
@@ -30981,9 +30981,9 @@ string
 ```
 ''
   ---
-
+  
   extends: relaxed
-
+  
   rules:
     indentation: enable
 ''
@@ -63007,10 +63007,10 @@ string
 ''
   [files]
   ignore-dot = true
-
+  
   [default]
   binary = false
-
+  
   [type.py]
   extend-glob = []
 ''
@@ -64771,9 +64771,9 @@ string
 ```
 ''
   ---
-
+  
   extends: relaxed
-
+  
   rules:
     indentation: enable
 ''
@@ -65940,7 +65940,7 @@ strings concatenated with “\\n”
   {
     debug
   }
-
+  
   # Site block
   example.com {
     encode gzip
@@ -67866,7 +67866,7 @@ strings concatenated with “\\n”
 ```
 ''
   log4j.rootLogger=INFO, stdout
-
+  
   log4j.appender.stdout=org.apache.log4j.ConsoleAppender
   log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
   log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
@@ -71846,7 +71846,7 @@ strings concatenated with “\\n”
 ```
 ''
   vcl 4.0;
-
+  
   backend default {
     .host = "127.0.0.1";
     .port = "80";
@@ -72527,3 +72527,5 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
