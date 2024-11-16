@@ -123,7 +123,7 @@ strings concatenated with “\\n”
   {
     debug
   }
-
+  
   # Site block
   example.com {
     encode gzip
