@@ -215,6 +215,13 @@ EOF
     '';
   };
 
+  tasks = {
+    "devenv:compile-requirements" = {
+      exec = "uv pip compile requirements.in -o requirements.txt";
+      before = [ "devenv:python:virtualenv" ];
+    };
+  };
+
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
     #shellcheck.enable = true;
