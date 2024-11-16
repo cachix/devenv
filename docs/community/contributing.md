@@ -6,7 +6,7 @@ We have a rule that new features need to come with documentation and tests (`dev
 
 ## Preparing the `devenv` development environment
 
-1. Follow the [installation instructions for Nix and Cachix](../../getting-started/#installation) and [install direnv](../../automatic-shell-activation/).
+1. Follow the [installation instructions for Nix and Cachix](../getting-started.md#installation) and [install direnv](../automatic-shell-activation.md).
 
 2. `git clone https://github.com/cachix/devenv.git`
 
