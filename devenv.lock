@@ -51,10 +51,10 @@
         ]
       },
       "locked": {
-        "lastModified": 1727826117,
+        "lastModified": 1730504689,
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "3d04084d54bedc3d6b8b736c70ef449225c361b1",
+        "rev": "506278e768c2a08bec68eb62932193e341f55c90",
         "type": "github"
       },
       "original": {
@@ -86,10 +86,10 @@
     "libgit2": {
       "flake": false,
       "locked": {
-        "lastModified": 1729159177,
+        "lastModified": 1730231647,
         "owner": "libgit2",
         "repo": "libgit2",
-        "rev": "215aafbd6d424dcb3401ad9903b203208a9ed923",
+        "rev": "c6111ec06cc0b0126cd67bdab78f8091e4cfaa10",
         "type": "github"
       },
       "original": {
@@ -124,10 +124,10 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1729153142,
+        "lastModified": 1731954261,
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "bc8d6370f78e3d9888d2bc077d043cded27abe7a",
+        "rev": "ad2c28c6c5cc04e09bed68db46db5718d40b5b9e",
         "type": "github"
       },
       "original": {
@@ -215,10 +215,10 @@
         ]
       },
       "locked": {
-        "lastModified": 1729104314,
+        "lastModified": 1731363552,
         "owner": "cachix",
         "repo": "pre-commit-hooks.nix",
-        "rev": "3c3e88f0f544d6bb54329832616af7eb971b6be6",
+        "rev": "cd1af27aa85026ac759d5d3fccf650abe7e1bbf0",
         "type": "github"
       },
       "original": {
