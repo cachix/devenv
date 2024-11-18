@@ -25,7 +25,7 @@ For example, ``devenv up`` will start both the frontend and backend processes.
 
 !!! note
 
-    While composing ``devenv.nix`` is a key feature, 
+    While composing ``devenv.nix`` is a key feature,
     composing ``devenv.yaml`` [hasn't been implemented yet](https://github.com/cachix/devenv/issues/14).
 
-See [devenv.yaml reference](reference/yaml-options.md#inputs) for all supported imports.
+See [devenv.yaml reference](reference/yaml-options.md#an-extensive-example) for all supported imports.

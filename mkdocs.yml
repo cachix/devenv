@@ -4,6 +4,12 @@ site_url: "https://devenv.sh"
 repo_name: "cachix/devenv"
 repo_url: "https://github.com/cachix/devenv"
 edit_uri: "edit/main/docs"
+strict: true
+validation:
+  omitted_files: warn
+  absolute_links: info  # Or 'relative_to_docs' - new in MkDocs 1.6
+  unrecognized_links: warn
+  anchors: warn  # New in MkDocs 1.6
 extra_css:
   - assets/top-level.css
 theme:
@@ -78,7 +84,11 @@ markdown_extensions:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist

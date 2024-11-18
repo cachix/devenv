@@ -24,6 +24,24 @@ boolean
 
 
 
+## services\.meilisearch\.package
+
+
+
+Which Meilisearch package to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` "pkgs.meilisearch" `
+
+
+
 ## services\.meilisearch\.environment
 
 

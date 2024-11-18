@@ -9,14 +9,20 @@ use miette::Result;
 async fn main() -> Result<()> {
     let cli = Cli::parse_and_resolve_options();
 
-    if let Commands::Version { .. } = cli.command {
+    let print_version = || {
         println!(
             "devenv {} ({})",
             crate_version!(),
             cli.global_options.system
         );
-        return Ok(());
-    }
+        Ok(())
+    };
+
+    let command = match cli.command {
+        None => return print_version(),
+        Some(Commands::Version { .. }) => return print_version(),
+        Some(cmd) => cmd,
+    };
 
     let level = if cli.global_options.verbose {
         log::Level::Debug
@@ -43,7 +49,7 @@ async fn main() -> Result<()> {
     // we let Drop delete the dir after all commands have ran
     let _tmpdir = if let Commands::Test {
         dont_override_dotfile,
-    } = cli.command
+    } = command
     {
         let pwd = std::env::current_dir().expect("Failed to get current directory");
         let tmpdir =
@@ -62,7 +68,7 @@ async fn main() -> Result<()> {
 
     let mut devenv = Devenv::new(options).await;
 
-    match cli.command {
+    match command {
         Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true).await,
         Commands::Test { .. } => devenv.test().await,
         Commands::Container {

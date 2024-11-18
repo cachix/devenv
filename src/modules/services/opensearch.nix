@@ -156,7 +156,7 @@ in
       process-compose = {
         readiness_probe = {
           exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.settings."network.host"}:${toString cfg.settings."http.port"}";
-          initial_delay_seconds = 15;
+          initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 2;
           success_threshold = 1;

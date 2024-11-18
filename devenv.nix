@@ -154,7 +154,7 @@
     exec = ''
       mkdir -p docs/{supported-languages,supported-services,supported-process-managers}
 
-      nix build --impure --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
+      nix build --no-pure-eval --extra-experimental-features 'flakes nix-command' --show-trace --print-out-paths '.#devenv-generate-individual-docs'
       cp -r --no-preserve=all result/docs/individual-docs/* docs/
     '';
   };
@@ -213,6 +213,13 @@ EOF
     process_directory "src/modules/services" "docs/individual-docs/services" "service"
     process_directory "src/modules/process-managers" "docs/individual-docs/process-managers" "process manager"
     '';
+  };
+
+  tasks = {
+    "devenv:compile-requirements" = {
+      exec = "uv pip compile requirements.in -o requirements.txt";
+      before = [ "devenv:python:virtualenv" ];
+    };
   };
 
   pre-commit.hooks = {

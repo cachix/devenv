@@ -27,7 +27,7 @@ To specify `pre-commit-hooks` as a cache to pull from and `mycache` to pull from
 
 You'll likely not want every user to push to the cache.
 
-It's usually convenient to push [explicitly](./files-and-variables/#devenvlocalnix), for example as part of CI run:
+It's usually convenient to push [explicitly](files-and-variables.md#devenvlocalnix), for example as part of CI run:
 
 ```shell-session
 $ echo '{ cachix.push = "mycache"; }' > devenv.local.nix

@@ -8,6 +8,9 @@ result
 /.pre-commit-config.yaml
 man
 
+# mkdocs
+site/
+
 # examples
 examples/rust/app/target
 
