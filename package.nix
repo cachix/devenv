@@ -50,11 +50,17 @@ pkgs.rustPlatform.buildRustPackage {
   postInstall = pkgs.lib.optionalString (!build_tasks) ''
     wrapProgram $out/bin/devenv \
       --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix} \
+      ${pkgs.lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
+        --set-default LOCALE_ARCHIVE ${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive \
+      ''}
       --prefix PATH ":" "$out/bin:${inputs.cachix.packages.${pkgs.stdenv.system}.cachix}/bin"
 
     # TODO: problematic for our library...
     wrapProgram $out/bin/devenv-run-tests \
       --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix} \
+      ${pkgs.lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
+        --set-default LOCALE_ARCHIVE ${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive \
+      ''}
       --prefix PATH ":" "$out/bin:${inputs.cachix.packages.${pkgs.stdenv.system}.cachix}/bin"
 
     # Generate manpages
