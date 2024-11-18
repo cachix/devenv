@@ -9,6 +9,13 @@ in
   options.services.meilisearch = {
     enable = lib.mkEnableOption "Meilisearch";
 
+    package = lib.mkOption {
+      type = types.package;
+      description = "Which Meilisearch package to use";
+      default = pkgs.meilisearch;
+      defaultText = "pkgs.meilisearch";
+    };
+
     listenAddress = lib.mkOption {
       description = "Meilisearch listen address.";
       default = "127.0.0.1";
@@ -65,7 +72,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [ pkgs.meilisearch ];
+    packages = [ cfg.package ];
 
     env.MEILI_DB_PATH = config.env.DEVENV_STATE + "/meilisearch";
     env.MEILI_HTTP_ADDR = "${cfg.listenAddress}:${toString cfg.listenPort}";
@@ -76,7 +83,7 @@ in
     env.MEILI_MAX_INDEX_SIZE = cfg.maxIndexSize;
 
     processes.meilisearch = {
-      exec = "${pkgs.meilisearch}/bin/meilisearch";
+      exec = "${cfg.package}/bin/meilisearch";
     };
   };
 }

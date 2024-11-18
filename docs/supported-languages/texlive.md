@@ -30,20 +30,26 @@ boolean
 
 
 
-Packages available to TeX Live
+Extra packages to add to the base TeX Live set
 
 
 
 *Type:*
-non-empty (list of string)
+list of string
 
 
 
 *Default:*
+` [ ] `
+
+
+
+*Example:*
 
 ```
 [
-  "collection-basic"
+  "algorithms"
+  "latexmk"
 ]
 ```
 
@@ -61,4 +67,9 @@ unspecified value
 
 
 *Default:*
-` pkgs.texlive `
+` pkgs.texliveSmall `
+
+
+
+*Example:*
+` pkgs.texliveBasic `

@@ -33,7 +33,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let config = Config { tasks, roots };
 
             let mut tasks_ui = TasksUi::new(config).await?;
-            tasks_ui.run().await?;
+            let (status, _outputs) = tasks_ui.run().await?;
+
+            if status.failed + status.dependency_failed > 0 {
+                std::process::exit(1);
+            }
         }
         Command::Export { strings } => {
             let output_file =

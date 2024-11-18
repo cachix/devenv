@@ -8,7 +8,7 @@ in {
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.lean4;
-      defaultText = "pkgs.lean4";
+      defaultText = lib.literalExpression "pkgs.lean4";
       description = ''
         The lean4 package to use.
       '';

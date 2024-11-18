@@ -5,7 +5,7 @@
 
   languages.go.enable = true;
 
-  pre-commit.hooks = {
+  git-hooks.hooks = {
     govet = {
       enable = true;
       pass_filenames = false;

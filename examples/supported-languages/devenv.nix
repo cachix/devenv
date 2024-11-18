@@ -1,3 +1,5 @@
+# DO NOT MODIFY.
+# This file was generated bu devenv-generate-languages-example.
 { pkgs, ... }: {
 
   # Enable all languages tooling!
@@ -50,6 +52,7 @@
   languages.terraform.enable = true;
   languages.texlive.enable = true;
   languages.typescript.enable = true;
+  languages.typst.enable = true;
   languages.unison.enable = true;
   languages.v.enable = true;
   languages.vala.enable = true;

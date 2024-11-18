@@ -4,6 +4,11 @@
     "devenv:enterShell".after = [ "myapp:shell" ];
     "myapp:test".exec = "touch test";
     "devenv:enterTest".after = [ "myapp:test" ];
+    "example:statusIgnored" = {
+      before = [ "devenv:enterTest" ];
+      exec = "touch ./should-not-exist";
+      status = "rm should-not-exist && ls";
+    };
   };
 
   enterTest = ''
@@ -17,6 +22,10 @@
     if [ ! -f test ]; then
       echo "test does not exist"
       exit 1
+    fi 
+    if [ -f ./should-not-exist ]; then
+        echo should-not-exist exists
+        exit 1
     fi
   '';
 }

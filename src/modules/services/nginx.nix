@@ -32,7 +32,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.nginx;
-      defaultText = "pkgs.nginx";
+      defaultText = lib.literalExpression "pkgs.nginx";
       description = "The nginx package to use.";
     };
 

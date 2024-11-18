@@ -35,7 +35,7 @@ in
       defaultText = lib.literalExpression ''[ ]'';
       description = ''
         List of extra [targets](https://github.com/nix-community/fenix#supported-platforms-and-targets)
-        to install. Defaults to only the native target. 
+        to install. Defaults to only the native target.
       '';
     };
 
@@ -128,6 +128,7 @@ in
         env =
           let
             moldFlags = lib.optionalString cfg.mold.enable "-C link-arg=-fuse-ld=mold";
+            optionalEnv = cond: str: if cond then str else null;
           in
           {
             # RUST_SRC_PATH is necessary when rust-src is not at the same location as
@@ -136,14 +137,14 @@ in
               if cfg.toolchain ? rust-src
               then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
               else pkgs.rustPlatform.rustLibSrc;
-            RUSTFLAGS = "${moldFlags} ${cfg.rustflags}";
-            RUSTDOCFLAGS = "${moldFlags}";
+            RUSTFLAGS = optionalEnv (moldFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags cfg.rustflags ]));
+            RUSTDOCFLAGS = optionalEnv (moldFlags != "") moldFlags;
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
 
-        pre-commit.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
-        pre-commit.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
-        pre-commit.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
+        git-hooks.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
+        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
+        git-hooks.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
       }
     )
 

@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.mlton;
-      defaultText = "pkgs.mlton";
+      defaultText = lib.literalExpression "pkgs.mlton";
       description = ''
         The Standard ML package to use.
       '';
@@ -18,10 +18,10 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
+    packages = [
       cfg.package
-      millet
-      smlfmt
+      pkgs.millet
+      pkgs.smlfmt
     ];
   };
 }

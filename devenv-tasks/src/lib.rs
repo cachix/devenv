@@ -3,6 +3,9 @@ use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
+
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -84,7 +87,7 @@ pub struct Config {
 }
 
 #[derive(Serialize)]
-pub struct Outputs(HashMap<String, serde_json::Value>);
+pub struct Outputs(BTreeMap<String, serde_json::Value>);
 #[derive(Debug, Clone)]
 pub struct Output(Option<serde_json::Value>);
 
@@ -97,9 +100,8 @@ impl TryFrom<serde_json::Value> for Config {
 }
 
 type LinesOutput = Vec<(std::time::Instant, String)>;
-
 impl std::ops::Deref for Outputs {
-    type Target = HashMap<String, serde_json::Value>;
+    type Target = BTreeMap<String, serde_json::Value>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -160,7 +162,7 @@ impl TaskState {
     fn prepare_command(
         &self,
         cmd: &str,
-        outputs: &HashMap<String, serde_json::Value>,
+        outputs: &BTreeMap<String, serde_json::Value>,
     ) -> (Command, tempfile::NamedTempFile) {
         let mut command = Command::new(cmd);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -219,7 +221,7 @@ impl TaskState {
     async fn run(
         &self,
         now: Instant,
-        outputs: &HashMap<String, serde_json::Value>,
+        outputs: &BTreeMap<String, serde_json::Value>,
     ) -> TaskCompleted {
         if let Some(cmd) = &self.task.status {
             let (mut command, outputs_file) = self.prepare_command(cmd, outputs);
@@ -510,7 +512,7 @@ impl Tasks {
     #[instrument(skip(self))]
     async fn run(&self) -> Outputs {
         let mut running_tasks = JoinSet::new();
-        let outputs = Arc::new(Mutex::new(HashMap::new()));
+        let outputs = Arc::new(Mutex::new(BTreeMap::new()));
 
         for index in &self.tasks_order {
             let task_state = &self.graph[*index];
@@ -611,6 +613,7 @@ impl Tasks {
     }
 }
 
+#[derive(Debug)]
 pub struct TasksStatus {
     lines: Vec<String>,
     pub pending: usize,
@@ -808,7 +811,7 @@ impl TasksUi {
                         .max(1)
                 )
             );
-            if tasks_status.lines.len() > 0 {
+            if !tasks_status.lines.is_empty() {
                 let output = console::Style::new().apply_to(output);
                 if last_list_height > 0 {
                     term.move_cursor_up(last_list_height as usize)?;
@@ -1231,6 +1234,56 @@ mod test {
                 )
             ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_output_order() -> Result<(), Error> {
+        let script1 = create_script(
+            r#"#!/bin/sh
+echo '{"key": "value1"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+        )?;
+        let script2 = create_script(
+            r#"#!/bin/sh
+echo '{"key": "value2"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+        )?;
+        let script3 = create_script(
+            r#"#!/bin/sh
+echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
+"#,
+        )?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_3"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "command": script2.to_str().unwrap(),
+                        "after": ["myapp:task_1"],
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "command": script3.to_str().unwrap(),
+                        "after": ["myapp:task_2"],
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+
+        let outputs = tasks.run().await;
+
+        let keys: Vec<_> = outputs.keys().collect();
+        assert_eq!(keys, vec!["myapp:task_1", "myapp:task_2", "myapp:task_3"]);
 
         Ok(())
     }

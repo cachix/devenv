@@ -28,7 +28,7 @@ in
       enable = mkEnableOption "maven";
       package = mkOption {
         type = types.package;
-        defaultText = "pkgs.maven.override { jdk_headless = cfg.jdk.package; }";
+        defaultText = literalExpression "pkgs.maven.override { jdk_headless = cfg.jdk.package; }";
         description = ''
           The Maven package to use.
           The Maven package by default inherits the JDK from `languages.java.jdk.package`.

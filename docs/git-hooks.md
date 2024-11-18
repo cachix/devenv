@@ -1,4 +1,4 @@
-``devenv`` has first-class integration for [pre-commit](https://pre-commit.com/) via [pre-commit-hooks.nix](https://github.com/cachix/pre-commit-hooks.nix).
+``devenv`` has first-class integration for [pre-commit](https://pre-commit.com/) via [git-hooks.nix](https://github.com/cachix/git-hooks.nix).
 
 ## Set up
 
@@ -10,7 +10,7 @@ We recommend a two-step approach for integrating your linters and formatters.
 { inputs, ... }:
 
 {
-  pre-commit.hooks = {
+  git-hooks.hooks = {
     # lint shell scripts
     shellcheck.enable = true;
     # execute example shell from Markdown files
@@ -21,11 +21,11 @@ We recommend a two-step approach for integrating your linters and formatters.
     # override a package with a different version
     ormolu.enable = true;
     ormolu.package = pkgs.haskellPackages.ormolu;
-    
+
     # some hooks have more than one package, like clippy:
     clippy.enable = true;
     clippy.packageOverrides.cargo = pkgs.cargo;
-    clippy.packageOverrides.clippy = tools.clippy;
+    clippy.packageOverrides.clippy = pkgs.clippy;
     # some hooks provide settings
     clippy.settings.allFeatures = true;
   };
@@ -63,7 +63,7 @@ If you'd like to define your own hook you can do:
 
 ```nix title="devenv.nix"
 {
-  pre-commit.hooks.unit-tests = {
+  git-hooks.hooks.unit-tests = {
     enable = true;
 
     # The name of the hook (appears on the report table):

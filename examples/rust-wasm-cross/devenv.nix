@@ -4,14 +4,14 @@
   languages.rust = {
     enable = true;
     # https://devenv.sh/reference/options/#languagesrustchannel
-    channel = "nightly";
+    channel = "stable";
 
     targets = [ "wasm32-unknown-unknown" ];
 
     components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" "rust-std" ];
   };
 
-  pre-commit.hooks = {
+  git-hooks.hooks = {
     clippy = {
       enable = true;
       settings.offline = false;
@@ -19,6 +19,7 @@
     };
     rustfmt.enable = true;
   };
+  git-hooks.settings.rust.cargoManifestPath = "./Cargo.toml";
 
   packages = [
     pkgs.wasm-pack
