@@ -47,35 +47,41 @@ pkgs.rustPlatform.buildRustPackage {
     cargo sqlx prepare --workspace
   '';
 
-  postInstall = pkgs.lib.optionalString (!build_tasks) ''
-    wrapProgram $out/bin/devenv \
-      --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix} \
-      ${pkgs.lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
-        --set-default LOCALE_ARCHIVE ${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive \
-      ''}
-      --prefix PATH ":" "$out/bin:${inputs.cachix.packages.${pkgs.stdenv.system}.cachix}/bin"
+  postInstall =
+    let
+      inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
+      inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
 
-    # TODO: problematic for our library...
-    wrapProgram $out/bin/devenv-run-tests \
-      --set DEVENV_NIX ${inputs.nix.packages.${pkgs.stdenv.system}.nix} \
-      ${pkgs.lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
-        --set-default LOCALE_ARCHIVE ${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive \
-      ''}
-      --prefix PATH ":" "$out/bin:${inputs.cachix.packages.${pkgs.stdenv.system}.cachix}/bin"
+      localeArchiveFix =
+        pkgs.lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
+          --set-default LOCALE_ARCHIVE ${pkgs.glibcLocalesUtf8}/lib/locale/locale-archive
+        '';
+    in
+    pkgs.lib.optionalString (!build_tasks) ''
+      wrapProgram $out/bin/devenv \
+        --prefix PATH ":" "$out/bin:${cachix}/bin" \
+        --set DEVENV_NIX ${nix} \
+        ${localeArchiveFix} \
 
-    # Generate manpages
-    cargo xtask generate-manpages --out-dir man
-    installManPage man/*
+      # TODO: problematic for our library...
+      wrapProgram $out/bin/devenv-run-tests \
+        --prefix PATH ":" "$out/bin:${cachix}/bin" \
+        --set DEVENV_NIX ${nix} \
+        ${localeArchiveFix} \
 
-    # Generate shell completions
-    compdir=./completions
-    for shell in bash fish zsh; do
-      cargo xtask generate-shell-completion $shell --out-dir $compdir
-    done
+      # Generate manpages
+      cargo xtask generate-manpages --out-dir man
+      installManPage man/*
 
-    installShellCompletion --cmd devenv \
-      --bash $compdir/devenv.bash \
-      --fish $compdir/devenv.fish \
-      --zsh $compdir/_devenv
-  '';
+      # Generate shell completions
+      compdir=./completions
+      for shell in bash fish zsh; do
+        cargo xtask generate-shell-completion $shell --out-dir $compdir
+      done
+
+      installShellCompletion --cmd devenv \
+        --bash $compdir/devenv.bash \
+        --fish $compdir/devenv.fish \
+        --zsh $compdir/_devenv
+    '';
 }
