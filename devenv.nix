@@ -6,6 +6,8 @@
   env.RUST_LOG_SPAN_EVENTS = "full";
   env.DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
 
+  cachix.pull = [ "cachix" ];
+
   packages = [
     pkgs.cairo
     pkgs.git
@@ -37,6 +39,10 @@
   devcontainer.enable = true;
   devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
   difftastic.enable = true;
+
+  outputs = {
+    devenv = import ./package.nix { inherit inputs pkgs; };
+  };
 
   processes = {
     docs.exec = "mkdocs serve";
