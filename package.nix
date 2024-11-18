@@ -29,14 +29,13 @@ pkgs.rustPlatform.buildRustPackage {
   };
 
   nativeBuildInputs = [
-    pkgs.makeWrapper
-    pkgs.pkg-config
     pkgs.installShellFiles
+    pkgs.makeBinaryWrapper
+    pkgs.pkg-config
   ] ++ pkgs.lib.optional (!build_tasks) pkgs.sqlx-cli;
 
-  buildInputs = [ pkgs.openssl ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
-    pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
-  ];
+  buildInputs = [ pkgs.openssl ]
+    ++ pkgs.lib.optional pkgs.stdenv.isDarwin pkgs.darwin.apple_sdk.frameworks.SystemConfiguration;
 
   # Force sqlx to use the prepared queries
   SQLX_OFFLINE = true;
