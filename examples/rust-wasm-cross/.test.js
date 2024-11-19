@@ -1,1 +1,1 @@
-import("./app/pkg/app.js").then((app) => app.main());
+import("./pkg/app.js").then((app) => app.main());
