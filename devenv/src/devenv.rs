@@ -9,7 +9,7 @@ use nix::unistd::Pid;
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
     fs,
@@ -219,46 +219,96 @@ impl Devenv {
             .query(&[("devenv", devenv_rev)])
             .header(reqwest::header::USER_AGENT, crate_version!());
 
-        if let Some(desc) = description {
-            request = request.query(&[("q", desc)]);
-        } else {
-            self.logger.info("Zipping source code ...");
-            let body = create_zip_from_directory()?;
-            request = request
-                .body(body)
-                .header(reqwest::header::CONTENT_TYPE, "application/zip");
-        }
+        let (asyncwriter, asyncreader) = tokio::io::duplex(256 * 1024);
+        let streamreader = tokio_util::io::ReaderStream::new(asyncreader);
+
+        let (body_sender, body) = match description {
+            Some(desc) => {
+                request = request.query(&[("q", desc)]);
+                (None, None)
+            }
+            None => {
+                let git_output = std::process::Command::new("git")
+                    .args(["ls-files", "-z"])
+                    .output()
+                    .map_err(|_| {
+                        miette::miette!("Failed to get list of files from git ls-files")
+                    })?;
+
+                let files = String::from_utf8_lossy(&git_output.stdout)
+                    .split('\0')
+                    .filter(|s| !s.is_empty())
+                    .map(PathBuf::from)
+                    .collect::<Vec<_>>();
+
+                if files.is_empty() {
+                    self.logger
+                        .warn("No files found. Are you in a git repository?");
+                    return Ok(());
+                }
+
+                if let Some(stderr) = String::from_utf8(git_output.stderr).ok() {
+                    if !stderr.is_empty() {
+                        self.logger.warn(&stderr);
+                    }
+                }
+
+                let body = reqwest::Body::wrap_stream(streamreader);
+
+                request = request
+                    .body(body)
+                    .header(reqwest::header::CONTENT_TYPE, "application/x-tar");
+
+                (Some(tokio_tar::Builder::new(asyncwriter)), Some(files))
+            }
+        };
+
         self.logger
             .info("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
-        // TODO: render hourglass
 
-        let response = request
-            .send()
-            .await
-            .into_diagnostic()
-            .expect("Failed to send request to server");
+        let response_future = request.send();
 
-        if !response.status().is_success() {
-            bail!("Server failed to generate devenv.nix and devenv.yaml");
+        let tar_task = async {
+            if let (Some(mut builder), Some(files)) = (body_sender, body) {
+                for path in files {
+                    if path.is_file() {
+                        builder.append_path(&path).await?;
+                    }
+                }
+                builder.finish().await?;
+            }
+            Ok::<(), std::io::Error>(())
+        };
+
+        let (response, _) = tokio::join!(response_future, tar_task);
+
+        let response = response.into_diagnostic()?;
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = &response
+                .text()
+                .await
+                .unwrap_or_else(|_| "No error details available".to_string());
+            bail!(
+                "Server failed to generate devenv.nix and devenv.yaml (HTTP {}): {}",
+                &status.as_u16(),
+                error_text
+            );
         }
 
         let response_json: GenerateResponse = response.json().await.expect("Failed to parse JSON.");
 
-        // write the files
-        confirm_overwrite("devenv.nix")?;
-        confirm_overwrite("devenv.yaml")?;
-        std::fs::write("devenv.nix", response_json.devenv_nix).expect("Failed to write devenv.nix");
-        std::fs::write("devenv.yaml", response_json.devenv_yaml)
-            .expect("Failed to write devenv.yaml");
+        confirm_overwrite("devenv.nix", response_json.devenv_nix)?;
+        confirm_overwrite("devenv.yaml", response_json.devenv_yaml)?;
 
         self.logger.info(
             &indoc::formatdoc!("
               Generated devenv.nix and devenv.yaml 🎉
 
               Treat these as templates and open an issue at https://github.com/cachix/devenv/issues if you think we can do better!
-             
+
               Start by running:
-              
+
                 $ devenv shell
             "));
         Ok(())
@@ -921,7 +971,7 @@ impl Devenv {
     }
 }
 
-fn confirm_overwrite(file: &str) -> Result<()> {
+fn confirm_overwrite(file: &str, contents: String) -> Result<()> {
     if std::fs::metadata(file).is_ok() {
         let confirm = dialoguer::Confirm::new()
             .with_prompt(format!(
@@ -934,47 +984,9 @@ fn confirm_overwrite(file: &str) -> Result<()> {
         if !confirm {
             bail!("You declined to overwrite devenv.nix");
         }
+        std::fs::write(file, contents).expect("Failed to write file");
     }
     Ok(())
-}
-
-fn create_zip_from_directory() -> Result<Vec<u8>> {
-    let mut buffer = Vec::new();
-    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buffer));
-    let options =
-        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-
-    let git_ls_files = std::process::Command::new("git")
-        .args(&["ls-files"])
-        .output()
-        .expect("Failed to execute git ls-files");
-
-    if !git_ls_files.status.success() {
-        bail!("Failed to execute git ls-files");
-    }
-
-    let files = String::from_utf8(git_ls_files.stdout)
-        .expect("Failed to parse git ls-files output")
-        .lines()
-        .map(|s| s.to_owned())
-        .collect::<Vec<_>>();
-
-    for file in files {
-        let file_path = std::path::Path::new(&file);
-        if file_path.is_file() {
-            zip.start_file(&file, options).into_diagnostic()?;
-            let mut file = std::fs::File::open(file_path).into_diagnostic()?;
-            let mut contents = Vec::new();
-            file.read_to_end(&mut contents).into_diagnostic()?;
-            zip.write_all(&contents).into_diagnostic()?;
-        } else if file_path.is_dir() {
-            let dir_path = file_path.to_str().unwrap();
-            zip.add_directory(dir_path, options).into_diagnostic()?;
-        }
-    }
-
-    zip.finish().into_diagnostic()?;
-    Ok(buffer)
 }
 
 #[derive(Deserialize)]

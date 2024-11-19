@@ -41,4 +41,5 @@ tracing.workspace = true
 which.workspace = true
 whoami.workspace = true
 xdg.workspace = true
-zip.workspace = true
+tokio-tar.workspace = true
+tokio-util = { version = "0.7.12", features = ["io"] }
