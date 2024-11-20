@@ -176,10 +176,18 @@ pub enum Commands {
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
     Generate {
-        description: Option<String>,
+        #[arg(num_args=0.., trailing_var_arg = true)]
+        description: Vec<String>,
 
         #[clap(long, default_value = "https://generate.devenv.sh")]
         host: String,
+
+        #[arg(
+            long,
+            help = "Paths to exclude during generation.",
+            value_name = "PATH"
+        )]
+        excludes: Vec<PathBuf>,
 
         // https://consoledonottrack.com/
         #[clap(long, env = "DO_NOT_TRACK", action = clap::ArgAction::SetTrue)]

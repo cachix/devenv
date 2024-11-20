@@ -134,8 +134,22 @@ async fn main() -> Result<()> {
         Commands::Generate {
             description,
             host,
+            excludes,
             disable_telemetry,
-        } => devenv.generate(description, &host, disable_telemetry).await,
+        } => {
+            devenv
+                .generate(
+                    if description.is_empty() {
+                        None
+                    } else {
+                        Some(description.join(" "))
+                    },
+                    &host,
+                    excludes,
+                    disable_telemetry,
+                )
+                .await
+        }
         Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
         Commands::Info {} => devenv.info().await,

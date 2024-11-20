@@ -43,3 +43,5 @@ whoami.workspace = true
 xdg.workspace = true
 tokio-tar.workspace = true
 tokio-util = { version = "0.7.12", features = ["io"] }
+similar = "2.6.0"
+binaryornot = "1.0.0"

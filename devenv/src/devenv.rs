@@ -8,6 +8,7 @@ use nix::sys::signal;
 use nix::unistd::Pid;
 use serde::Deserialize;
 use sha2::Digest;
+use similar::{ChangeTag, TextDiff};
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
@@ -158,14 +159,6 @@ impl Devenv {
             std::fs::create_dir_all(&target).expect("Failed to create target directory");
         }
 
-        // fails if any of the required files already exists
-        for filename in REQUIRED_FILES {
-            let file_path = target.join(filename);
-            if file_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
-                bail!("File already exists {}", file_path.display());
-            }
-        }
-
         for filename in REQUIRED_FILES {
             self.logger.info(&format!("Creating {}", filename));
 
@@ -184,7 +177,15 @@ impl Devenv {
                     .and_then(|mut file| file.write_all(path.contents()))
                     .expect("Failed to append to existing file");
             } else {
-                std::fs::write(&target_path, path.contents()).expect("Failed to write file");
+                if target_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
+                    if let Some(utf8_contents) = path.contents_utf8() {
+                        confirm_overwrite(&target_path, utf8_contents.to_string())?;
+                    } else {
+                        bail!("Failed to read file contents as UTF-8");
+                    }
+                } else {
+                    std::fs::write(&target_path, path.contents()).expect("Failed to write file");
+                }
             }
         }
 
@@ -205,6 +206,7 @@ impl Devenv {
         &mut self,
         description: Option<String>,
         host: &str,
+        excludes: Vec<PathBuf>,
         disable_telemetry: bool,
     ) -> Result<()> {
         // TODO: get nixpkgs revision and devenv revision
@@ -238,6 +240,7 @@ impl Devenv {
                 let files = String::from_utf8_lossy(&git_output.stdout)
                     .split('\0')
                     .filter(|s| !s.is_empty())
+                    .filter(|s| !binaryornot::is_binary(s).unwrap_or(false))
                     .map(PathBuf::from)
                     .collect::<Vec<_>>();
 
@@ -271,7 +274,7 @@ impl Devenv {
         let tar_task = async {
             if let (Some(mut builder), Some(files)) = (body_sender, body) {
                 for path in files {
-                    if path.is_file() {
+                    if path.is_file() && !excludes.iter().any(|exclude| path.starts_with(exclude)) {
                         builder.append_path(&path).await?;
                     }
                 }
@@ -290,16 +293,21 @@ impl Devenv {
                 .await
                 .unwrap_or_else(|_| "No error details available".to_string());
             bail!(
-                "Server failed to generate devenv.nix and devenv.yaml (HTTP {}): {}",
+                "Failed to generate (HTTP {}): {}",
                 &status.as_u16(),
-                error_text
+                match serde_json::from_str::<serde_json::Value>(error_text)
+                    .map(|json| json["message"].as_str().unwrap_or(error_text))
+                {
+                    Ok(message) => message,
+                    Err(_) => error_text,
+                }
             );
         }
 
         let response_json: GenerateResponse = response.json().await.expect("Failed to parse JSON.");
 
-        confirm_overwrite("devenv.nix", response_json.devenv_nix)?;
-        confirm_overwrite("devenv.yaml", response_json.devenv_yaml)?;
+        confirm_overwrite(Path::new("devenv.nix"), response_json.devenv_nix)?;
+        confirm_overwrite(Path::new("devenv.yaml"), response_json.devenv_yaml)?;
 
         self.logger.info(
             &indoc::formatdoc!("
@@ -971,20 +979,43 @@ impl Devenv {
     }
 }
 
-fn confirm_overwrite(file: &str, contents: String) -> Result<()> {
+fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
     if std::fs::metadata(file).is_ok() {
+        // first output the old version and propose new changes
+        let before = std::fs::read_to_string(file).expect("Failed to read file");
+
+        let diff = TextDiff::from_lines(&before, &contents);
+        let mut changed = false;
+
+        println!("Changes that will be made to {}:", file.to_string_lossy());
+        for change in diff.iter_all_changes() {
+            let sign = match change.tag() {
+                ChangeTag::Delete => "-",
+                ChangeTag::Insert => "+",
+                ChangeTag::Equal => " ",
+            };
+            changed = changed || sign == "+" || sign == "-";
+            print!("{}{}", sign, change);
+        }
+
+        if !changed {
+            println!("No changes needed in {}", file.to_string_lossy());
+            return Ok(());
+        }
+
         let confirm = dialoguer::Confirm::new()
             .with_prompt(format!(
                 "{} already exists. Do you want to overwrite it?",
-                file
+                file.to_string_lossy()
             ))
             .interact()
-            .expect("");
+            .into_diagnostic()?;
 
-        if !confirm {
-            bail!("You declined to overwrite devenv.nix");
+        if confirm {
+            std::fs::write(file, contents).into_diagnostic()?;
         }
-        std::fs::write(file, contents).expect("Failed to write file");
+    } else {
+        std::fs::write(file, contents).into_diagnostic()?;
     }
     Ok(())
 }
