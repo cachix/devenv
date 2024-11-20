@@ -70994,6 +70994,161 @@ Port for the Web UI.
 
 
 
+## services.tideways.enable
+
+
+
+Whether to enable Tideways profiler daemon
+
+It automatically installs Tideways PHP extension.
+.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
+
+
+## services.tideways.apiKey
+
+
+
+Sets the API-Key for the Tideways Daemon.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
+
+
+## services.tideways.cliPackage
+
+
+
+Which package of tideways-cli to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.tideways-cli `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
+
+
+## services.tideways.daemonPackage
+
+
+
+Which package of tideways-daemon to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.tideways-daemon `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
+
+
+## services.tideways.environment
+
+
+
+Sets the Environment for Tideways Daemon.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "devenv" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
+
+
+## services.tideways.profilingSpace
+
+
+
+When the profiling space is enabled, the default monitoring will be disabled.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
+
+
+## services.tideways.service
+
+
+
+Sets the Service name for Tideways Daemon.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
+
+
 ## services.trafficserver.enable
 
 
