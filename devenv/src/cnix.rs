@@ -461,25 +461,31 @@ impl<'a> Nix<'a> {
                 Ok(cachix_caches) => {
                     push_cache = cachix_caches.caches.push.clone();
                     // handle cachix.pull
-                    pull_caches = cachix_caches
-                        .caches
-                        .pull
-                        .iter()
-                        .map(|cache| format!("https://{}.cachix.org", cache))
-                        .collect::<Vec<String>>()
-                        .join(" ");
-                    final_args.extend_from_slice(&["--option", "extra-substituters", &pull_caches]);
-                    known_keys = cachix_caches
-                        .known_keys
-                        .values()
-                        .cloned()
-                        .collect::<Vec<String>>()
-                        .join(" ");
-                    final_args.extend_from_slice(&[
-                        "--option",
-                        "extra-trusted-public-keys",
-                        &known_keys,
-                    ]);
+                    if !cachix_caches.caches.pull.is_empty() {
+                        pull_caches = cachix_caches
+                            .caches
+                            .pull
+                            .iter()
+                            .map(|cache| format!("https://{}.cachix.org", cache))
+                            .collect::<Vec<String>>()
+                            .join(" ");
+                        final_args.extend_from_slice(&[
+                            "--option",
+                            "extra-substituters",
+                            &pull_caches,
+                        ]);
+                        known_keys = cachix_caches
+                            .known_keys
+                            .values()
+                            .cloned()
+                            .collect::<Vec<String>>()
+                            .join(" ");
+                        final_args.extend_from_slice(&[
+                            "--option",
+                            "extra-trusted-public-keys",
+                            &known_keys,
+                        ]);
+                    }
                 }
             }
         }
