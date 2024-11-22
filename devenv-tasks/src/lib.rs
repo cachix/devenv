@@ -1215,7 +1215,7 @@ mod test {
                     },
                     {
                         "name": "myapp:task_3",
-                         "after": ["myapp:task_1"],
+                        "after": ["myapp:task_1"],
                         "command": script3.to_str().unwrap()
                     },
                     {
