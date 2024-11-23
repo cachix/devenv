@@ -40,7 +40,7 @@ in
       };
       "devenv:git-hooks:run" = {
         exec = "pre-commit run -a";
-        before = [ "devenv:enterShell" ];
+        before = [ "devenv:enterTest" ];
       };
     };
   };
