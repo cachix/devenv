@@ -233,7 +233,7 @@
               modules = [
                 (self.modules + /top-level.nix)
                 ({ config, ... }: {
-                  packages = [
+                  packages = pkgs.lib.mkBefore [
                     (mkDevShellPackage config pkgs)
                   ];
                   devenv.warnOnNewVersion = false;
