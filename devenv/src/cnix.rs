@@ -646,7 +646,7 @@ impl<'a> Nix<'a> {
                     .trusted;
                 if trusted.is_none() {
                     self.logger.warn(
-                    "You're using very old version of Nix, please upgrade and restart nix-daemon.",
+                    "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
                 );
                 }
                 let restart_command = if cfg!(target_os = "linux") {
@@ -676,64 +676,78 @@ impl<'a> Nix<'a> {
                 if trusted == Some(0) {
                     if !Path::new("/etc/NIXOS").exists() {
                         self.logger.error(&indoc::formatdoc!(
-                        "You're not a trusted user of the Nix store. You have the following options:
+                        "Failed to set up binary caches.
 
-                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
+                        devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
 
-                        trusted-users = root {}
+                        You have two options:
 
-                        Restart nix-daemon with:
+                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf to allow devenv to set up the caches for you:
 
-                          $ {restart_command}
+                               trusted-users = root {}
 
-                        b) Add binary caches to /etc/nix/nix.conf yourself:
+                           Then restart the nix-daemon:
 
-                        extra-substituters = {}
-                        extra-trusted-public-keys = {}
+                               $ {restart_command}
 
-                        And disable automatic cache configuration in `devenv.nix`:
+                        b) Add the binary caches to /etc/nix/nix.conf yourself:
 
-                        {{
-                            cachix.enable = false;
-                        }}
+                             extra-substituters = {}
+                             extra-trusted-public-keys = {}
+
+                           Then disable automatic cache configuration in `devenv.nix`:
+
+                           {{
+                               cachix.enable = false;
+                           }}
                     ", whoami::username()
                     , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                     , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
                     ));
                     } else {
                         self.logger.error(&indoc::formatdoc!(
-                        "You're not a trusted user of the Nix store. You have the following options:
+                        "Failed to set up binary caches.
 
-                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix for devenv to manage caches for you.
+                        devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
 
-                        {{
-                            nix.extraOptions = ''
-                                trusted-users = root {}
-                            '';
-                        }}
+                        You have two options:
 
-                        b) Add binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
-                        {{
-                            nix.extraOptions = ''
-                                extra-substituters = {}
-                                extra-trusted-public-keys = {}
-                            '';
-                        }}
+                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix to let devenv set up the caches for you:
 
-                        Disable automatic cache configuration in `devenv.nix`:
+                           {{
+                               nix.extraOptions = ''
+                                   trusted-users = root {}
+                               '';
+                           }}
 
-                        {{
-                            cachix.enable = false;
-                        }}
+                           Rebuild your system:
 
-                        Lastly, rebuild your system:
+                               $ sudo nixos-rebuild switch
 
-                          $ sudo nixos-rebuild switch
+                        b) Add the binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
+
+                           {{
+                               nix.extraOptions = ''
+                                   extra-substituters = {}
+                                   extra-trusted-public-keys = {}
+                               '';
+                           }}
+
+                           Disable automatic cache configuration in `devenv.nix`:
+
+                           {{
+                               cachix.enable = false;
+                           }}
+
+                           Rebuild your system:
+
+                               $ sudo nixos-rebuild switch
                     ", whoami::username()
                     , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
                     , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
                     ));
                     }
+
                     bail!("You're not a trusted user of the Nix store.")
                 }
             }
