@@ -1,5 +1,6 @@
 use crate::{cli, config, log};
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use nix_conf_parser::NixConf;
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::cell::{Ref, RefCell};
@@ -588,6 +589,16 @@ impl<'a> Nix<'a> {
         Ok(cmd)
     }
 
+    async fn get_nix_config(&self) -> Result<NixConf> {
+        let options = Options {
+            logging: false,
+            ..self.options
+        };
+        let raw_conf = self.run_nix("nix", &["config", "show"], &options).await?;
+        let nix_conf = NixConf::parse_stdout(&raw_conf.stdout)?;
+        Ok(nix_conf)
+    }
+
     async fn get_cachix_caches(&self) -> Result<Ref<CachixCaches>> {
         if self.cachix_caches.borrow().is_none() {
             let no_logging = Options {
@@ -673,9 +684,43 @@ impl<'a> Nix<'a> {
                 )
                 .expect("Failed to write cachix caches to file");
 
+                // If the user is not a trusted user, we can't set up the caches for them.
+                // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
+                // If not, suggest actions to remedy the issue.
                 if trusted == Some(0) {
-                    if !Path::new("/etc/NIXOS").exists() {
-                        self.logger.error(&indoc::formatdoc!(
+                    let mut missing_caches = Vec::new();
+                    let mut missing_public_keys = Vec::new();
+
+                    if let Ok(nix_conf) = self.get_nix_config().await {
+                        let substituters = nix_conf
+                            .get("substituters")
+                            .map(|s| s.split_whitespace().collect::<Vec<_>>());
+
+                        if let Some(substituters) = substituters {
+                            for cache in caches.caches.pull.iter() {
+                                let cache_url = format!("https://{}.cachix.org", cache);
+                                if !substituters.iter().any(|s| s == &cache_url) {
+                                    missing_caches.push(cache_url);
+                                }
+                            }
+                        }
+
+                        let trusted_public_keys = nix_conf
+                            .get("trusted-public-keys")
+                            .map(|s| s.split_whitespace().collect::<Vec<_>>());
+
+                        if let Some(trusted_public_keys) = trusted_public_keys {
+                            for (_name, key) in caches.known_keys.iter() {
+                                if !trusted_public_keys.iter().any(|p| p == key) {
+                                    missing_public_keys.push(key.clone());
+                                }
+                            }
+                        }
+                    }
+
+                    if !missing_caches.is_empty() || !missing_public_keys.is_empty() {
+                        if !Path::new("/etc/NIXOS").exists() {
+                            self.logger.error(&indoc::formatdoc!(
                         "Failed to set up binary caches.
 
                         devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
@@ -701,11 +746,11 @@ impl<'a> Nix<'a> {
                                cachix.enable = false;
                            }}
                     ", whoami::username()
-                    , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
-                    , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
+                    , missing_caches.join(" ")
+                    , missing_public_keys.join(" ")
                     ));
-                    } else {
-                        self.logger.error(&indoc::formatdoc!(
+                        } else {
+                            self.logger.error(&indoc::formatdoc!(
                         "Failed to set up binary caches.
 
                         devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
@@ -743,12 +788,13 @@ impl<'a> Nix<'a> {
 
                                $ sudo nixos-rebuild switch
                     ", whoami::username()
-                    , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
-                    , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
+                    , missing_caches.join(" ")
+                    , missing_public_keys.join(" ")
                     ));
-                    }
+                        }
 
-                    bail!("You're not a trusted user of the Nix store.")
+                        bail!("You're not a trusted user of the Nix store.")
+                    }
                 }
             }
 

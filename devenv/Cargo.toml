@@ -12,6 +12,7 @@ default-run = "devenv"
 [dependencies]
 devenv-eval-cache.workspace = true
 devenv-tasks.workspace = true
+nix-conf-parser.workspace = true
 
 clap.workspace = true
 cli-table.workspace = true

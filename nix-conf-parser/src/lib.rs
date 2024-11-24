@@ -1,4 +1,15 @@
+/// Parse a nix.conf into an ordered map of key-value string pairs.
+///
+/// Closely follows the upstream implementation:
+/// https://github.com/NixOS/nix/blob/acb60fc3594edcc54dae9a10d2a0dc3f3b3be0da/src/libutil/config.cc#L104-L161
+///
+/// Only intended to work on the output of `nix config show`.
+/// Therefore, this intentionally leaves out:
+///   - includes and !includes
+///   - comments
+///   - formatting
 use indexmap::IndexMap;
+use miette::Diagnostic;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -7,17 +18,13 @@ pub struct NixConf {
 }
 
 impl NixConf {
+    pub fn parse_stdout(input: &[u8]) -> Result<Self, ParseError> {
+        let input = String::from_utf8_lossy(input);
+        Self::parse_str(&input)
+    }
+
     /// Parse a string into an ordered map of key-value string pairs.
-    ///
-    /// Closely follows the upstream implementation:
-    /// https://github.com/NixOS/nix/blob/acb60fc3594edcc54dae9a10d2a0dc3f3b3be0da/src/libutil/config.cc#L104-L161
-    ///
-    /// Only intended to work on the output of `nix config show`.
-    /// Therefore, this intentionally leaves out:
-    ///   - includes and !includes
-    ///   - comments
-    ///   - formatting
-    pub fn parse(input: &str) -> Result<Self, ParseError> {
+    pub fn parse_str(input: &str) -> Result<Self, ParseError> {
         let mut settings = IndexMap::new();
 
         for mut line in input.lines() {
@@ -65,7 +72,7 @@ impl NixConf {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Diagnostic, Error)]
 pub enum ParseError {
     #[error("illegal configuration line '{0}'")]
     IllegalConfiguration(String),
@@ -87,7 +94,7 @@ mod test {
             comment = foo # comment
             tab =	 foo 
         "#;
-        let nix_conf = NixConf::parse(input).unwrap();
+        let nix_conf = NixConf::parse_str(input).unwrap();
         assert_eq!(nix_conf.get("single"), Some(&"foo".into()));
         assert_eq!(nix_conf.get("space"), Some(&"foo bar".into()));
         assert_eq!(nix_conf.get("list"), Some(&"foo bar baz".into()));

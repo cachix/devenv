@@ -546,6 +546,7 @@ dependencies = [
  "indoc",
  "miette",
  "nix",
+ "nix-conf-parser",
  "petgraph",
  "regex",
  "reqwest",
@@ -1372,6 +1373,7 @@ name = "nix-conf-parser"
 version = "0.0.1"
 dependencies = [
  "indexmap",
+ "miette",
  "thiserror",
 ]
 

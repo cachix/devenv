@@ -13,6 +13,7 @@ devenv = { path = "devenv" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-tasks = { path = "devenv-tasks" }
+nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }
 
 ansiterm = "0.12.2"

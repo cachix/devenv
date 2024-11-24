@@ -6,4 +6,5 @@ license.workspace = true
 
 [dependencies]
 indexmap.workspace = true
+miette.workspace = true
 thiserror.workspace = true
