@@ -449,8 +449,8 @@ impl Tasks {
             }
         }
 
-        for (dep_idx, idx) in edges_to_add {
-            self.graph.add_edge(dep_idx, idx, ());
+        for (from, to) in edges_to_add {
+            self.graph.update_edge(from, to, ());
         }
 
         if unresolved.is_empty() {
@@ -479,10 +479,7 @@ impl Tasks {
                 node_map.insert(node, new_node);
 
                 // Add dependencies to visit
-                for neighbor in self
-                    .graph
-                    .neighbors_directed(node, petgraph::Direction::Incoming)
-                {
+                for neighbor in self.graph.neighbors_undirected(node) {
                     to_visit.push(neighbor);
                 }
             }
@@ -1148,15 +1145,9 @@ mod test {
 
     #[tokio::test]
     async fn test_before_tasks() -> Result<(), Error> {
-        let script1 = create_script(
-            "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
-        )?;
-        let script2 = create_script(
-            "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
-        )?;
-        let script3 = create_script(
-            "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
-        )?;
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
 
         let tasks = Tasks::new(
             Config::try_from(json!({
@@ -1165,7 +1156,7 @@ mod test {
                     {
                         "name": "myapp:task_1",
                         "command": script1.to_str().unwrap(),
-                        "after": ["myapp:task_3"]
+                        "before": ["myapp:task_2", "myapp:task_3"]
                     },
                     {
                         "name": "myapp:task_2",
@@ -1191,7 +1182,186 @@ mod test {
                 (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
                 (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
                 (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
-            ] if name1 == "myapp:task_2" && name2 == "myapp:task_3" && name3 == "myapp:task_1"
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_after_tasks() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                        "after": ["myapp:task_3", "myapp:task_2"]
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "after": ["myapp:task_3"],
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "command": script3.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_3" && name2 == "myapp:task_2" && name3 == "myapp:task_1"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_before_and_after_tasks() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "after": ["myapp:task_1"],
+                        "command": script3.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "before": ["myapp:task_3"],
+                        "after": ["myapp:task_1"],
+                        "command": script2.to_str().unwrap()
+                    },
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+        );
+        Ok(())
+    }
+
+    // Test that tasks indirectly linked to the root are picked up and run.
+    #[tokio::test]
+    async fn test_transitive_dependencies() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_3"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "after": ["myapp:task_1"],
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "after": ["myapp:task_2"],
+                        "command": script3.to_str().unwrap()
+                    },
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+        );
+        Ok(())
+    }
+
+    // Ensure that tasks before and after a root are run in the correct order.
+    #[tokio::test]
+    async fn test_non_root_before_and_after() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_2"],
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                        "before": [ "myapp:task_2"]
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "after": ["myapp:task_2"],
+                        "command": script3.to_str().unwrap()
+                    },
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
         );
         Ok(())
     }
@@ -1357,7 +1527,6 @@ fi
         Ok(())
     }
 
-    #[cfg(test)]
     async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
         let mut result = Vec::new();
         for index in &tasks.tasks_order {
@@ -1367,7 +1536,6 @@ fi
         result
     }
 
-    #[cfg(test)]
     fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
         let mut temp_file = tempfile::Builder::new()
             .prefix("script")
@@ -1378,5 +1546,11 @@ fi
             .as_file_mut()
             .set_permissions(fs::Permissions::from_mode(0o755))?;
         Ok(temp_file.into_temp_path())
+    }
+
+    fn create_basic_script(tag: &str) -> std::io::Result<tempfile::TempPath> {
+        create_script(&format!(
+            "#!/bin/sh\necho 'Task {tag} is running' && sleep 0.1 && echo 'Task {tag} completed'"
+        ))
     }
 }

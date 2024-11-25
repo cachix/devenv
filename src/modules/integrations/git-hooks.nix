@@ -34,10 +34,14 @@ in
     packages = lib.mkAfter ([ config.git-hooks.package ] ++ (config.git-hooks.enabledPackages or [ ]));
     tasks = {
       # TODO: split installation script into status + exec
-      "devenv:git-hooks:install".exec = config.git-hooks.installationScript;
-      "devenv:git-hooks:run".exec = "pre-commit run -a";
-      "devenv:enterShell".after = [ "devenv:git-hooks:install" ];
-      "devenv:enterTest".after = [ "devenv:git-hooks:run" ];
+      "devenv:git-hooks:install" = {
+        exec = config.git-hooks.installationScript;
+        before = [ "devenv:enterShell" ];
+      };
+      "devenv:git-hooks:run" = {
+        exec = "pre-commit run -a";
+        before = [ "devenv:enterTest" ];
+      };
     };
   };
 }
