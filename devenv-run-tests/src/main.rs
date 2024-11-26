@@ -2,8 +2,8 @@ use clap::Parser;
 use devenv::log::Level;
 use devenv::log::Logger;
 use devenv::{Devenv, DevenvOptions};
-use std::fs;
 use std::path::PathBuf;
+use std::{env, fs};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -97,27 +97,26 @@ async fn run_tests_in_directory(
                 };
                 let mut devenv = Devenv::new(options).await;
 
-                // A script to patch files in the working directory before the shell.
-                let patch_script = ".patch.sh";
-                let patch_script_path = path.join(patch_script);
-
-                // A script to run inside the shell before the test.
-                let setup_script = ".setup.sh";
-                let setup_script_path = path.join(setup_script);
-
                 println!("  Running {}", dir_name);
 
+                env::set_current_dir(path).expect("failed to set current dir");
+
+                // A script to patch files in the working directory before the shell.
+                let patch_script = ".patch.sh";
+
                 // Run .patch.sh if it exists
-                if patch_script_path.exists() {
+                if PathBuf::from(patch_script).exists() {
                     println!("    Running {patch_script}");
                     let _ = std::process::Command::new("bash")
-                        .arg("./.patch.sh")
-                        .current_dir(path)
+                        .arg(patch_script)
                         .status()?;
                 }
 
+                // A script to run inside the shell before the test.
+                let setup_script = ".setup.sh";
+
                 // Run .setup.sh if it exists
-                if setup_script_path.exists() {
+                if PathBuf::from(setup_script).exists() {
                     println!("    Running {setup_script}");
                     devenv
                         .shell(&Some(format!("./{setup_script}")), &[], false)
@@ -131,6 +130,9 @@ async fn run_tests_in_directory(
                     passed: status.is_ok(),
                 };
                 test_results.push(result);
+
+                // Restore the current directory
+                env::set_current_dir(&cwd).expect("failed to set current dir");
             }
         }
     }

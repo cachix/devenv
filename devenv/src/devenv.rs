@@ -174,7 +174,10 @@ impl Devenv {
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(&target_path)
-                    .and_then(|mut file| file.write_all(path.contents()))
+                    .and_then(|mut file| {
+                        file.write_all(b"\n")?;
+                        file.write_all(path.contents())
+                    })
                     .expect("Failed to append to existing file");
             } else {
                 if target_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {

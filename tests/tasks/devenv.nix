@@ -1,9 +1,16 @@
 {
   tasks = {
-    "myapp:shell".exec = "touch shell";
-    "devenv:enterShell".after = [ "myapp:shell" ];
-    "myapp:test".exec = "touch test";
+    "myapp:shell" = {
+      exec = "touch shell";
+      before = [ "devenv:enterShell" ];
+    };
+
+    "myapp:test" = {
+      exec = "touch test";
+    };
+    # Test specifying "after"
     "devenv:enterTest".after = [ "myapp:test" ];
+
     "example:statusIgnored" = {
       before = [ "devenv:enterTest" ];
       exec = "touch ./should-not-exist";

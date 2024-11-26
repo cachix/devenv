@@ -246,7 +246,7 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Whether to include the Flutter tools.
+        Whether to include the React Native tools.
       '';
     };
   };

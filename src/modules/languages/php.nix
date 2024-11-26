@@ -317,7 +317,8 @@ in
 
       languages.php.extensions = lib.optionals config.services.rabbitmq.enable [ "amqp" ]
         ++ lib.optionals config.services.redis.enable [ "redis" ]
-        ++ lib.optionals config.services.blackfire.enable [ "blackfire" ];
+        ++ lib.optionals config.services.blackfire.enable [ "blackfire" ]
+        ++ lib.optionals config.services.tideways.enable [ "tideways" ];
 
       languages.php.ini = ''
         ${lib.optionalString config.services.mysql.enable ''
