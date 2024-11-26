@@ -134,7 +134,7 @@ async fn main() -> Result<()> {
         Commands::Generate {
             description,
             host,
-            excludes,
+            exclude,
             disable_telemetry,
         } => {
             devenv
@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
                         Some(description.join(" "))
                     },
                     &host,
-                    excludes,
+                    exclude,
                     disable_telemetry,
                 )
                 .await

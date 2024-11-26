@@ -187,7 +187,7 @@ pub enum Commands {
             help = "Paths to exclude during generation.",
             value_name = "PATH"
         )]
-        excludes: Vec<PathBuf>,
+        exclude: Vec<PathBuf>,
 
         // https://consoledonottrack.com/
         #[clap(long, env = "DO_NOT_TRACK", action = clap::ArgAction::SetTrue)]

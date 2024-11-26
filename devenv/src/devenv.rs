@@ -209,7 +209,7 @@ impl Devenv {
         &mut self,
         description: Option<String>,
         host: &str,
-        excludes: Vec<PathBuf>,
+        exclude: Vec<PathBuf>,
         disable_telemetry: bool,
     ) -> Result<()> {
         // TODO: get nixpkgs revision and devenv revision
@@ -277,7 +277,7 @@ impl Devenv {
         let tar_task = async {
             if let (Some(mut builder), Some(files)) = (body_sender, body) {
                 for path in files {
-                    if path.is_file() && !excludes.iter().any(|exclude| path.starts_with(exclude)) {
+                    if path.is_file() && !exclude.iter().any(|exclude| path.starts_with(exclude)) {
                         builder.append_path(&path).await?;
                     }
                 }
@@ -298,11 +298,12 @@ impl Devenv {
             bail!(
                 "Failed to generate (HTTP {}): {}",
                 &status.as_u16(),
-                match serde_json::from_str::<serde_json::Value>(error_text)
-                    .map(|json| json["message"].unwrap_or(error_text))
-                {
-                    Ok(message) => message,
-                    Err(_) => error_text,
+                match serde_json::from_str::<serde_json::Value>(error_text) {
+                    Ok(json) => json["message"]
+                        .as_str()
+                        .map(String::from)
+                        .unwrap_or_else(|| error_text.clone()),
+                    Err(_) => error_text.clone(),
                 }
             );
         }
