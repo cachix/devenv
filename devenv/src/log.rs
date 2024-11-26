@@ -52,18 +52,17 @@ pub fn init_tracing(level: Level) {
         tracing_subscriber::fmt::layer()
             .with_writer(stderr)
             .with_ansi(ansi)
-            .with_filter(filter)
             .boxed()
     } else {
         tracing_subscriber::fmt::layer()
             .event_format(DevenvFormat::default())
             .with_writer(stderr)
             .with_ansi(ansi)
-            .with_filter(filter)
             .boxed()
     };
 
     tracing_subscriber::registry()
+        .with(filter)
         .with(stderr_layer)
         .with(devenv_layer) // The order is crucial
         .init();
