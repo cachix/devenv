@@ -989,22 +989,15 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
         let before = std::fs::read_to_string(file).expect("Failed to read file");
 
         let diff = TextDiff::from_lines(&before, &contents);
-        let mut changed = false;
 
-        println!("Changes that will be made to {}:", file.to_string_lossy());
+        println!("\nChanges that will be made to {}:", file.to_string_lossy());
         for change in diff.iter_all_changes() {
             let sign = match change.tag() {
-                ChangeTag::Delete => "-",
-                ChangeTag::Insert => "+",
+                ChangeTag::Delete => "\x1b[31m-\x1b[0m",
+                ChangeTag::Insert => "\x1b[32m+\x1b[0m",
                 ChangeTag::Equal => " ",
             };
-            changed = changed || sign == "+" || sign == "-";
             print!("{}{}", sign, change);
-        }
-
-        if !changed {
-            println!("No changes needed in {}", file.to_string_lossy());
-            return Ok(());
         }
 
         let confirm = dialoguer::Confirm::new()
