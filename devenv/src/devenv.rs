@@ -296,7 +296,7 @@ impl Devenv {
                 "Failed to generate (HTTP {}): {}",
                 &status.as_u16(),
                 match serde_json::from_str::<serde_json::Value>(error_text)
-                    .map(|json| json["message"].as_str().unwrap_or(error_text))
+                    .map(|json| json["message"].unwrap_or(error_text))
                 {
                     Ok(message) => message,
                     Err(_) => error_text,
