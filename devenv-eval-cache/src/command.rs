@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
+use tracing::{debug, info, trace};
 
 use crate::{
     db, hash,
@@ -284,7 +285,7 @@ async fn query_cached_output(
 
         let mut should_refresh = false;
 
-        let file_input_hash = hash::digest(
+        let new_input_hash = hash::digest(
             &files
                 .iter()
                 .map(|f| f.content_hash.clone())
@@ -292,7 +293,12 @@ async fn query_cached_output(
         );
 
         // Hash of input hashes do not match
-        if cmd.input_hash != file_input_hash {
+        if cmd.input_hash != new_input_hash {
+            debug!(
+                old_hash = cmd.input_hash,
+                new_hash = new_input_hash,
+                "Input hashes do not match, refreshing command",
+            );
             should_refresh = true;
         }
 
@@ -330,6 +336,8 @@ async fn query_cached_output(
         if should_refresh {
             Ok(None)
         } else {
+            trace!("Command has not been modified, returning cached output");
+
             db::update_command_updated_at(pool, cmd.id)
                 .await
                 .map_err(CommandError::Sqlx)?;
