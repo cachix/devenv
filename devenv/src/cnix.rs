@@ -383,13 +383,12 @@ impl<'a> Nix<'a> {
                     if let Some(log) = log.filter_by_level(target_log_level) {
                         if let Some(msg) = log.get_msg() {
                             use devenv_eval_cache::internal_log::InternalLog;
-                            // TODO: don't use macro
                             match log {
                                 InternalLog::Msg { level, .. } if *level == Verbosity::Error => {
                                     error!("{msg}");
                                 }
                                 _ => info!("{msg}"),
-                            }
+                            };
                         }
                     }
                 });
