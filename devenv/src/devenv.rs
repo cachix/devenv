@@ -1,4 +1,4 @@
-use super::{cli, cnix, config, tasks};
+use super::{cli, cnix, config, log, tasks};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -841,10 +841,13 @@ impl Devenv {
 
     pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
         self.assemble(false)?;
-        // TODO: figure out logging bool usage
+
+        if !logging {
+            log::disable_user_messages();
+        }
 
         let gc_root = self.devenv_dot_gc.join("shell");
-        let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell");
+        let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
         std::fs::write(
@@ -856,6 +859,10 @@ impl Devenv {
                 .join("\n"),
         )
         .expect("Failed to write input-paths.txt");
+
+        if !logging {
+            log::enable_user_messages();
+        }
 
         Ok(DevEnv {
             output: env.stdout,
