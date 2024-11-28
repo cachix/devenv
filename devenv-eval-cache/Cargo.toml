@@ -17,6 +17,7 @@ serde_repr.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tempdir.workspace = true

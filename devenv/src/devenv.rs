@@ -15,6 +15,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use tracing::{debug, error, info, info_span, warn, Instrument};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -28,7 +29,6 @@ const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
-    pub logger: Option<log::Logger>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
 }
@@ -36,9 +36,6 @@ pub struct DevenvOptions {
 pub struct Devenv {
     pub config: config::Config,
     pub global_options: cli::GlobalOptions,
-
-    logger: log::Logger,
-    log_progress: log::LogProgressCreator,
 
     nix: cnix::Nix<'static>,
 
@@ -89,19 +86,6 @@ impl Devenv {
 
         let global_options = options.global_options.unwrap_or_default();
 
-        let level = if global_options.verbose {
-            log::Level::Debug
-        } else {
-            log::Level::Info
-        };
-        let logger = options.logger.unwrap_or_else(|| log::Logger::new(level));
-
-        let log_progress = if global_options.quiet {
-            log::LogProgressCreator::Silent
-        } else {
-            log::LogProgressCreator::Logging
-        };
-
         xdg_dirs
             .create_data_directory(Path::new("devenv"))
             .expect("Failed to create DEVENV_HOME directory");
@@ -110,7 +94,6 @@ impl Devenv {
         std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
 
         let nix = cnix::Nix::new(
-            logger.clone(),
             options.config.clone(),
             global_options.clone(),
             cachix_trusted_keys,
@@ -125,8 +108,6 @@ impl Devenv {
         Self {
             config: options.config,
             global_options,
-            logger,
-            log_progress,
             devenv_root,
             devenv_dotfile,
             devenv_dot_gc,
@@ -167,7 +148,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            self.logger.info(&format!("Creating {}", filename));
+            info!("Creating {}", filename);
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -211,7 +192,7 @@ impl Devenv {
     }
 
     pub async fn print_dev_env(&mut self, json: bool) -> Result<()> {
-        let env = self.get_dev_environment(json, false).await?;
+        let env = self.get_dev_environment(json).await?;
         print!(
             "{}",
             String::from_utf8(env.output).expect("Failed to convert env to utf-8")
@@ -242,7 +223,7 @@ impl Devenv {
         args: &[String],
     ) -> Result<Vec<String>> {
         self.assemble(false)?;
-        let env = self.get_dev_environment(false, true).await?;
+        let env = self.get_dev_environment(false).await?;
 
         let mut develop_args = vec![
             "develop",
@@ -281,7 +262,7 @@ impl Devenv {
                 develop_args.extend_from_slice(&args);
             }
             None => {
-                self.logger.info("Entering shell");
+                info!("Entering shell");
             }
         };
 
@@ -289,14 +270,16 @@ impl Devenv {
     }
 
     pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
+        self.assemble(false)?;
+
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
             None => "Updating devenv.lock".to_string(),
         };
-        let _logprogress = self.log_progress.with_newline(&msg);
-        self.assemble(false)?;
 
-        self.nix.update(input_name).await?;
+        let span = info_span!("update", devenv.user_message = msg);
+        self.nix.update(input_name).instrument(span).await?;
+
         Ok(())
     }
 
@@ -305,21 +288,26 @@ impl Devenv {
             bail!("Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430");
         }
 
-        let _logprogress = self
-            .log_progress
-            .with_newline(&format!("Building {name} container"));
+        let span = info_span!(
+            "building_container",
+            devenv.user_message = format!("Building {name} container")
+        );
 
-        self.assemble(false)?;
+        async move {
+            self.assemble(false)?;
 
-        let container_store_path = self
-            .nix
-            .build(&[&format!("devenv.containers.{name}.derivation")])
-            .await?;
-        let container_store_path = container_store_path[0]
-            .to_str()
-            .expect("Failed to get container store path");
-        println!("{}", &container_store_path);
-        Ok(container_store_path.to_string())
+            let container_store_path = self
+                .nix
+                .build(&[&format!("devenv.containers.{name}.derivation")])
+                .await?;
+            let container_store_path = container_store_path[0]
+                .to_str()
+                .expect("Failed to get container store path");
+            println!("{}", &container_store_path);
+            Ok(container_store_path.to_string())
+        }
+        .instrument(span)
+        .await
     }
 
     pub async fn container_copy(
@@ -330,40 +318,43 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        let _logprogress = self
-            .log_progress
-            .without_newline(&format!("Copying {name} container"));
+        // TODO: No newline
+        let span = info_span!(
+            "copying_container",
+            devenv.user_message = format!("Copying {name} container")
+        );
 
-        let copy_script = self
-            .nix
-            .build(&[&format!("devenv.containers.{name}.copyScript")])
-            .await?;
-        let copy_script = &copy_script[0];
-        let copy_script_string = &copy_script.to_string_lossy();
+        async move {
+            let copy_script = self
+                .nix
+                .build(&[&format!("devenv.containers.{name}.copyScript")])
+                .await?;
+            let copy_script = &copy_script[0];
+            let copy_script_string = &copy_script.to_string_lossy();
 
-        let copy_args = [
-            spec,
-            registry.unwrap_or("false").to_string(),
-            copy_args.join(" "),
-        ];
+            let copy_args = [
+                spec,
+                registry.unwrap_or("false").to_string(),
+                copy_args.join(" "),
+            ];
 
-        self.logger.info(&format!(
-            "Running {copy_script_string} {}",
-            copy_args.join(" ")
-        ));
+            info!("Running {copy_script_string} {}", copy_args.join(" "));
 
-        let status = std::process::Command::new(copy_script)
-            .args(copy_args)
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .expect("Failed to run copy script");
+            let status = std::process::Command::new(copy_script)
+                .args(copy_args)
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .status()
+                .expect("Failed to run copy script");
 
-        if !status.success() {
-            bail!("Failed to copy container")
-        } else {
-            Ok(())
+            if !status.success() {
+                bail!("Failed to copy container")
+            } else {
+                Ok(())
+            }
         }
+        .instrument(span)
+        .await
     }
 
     pub async fn container_run(
@@ -373,30 +364,34 @@ impl Devenv {
         registry: Option<&str>,
     ) -> Result<()> {
         if registry.is_some() {
-            self.logger
-                .warn("Ignoring --registry flag when running container");
+            warn!("Ignoring --registry flag when running container");
         };
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        let _logprogress = self
-            .log_progress
-            .without_newline(&format!("Running {name} container"));
+        let span = info_span!(
+            "running_container",
+            devenv.user_message = format!("Running {name} container")
+        );
 
-        let run_script = self
-            .nix
-            .build(&[&format!("devenv.containers.{name}.dockerRun")])
-            .await?;
+        async move {
+            let run_script = self
+                .nix
+                .build(&[&format!("devenv.containers.{name}.dockerRun")])
+                .await?;
 
-        let status = std::process::Command::new(&run_script[0])
-            .status()
-            .expect("Failed to run container script");
+            let status = std::process::Command::new(&run_script[0])
+                .status()
+                .expect("Failed to run container script");
 
-        if !status.success() {
-            bail!("Failed to run container")
-        } else {
-            Ok(())
+            if !status.success() {
+                bail!("Failed to run container")
+            } else {
+                Ok(())
+            }
         }
+        .instrument(span)
+        .await
     }
 
     pub fn repl(&mut self) -> Result<()> {
@@ -408,38 +403,43 @@ impl Devenv {
         let start = std::time::Instant::now();
 
         let (to_gc, removed_symlinks) = {
-            let _logprogress = self.log_progress.without_newline(&format!(
-                "Removing non-existing symlinks in {} ...",
-                &self.devenv_home_gc.display()
-            ));
-            cleanup_symlinks(&self.devenv_home_gc)
+            // TODO: No newline
+            let span = info_span!(
+                "cleanup_symlinks",
+                devenv.user_message = format!(
+                    "Removing non-existing symlinks in {} ...",
+                    &self.devenv_home_gc.display()
+                )
+            );
+            span.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
         };
         let to_gc_len = to_gc.len();
 
-        self.logger
-            .info(&format!("Found {} active environments.", to_gc_len));
-        self.logger.info(&format!(
+        info!("Found {} active environments.", to_gc_len);
+        info!(
             "Deleted {} dangling environments (most likely due to previous GC).",
             removed_symlinks.len()
-        ));
+        );
 
         {
-            let _logprogress = self
-                .log_progress
-                .with_newline("Running garbage collection (this process will take some time) ...");
-            self.logger.warn("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
-            self.nix.gc(to_gc)?;
+            let span = info_span!(
+                "nix_gc",
+                devenv.user_message =
+                    "Running garbage collection (this process will take some time) ..."
+            );
+            info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
+            span.in_scope(|| self.nix.gc(to_gc))?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
         let end = std::time::Instant::now();
 
-        eprintln!();
-        self.logger.info(&format!(
-            "Done. Successfully removed {} symlinks in {}s.",
+        // TODO: newline before or after
+        info!(
+            "\nDone. Successfully removed {} symlinks in {}s.",
             to_gc_len - after_gc.len(),
             (end - start).as_secs_f32()
-        ));
+        );
         Ok(())
     }
 
@@ -494,7 +494,7 @@ impl Devenv {
             print_stderr(options_results.with_title()).expect("Failed to print options results");
         }
 
-        self.logger.info(&format!("Found {search_results_count} packages and {results_options_count} options for '{name}'."));
+        info!("Found {search_results_count} packages and {results_options_count} options for '{name}'.");
         Ok(())
     }
 
@@ -512,8 +512,12 @@ impl Devenv {
             bail!("No tasks specified.");
         }
         let tasks_json_file = {
-            let _logprogress = self.log_progress.without_newline("Evaluating tasks");
-            self.nix.build(&["devenv.task.config"]).await?
+            // TODO: No newline
+            let span = info_span!("tasks_run", devenv.user_message = "Evaluating tasks");
+            self.nix
+                .build(&["devenv.task.config"])
+                .instrument(span)
+                .await?
         };
         // parse tasks config
         let tasks_json =
@@ -522,10 +526,10 @@ impl Devenv {
             serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
         // run tasks
         let config = tasks::Config { roots, tasks };
-        self.logger.debug(&format!(
+        debug!(
             "Tasks config: {}",
             serde_json::to_string_pretty(&config).unwrap()
-        ));
+        );
         let mut tui = tasks::TasksUi::new(config).await?;
         let (tasks_status, outputs) = tui.run().await?;
 
@@ -545,8 +549,8 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let _logprogress = self.log_progress.with_newline("Building tests");
-            self.nix.build(&["devenv.test"]).await?
+            let span = info_span!("test", devenv.user_message = "Building tests");
+            self.nix.build(&["devenv.test"]).instrument(span).await?
         };
         let test_script = test_script[0].to_string_lossy().to_string();
 
@@ -554,10 +558,9 @@ impl Devenv {
             self.up(None, &true, &false).await?;
         }
 
-        let result = {
-            let _logprogress = self.log_progress.with_newline("Running tests");
-            self.logger
-                .debug(&format!("Running command: {test_script}"));
+        let span = info_span!("test", devenv.user_message = "Running tests");
+        let result = async {
+            debug!("Running command: {test_script}");
             let develop_args = self.prepare_develop_args(&Some(test_script), &[]).await?;
             // TODO: replace_shell?
             self.nix
@@ -568,18 +571,20 @@ impl Devenv {
                         .collect::<Vec<&str>>(),
                     false, // replace_shell
                 )
-                .await?
-        };
+                .await
+        }
+        .instrument(span)
+        .await?;
 
         if self.has_processes().await? {
             self.down()?;
         }
 
         if !result.status.success() {
-            self.logger.error("Tests failed :(");
+            error!("Tests failed :(");
             bail!("Tests failed");
         } else {
-            self.logger.info("Tests passed :)");
+            info!("Tests passed :)");
             Ok(())
         }
     }
@@ -638,24 +643,28 @@ impl Devenv {
     ) -> Result<()> {
         self.assemble(false)?;
         if !self.has_processes().await? {
-            self.logger
-                .error("No 'processes' option defined: https://devenv.sh/processes/");
+            error!("No 'processes' option defined: https://devenv.sh/processes/");
             bail!("No processes defined");
         }
 
-        let proc_script_string: String;
-        {
-            let _logprogress = self.log_progress.with_newline("Building processes");
+        let span = info_span!(
+            "build_processes",
+            devenv.user_message = "Building processes"
+        );
+        let proc_script_string = async {
             let proc_script = self.nix.build(&["procfileScript"]).await?;
-            proc_script_string = proc_script[0]
+            let proc_script_string = proc_script[0]
                 .to_str()
                 .expect("Failed to get proc script path")
                 .to_string();
             self.nix.add_gc("procfilescript", &proc_script[0]).await?;
+            Ok::<String, miette::Report>(proc_script_string)
         }
-        {
-            let _logprogress = self.log_progress.with_newline("Starting processes");
+        .instrument(span)
+        .await?;
 
+        let span = info_span!("up", devenv.user_message = "Starting processes");
+        async {
             let process = process.unwrap_or("");
 
             let processes_script = self.devenv_dotfile.join("processes");
@@ -711,25 +720,24 @@ impl Devenv {
 
                 std::fs::write(self.processes_pid(), process.id().to_string())
                     .expect("Failed to write PROCESSES_PID");
-                self.logger.info(&format!("PID is {}", process.id()));
+                info!("PID is {}", process.id());
                 if *log_to_file {
-                    self.logger.info(&format!(
-                        "See logs:  $ tail -f {}",
-                        self.processes_log().display()
-                    ));
+                    info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
-                self.logger.info("Stop:      $ devenv processes stop");
+                info!("Stop:      $ devenv processes stop");
             } else {
                 let err = cmd.exec();
                 bail!(err);
             }
             Ok(())
         }
+        .instrument(span)
+        .await
     }
 
     pub fn down(&self) -> Result<()> {
         if !PathBuf::from(&self.processes_pid()).exists() {
-            self.logger.error("No processes running.");
+            error!("No processes running.");
             bail!("No processes running");
         }
 
@@ -738,15 +746,13 @@ impl Devenv {
             .parse::<i32>()
             .expect("Failed to parse PROCESSES_PID");
 
-        self.logger
-            .info(&format!("Stopping process with PID {}", pid));
+        info!("Stopping process with PID {}", pid);
 
         let pid = Pid::from_raw(pid);
         match signal::kill(pid, signal::Signal::SIGTERM) {
             Ok(_) => {}
             Err(_) => {
-                self.logger
-                    .error(&format!("Process with PID {} not found.", pid));
+                error!("Process with PID {} not found.", pid);
                 bail!("Process not found");
             }
         }
@@ -777,8 +783,7 @@ impl Devenv {
                     flake_inputs.insert(input.clone(), flake_input);
                 }
                 Err(e) => {
-                    self.logger
-                        .error(&format!("Failed to parse input {}: {}", input, e));
+                    error!("Failed to parse input {}: {}", input, e);
                     bail!("Failed to parse inputs");
                 }
             }
@@ -834,15 +839,12 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
+    pub async fn get_dev_environment(&mut self, json: bool) -> Result<DevEnv> {
         self.assemble(false)?;
-        let _logprogress = if logging {
-            Some(self.log_progress.with_newline("Building shell"))
-        } else {
-            None
-        };
+
         let gc_root = self.devenv_dot_gc.join("shell");
-        let env = self.nix.dev_env(json, &gc_root).await?;
+        let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
+        let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
         std::fs::write(
             self.devenv_dotfile.join("input-paths.txt"),

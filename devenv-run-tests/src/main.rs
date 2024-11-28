@@ -1,7 +1,5 @@
 use clap::Parser;
-use devenv::log::Level;
-use devenv::log::Logger;
-use devenv::{Devenv, DevenvOptions};
+use devenv::{log, Devenv, DevenvOptions};
 use std::path::PathBuf;
 use std::{env, fs};
 
@@ -35,9 +33,7 @@ struct TestResult {
 async fn run_tests_in_directory(
     args: &Args,
 ) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
-    let logger = Logger::new(Level::Info);
-
-    logger.info("Running Tests");
+    println!("Running Tests");
 
     let cwd = std::env::current_dir()?;
 
@@ -142,6 +138,8 @@ async fn run_tests_in_directory(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    log::init_tracing_default();
+
     let args = Args::parse();
 
     let executable_path = std::env::current_exe()?;
