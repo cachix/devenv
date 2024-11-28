@@ -16,7 +16,7 @@ use tracing_subscriber::{
     EnvFilter, Layer,
 };
 
-#[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
     Silent,
     Error,
@@ -38,16 +38,30 @@ impl From<Level> for LevelFilter {
     }
 }
 
-pub fn init_tracing(level: Level) {
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogFormat {
+    /// The default human-readable log format used in the CLI.
+    #[default]
+    Cli,
+    /// A verbose structured log format used for debugging.
+    TracingFull,
+}
+
+pub fn init_tracing_default() {
+    init_tracing(Level::default(), LogFormat::default());
+}
+
+pub fn init_tracing(level: Level, log_format: LogFormat) {
     let devenv_layer = DevenvLayer::new();
 
-    let filter = EnvFilter::from_default_env()
-        .add_directive(tracing::level_filters::LevelFilter::from(level.clone()).into());
+    let filter =
+        EnvFilter::from_default_env().add_directive(LevelFilter::from(level.clone()).into());
 
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
 
-    let stderr_layer = if level == Level::Debug {
+    let stderr_layer = if log_format == LogFormat::TracingFull {
         tracing_subscriber::fmt::layer()
             .with_writer(stderr)
             .with_ansi(ansi)
@@ -330,9 +344,8 @@ where
 
         impl Visit for EventVisitor {
             fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
-                match field.name() {
-                    "message" => self.message = Some(format!("{:?}", value)),
-                    _ => {}
+                if field.name() == "message" {
+                    self.message = Some(format!("{:?}", value));
                 }
             }
 

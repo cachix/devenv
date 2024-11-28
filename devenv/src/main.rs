@@ -30,10 +30,10 @@ async fn main() -> Result<()> {
     } else if cli.global_options.quiet {
         log::Level::Silent
     } else {
-        log::Level::Info
+        log::Level::default()
     };
 
-    log::init_tracing(level);
+    log::init_tracing(level, cli.global_options.log_format);
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {

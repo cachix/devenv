@@ -1,3 +1,4 @@
+use crate::log::LogFormat;
 use clap::{crate_version, Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::error;
@@ -39,7 +40,7 @@ pub struct GlobalOptions {
     )]
     pub version: bool,
 
-    #[arg(short, long, global = true, help = "Enable debug log level.")]
+    #[arg(short, long, global = true, help = "Enable additional debug logs.")]
     pub verbose: bool,
 
     #[arg(
@@ -47,9 +48,18 @@ pub struct GlobalOptions {
         long,
         global = true,
         conflicts_with = "verbose",
-        help = "Disable all logs"
+        help = "Silence all logs"
     )]
     pub quiet: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Configure the output format of the logs.",
+        default_value_t,
+        value_enum
+    )]
+    pub log_format: LogFormat,
 
     #[arg(short = 'j', long,
         global = true, help = "Maximum number of Nix builds at any time.",
@@ -142,6 +152,7 @@ impl Default for GlobalOptions {
             version: false,
             verbose: false,
             quiet: false,
+            log_format: LogFormat::default(),
             max_jobs: max_jobs(),
             cores: 2,
             system: default_system(),

@@ -138,7 +138,7 @@ async fn run_tests_in_directory(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    log::init_tracing(log::Level::Info);
+    log::init_tracing_default();
 
     let args = Args::parse();
 
