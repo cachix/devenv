@@ -55,7 +55,9 @@ pub fn init_tracing_default() {
 pub fn init_tracing(level: Level, log_format: LogFormat) {
     let devenv_layer = DevenvLayer::new();
 
-    let filter = EnvFilter::from_default_env().add_directive(LevelFilter::from(level).into());
+    let filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::from(level).into())
+        .from_env_lossy();
 
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
