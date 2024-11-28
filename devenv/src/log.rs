@@ -365,33 +365,6 @@ where
         let mut visitor = EventVisitor::default();
         event.record(&mut visitor);
 
-        if let Some(span) = ctx.parent_span() {
-            let ext = span.extensions();
-
-            if let Some(span_ctx) = ext.get::<SpanContext>() {
-                if visitor.is_user_message {
-                    let time_total = format!("{}", span_ctx.timings.total_duration());
-                    let has_error = span_ctx.has_error;
-                    let msg = &span_ctx.msg;
-                    match span_ctx.span_kind {
-                        SpanKind::Start => {
-                            let prefix = style("•").blue();
-                            return writeln!(writer, "{} {} ...", prefix, msg);
-                        }
-
-                        SpanKind::End => {
-                            let prefix = if has_error {
-                                style("✖").red()
-                            } else {
-                                style("✔").green()
-                            };
-                            return writeln!(writer, "{} {} in {}", prefix, msg, time_total);
-                        }
-                    }
-                }
-            }
-        }
-
         if let Some(msg) = visitor.message {
             if visitor.is_user_message {
                 let meta = event.metadata();
@@ -418,7 +391,36 @@ where
             }
 
             writeln!(writer, "{}", msg)?;
+
+            return Ok(());
         };
+
+        if let Some(span) = ctx.parent_span() {
+            let ext = span.extensions();
+
+            if let Some(span_ctx) = ext.get::<SpanContext>() {
+                if visitor.is_user_message {
+                    let time_total = format!("{}", span_ctx.timings.total_duration());
+                    let has_error = span_ctx.has_error;
+                    let msg = &span_ctx.msg;
+                    match span_ctx.span_kind {
+                        SpanKind::Start => {
+                            let prefix = style("•").blue();
+                            return writeln!(writer, "{} {} ...", prefix, msg);
+                        }
+
+                        SpanKind::End => {
+                            let prefix = if has_error {
+                                style("✖").red()
+                            } else {
+                                style("✔").green()
+                            };
+                            return writeln!(writer, "{} {} in {}", prefix, msg, time_total);
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
