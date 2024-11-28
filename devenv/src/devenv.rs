@@ -192,7 +192,7 @@ impl Devenv {
     }
 
     pub async fn print_dev_env(&mut self, json: bool) -> Result<()> {
-        let env = self.get_dev_environment(json, false).await?;
+        let env = self.get_dev_environment(json).await?;
         print!(
             "{}",
             String::from_utf8(env.output).expect("Failed to convert env to utf-8")
@@ -223,7 +223,7 @@ impl Devenv {
         args: &[String],
     ) -> Result<Vec<String>> {
         self.assemble(false)?;
-        let env = self.get_dev_environment(false, true).await?;
+        let env = self.get_dev_environment(false).await?;
 
         let mut develop_args = vec![
             "develop",
@@ -839,12 +839,8 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn get_dev_environment(&mut self, json: bool, logging: bool) -> Result<DevEnv> {
+    pub async fn get_dev_environment(&mut self, json: bool) -> Result<DevEnv> {
         self.assemble(false)?;
-
-        if !logging {
-            log::disable_user_messages();
-        }
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
@@ -859,10 +855,6 @@ impl Devenv {
                 .join("\n"),
         )
         .expect("Failed to write input-paths.txt");
-
-        if !logging {
-            log::enable_user_messages();
-        }
 
         Ok(DevEnv {
             output: env.stdout,

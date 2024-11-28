@@ -192,9 +192,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Default)]
 pub struct DevenvLayer {
-    /// Whether to show user messages.
-    /// Can be dynamically toggled by [enable_user_messages] and [disable_user_messages].
-    show_user_messages: AtomicBool,
     /// Whether the span has an error event.
     has_error: AtomicBool,
 }
@@ -202,7 +199,6 @@ pub struct DevenvLayer {
 impl DevenvLayer {
     pub fn new() -> Self {
         Self {
-            show_user_messages: AtomicBool::new(true),
             has_error: AtomicBool::new(false),
         }
     }
@@ -240,20 +236,18 @@ where
                 timings: SpanTimings::new(),
             });
 
-            if self.show_user_messages.load(Ordering::Relaxed) {
-                with_event_from_span!(
-                    id,
-                    span,
-                    "message" = msg,
-                    "devenv.is_user_message" = true,
-                    "devenv.span_event_kind" = SpanKind::Start as u8,
-                    |event| {
-                        drop(ext);
-                        drop(span);
-                        ctx.event(&event);
-                    }
-                );
-            }
+            with_event_from_span!(
+                id,
+                span,
+                "message" = msg,
+                "devenv.is_user_message" = true,
+                "devenv.span_event_kind" = SpanKind::Start as u8,
+                |event| {
+                    drop(ext);
+                    drop(span);
+                    ctx.event(&event);
+                }
+            );
         }
     }
 
@@ -288,22 +282,20 @@ where
             let msg = span_ctx.msg.clone();
             let time_total = format!("{}", span_ctx.timings.total_duration());
 
-            if self.show_user_messages.load(Ordering::Relaxed) {
-                with_event_from_span!(
-                    id,
-                    span,
-                    "message" = msg,
-                    "devenv.is_user_message" = true,
-                    "devenv.span_event_kind" = SpanKind::End as u8,
-                    "devenv.span_has_error" = has_error,
-                    "devenv.time_total" = time_total,
-                    |event| {
-                        drop(extensions);
-                        drop(span);
-                        ctx.event(&event);
-                    }
-                );
-            }
+            with_event_from_span!(
+                id,
+                span,
+                "message" = msg,
+                "devenv.is_user_message" = true,
+                "devenv.span_event_kind" = SpanKind::End as u8,
+                "devenv.span_has_error" = has_error,
+                "devenv.time_total" = time_total,
+                |event| {
+                    drop(extensions);
+                    drop(span);
+                    ctx.event(&event);
+                }
+            );
         }
     }
 
@@ -313,21 +305,6 @@ where
             self.has_error.store(true, Ordering::SeqCst);
         }
     }
-}
-
-pub fn enable_user_messages() {
-    set_show_user_messages(true);
-}
-
-pub fn disable_user_messages() {
-    set_show_user_messages(false);
-}
-
-fn set_show_user_messages(show: bool) {
-    let dispatcher = tracing::dispatcher::get_default(|dispatcher| dispatcher.clone());
-    if let Some(layer) = dispatcher.downcast_ref::<DevenvLayer>() {
-        layer.show_user_messages.store(show, Ordering::SeqCst);
-    };
 }
 
 #[derive(Default)]
