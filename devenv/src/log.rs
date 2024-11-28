@@ -55,8 +55,7 @@ pub fn init_tracing_default() {
 pub fn init_tracing(level: Level, log_format: LogFormat) {
     let devenv_layer = DevenvLayer::new();
 
-    let filter =
-        EnvFilter::from_default_env().add_directive(LevelFilter::from(level.clone()).into());
+    let filter = EnvFilter::from_default_env().add_directive(LevelFilter::from(level).into());
 
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
@@ -136,18 +135,18 @@ impl std::fmt::Display for HumanReadableDuration {
 }
 
 /// Capture additional context during a span.
+#[derive(Debug)]
 struct SpanContext {
     /// The user message associated with the span.
     msg: String,
     /// Whether the span has an error event.
     has_error: bool,
-    // Track the liecycle of the span.
-    span_kind: SpanKind,
     /// Span timings
     timings: SpanTimings,
 }
 
 /// The kind of span event based on its lifecycle.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum SpanKind {
     /// Marks the start of a span.
     /// Equivalent to [tracing_subscriber::fmt::format::FmtSpan::NEW].
@@ -155,6 +154,18 @@ enum SpanKind {
     /// Marks the end of a span.
     /// Equivalent to [tracing_subscriber::fmt::format::FmtSpan::CLOSE].
     End = 1,
+}
+
+impl TryFrom<u8> for SpanKind {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, ()> {
+        match value {
+            0 => Ok(SpanKind::Start),
+            1 => Ok(SpanKind::End),
+            _ => Err(()),
+        }
+    }
 }
 
 /// A helper to create child events from a span.
@@ -224,7 +235,6 @@ where
             ext.insert(SpanContext {
                 msg: msg.clone(),
                 has_error: false,
-                span_kind: SpanKind::Start,
                 timings: SpanTimings::new(),
             });
 
@@ -234,7 +244,7 @@ where
                     span,
                     "message" = msg,
                     "devenv.is_user_message" = true,
-                    "devenv:span_event_kind" = SpanKind::Start as u8,
+                    "devenv.span_event_kind" = SpanKind::Start as u8,
                     |event| {
                         drop(ext);
                         drop(span);
@@ -267,8 +277,6 @@ where
 
         if let Some(span_ctx) = extensions.get_mut::<SpanContext>() {
             span_ctx.timings.enter();
-
-            span_ctx.span_kind = SpanKind::End;
 
             let has_error = self.has_error.load(Ordering::SeqCst);
             if has_error {
@@ -315,9 +323,9 @@ pub fn disable_user_messages() {
 
 fn set_show_user_messages(show: bool) {
     let dispatcher = tracing::dispatcher::get_default(|dispatcher| dispatcher.clone());
-    dispatcher.downcast_ref::<DevenvLayer>().map(|layer| {
+    if let Some(layer) = dispatcher.downcast_ref::<DevenvLayer>() {
         layer.show_user_messages.store(show, Ordering::SeqCst);
-    });
+    };
 }
 
 #[derive(Default)]
@@ -336,10 +344,11 @@ where
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> fmt::Result {
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         struct EventVisitor {
             message: Option<String>,
             is_user_message: bool,
+            span_event_kind: Option<SpanKind>,
         }
 
         impl Visit for EventVisitor {
@@ -360,67 +369,73 @@ where
                     self.is_user_message = value;
                 }
             }
+
+            fn record_u64(&mut self, field: &Field, value: u64) {
+                if field.name() == "devenv.span_event_kind" {
+                    self.span_event_kind = SpanKind::try_from(value as u8).ok()
+                }
+            }
         }
 
         let mut visitor = EventVisitor::default();
         event.record(&mut visitor);
 
-        if let Some(msg) = visitor.message {
-            if visitor.is_user_message {
-                let meta = event.metadata();
-                let ansi = writer.has_ansi_escapes();
+        if let Some(span_kind) = visitor.span_event_kind {
+            if let Some(span) = ctx.parent_span() {
+                let ext = span.extensions();
 
-                if ansi && !self.verbose {
-                    let level = meta.level();
-                    match *level {
-                        tracing::Level::ERROR => {
-                            write!(writer, "{} ", style("✖").red())?;
+                if let Some(span_ctx) = ext.get::<SpanContext>() {
+                    if visitor.is_user_message {
+                        let time_total = format!("{}", span_ctx.timings.total_duration());
+                        let has_error = span_ctx.has_error;
+                        let msg = &span_ctx.msg;
+                        match span_kind {
+                            SpanKind::Start => {
+                                let prefix = style("•").blue();
+                                return writeln!(writer, "{} {} ...", prefix, msg);
+                            }
+
+                            SpanKind::End => {
+                                let prefix = if has_error {
+                                    style("✖").red()
+                                } else {
+                                    style("✔").green()
+                                };
+                                return writeln!(writer, "{} {} in {}", prefix, msg, time_total);
+                            }
                         }
-                        tracing::Level::WARN => {
-                            write!(writer, "{} ", style("•").yellow())?;
-                        }
-                        tracing::Level::INFO => {
-                            write!(writer, "{} ", style("•").blue())?;
-                        }
-                        tracing::Level::DEBUG => {
-                            write!(writer, "{} ", style("•").italic())?;
-                        }
-                        _ => {}
                     }
                 }
             }
-
-            writeln!(writer, "{}", msg)?;
-
-            return Ok(());
-        };
-
-        if let Some(span) = ctx.parent_span() {
-            let ext = span.extensions();
-
-            if let Some(span_ctx) = ext.get::<SpanContext>() {
+        } else {
+            if let Some(msg) = visitor.message {
                 if visitor.is_user_message {
-                    let time_total = format!("{}", span_ctx.timings.total_duration());
-                    let has_error = span_ctx.has_error;
-                    let msg = &span_ctx.msg;
-                    match span_ctx.span_kind {
-                        SpanKind::Start => {
-                            let prefix = style("•").blue();
-                            return writeln!(writer, "{} {} ...", prefix, msg);
-                        }
+                    let meta = event.metadata();
+                    let ansi = writer.has_ansi_escapes();
 
-                        SpanKind::End => {
-                            let prefix = if has_error {
-                                style("✖").red()
-                            } else {
-                                style("✔").green()
-                            };
-                            return writeln!(writer, "{} {} in {}", prefix, msg, time_total);
+                    if ansi && !self.verbose {
+                        let level = meta.level();
+                        match *level {
+                            tracing::Level::ERROR => {
+                                write!(writer, "{} ", style("✖").red())?;
+                            }
+                            tracing::Level::WARN => {
+                                write!(writer, "{} ", style("•").yellow())?;
+                            }
+                            tracing::Level::INFO => {
+                                write!(writer, "{} ", style("•").blue())?;
+                            }
+                            tracing::Level::DEBUG => {
+                                write!(writer, "{} ", style("•").italic())?;
+                            }
+                            _ => {}
                         }
                     }
                 }
+
+                writeln!(writer, "{}", msg)?;
             }
-        }
+        };
 
         Ok(())
     }
