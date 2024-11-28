@@ -324,13 +324,6 @@ impl<'a> Nix<'a> {
         use devenv_eval_cache::internal_log::Verbosity;
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
-        // TODO: change logging level using structured attrs?
-        // let mut logger = self.logger.clone();
-
-        // if !options.logging {
-        //     logger.level = log::Level::Error;
-        // }
-
         if options.replace_shell {
             if self.global_options.nix_debugger
                 && cmd.get_program().to_string_lossy().ends_with("bin/nix")
@@ -370,13 +363,12 @@ impl<'a> Nix<'a> {
                 cached_cmd.force_refresh();
             }
 
-            if options.logging {
+            if options.logging && !self.global_options.quiet {
+                // Show eval and build logs only in verbose mode
                 let target_log_level = if self.global_options.verbose {
                     Verbosity::Talkative
-                } else if self.global_options.quiet {
-                    Verbosity::Error
                 } else {
-                    Verbosity::Info
+                    Verbosity::Warn
                 };
 
                 cached_cmd.on_stderr(move |log| {
@@ -384,9 +376,12 @@ impl<'a> Nix<'a> {
                         if let Some(msg) = log.get_msg() {
                             use devenv_eval_cache::internal_log::InternalLog;
                             match log {
-                                InternalLog::Msg { level, .. } if *level == Verbosity::Error => {
-                                    error!("{msg}");
-                                }
+                                InternalLog::Msg { level, .. } => match *level {
+                                    Verbosity::Error => error!("{msg}"),
+                                    Verbosity::Warn => warn!("{msg}"),
+                                    Verbosity::Talkative => debug!("{msg}"),
+                                    _ => info!("{msg}"),
+                                },
                                 _ => info!("{msg}"),
                             };
                         }
