@@ -145,7 +145,7 @@ jobs:
       run: devenv shell hello
 
     - name: Run a multi-line command in the devenv shell
-      shell: devenv shell bash -e {0}
+      shell: devenv shell bash -- -e {0}
       run: |
         hello
         say-bye
