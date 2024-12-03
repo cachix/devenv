@@ -4,6 +4,7 @@
   packages = [
     # A python dependency outside of poetry.
     config.languages.python.package.pkgs.pjsua2
+    pkgs.zlib
   ];
 
   languages.python = {
