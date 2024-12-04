@@ -26,6 +26,7 @@
   services.rabbitmq.enable = true;
   services.redis.enable = true;
   services.sqld.enable = true;
+  services.tailscale.enable = true;
   services.temporal.enable = true;
   services.tideways.enable = true;
   services.trafficserver.enable = true;
