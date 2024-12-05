@@ -10,21 +10,7 @@ let
   );
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
-  package = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
-    python = cfg.package;
-    requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
-    makeWrapperArgs = [
-      "--prefix"
-      "LD_LIBRARY_PATH"
-      ":"
-      libraries
-    ] ++ lib.optionals pkgs.stdenv.isDarwin [
-      "--prefix"
-      "DYLD_LIBRARY_PATH"
-      ":"
-      libraries
-    ];
-  };
+  inherit (cfg.finalPackage) interpreter sitePackages;
 
   requirements = pkgs.writeText "requirements.txt" (toString (
     if lib.isPath cfg.venv.requirements
@@ -52,7 +38,7 @@ let
 
       VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-      profile_python="$(${readlink} ${package.interpreter})"
+      profile_python="$(${readlink} ${interpreter})"
       devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
       venv_python="$(${readlink} "$devenv_interpreter_path")"
 
@@ -71,15 +57,15 @@ let
           [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
         ''}
         ${if cfg.uv.enable then ''
-          echo uv venv -p ${package.interpreter} "$VENV_PATH"
-          uv venv -p ${package.interpreter} "$VENV_PATH"
+          echo uv venv -p ${interpreter} "$VENV_PATH"
+          uv venv -p ${interpreter} "$VENV_PATH"
         ''
         else ''
-            echo ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
-            ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
+            echo ${interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
+            ${interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
           ''
         }
-        echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+        echo "${interpreter}" > "$VENV_PATH/.devenv_interpreter"
       fi
 
       source "$VENV_PATH"/bin/activate
@@ -143,7 +129,7 @@ let
 
       # Avoid running "uv sync" for every shell.
       # Only run it when the "pyproject.toml" file or Python interpreter has changed.
-      local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
+      local ACTUAL_UV_CHECKSUM="${interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
       local UV_CHECKSUM_FILE="$VENV_PATH/uv.sync.checksum"
       if [ -f "$UV_CHECKSUM_FILE" ]
       then
@@ -183,7 +169,7 @@ let
       unset VIRTUAL_ENV
 
       # Make sure poetry's venv uses the configured Python executable.
-      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${interpreter}
     }
 
     function _devenv_poetry_install
@@ -192,7 +178,7 @@ let
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or Python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local ACTUAL_POETRY_CHECKSUM="${interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
       local POETRY_CHECKSUM_FILE=".venv/poetry.lock.checksum"
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
@@ -237,6 +223,12 @@ in
       default = pkgs.python3;
       defaultText = lib.literalExpression "pkgs.python3";
       description = "The Python package to use.";
+    };
+
+    finalPackage = lib.mkOption {
+      type = lib.types.package;
+      description = "The final Python package to use.";
+      internal = true;
     };
 
     manylinux.enable = lib.mkOption {
@@ -428,10 +420,27 @@ in
       (lib.mkIf (cfg.version != null)
         (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
     ];
+    languages.python.finalPackage = lib.mkDefault (
+      pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
+        python = cfg.package;
+        requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
+        makeWrapperArgs = [
+          "--prefix"
+          "LD_LIBRARY_PATH"
+          ":"
+          libraries
+        ] ++ lib.optionals pkgs.stdenv.isDarwin [
+          "--prefix"
+          "DYLD_LIBRARY_PATH"
+          ":"
+          libraries
+        ];
+      }
+    );
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
-    packages = [ package ]
+    packages = [ cfg.finalPackage ]
       ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
       ++ (lib.optional cfg.uv.enable cfg.uv.package);
 
@@ -480,7 +489,7 @@ in
     };
 
     enterShell = ''
-      export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+      export PYTHONPATH="$DEVENV_PROFILE/${sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
     '';
   };
 }
