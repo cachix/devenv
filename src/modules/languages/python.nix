@@ -170,6 +170,10 @@ let
       _devenv_uv_sync
     fi
 
+    ${lib.optionalString cfg.uv.activate.enable ''
+      source $UV_PROJECT_ENVIRONMENT/bin/activate
+    ''}
+
     popd
   '';
 
@@ -309,6 +313,11 @@ in
         default = pkgs.uv;
         defaultText = lib.literalExpression "pkgs.uv";
         description = "The uv package to use.";
+      };
+      activate.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Whether to activate the uv virtual environment automatically.";
       };
       sync = {
         enable = lib.mkEnableOption "uv sync during devenv initialisation";
