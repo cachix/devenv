@@ -81,6 +81,7 @@ in
 
     process.manager.args = {
       "config" = cfg.configFile;
+      "disable-dotenv" = true;
       "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
       "unix-socket" =
         if cfg.unixSocket.enable

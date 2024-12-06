@@ -33937,7 +33937,7 @@ boolean
 
 
 *Default:*
-` true `
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
@@ -68859,7 +68859,7 @@ package
 
 
 *Default:*
-` pkgs.mongodb `
+` pkgs.mongodb-ce `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)

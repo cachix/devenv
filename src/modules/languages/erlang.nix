@@ -10,7 +10,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       description = "Which package of Erlang to use.";
-      default = pkgs.erlang;
+      default = pkgs.erlang_27;
       defaultText = lib.literalExpression "pkgs.erlang";
     };
   };

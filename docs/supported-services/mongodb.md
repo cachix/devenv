@@ -40,7 +40,7 @@ package
 
 
 *Default:*
-` pkgs.mongodb `
+` pkgs.mongodb-ce `
 
 
 
