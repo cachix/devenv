@@ -2276,6 +2276,31 @@ list of string
 
 
 
+## git-hooks.gitPackage
+
+
+
+The ` git ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```
+pkgs.gitMinimal
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
 ## git-hooks.hooks
 
 
@@ -2962,8 +2987,6 @@ null or package
 
 ## git-hooks.hooks.\<name>.always_run
 
-
-
 if true this hook will run even if there are no matching files.
 
 
@@ -2982,6 +3005,8 @@ boolean
 
 
 ## git-hooks.hooks.\<name>.args
+
+
 
 List of additional parameters to pass to the hook.
 
@@ -5051,8 +5076,6 @@ list of package
 
 ## git-hooks.hooks.biome.fail_fast
 
-
-
 if true pre-commit will stop running hooks if this hook fails.
 
 
@@ -5071,6 +5094,8 @@ boolean
 
 
 ## git-hooks.hooks.biome.files
+
+
 
 The pattern of files to run on.
 
@@ -7112,8 +7137,6 @@ internal name, same as ` id `
 
 ## git-hooks.hooks.credo.pass_filenames
 
-
-
 Whether to pass filenames as arguments to the entry point.
 
 
@@ -7132,6 +7155,8 @@ boolean
 
 
 ## git-hooks.hooks.credo.raw
+
+
 
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
@@ -28667,6 +28692,27 @@ boolean
 
 
 
+## git-hooks.hooks.treefmt.settings.fail-on-change
+
+
+
+Fail if some files require re-formatting.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## git-hooks.hooks.treefmt.settings.formatters
 
 
@@ -28682,6 +28728,27 @@ list of package
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.treefmt.settings.no-cache
+
+
+
+Ignore the evaluation cache entirely.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -35914,9 +35981,9 @@ outputOf (attribute set)
 ```
 {
   foo = {
-    ncdu = <derivation ncdu-2.3>;
+    ncdu = <derivation ncdu-2.7>;
   };
-  git = <derivation git-2.44.0>;
+  git = <derivation git-2.47.0>;
 }
 ```
 
@@ -36054,6 +36121,31 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## pre-commit.gitPackage
+
+
+
+The ` git ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```
+pkgs.gitMinimal
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -62457,6 +62549,27 @@ boolean
 
 
 
+## pre-commit.hooks.treefmt.settings.fail-on-change
+
+
+
+Fail if some files require re-formatting.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.hooks.treefmt.settings.formatters
 
 
@@ -62472,6 +62585,27 @@ list of package
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.treefmt.settings.no-cache
+
+
+
+Ignore the evaluation cache entirely.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -65487,7 +65621,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` <derivation bash-5.2p37> `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -69870,6 +70004,8 @@ The available extensions are:
  - jsonb_deep_sum
  - lantern
  - periods
+ - pg-gvm
+ - pg-semver
  - pg_auto_failover
  - pg_bigm
  - pg_cron
@@ -69892,6 +70028,7 @@ The available extensions are:
  - pg_uuidv7
  - pgaudit
  - pgjwt
+ - pgmq
  - pgroonga
  - pgrouting
  - pgsodium
@@ -69903,10 +70040,11 @@ The available extensions are:
  - plr
  - plv8
  - postgis
- - promscale_extension
  - repmgr
  - rum
  - smlar
+ - sqlite_fdw
+ - system_stats
  - tds_fdw
  - temporal_tables
  - timescaledb
@@ -72498,7 +72636,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` <derivation bash-5.2p37> `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
