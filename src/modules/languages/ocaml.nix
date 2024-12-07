@@ -14,6 +14,13 @@ in
         default = pkgs.ocaml-ng.ocamlPackages;
         defaultText = lib.literalExpression "pkgs.ocaml-ng.ocamlPackages_4_12";
       };
+
+    extraPackages = lib.mkOption
+      {
+        type = lib.types.listOf lib.types.package;
+        description = "Extra OCaml packages to use";
+        default = [ ];
+      };
   };
 
   config = lib.mkIf cfg.enable {
@@ -27,6 +34,6 @@ in
       cfg.packages.ocp-indent
       cfg.packages.findlib
       pkgs.ocamlformat
-    ];
+    ] ++ cfg.extraPackages;
   };
 }
