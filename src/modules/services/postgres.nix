@@ -98,6 +98,15 @@ let
     ''
     else "";
 
+  runSetupSchemaScript =
+    if cfg.setupSchemaScript == null
+    then ''
+      echo "script not provided, skipping."
+    ''
+    else ''
+      ${cfg.setupSchemaScript}
+    '';
+
   toStr = value:
     if true == value
     then "yes"
@@ -158,10 +167,29 @@ let
     fi
     unset POSTGRES_RUN_INITIAL_SCRIPT
   '';
+
+  setupSchemaScript = pkgs.writeShellScriptBin "setup-schema-script" ''
+    echo
+    echo "PostgreSQL is setting up the schema"
+    echo
+    OLDPGHOST="$PGHOST"
+    PGHOST=${q runtimeDir}
+
+    pg_ctl -D "$PGDATA" -w start -o "-c unix_socket_directories=${runtimeDir} -c listen_addresses= -p ${toString cfg.port}"
+    ${runSetupSchemaScript}
+    pg_ctl -D "$PGDATA" -m fast -w stop
+    PGHOST="$OLDPGHOST"
+    unset OLDPGHOST
+    echo
+    echo "PostgreSQL setup schema complete."
+    echo
+  '';
+
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail
     mkdir -p ${q runtimeDir}
     ${setupScript}/bin/setup-postgres
+    ${setupSchemaScript}/bin/setup-schema-script
     exec ${postgresPkg}/bin/postgres
   '';
 in
@@ -324,6 +352,18 @@ in
       example = lib.literalExpression ''
         CREATE ROLE postgres SUPERUSER;
         CREATE ROLE bar;
+      '';
+    };
+
+    setupSchemaScript = lib.mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = ''
+        Path to a script that will set up or update the PostgreSQL database schema. This script must be idempotent, meaning it can be run multiple times without causing unintended side effects. 
+        If your schema changes dynamically, ensure that this script handles such cases gracefully to maintain database integrity.
+      '';
+      example = lib.literalExpression ''
+        "path/to/your/schema/setup/script.sh"
       '';
     };
 
