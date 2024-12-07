@@ -2,6 +2,9 @@
 
 let
   cfg = config.languages.erlang;
+  rebar3 = pkgs.rebar3.overrideAttrs (oldAttrs: {
+    buildInputs = [ cfg.package ];
+  });
 in
 {
   options.languages.erlang = {
@@ -20,7 +23,7 @@ in
       packages = [
         cfg.package
         pkgs.erlang-ls
-        pkgs.rebar3
+        rebar3
       ];
     };
 }
