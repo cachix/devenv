@@ -61,13 +61,27 @@ impl InternalLog {
             {
                 Some(self)
             }
+
             InternalLog::Msg { level, .. }
                 if *level > Verbosity::Error && *level <= target_log_level =>
             {
                 Some(self)
             }
 
+            // The log levels are also broken for activity messages.
+            InternalLog::Start {
+                level: Verbosity::Error,
+                ..
+            } => {
+                if target_log_level >= Verbosity::Info {
+                    Some(self)
+                } else {
+                    None
+                }
+            }
+
             InternalLog::Start { level, .. } if *level <= target_log_level => Some(self),
+
             InternalLog::Result {
                 typ: ResultType::BuildLogLine,
                 ..
@@ -76,13 +90,63 @@ impl InternalLog {
         }
     }
 
+    /// Extract or format a human-readable message from the log.
+    ///
+    /// Reference for activity messages:
+    /// https://github.com/NixOS/nix/blob/ff00eebb16fc4c0fd4cebf0cbfc63c471e3c4abd/src/libmain/progress-bar.cc#L177
     pub fn get_msg(&self) -> Option<Cow<'_, String>> {
         use std::fmt::Write;
 
         match self {
             InternalLog::Msg { ref msg, .. } => Some(Cow::Borrowed(msg)),
+            InternalLog::Start {
+                typ: ActivityType::Substitute,
+                fields,
+                ..
+            } => fields.first().zip(fields.get(1)).and_then(|(path, sub)| {
+                if let (Field::String(path), Field::String(sub)) = (path, sub) {
+                    let name = store_path_to_name(path);
+                    let action = if sub.starts_with("local") {
+                        "copying"
+                    } else {
+                        "fetching"
+                    };
+                    Some(Cow::Owned(format!("{action} {name} from {sub}")))
+                } else {
+                    None
+                }
+            }),
 
-            InternalLog::Start { ref text, .. } => Some(Cow::Borrowed(text)),
+            InternalLog::Start {
+                typ: ActivityType::Build,
+                fields,
+                ..
+            } => {
+                if let Some(Field::String(name)) = fields.first() {
+                    let name = name.strip_suffix(".drv").unwrap_or(name);
+                    let mut msg = format!("building {name}");
+                    if let Some(Field::String(machine_name)) = fields.get(1) {
+                        write!(msg, " on {machine_name}").ok();
+                    }
+                    Some(Cow::Owned(msg))
+                } else {
+                    None
+                }
+            }
+
+            InternalLog::Start {
+                typ: ActivityType::QueryPathInfo,
+                fields,
+                ..
+            } => fields.first().zip(fields.get(1)).and_then(|(path, sub)| {
+                if let (Field::String(path), Field::String(sub)) = (path, sub) {
+                    let name = store_path_to_name(path);
+                    Some(Cow::Owned(format!("querying {name} on {sub}")))
+                } else {
+                    None
+                }
+            }),
+
             InternalLog::Result {
                 typ: ResultType::BuildLogLine,
                 fields,
@@ -197,6 +261,14 @@ impl Display for Field {
             Field::Int(i) => write!(f, "{}", i),
             Field::String(s) => write!(f, "{}", s),
         }
+    }
+}
+
+fn store_path_to_name(path: &str) -> &str {
+    if let Some((_, name)) = path.split_once('-') {
+        name
+    } else {
+        path
     }
 }
 
