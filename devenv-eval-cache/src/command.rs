@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 use crate::{
     db, hash,
@@ -144,28 +144,47 @@ impl<'a> CachedCommand<'a> {
             });
         }
 
-        let mut sources = ops
-            .into_iter()
-            .filter_map(|op| op.owned_source())
-            .filter(|source| {
-                !self
-                    .excluded_paths
-                    .iter()
-                    .any(|path| source.starts_with(path))
-            })
-            .collect::<Vec<PathBuf>>();
+        let mut env_inputs = Vec::new();
+        let mut sources = Vec::new();
+
+        for op in ops.into_iter() {
+            if let Op::GetEnv { name } = op {
+                if let Ok(env_input) = EnvInputDesc::new(name) {
+                    env_inputs.push(env_input);
+                }
+                continue;
+            }
+
+            match op {
+                Op::CopiedSource { source, .. }
+                | Op::EvaluatedFile { source }
+                | Op::ReadFile { source }
+                | Op::ReadDir { source }
+                | Op::TrackedPath { source }
+                    if !self
+                        .excluded_paths
+                        .iter()
+                        .any(|path| source.starts_with(path)) =>
+                {
+                    sources.push(source);
+                }
+                _ => {}
+            }
+        }
 
         // Watch additional paths
         sources.extend_from_slice(&self.extra_paths);
 
-        let file_path_futures = sources
+        let file_input_futures = sources
             .into_iter()
             .map(|source| {
-                tokio::task::spawn_blocking(move || FilePath::new(source).map_err(CommandError::Io))
+                tokio::task::spawn_blocking(move || {
+                    FileInputDesc::new(source).map_err(CommandError::Io)
+                })
             })
             .collect::<Vec<_>>();
 
-        let mut file_paths = join_all(file_path_futures)
+        let file_inputs = join_all(file_input_futures)
             .await
             .into_iter()
             .flatten()
@@ -173,23 +192,24 @@ impl<'a> CachedCommand<'a> {
             .filter_map(Result::ok)
             .collect::<Vec<_>>();
 
-        file_paths.sort_by(|a, b| a.path.cmp(&b.path));
-        file_paths.dedup();
+        let mut inputs = file_inputs
+            .into_iter()
+            .map(Input::File)
+            .chain(env_inputs.into_iter().map(Input::Env))
+            .collect::<Vec<_>>();
 
-        let input_hash = hash::digest(
-            &file_paths
-                .iter()
-                .map(|p| p.content_hash.clone())
-                .collect::<String>(),
-        );
+        inputs.sort();
+        inputs.dedup();
 
-        let _ = db::insert_command_with_files(
+        let input_hash = Input::compute_input_hash(&inputs);
+
+        let _ = db::insert_command_with_inputs(
             self.pool,
             &raw_cmd,
             &cmd_hash,
             &input_hash,
             &stdout,
-            &file_paths,
+            &inputs,
         )
         .await
         .map_err(CommandError::Sqlx)?;
@@ -198,7 +218,7 @@ impl<'a> CachedCommand<'a> {
             status,
             stdout,
             stderr,
-            paths: file_paths,
+            inputs,
         })
     }
 }
@@ -216,19 +236,61 @@ pub struct Output {
     pub stdout: Vec<u8>,
     /// The data that the process wrote to stderr.
     pub stderr: Vec<u8>,
-    /// A list of paths that the command depends on and their hashes.
-    pub paths: Vec<FilePath>,
+    /// A list of inputs that the command depends on and their hashes.
+    pub inputs: Vec<Input>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct FilePath {
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Input {
+    File(FileInputDesc),
+    Env(EnvInputDesc),
+}
+
+impl Input {
+    pub fn content_hash(&self) -> &str {
+        match self {
+            Self::File(desc) => &desc.content_hash,
+            Self::Env(desc) => &desc.content_hash,
+        }
+    }
+
+    pub fn compute_input_hash(inputs: &[Self]) -> String {
+        inputs
+            .iter()
+            .map(|input| input.content_hash())
+            .collect::<String>()
+    }
+
+    pub fn partition_refs(inputs: &[Self]) -> (Vec<&FileInputDesc>, Vec<&EnvInputDesc>) {
+        let mut file_inputs = Vec::new();
+        let mut env_inputs = Vec::new();
+
+        for input in inputs {
+            match input {
+                Self::File(desc) => file_inputs.push(desc),
+                Self::Env(desc) => env_inputs.push(desc),
+            }
+        }
+
+        (file_inputs, env_inputs)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+pub struct FileInputDesc {
     pub path: PathBuf,
     pub is_directory: bool,
     pub content_hash: String,
     pub modified_at: SystemTime,
 }
 
-impl FilePath {
+impl Ord for FileInputDesc {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.path.cmp(&other.path)
+    }
+}
+
+impl FileInputDesc {
     pub fn new(path: PathBuf) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
@@ -250,13 +312,73 @@ impl FilePath {
     }
 }
 
-impl From<db::FilePathRow> for FilePath {
-    fn from(row: db::FilePathRow) -> Self {
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+pub struct EnvInputDesc {
+    pub name: String,
+    pub content_hash: String,
+}
+
+impl Ord for EnvInputDesc {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl EnvInputDesc {
+    pub fn new(name: String) -> Result<Self, io::Error> {
+        let value = std::env::var(&name).unwrap_or_default();
+        let content_hash = hash::digest(&value);
+        Ok(Self { name, content_hash })
+    }
+}
+
+impl Input {
+    pub fn from_path(path: PathBuf) -> Result<Self, io::Error> {
+        let file = FileInputDesc::new(path)?;
+        Ok(Self::File(file))
+    }
+
+    pub fn from_env_var(name: String) -> Result<Self, io::Error> {
+        let env = EnvInputDesc::new(name)?;
+        Ok(Self::Env(env))
+    }
+
+    pub fn to_identifier(&self) -> String {
+        match self {
+            Self::File(file) => file.path.to_string_lossy().to_string(),
+            Self::Env(env) => format!("${}", env.name),
+        }
+    }
+}
+
+impl From<db::FileInputRow> for Input {
+    fn from(row: db::FileInputRow) -> Self {
+        Self::File(row.into())
+    }
+}
+
+impl From<db::EnvInputRow> for Input {
+    fn from(row: db::EnvInputRow) -> Self {
+        Self::Env(row.into())
+    }
+}
+
+impl From<db::FileInputRow> for FileInputDesc {
+    fn from(row: db::FileInputRow) -> Self {
         Self {
             path: row.path,
             is_directory: row.is_directory,
             content_hash: row.content_hash,
             modified_at: row.modified_at,
+        }
+    }
+}
+
+impl From<db::EnvInputRow> for EnvInputDesc {
+    fn from(row: db::EnvInputRow) -> Self {
+        Self {
+            name: row.name,
+            content_hash: row.content_hash,
         }
     }
 }
@@ -274,21 +396,27 @@ async fn query_cached_output(
         .map_err(CommandError::Sqlx)?;
 
     if let Some(cmd) = cached_cmd {
-        let mut files = db::get_files_by_command_id(pool, cmd.id)
+        let files = db::get_files_by_command_id(pool, cmd.id)
             .await
             .map_err(CommandError::Sqlx)?;
 
-        files.sort_by(|a, b| a.path.cmp(&b.path));
-        files.dedup();
+        let envs = db::get_envs_by_command_id(pool, cmd.id)
+            .await
+            .map_err(CommandError::Sqlx)?;
+
+        use std::sync::Arc;
+        let mut inputs = files
+            .into_iter()
+            .map(Input::from)
+            .chain(envs.into_iter().map(Input::from))
+            .collect::<Vec<_>>();
+
+        inputs.sort();
+        inputs.dedup();
 
         let mut should_refresh = false;
 
-        let new_input_hash = hash::digest(
-            &files
-                .iter()
-                .map(|f| f.content_hash.clone())
-                .collect::<String>(),
-        );
+        let new_input_hash = Input::compute_input_hash(&inputs);
 
         // Hash of input hashes do not match
         if cmd.input_hash != new_input_hash {
@@ -300,24 +428,36 @@ async fn query_cached_output(
             should_refresh = true;
         }
 
+        let inputs = Arc::new(inputs);
+
         if !should_refresh {
             let mut set = tokio::task::JoinSet::new();
 
-            for file in &files {
-                let file = file.clone();
-                set.spawn_blocking(|| check_file_state(file));
+            for (index, _) in inputs.iter().enumerate() {
+                let inputs = Arc::clone(&inputs);
+                set.spawn_blocking(move || match &inputs[index] {
+                    Input::File(file) => {
+                        let res = check_file_state(&file);
+                        (index, res)
+                    }
+                    Input::Env(env) => {
+                        let res = check_env_state(&env);
+                        (index, res)
+                    }
+                });
             }
 
             while let Some(res) = set.join_next().await {
-                if let Ok(Ok(file_state)) = res {
+                if let Ok((index, Ok(file_state))) = res {
                     match file_state {
-                        FileState::MetadataModified {
-                            modified_at, path, ..
-                        } => {
-                            // TODO: batch with query builder?
-                            db::update_file_modified_at(pool, path, modified_at)
-                                .await
-                                .map_err(CommandError::Sqlx)?;
+                        FileState::MetadataModified { modified_at, .. } => {
+                            if let Input::File(file) = &inputs[index] {
+                                // TODO: batch with query builder?
+                                let path = file.path.to_string_lossy().to_string();
+                                db::update_file_modified_at(pool, path, modified_at)
+                                    .await
+                                    .map_err(CommandError::Sqlx)?;
+                            }
                         }
                         FileState::Modified { .. } => {
                             should_refresh = true;
@@ -345,7 +485,7 @@ async fn query_cached_output(
                 status: process::ExitStatus::default(),
                 stdout: cmd.output,
                 stderr: Vec::new(),
-                paths: files.into_iter().map(FilePath::from).collect(),
+                inputs: Arc::try_unwrap(inputs).unwrap_or_else(|arc| (*arc).clone()),
             }))
         }
     } else {
@@ -379,39 +519,35 @@ fn extract_op_from_log_line(log: &InternalLog) -> Option<Op> {
 #[allow(dead_code)]
 enum FileState {
     /// The file has not been modified since it was last cached.
-    Unchanged { path: PathBuf },
+    Unchanged,
     /// The file's metadata, i.e. timestamp, has changed, but its content remains the same.
-    MetadataModified {
-        path: PathBuf,
-        modified_at: SystemTime,
-    },
+    MetadataModified { modified_at: SystemTime },
     /// The file's contents have been modified.
     Modified {
-        path: PathBuf,
         new_hash: String,
         modified_at: SystemTime,
     },
     /// The file no longer exists in the file system.
-    Removed { path: PathBuf },
+    Removed,
 }
 
-fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
+fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
     let metadata = match std::fs::metadata(&file.path) {
         Ok(metadata) => metadata,
         // Fix
-        Err(_) => return Ok(FileState::Removed { path: file.path }),
+        Err(_) => return Ok(FileState::Removed),
     };
 
     let modified_at = metadata.modified().and_then(truncate_to_seconds)?;
     if modified_at == file.modified_at {
         // File has not been modified
-        return Ok(FileState::Unchanged { path: file.path });
+        return Ok(FileState::Unchanged);
     }
 
     // mtime has changed, check if content has changed
     let new_hash = if file.is_directory {
         if !metadata.is_dir() {
-            return Ok(FileState::Removed { path: file.path });
+            return Ok(FileState::Removed);
         }
 
         let paths = std::fs::read_dir(&file.path)?
@@ -425,17 +561,32 @@ fn check_file_state(file: db::FilePathRow) -> io::Result<FileState> {
 
     if new_hash == file.content_hash {
         // File touched but hash unchanged
-        Ok(FileState::MetadataModified {
-            path: file.path,
-            modified_at,
-        })
+        Ok(FileState::MetadataModified { modified_at })
     } else {
         // Hash has changed, return new hash
         Ok(FileState::Modified {
-            path: file.path,
             new_hash,
             modified_at,
         })
+    }
+}
+
+fn check_env_state(env: &EnvInputDesc) -> io::Result<FileState> {
+    let value = std::env::var(&env.name);
+
+    if let Err(std::env::VarError::NotPresent) = value {
+        return Ok(FileState::Removed);
+    }
+
+    let new_hash = hash::digest(&value.unwrap_or("".into()));
+
+    if new_hash != env.content_hash {
+        Ok(FileState::Modified {
+            new_hash,
+            modified_at: SystemTime::now(),
+        })
+    } else {
+        Ok(FileState::Unchanged)
     }
 }
 
@@ -455,7 +606,7 @@ mod test {
     use std::io::Write;
     use tempdir::TempDir;
 
-    fn create_file_row(dir: &TempDir, content: &[u8]) -> db::FilePathRow {
+    fn create_file_row(dir: &TempDir, content: &[u8]) -> db::FileInputRow {
         let file_path = dir.path().join("test_file.txt");
         let mut file = File::create(&file_path).unwrap();
         file.write_all(content).unwrap();
@@ -465,7 +616,7 @@ mod test {
         let truncated_modified_at = truncate_to_seconds(modified_at).unwrap();
         let content_hash = hash::compute_file_hash(&file_path).unwrap();
 
-        db::FilePathRow {
+        db::FileInputRow {
             path: file_path,
             is_directory: false,
             content_hash,
@@ -480,7 +631,7 @@ mod test {
         let file_row = create_file_row(&temp_dir, b"Hello, World!");
 
         assert!(matches!(
-            check_file_state(file_row),
+            check_file_state(&file_row.into()),
             Ok(FileState::Unchanged { .. })
         ));
     }
@@ -500,7 +651,7 @@ mod test {
         drop(file);
 
         assert!(matches!(
-            check_file_state(file_row),
+            check_file_state(&file_row.into()),
             Ok(FileState::MetadataModified { .. })
         ));
     }
@@ -517,7 +668,7 @@ mod test {
         file.write_all(b"Modified content").unwrap();
 
         assert!(matches!(
-            check_file_state(file_row),
+            check_file_state(&file_row.into()),
             Ok(FileState::Modified { .. })
         ));
     }
@@ -531,7 +682,7 @@ mod test {
         std::fs::remove_file(&file_row.path).unwrap();
 
         assert!(matches!(
-            check_file_state(file_row),
+            check_file_state(&file_row.into()),
             Ok(FileState::Removed { .. })
         ));
     }
