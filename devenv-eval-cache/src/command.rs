@@ -133,7 +133,7 @@ impl<'a> CachedCommand<'a> {
         let status = child.wait().map_err(CommandError::Io)?;
 
         let stdout = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
-        let (mut ops, stderr) = stderr_thread.await.unwrap();
+        let (ops, stderr) = stderr_thread.await.unwrap();
 
         if !status.success() {
             return Ok(Output {
@@ -144,28 +144,26 @@ impl<'a> CachedCommand<'a> {
             });
         }
 
-        // Remove excluded paths if any are a parent directory
-        ops.retain_mut(|op| {
-            !self
-                .excluded_paths
-                .iter()
-                .any(|path| op.source().starts_with(path))
-        });
-
-        // Convert Ops to FilePaths
-        let mut file_path_futures = ops
+        let mut sources = ops
             .into_iter()
-            .map(|op| {
-                tokio::task::spawn_blocking(move || {
-                    FilePath::new(op.source().to_path_buf()).map_err(CommandError::Io)
-                })
+            .filter_map(|op| op.owned_source())
+            .filter(|source| {
+                !self
+                    .excluded_paths
+                    .iter()
+                    .any(|path| source.starts_with(path))
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<PathBuf>>();
 
         // Watch additional paths
-        file_path_futures.extend(self.extra_paths.into_iter().map(|path| {
-            tokio::task::spawn_blocking(move || FilePath::new(path).map_err(CommandError::Io))
-        }));
+        sources.extend_from_slice(&self.extra_paths);
+
+        let file_path_futures = sources
+            .into_iter()
+            .map(|source| {
+                tokio::task::spawn_blocking(move || FilePath::new(source).map_err(CommandError::Io))
+            })
+            .collect::<Vec<_>>();
 
         let mut file_paths = join_all(file_path_futures)
             .await
@@ -369,6 +367,7 @@ fn extract_op_from_log_line(log: &InternalLog) -> Option<Op> {
             {
                 Some(op)
             }
+            Op::GetEnv { .. } => Some(op),
             _ => None,
         }),
         _ => None,

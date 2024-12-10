@@ -1,7 +1,7 @@
 use crate::internal_log::InternalLog;
 
 use regex::Regex;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// A sum-type of filesystem operations that we can extract from the Nix logs.
 #[derive(Clone, Debug, PartialEq)]
@@ -14,6 +14,8 @@ pub enum Op {
     ReadFile { source: PathBuf },
     /// List a directory's contents with `builtins.readDir`.
     ReadDir { source: PathBuf },
+    /// Read an environment variable with `builtins.getEnv`.
+    GetEnv { name: String },
     /// Used a tracked devenv string path.
     TrackedPath { source: PathBuf },
 }
@@ -30,6 +32,8 @@ impl Op {
                 Regex::new("^devenv readFile: '(?P<source>.*)'$").expect("invalid regex");
             static ref READ_DIR: Regex =
                 Regex::new("^devenv readDir: '(?P<source>.*)'$").expect("invalid regex");
+            static ref GET_ENV: Regex =
+                Regex::new("^devenv getEnv: '(?P<name>.*)'$").expect("invalid regex");
             static ref TRACKED_PATH: Regex =
                 Regex::new("^trace: devenv path: '(?P<source>.*)'$").expect("invalid regex");
         }
@@ -53,6 +57,9 @@ impl Op {
                 } else if let Some(matches) = READ_DIR.captures(msg) {
                     let source = PathBuf::from(&matches["source"]);
                     Some(Op::ReadDir { source })
+                } else if let Some(matches) = GET_ENV.captures(msg) {
+                    let name = matches["name"].to_string();
+                    Some(Op::GetEnv { name })
                 } else if let Some(matches) = TRACKED_PATH.captures(msg) {
                     let source = PathBuf::from(&matches["source"]);
                     Some(Op::TrackedPath { source })
@@ -64,13 +71,25 @@ impl Op {
         }
     }
 
-    pub fn source(&self) -> &PathBuf {
+    pub fn source(&self) -> Option<&Path> {
         match self {
-            Op::CopiedSource { source, .. } => source,
-            Op::EvaluatedFile { source } => source,
-            Op::ReadFile { source } => source,
-            Op::ReadDir { source } => source,
-            Op::TrackedPath { source } => source,
+            Op::CopiedSource { source, .. } => Some(source.as_path()),
+            Op::EvaluatedFile { source } => Some(source.as_path()),
+            Op::ReadFile { source } => Some(source.as_path()),
+            Op::ReadDir { source } => Some(source.as_path()),
+            Op::TrackedPath { source } => Some(source.as_path()),
+            _ => None,
+        }
+    }
+
+    pub fn owned_source(self) -> Option<PathBuf> {
+        match self {
+            Op::CopiedSource { source, .. } => Some(source),
+            Op::EvaluatedFile { source } => Some(source),
+            Op::ReadFile { source } => Some(source),
+            Op::ReadDir { source } => Some(source),
+            Op::TrackedPath { source } => Some(source),
+            _ => None,
         }
     }
 }
@@ -133,6 +152,18 @@ mod tests {
             op,
             Some(Op::ReadDir {
                 source: PathBuf::from("/path/to/dir"),
+            })
+        );
+    }
+
+    #[test]
+    fn test_get_env() {
+        let log = create_log("devenv getEnv: 'SOME_ENV'");
+        let op = Op::from_internal_log(&log);
+        assert_eq!(
+            op,
+            Some(Op::GetEnv {
+                name: "SOME_ENV".to_string(),
             })
         );
     }
