@@ -1,7 +1,7 @@
 use crate::internal_log::InternalLog;
 
 use regex::Regex;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// A sum-type of filesystem operations that we can extract from the Nix logs.
 #[derive(Clone, Debug, PartialEq)]
@@ -67,28 +67,6 @@ impl Op {
                     None
                 }
             }
-            _ => None,
-        }
-    }
-
-    pub fn source(&self) -> Option<&Path> {
-        match self {
-            Op::CopiedSource { source, .. } => Some(source.as_path()),
-            Op::EvaluatedFile { source } => Some(source.as_path()),
-            Op::ReadFile { source } => Some(source.as_path()),
-            Op::ReadDir { source } => Some(source.as_path()),
-            Op::TrackedPath { source } => Some(source.as_path()),
-            _ => None,
-        }
-    }
-
-    pub fn owned_source(self) -> Option<PathBuf> {
-        match self {
-            Op::CopiedSource { source, .. } => Some(source),
-            Op::EvaluatedFile { source } => Some(source),
-            Op::ReadFile { source } => Some(source),
-            Op::ReadDir { source } => Some(source),
-            Op::TrackedPath { source } => Some(source),
             _ => None,
         }
     }
