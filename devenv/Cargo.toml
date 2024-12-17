@@ -12,6 +12,7 @@ default-run = "devenv"
 [dependencies]
 devenv-eval-cache.workspace = true
 devenv-tasks.workspace = true
+nix-conf-parser.workspace = true
 
 clap.workspace = true
 cli-table.workspace = true
@@ -38,6 +39,8 @@ tempfile.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+tracing-core.workspace = true
+tracing-subscriber.workspace = true
 which.workspace = true
 whoami.workspace = true
 xdg.workspace = true

@@ -33937,7 +33937,7 @@ boolean
 
 
 *Default:*
-` true `
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
@@ -68859,7 +68859,7 @@ package
 
 
 *Default:*
-` pkgs.mongodb `
+` pkgs.mongodb-ce `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -70712,6 +70712,48 @@ signed integer
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
+
+
+
+## services.tailscale.funnel.enable
+
+
+
+Whether to enable Tailscale funnel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tailscale.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tailscale.nix)
+
+
+
+## services.tailscale.funnel.target
+
+
+
+Target host or host:port for Tailscale funnel
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/tailscale.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tailscale.nix)
 
 
 

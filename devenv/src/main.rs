@@ -4,6 +4,7 @@ use devenv::{
     config, log, Devenv,
 };
 use miette::Result;
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -29,10 +30,10 @@ async fn main() -> Result<()> {
     } else if cli.global_options.quiet {
         log::Level::Silent
     } else {
-        log::Level::Info
+        log::Level::default()
     };
 
-    let logger = log::Logger::new(level);
+    log::init_tracing(level, cli.global_options.log_format);
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
@@ -40,7 +41,6 @@ async fn main() -> Result<()> {
     }
 
     let mut options = devenv::DevenvOptions {
-        logger: Some(logger.clone()),
         global_options: Some(cli.global_options),
         config,
         ..Default::default()
@@ -55,10 +55,10 @@ async fn main() -> Result<()> {
         let tmpdir =
             tempdir::TempDir::new_in(pwd, ".devenv").expect("Failed to create temporary directory");
         if !dont_override_dotfile {
-            logger.info(&format!(
+            info!(
                 "Overriding .devenv to {}",
                 tmpdir.path().file_name().unwrap().to_str().unwrap()
-            ));
+            );
             options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
         }
         Some(tmpdir)
@@ -106,15 +106,13 @@ async fn main() -> Result<()> {
                 Some(name) => {
                     match (copy, docker_run) {
                         (true, false) => {
-                            logger.warn(
-                                "--copy flag is deprecated, use `devenv container copy` instead",
-                            );
+                            warn!("--copy flag is deprecated, use `devenv container copy` instead",);
                             devenv
                                 .container_copy(&name, &copy_args, registry.as_deref())
                                 .await?;
                         }
                         (_, true) => {
-                            logger.warn(
+                            warn!(
                                 "--docker-run flag is deprecated, use `devenv container run` instead",
                             );
                             devenv
@@ -122,7 +120,7 @@ async fn main() -> Result<()> {
                                 .await?;
                         }
                         _ => {
-                            logger.warn("Calling without a subcommand is deprecated, use `devenv container build` instead");
+                            warn!("Calling without a subcommand is deprecated, use `devenv container build` instead");
                             let _ = devenv.container_build(&name).await?;
                         }
                     };

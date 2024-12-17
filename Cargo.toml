@@ -5,6 +5,7 @@ members = [
     "devenv-eval-cache",
     "devenv-run-tests",
     "devenv-tasks",
+    "nix-conf-parser",
     "xtask",
 ]
 
@@ -19,6 +20,7 @@ devenv = { path = "devenv" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-tasks = { path = "devenv-tasks" }
+nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }
 
 ansiterm = "0.12.2"
@@ -31,6 +33,7 @@ dialoguer = "0.11.0"
 futures = "0.3.30"
 hex = "0.4.3"
 include_dir = "0.7.3"
+indexmap = "2.6.0"
 indoc = "2.0.4"
 lazy_static = "1.5.0"
 miette = { version = "7.1.0", features = ["fancy"] }
@@ -56,6 +59,8 @@ tempdir = "0.3.7"
 tempfile = "3.12.0"
 thiserror = "1.0.63"
 tracing = "0.1.40"
+tracing-core = "0.1.32"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tokio = { version = "1.39.3", features = [
     "process",
     "fs",

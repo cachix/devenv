@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 
 /// Represents Nix's JSON structured log format (--log-format=internal-json).
@@ -49,38 +50,113 @@ impl InternalLog {
             .map(serde_json::from_str)
     }
 
-    pub fn get_log_msg_by_level(&self, target_log_level: Verbosity) -> Option<String> {
-        use std::fmt::Write;
-
+    pub fn filter_by_level(&self, target_log_level: Verbosity) -> Option<&Self> {
         match self {
             // A lot of build messages are tagged as level 0 (Error), making it difficult
             // to filter things out. Our hunch is that these messages are coming from the
             // nix daemon.
-            InternalLog::Msg { msg, level, .. }
+            InternalLog::Msg { level, .. }
                 if *level == Verbosity::Error
                     && (self.is_nix_error() || self.is_builtin_trace()) =>
             {
-                Some(msg.clone())
-            }
-            InternalLog::Msg { msg, level, .. }
-                if *level > Verbosity::Error && *level <= target_log_level =>
-            {
-                Some(msg.clone())
+                Some(self)
             }
 
-            InternalLog::Start { level, text, .. } if *level <= target_log_level => {
-                Some(text.clone())
+            InternalLog::Msg { level, .. }
+                if *level > Verbosity::Error && *level <= target_log_level =>
+            {
+                Some(self)
             }
+
+            // The log levels are also broken for activity messages.
+            InternalLog::Start {
+                level: Verbosity::Error,
+                ..
+            } => {
+                if target_log_level >= Verbosity::Info {
+                    Some(self)
+                } else {
+                    None
+                }
+            }
+
+            InternalLog::Start { level, .. } if *level <= target_log_level => Some(self),
+
+            InternalLog::Result {
+                typ: ResultType::BuildLogLine,
+                ..
+            } if target_log_level >= Verbosity::Info => Some(self),
+            _ => None,
+        }
+    }
+
+    /// Extract or format a human-readable message from the log.
+    ///
+    /// Reference for activity messages:
+    /// https://github.com/NixOS/nix/blob/ff00eebb16fc4c0fd4cebf0cbfc63c471e3c4abd/src/libmain/progress-bar.cc#L177
+    pub fn get_msg(&self) -> Option<Cow<'_, String>> {
+        use std::fmt::Write;
+
+        match self {
+            InternalLog::Msg { ref msg, .. } => Some(Cow::Borrowed(msg)),
+            InternalLog::Start {
+                typ: ActivityType::Substitute,
+                fields,
+                ..
+            } => fields.first().zip(fields.get(1)).and_then(|(path, sub)| {
+                if let (Field::String(path), Field::String(sub)) = (path, sub) {
+                    let name = store_path_to_name(path);
+                    let action = if sub.starts_with("local") {
+                        "copying"
+                    } else {
+                        "fetching"
+                    };
+                    Some(Cow::Owned(format!("{action} {name} from {sub}")))
+                } else {
+                    None
+                }
+            }),
+
+            InternalLog::Start {
+                typ: ActivityType::Build,
+                fields,
+                ..
+            } => {
+                if let Some(Field::String(name)) = fields.first() {
+                    let name = name.strip_suffix(".drv").unwrap_or(name);
+                    let mut msg = format!("building {name}");
+                    if let Some(Field::String(machine_name)) = fields.get(1) {
+                        write!(msg, " on {machine_name}").ok();
+                    }
+                    Some(Cow::Owned(msg))
+                } else {
+                    None
+                }
+            }
+
+            InternalLog::Start {
+                typ: ActivityType::QueryPathInfo,
+                fields,
+                ..
+            } => fields.first().zip(fields.get(1)).and_then(|(path, sub)| {
+                if let (Field::String(path), Field::String(sub)) = (path, sub) {
+                    let name = store_path_to_name(path);
+                    Some(Cow::Owned(format!("querying {name} on {sub}")))
+                } else {
+                    None
+                }
+            }),
+
             InternalLog::Result {
                 typ: ResultType::BuildLogLine,
                 fields,
                 ..
-            } if target_log_level >= Verbosity::Info => {
+            } => {
                 let mut msg = String::new();
                 for field in fields {
                     writeln!(msg, "{}", field).ok();
                 }
-                Some(msg.trim_end().to_string())
+                Some(Cow::Owned(msg.trim_end().to_string()))
             }
             _ => None,
         }
@@ -188,6 +264,14 @@ impl Display for Field {
     }
 }
 
+fn store_path_to_name(path: &str) -> &str {
+    if let Some((_, name)) = path.split_once('-') {
+        name
+    } else {
+        path
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -272,7 +356,6 @@ mod test {
             msg: "\u{1b}[31;1merror:\u{1b}[0m\nsomething went wrong".to_string(),
             raw_msg: None,
         };
-        eprintln!("{:?}", log);
         assert!(log.is_nix_error());
     }
 

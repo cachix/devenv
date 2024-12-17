@@ -1,5 +1,6 @@
-use crate::{cli, config, log};
+use crate::{cli, config};
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use nix_conf_parser::NixConf;
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::cell::{Ref, RefCell};
@@ -11,9 +12,9 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::{debug, error, info, warn};
 
 pub struct Nix<'a> {
-    logger: log::Logger,
     pub options: Options<'a>,
     pool: SqlitePool,
     // TODO: all these shouldn't be here
@@ -69,7 +70,6 @@ impl Default for Options<'_> {
 
 impl<'a> Nix<'a> {
     pub async fn new<P: AsRef<Path>>(
-        logger: log::Logger,
         config: config::Config,
         global_options: cli::GlobalOptions,
         cachix_trusted_keys: P,
@@ -96,7 +96,6 @@ impl<'a> Nix<'a> {
             .into_diagnostic()?;
 
         Ok(Self {
-            logger,
             options,
             pool,
             config,
@@ -155,7 +154,6 @@ impl<'a> Nix<'a> {
         let now_ns = get_now_with_nanoseconds();
         let target = format!("{}-shell", now_ns);
         symlink_force(
-            &self.logger,
             &fs::canonicalize(gc_root).expect("to resolve gc_root"),
             &self.devenv_home_gc.join(target),
         );
@@ -178,7 +176,7 @@ impl<'a> Nix<'a> {
         let link_path = self
             .devenv_dot_gc
             .join(format!("{}-{}", name, get_now_with_nanoseconds()));
-        symlink_force(&self.logger, path, &link_path);
+        symlink_force(path, &link_path);
         Ok(())
     }
 
@@ -286,7 +284,7 @@ impl<'a> Nix<'a> {
             .filter_map(|path_buf| path_buf.to_str())
             .collect();
         for path in paths {
-            self.logger.info(&format!("Deleting {}...", path));
+            info!("Deleting {}...", path);
             let args: Vec<&str> = ["store", "delete", path].to_vec();
             let cmd = self.prepare_command("nix", &args, &self.options);
             // we ignore if this command fails, because root might be in use
@@ -326,12 +324,6 @@ impl<'a> Nix<'a> {
         use devenv_eval_cache::internal_log::Verbosity;
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
-        let mut logger = self.logger.clone();
-
-        if !options.logging {
-            logger.level = log::Level::Error;
-        }
-
         if options.replace_shell {
             if self.global_options.nix_debugger
                 && cmd.get_program().to_string_lossy().ends_with("bin/nix")
@@ -339,10 +331,10 @@ impl<'a> Nix<'a> {
                 cmd.arg("--debugger");
             }
             let error = cmd.exec();
-            self.logger.error(&format!(
+            error!(
                 "Failed to replace shell with `{}`: {error}",
                 display_command(&cmd),
-            ));
+            );
             bail!("Failed to replace shell")
         }
 
@@ -371,21 +363,32 @@ impl<'a> Nix<'a> {
                 cached_cmd.force_refresh();
             }
 
-            if options.logging {
+            if options.logging && !self.global_options.quiet {
+                // Show eval and build logs only in verbose mode
                 let target_log_level = if self.global_options.verbose {
                     Verbosity::Talkative
-                } else if self.global_options.quiet {
-                    Verbosity::Error
                 } else {
-                    Verbosity::Info
+                    Verbosity::Warn
                 };
 
                 cached_cmd.on_stderr(move |log| {
-                    if let Some(msg) = log.get_log_msg_by_level(target_log_level) {
-                        eprintln!("{msg}");
+                    if let Some(log) = log.filter_by_level(target_log_level) {
+                        if let Some(msg) = log.get_msg() {
+                            use devenv_eval_cache::internal_log::InternalLog;
+                            match log {
+                                InternalLog::Msg { level, .. } => match *level {
+                                    Verbosity::Error => error!("{msg}"),
+                                    Verbosity::Warn => warn!("{msg}"),
+                                    Verbosity::Talkative => debug!("{msg}"),
+                                    _ => info!("{msg}"),
+                                },
+                                _ => info!("{msg}"),
+                            };
+                        }
                     }
                 });
             }
+
             cached_cmd
                 .output(&mut cmd)
                 .await
@@ -396,6 +399,7 @@ impl<'a> Nix<'a> {
                 .output()
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+
             devenv_eval_cache::Output {
                 status: output.status,
                 stdout: output.stdout,
@@ -410,23 +414,22 @@ impl<'a> Nix<'a> {
                 None => "without exit code".to_string(),
             };
 
+            if !options.logging {
+                error!(
+                    "Command produced the following output:\n{}\n{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                );
+            }
+
             if self.global_options.nix_debugger
                 && cmd.get_program().to_string_lossy().ends_with("bin/nix")
             {
-                self.logger.info("Starting Nix debugger ...");
+                info!("Starting Nix debugger ...");
                 cmd.arg("--debugger").exec();
             }
 
             if options.bail_on_error {
-                if options.logging {
-                    eprintln!();
-                    self.logger.error(&format!(
-                        "Command produced the following output:\n{}\n{}",
-                        String::from_utf8_lossy(&result.stdout),
-                        String::from_utf8_lossy(&result.stderr),
-                    ));
-                }
-
                 bail!(format!(
                     "Command `{}` failed with {code}",
                     display_command(&cmd)
@@ -454,9 +457,8 @@ impl<'a> Nix<'a> {
 
             match cachix_caches {
                 Err(e) => {
-                    self.logger
-                        .warn("Failed to get cachix caches due to evaluation error");
-                    self.logger.debug(&format!("{}", e));
+                    warn!("Failed to get cachix caches due to evaluation error");
+                    debug!("{}", e);
                 }
                 Ok(cachix_caches) => {
                     push_cache = cachix_caches.caches.push.clone();
@@ -515,10 +517,10 @@ impl<'a> Nix<'a> {
                 new_cmd.current_dir(cmd.get_current_dir().unwrap_or_else(|| Path::new(".")));
                 return Ok(new_cmd);
             } else {
-                self.logger.warn(&format!(
+                warn!(
                     "CACHIX_AUTH_TOKEN is not set, but required to push to {}.",
                     push_cache
-                ));
+                );
             }
         }
         Ok(cmd)
@@ -552,11 +554,10 @@ impl<'a> Nix<'a> {
         let mut cmd = match env::var("DEVENV_NIX") {
             Ok(devenv_nix) => std::process::Command::new(format!("{devenv_nix}/bin/{command}")),
             Err(_) => {
-                self.logger.error(
+                error!(
             "$DEVENV_NIX is not set, but required as devenv doesn't work without a few Nix patches."
             );
-                self.logger
-                    .error("Please follow https://devenv.sh/getting-started/ to install devenv.");
+                error!("Please follow https://devenv.sh/getting-started/ to install devenv.");
                 bail!("$DEVENV_NIX is not set")
             }
         };
@@ -582,10 +583,19 @@ impl<'a> Nix<'a> {
         cmd.current_dir(&self.devenv_root);
 
         if self.global_options.verbose {
-            self.logger
-                .debug(&format!("Running command: {}", display_command(&cmd)));
+            debug!("Running command: {}", display_command(&cmd));
         }
         Ok(cmd)
+    }
+
+    async fn get_nix_config(&self) -> Result<NixConf> {
+        let options = Options {
+            logging: false,
+            ..self.options
+        };
+        let raw_conf = self.run_nix("nix", &["config", "show"], &options).await?;
+        let nix_conf = NixConf::parse_stdout(&raw_conf.stdout)?;
+        Ok(nix_conf)
     }
 
     async fn get_cachix_caches(&self) -> Result<Ref<CachixCaches>> {
@@ -620,12 +630,11 @@ impl<'a> Nix<'a> {
                     }
                     let resp = request.send().await.expect("Failed to get cache");
                     if resp.status().is_client_error() {
-                        self.logger.error(&format!(
+                        error!(
                         "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
                         name
-                    ));
-                        self.logger
-                            .error("To create a cache, go to https://app.cachix.org/.");
+                    );
+                        error!("To create a cache, go to https://app.cachix.org/.");
                         bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
                     } else {
                         let resp_json =
@@ -645,8 +654,8 @@ impl<'a> Nix<'a> {
                     .expect("Failed to parse JSON")
                     .trusted;
                 if trusted.is_none() {
-                    self.logger.warn(
-                    "You're using very old version of Nix, please upgrade and restart nix-daemon.",
+                    warn!(
+                    "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
                 );
                 }
                 let restart_command = if cfg!(target_os = "linux") {
@@ -655,14 +664,17 @@ impl<'a> Nix<'a> {
                     "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
                 };
 
-                self.logger
-                    .info(&format!("Using Cachix: {}", caches.caches.pull.join(", ")));
+                info!(
+                    devenv.is_user_message = true,
+                    "Using Cachix: {}",
+                    caches.caches.pull.join(", "),
+                );
                 if !new_known_keys.is_empty() {
                     for (name, pubkey) in new_known_keys.iter() {
-                        self.logger.info(&format!(
+                        info!(
                             "Trusting {}.cachix.org on first use with the public key {}",
                             name, pubkey
-                        ));
+                        );
                     }
                     caches.known_keys.extend(new_known_keys);
                 }
@@ -673,68 +685,123 @@ impl<'a> Nix<'a> {
                 )
                 .expect("Failed to write cachix caches to file");
 
+                // If the user is not a trusted user, we can't set up the caches for them.
+                // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
+                // If not, suggest actions to remedy the issue.
                 if trusted == Some(0) {
-                    if !Path::new("/etc/NIXOS").exists() {
-                        self.logger.error(&indoc::formatdoc!(
-                        "You're not a trusted user of the Nix store. You have the following options:
+                    let mut missing_caches = Vec::new();
+                    let mut missing_public_keys = Vec::new();
 
-                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf for devenv to manage caches for you.
+                    if let Ok(nix_conf) = self.get_nix_config().await {
+                        let substituters = nix_conf
+                            .get("substituters")
+                            .map(|s| s.split_whitespace().collect::<Vec<_>>());
 
-                        trusted-users = root {}
+                        if let Some(substituters) = substituters {
+                            for cache in caches.caches.pull.iter() {
+                                let cache_url = format!("https://{}.cachix.org", cache);
+                                if !substituters.iter().any(|s| s == &cache_url) {
+                                    missing_caches.push(cache_url);
+                                }
+                            }
+                        }
 
-                        Restart nix-daemon with:
+                        let trusted_public_keys = nix_conf
+                            .get("trusted-public-keys")
+                            .map(|s| s.split_whitespace().collect::<Vec<_>>());
 
-                          $ {restart_command}
-
-                        b) Add binary caches to /etc/nix/nix.conf yourself:
-
-                        extra-substituters = {}
-                        extra-trusted-public-keys = {}
-
-                        And disable automatic cache configuration in `devenv.nix`:
-
-                        {{
-                            cachix.enable = false;
-                        }}
-                    ", whoami::username()
-                    , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
-                    , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
-                    ));
-                    } else {
-                        self.logger.error(&indoc::formatdoc!(
-                        "You're not a trusted user of the Nix store. You have the following options:
-
-                        a) Add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix for devenv to manage caches for you.
-
-                        {{
-                            nix.extraOptions = ''
-                                trusted-users = root {}
-                            '';
-                        }}
-
-                        b) Add binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
-                        {{
-                            nix.extraOptions = ''
-                                extra-substituters = {}
-                                extra-trusted-public-keys = {}
-                            '';
-                        }}
-
-                        Disable automatic cache configuration in `devenv.nix`:
-
-                        {{
-                            cachix.enable = false;
-                        }}
-
-                        Lastly, rebuild your system:
-
-                          $ sudo nixos-rebuild switch
-                    ", whoami::username()
-                    , caches.caches.pull.iter().map(|cache| format!("https://{}.cachix.org", cache)).collect::<Vec<String>>().join(" ")
-                    , caches.known_keys.values().cloned().collect::<Vec<String>>().join(" ")
-                    ));
+                        if let Some(trusted_public_keys) = trusted_public_keys {
+                            for (_name, key) in caches.known_keys.iter() {
+                                if !trusted_public_keys.iter().any(|p| p == key) {
+                                    missing_public_keys.push(key.clone());
+                                }
+                            }
+                        }
                     }
-                    bail!("You're not a trusted user of the Nix store.")
+
+                    if !missing_caches.is_empty() || !missing_public_keys.is_empty() {
+                        if !Path::new("/etc/NIXOS").exists() {
+                            error!("{}", indoc::formatdoc!(
+                        "Failed to set up binary caches:
+
+                           {}
+
+                        devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
+
+                        You have several options:
+
+                        a) To let devenv set up the caches for you, add yourself to the trusted-users list in /etc/nix/nix.conf:
+
+                             trusted-users = root {}
+
+                           Then restart the nix-daemon:
+
+                             $ {restart_command}
+
+                        b) Add the missing binary caches to /etc/nix/nix.conf yourself:
+
+                             extra-substituters = {}
+                             extra-trusted-public-keys = {}
+
+                        c) Disable automatic cache management in your devenv configuration:
+
+                             {{
+                               cachix.enable = false;
+                             }}
+                    "
+                    , missing_caches.join(" ")
+                    , whoami::username()
+                    , missing_caches.join(" ")
+                    , missing_public_keys.join(" ")
+                    ));
+                        } else {
+                            error!("{}", indoc::formatdoc!(
+                        "Failed to set up binary caches:
+
+                           {}
+
+                        devenv is configured to automatically manage binary caches with `cachix.enable = true`, but cannot do so because you are not a trusted user of the Nix store.
+
+                        You have several options:
+
+                        a) To let devenv set up the caches for you, add yourself to the trusted-users list in /etc/nix/nix.conf by editing configuration.nix.
+
+                             {{
+                               nix.settings.trusted-users = [ \"root\" \"{}\" ];
+                             }}
+
+                           Rebuild your system:
+
+                             $ sudo nixos-rebuild switch
+
+                        b) Add the missing binary caches to /etc/nix/nix.conf yourself by editing configuration.nix:
+
+                             {{
+                               nix.extraOptions = ''
+                                 extra-substituters = {}
+                                 extra-trusted-public-keys = {}
+                               '';
+                             }}
+
+                           Rebuild your system:
+
+                             $ sudo nixos-rebuild switch
+
+                        c) Disable automatic cache management in your devenv configuration:
+
+                             {{
+                               cachix.enable = false;
+                             }}
+                    "
+                    , missing_caches.join(" ")
+                    , whoami::username()
+                    , missing_caches.join(" ")
+                    , missing_public_keys.join(" ")
+                    ));
+                        }
+
+                        bail!("You're not a trusted user of the Nix store.")
+                    }
                 }
             }
 
@@ -747,13 +814,14 @@ impl<'a> Nix<'a> {
     }
 }
 
-fn symlink_force(logger: &log::Logger, link_path: &Path, target: &Path) {
+fn symlink_force(link_path: &Path, target: &Path) {
     let _lock = dotlock::Dotlock::create(target.with_extension("lock")).unwrap();
-    logger.debug(&format!(
+
+    debug!(
         "Creating symlink {} -> {}",
         link_path.display(),
         target.display()
-    ));
+    );
 
     if target.exists() {
         fs::remove_file(target).unwrap_or_else(|_| panic!("Failed to remove {}", target.display()));

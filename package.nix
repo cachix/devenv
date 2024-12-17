@@ -14,6 +14,7 @@ pkgs.rustPlatform.buildRustPackage {
     ".*devenv-eval-cache(/.*)?"
     ".*devenv-run-tests(/.*)?"
     ".*devenv-tasks(/.*)?"
+    ".*nix-conf-parser(/.*)?"
     ".*xtask(/.*)?"
   ];
 
