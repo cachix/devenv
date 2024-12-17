@@ -1,4 +1,4 @@
-use super::{cli, cnix, config, log, tasks};
+use super::{cli, cnix, config, tasks};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -229,14 +229,13 @@ impl Devenv {
                     .collect::<Vec<_>>();
 
                 if files.is_empty() {
-                    self.logger
-                        .warn("No files found. Are you in a git repository?");
+                    warn!("No files found. Are you in a git repository?");
                     return Ok(());
                 }
 
                 if let Some(stderr) = String::from_utf8(git_output.stderr).ok() {
                     if !stderr.is_empty() {
-                        self.logger.warn(&stderr);
+                        warn!("{}", &stderr);
                     }
                 }
 
@@ -250,8 +249,7 @@ impl Devenv {
             }
         };
 
-        self.logger
-            .info("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
+        info!("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
 
         let response_future = request.send();
 
@@ -294,8 +292,9 @@ impl Devenv {
         confirm_overwrite(Path::new("devenv.nix"), response_json.devenv_nix)?;
         confirm_overwrite(Path::new("devenv.yaml"), response_json.devenv_yaml)?;
 
-        self.logger.info(
-            &indoc::formatdoc!("
+        info!(
+            "{}",
+            indoc::formatdoc!("
               Generated devenv.nix and devenv.yaml 🎉
 
               Treat these as templates and open an issue at https://github.com/cachix/devenv/issues if you think we can do better!
