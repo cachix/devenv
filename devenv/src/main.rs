@@ -1,13 +1,12 @@
 use clap::crate_version;
 use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
-    config, log, utils, Devenv,
+    config, log, Devenv,
 };
 use miette::Result;
-use std::fs::File;
 use std::io::BufWriter;
 use tracing::level_filters::LevelFilter;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {

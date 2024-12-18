@@ -48,6 +48,8 @@ tracing-appender.workspace = true
 dashmap.workspace = true
 tree-sitter.workspace = true
 tree-sitter-nix.workspace = true
+fs_extra.workspace = true
+temp-dir.workspace = true
 
 [build-dependencies]
 cc = "*"

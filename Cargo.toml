@@ -69,6 +69,8 @@ tokio = { version = "1.39.3", features = [
     "sync",
     "time",
     "io-std",
+    "test-util",
+    "full",
 ] }
 which = "6.0.0"
 whoami = "1.5.1"
@@ -77,6 +79,8 @@ xdg = "2.5.2"
 tower-lsp = "0.20.0"
 tracing-appender = "0.2.3"
 dashmap = "6.1.0"
+fs_extra = "1.3.0"
+temp-dir = "0.1.13"
 # Using older version of tree-sitter due to tree-sitter-nix not being updated yet
 tree-sitter = "0.20"
 tree-sitter-nix = "0.0.1"
