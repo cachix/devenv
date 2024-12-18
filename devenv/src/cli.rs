@@ -282,6 +282,9 @@ pub enum Commands {
     #[command(about = "Print the version of devenv.")]
     Version,
 
+    #[command(about = "Start devenv LSP")]
+    Lsp {},
+
     #[clap(hide = true)]
     Assemble,
 
