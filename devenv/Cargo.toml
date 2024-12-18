@@ -48,3 +48,6 @@ tracing-appender.workspace = true
 dashmap.workspace = true
 tree-sitter.workspace = true
 tree-sitter-nix.workspace = true
+
+[build-dependencies]
+cc = "*"

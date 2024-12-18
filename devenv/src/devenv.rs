@@ -1,4 +1,4 @@
-use super::{cli, cnix, config, log, lsp, tasks};
+use super::{cli, cnix, config, log, lsp, tasks, utils};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -397,7 +397,25 @@ impl Devenv {
         .await
     }
 
-    pub async fn lsp(&mut self, completion_json: &Value) -> Result<()> {
+    pub async fn lsp(&mut self) -> Result<()> {
+        let options = self.nix.build(&["optionsJSON"]).await?;
+        let options_path = options[0]
+            .join("share")
+            .join("doc")
+            .join("nixos")
+            .join("options.json");
+        let options_contents = fs::read(options_path).expect("Failed to read options.json");
+        let options_json: serde_json::Value =
+            serde_json::from_slice(&options_contents).expect("Failed to parse options.json");
+        let mut flatten_json = utils::flatten(options_json);
+        let filter_keys = vec![
+            String::from("declarations"),
+            String::from("loc"),
+            String::from("readOnly"),
+        ];
+        let filter_keys_refs: Vec<&str> = filter_keys.iter().map(|s| s.as_str()).collect();
+        let completion_json = utils::filter_json(&mut flatten_json, filter_keys_refs);
+
         let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
         info!("Inside the tokio main async lsp");
         let (service, socket) = LspService::new(|client| lsp::Backend {
