@@ -1,4 +1,4 @@
-use super::{cli, cnix, config, log, lsp, tasks, utils};
+use super::{cli, cnix, config, lsp, tasks, utils};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -9,7 +9,6 @@ use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use serde_json::Value;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
@@ -413,7 +412,9 @@ impl Devenv {
     }
 
     pub async fn lsp(&mut self) -> Result<()> {
+        self.assemble(false)?;
         let options = self.nix.build(&["optionsJSON"]).await?;
+        debug!("{:?}", options);
         let options_path = options[0]
             .join("share")
             .join("doc")
