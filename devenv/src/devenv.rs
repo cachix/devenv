@@ -1,12 +1,14 @@
-use super::{cli, cnix, config, log, tasks};
+use super::{cli, cnix, config, log, lsp, tasks};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
+use dashmap::DashMap;
 use include_dir::{include_dir, Dir};
 use miette::{bail, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use serde::Deserialize;
+use serde_json::Value;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
@@ -15,6 +17,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use tower_lsp::{LspService, Server};
 use tracing::{debug, error, info, info_span, warn, Instrument};
 
 // templates
@@ -392,6 +395,18 @@ impl Devenv {
         }
         .instrument(span)
         .await
+    }
+
+    pub async fn lsp(&mut self, completion_json: &Value) -> Result<()> {
+        let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
+        info!("Inside the tokio main async lsp");
+        let (service, socket) = LspService::new(|client| lsp::Backend {
+            client,
+            document_map: DashMap::new(),
+            completion_json: completion_json.clone(),
+        });
+        Server::new(stdin, stdout, socket).serve(service).await;
+        Ok(())
     }
 
     pub fn repl(&mut self) -> Result<()> {
