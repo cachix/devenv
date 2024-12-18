@@ -355,7 +355,6 @@ impl<'a> Nix<'a> {
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
             cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
 
-            cached_cmd.unwatch_path(self.devenv_root.join(".devenv.flake.nix"));
             // Ignore anything in .devenv.
             cached_cmd.unwatch_path(&self.devenv_dotfile);
 
@@ -404,7 +403,7 @@ impl<'a> Nix<'a> {
                 status: output.status,
                 stdout: output.stdout,
                 stderr: output.stderr,
-                paths: vec![],
+                inputs: vec![],
             }
         };
 
