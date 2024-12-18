@@ -68,10 +68,18 @@ tokio = { version = "1.39.3", features = [
     "rt-multi-thread",
     "sync",
     "time",
+    "io-std",
 ] }
 which = "6.0.0"
 whoami = "1.5.1"
 xdg = "2.5.2"
+# LSP dependencies
+tower-lsp = "0.20.0"
+tracing-appender = "0.2.3"
+dashmap = "6.1.0"
+# Using older version of tree-sitter due to tree-sitter-nix not being updated yet
+tree-sitter = "0.20"
+tree-sitter-nix = "0.0.1"
 
 # Always build optimized sqlx-macro to speed up query checks
 [profile.dev.package.sqlx-macros]
