@@ -6,7 +6,7 @@
         git-hooks.url = "github:cachix/git-hooks.nix";
       git-hooks.inputs.nixpkgs.follows = "nixpkgs";
       pre-commit-hooks.follows = "git-hooks";
-      nixpkgs.url = "github:cachix/devenv-nixpkgs/bump-rolling";
+      nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
       devenv.url = "github:cachix/devenv?dir=src/modules";
       } // (if builtins.pathExists (devenv_dotfile + "/flake.json")
       then builtins.fromJSON (builtins.readFile (devenv_dotfile +  "/flake.json"))
