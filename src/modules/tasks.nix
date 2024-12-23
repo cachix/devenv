@@ -1,7 +1,11 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
-  devenv = import ./../../package.nix { inherit pkgs inputs; build_tasks = true; };
+  devenv = pkgs.callPackage ./../../package.nix {
+    build_tasks = true;
+    inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
+    inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
+  };
   taskType = types.submodule
     ({ name, config, ... }:
       let
