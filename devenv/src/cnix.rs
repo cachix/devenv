@@ -355,7 +355,6 @@ impl<'a> Nix<'a> {
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
             cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
 
-            cached_cmd.unwatch_path(self.devenv_root.join(".devenv.flake.nix"));
             // Ignore anything in .devenv.
             cached_cmd.unwatch_path(&self.devenv_dotfile);
 
@@ -448,8 +447,8 @@ impl<'a> Nix<'a> {
         options: &Options<'a>,
     ) -> Result<std::process::Command> {
         let mut final_args = Vec::new();
-        let known_keys;
-        let pull_caches;
+        let known_keys_str;
+        let pull_caches_str;
         let mut push_cache = None;
 
         if !self.global_options.offline {
@@ -464,28 +463,31 @@ impl<'a> Nix<'a> {
                     push_cache = cachix_caches.caches.push.clone();
                     // handle cachix.pull
                     if !cachix_caches.caches.pull.is_empty() {
-                        pull_caches = cachix_caches
+                        let mut pull_caches = cachix_caches
                             .caches
                             .pull
                             .iter()
                             .map(|cache| format!("https://{}.cachix.org", cache))
-                            .collect::<Vec<String>>()
-                            .join(" ");
+                            .collect::<Vec<String>>();
+                        pull_caches.sort();
+                        pull_caches_str = pull_caches.join(" ");
                         final_args.extend_from_slice(&[
                             "--option",
                             "extra-substituters",
-                            &pull_caches,
+                            &pull_caches_str,
                         ]);
-                        known_keys = cachix_caches
+
+                        let mut known_keys = cachix_caches
                             .known_keys
                             .values()
                             .cloned()
-                            .collect::<Vec<String>>()
-                            .join(" ");
+                            .collect::<Vec<String>>();
+                        known_keys.sort();
+                        known_keys_str = known_keys.join(" ");
                         final_args.extend_from_slice(&[
                             "--option",
                             "extra-trusted-public-keys",
-                            &known_keys,
+                            &known_keys_str,
                         ]);
                     }
                 }
