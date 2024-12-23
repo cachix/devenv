@@ -773,7 +773,7 @@ impl Devenv {
                 $ devenv init
             "});
         }
-        std::fs::create_dir_all(&self.devenv_dot_gc)
+        fs::create_dir_all(&self.devenv_dot_gc)
             .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_dot_gc.display()));
 
         let mut flake_inputs = HashMap::new();
@@ -832,8 +832,14 @@ impl Devenv {
             is_testing
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
-        std::fs::write(self.devenv_root.join(DEVENV_FLAKE), flake)
-            .expect("Failed to write flake.nix");
+        let flake_path = self.devenv_root.join(DEVENV_FLAKE);
+
+        // Avoid writing the flake if it hasn't changed.
+        // direnv's watch_file triggers a reload based solely on mtime, which becomes annoying if we constantly touch this file.
+        let existing_flake = fs::read_to_string(&flake_path).unwrap_or_default();
+        if flake != existing_flake {
+            fs::write(flake_path, flake).expect("Failed to write flake.nix");
+        }
 
         self.assembled = true;
         Ok(())
