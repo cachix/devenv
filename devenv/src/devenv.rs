@@ -1,4 +1,5 @@
 use super::{cli, cnix, config, lsp, tasks, utils};
+use crate::log::{DevenvFormat, DevenvLayer};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -12,6 +13,7 @@ use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
+use std::io::{self, BufWriter};
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
     fs,
@@ -19,6 +21,8 @@ use std::{
 };
 use tower_lsp::{LspService, Server};
 use tracing::{debug, error, info, info_span, warn, Instrument};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::{prelude::*, EnvFilter};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -413,6 +417,36 @@ impl Devenv {
 
     pub async fn lsp(&mut self) -> Result<()> {
         self.assemble(false)?;
+        // Setup file logging
+        let file = std::fs::File::create("/tmp/devenv-lsp.log")
+            .expect("Couldn't create devenv-lsp.log file");
+        let file = BufWriter::new(file);
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file);
+
+        // Create a dedicated subscriber for LSP
+        let subscriber = tracing_subscriber::registry()
+            .with(
+                EnvFilter::builder()
+                    .with_default_directive(LevelFilter::DEBUG.into())
+                    .from_env_lossy(),
+            )
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(io::stderr)
+                    .with_ansi(false)
+                    .event_format(DevenvFormat::default()),
+            )
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_ansi(false),
+            )
+            .with(DevenvLayer::new());
+
+        // Set as global default for LSP session
+        let _guard = tracing::subscriber::set_global_default(subscriber)
+            .expect("Failed to set tracing subscriber");
+
         let options = self.nix.build(&["optionsJSON"]).await?;
         debug!("{:?}", options);
         let options_path = options[0]

@@ -2,6 +2,7 @@
 
 use core::panic;
 use devenv::lsp::Backend;
+use devenv::utils;
 use fs_extra::dir::CopyOptions;
 use std::fmt::Debug;
 use std::fs;
@@ -40,15 +41,20 @@ impl TestContext {
         let (resp_server, response_rx) = duplex(1024);
         let response_rx = BufReader::new(response_rx);
         // create a demo completion json file
-        let completion_json = serde_json::json!({ "languages": {
-                "python": { "description": "Python language" },
-                "nodejs": { "description": "Node.js runtime" }
-            },
-            "services": {
-                "nginx": { "description": "Web server" },
-                "redis": { "description": "Cache server" }
-            }
-        });
+
+        let options_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/common/options.json");
+
+        let options_contents = fs::read(options_path).expect("Failed to read options.json");
+        let options_json: serde_json::Value =
+            serde_json::from_slice(&options_contents).expect("Failed to parse options.json");
+        let mut flatten_json = utils::flatten(options_json);
+        let filter_keys = vec![
+            String::from("declarations"),
+            String::from("loc"),
+            String::from("readOnly"),
+        ];
+        let filter_keys_refs: Vec<&str> = filter_keys.iter().map(|s| s.as_str()).collect();
+        let completion_json = utils::filter_json(&mut flatten_json, filter_keys_refs);
 
         let (service, socket) =
             LspService::build(|client| Backend::new(client, completion_json.clone())).finish();
@@ -57,7 +63,7 @@ impl TestContext {
         // create a temporary workspace an init it with our test inputs
         let workspace = TempDir::new().unwrap();
         for item in fs::read_dir(Path::new("tests").join("workspace").join(base)).unwrap() {
-            eprintln!("copying {item:?}");
+            // eprintln!("copying {item:?}");
             fs_extra::copy_items(
                 &[item.unwrap().path()],
                 workspace.path(),
@@ -98,7 +104,7 @@ impl TestContext {
             let mut content = vec![0; length];
             self.response_rx.read_exact(&mut content).await.unwrap();
             let content = String::from_utf8(content).unwrap();
-            eprintln!("received: {content}");
+            // eprintln!("received: {content}");
             std::io::stderr().flush().unwrap();
             // skip log messages
             if content.contains("window/logMessage") {
@@ -129,7 +135,7 @@ impl TestContext {
             let mut content = vec![0; length];
             self.response_rx.read_exact(&mut content).await.unwrap();
             let content = String::from_utf8(content).unwrap();
-            eprintln!("received: {content}");
+            // eprintln!("received: {content}");
             std::io::stderr().flush().unwrap();
             // skip log messages
             if content.contains("window/logMessage") {
@@ -143,7 +149,7 @@ impl TestContext {
 
     pub async fn send(&mut self, request: &jsonrpc::Request) {
         let content = serde_json::to_string(request).unwrap();
-        eprintln!("\nsending: {content}");
+        // eprintln!("\nsending: {content}");
         std::io::stderr().flush().unwrap();
         self.request_tx
             .write_all(encode_message(None, &content).as_bytes())

@@ -47,13 +47,11 @@ async fn test_simple_completions() {
     if let Some(tower_lsp::lsp_types::CompletionResponse::List(list)) = completion_response {
         assert!(!list.items.is_empty(), "Should have completion items");
         let item_labels: Vec<String> = list.items.into_iter().map(|item| item.label).collect();
+
+        println!("labels are {:?}", item_labels);
         assert!(
             item_labels.contains(&"python".to_string()),
             "Should suggest python"
-        );
-        assert!(
-            item_labels.contains(&"nodejs".to_string()),
-            "Should suggest nodejs"
         );
     } else {
         panic!("Expected CompletionResponse::List");
@@ -103,6 +101,7 @@ async fn test_simple_nested_completions() {
     if let Some(tower_lsp::lsp_types::CompletionResponse::List(list)) = completion_response {
         assert!(!list.items.is_empty(), "Should have completion items");
         let item_labels: Vec<String> = list.items.into_iter().map(|item| item.label).collect();
+        // println!("Completion list is {:?}", item_labels);
         assert!(
             item_labels.contains(&"python".to_string()),
             "Should suggest python"

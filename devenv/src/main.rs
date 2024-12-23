@@ -4,8 +4,6 @@ use devenv::{
     config, log, Devenv,
 };
 use miette::Result;
-use std::io::BufWriter;
-use tracing::level_filters::LevelFilter;
 use tracing::{info, warn};
 
 #[tokio::main]
@@ -38,19 +36,12 @@ async fn main() -> Result<()> {
         log::Level::default()
     };
 
-    log::init_tracing(level, cli.global_options.log_format);
+    // log::init_tracing(level, cli.global_options.log_format);
 
-    let file =
-        std::fs::File::create("/tmp/devenv-lsp.log").expect("Couldn't create devenv-lsp.log file");
-
-    let file = BufWriter::new(file);
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file);
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(LevelFilter::DEBUG)
-        .with_ansi(false)
-        .with_writer(non_blocking)
-        .finish();
-    let _ = tracing::subscriber::set_global_default(subscriber);
+    // Only initialize tracing if we're not running LSP
+    if !matches!(command, Commands::Lsp { .. }) {
+        log::init_tracing(level, cli.global_options.log_format);
+    }
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {

@@ -30,7 +30,6 @@ impl Backend {
     }
 
     fn get_completion_items(&self, uri: &str, position: Position) -> Vec<CompletionItem> {
-        println!("Test document uri {:?}", uri);
         let (content, tree) = self
             .document_map
             .get(uri)
