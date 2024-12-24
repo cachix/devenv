@@ -274,8 +274,12 @@ pub enum Commands {
         attributes: Vec<String>,
     },
 
+    #[command(about = "Generate and print out a direnvrc.")]
+    #[clap(hide = true)]
+    Direnvrc,
+
     #[command(about = "Print the version of devenv.")]
-    Version {},
+    Version,
 
     #[clap(hide = true)]
     Assemble,
