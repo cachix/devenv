@@ -78,7 +78,10 @@ _nix_import_env() {
 _nix_argsum_suffix() {
   local out checksum content
 
-  content=$(cat "$@" 2>/dev/null)
+  args=("$@")
+  sorted_args=$(printf "%s\n" "${args[@]}" | sort -u)
+
+  content=$(cat "${sorted_args[@]}" 2>/dev/null)
 
   if has sha1sum; then
     out=$(sha1sum <<< "$content")
@@ -94,8 +97,52 @@ _nix_argsum_suffix() {
 }
 
 nix_direnv_watch_file() {
+  log_error "nix_direnv_watch_file is deprecated. Use watch_file instead."
   watch_file "$@"
-  nix_watches+=("$@")
+}
+
+_nix_direnv_watches() {
+  local -n _watches=$1
+  if [[ -z ${DIRENV_WATCHES-} ]]; then
+    return
+  fi
+  while IFS= read -r line; do
+    local regex='"[Pp]ath": "(.+)"$'
+    if [[ $line =~ $regex ]]; then
+      local path="${BASH_REMATCH[1]}"
+      if [[ $path == "${XDG_DATA_HOME:-${HOME:-/var/empty}/.local/share}/direnv/allow/"* ]]; then
+        continue
+      fi
+      # expand new lines and other json escapes
+      # shellcheck disable=2059
+      path=$(printf "$path")
+      _watches+=("$path")
+    fi
+  done < <($direnv show_dump "${DIRENV_WATCHES}")
+}
+
+_devenv_watches() {
+  local -n path=$1
+  local -n watches=$2
+  if [[ -f $path ]]; then
+    for file in $(cat "$path"); do
+      watches+=("$file")
+    done
+  fi
+}
+
+_devenv_profile_rc() {
+  local -n _watches=$1
+  local layout_dir profile
+  layout_dir=$(direnv_layout_dir)
+  profile="${layout_dir}/devenv-profile$(_nix_argsum_suffix "${_watches[@]}")"
+  echo "${profile}.rc"
+}
+
+_devenv_test() {
+  local arg=$1
+
+  echo "$@"
 }
 
 use_devenv() {
@@ -103,35 +150,38 @@ use_devenv() {
 
   flake_expr="${1:-.}"
   flake_dir="${flake_expr%#*}"
+  env_deps_path="$flake_dir/.devenv/input-paths.txt"
 
-  local files_to_watch
-  files_to_watch=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
+  local default_watches
+  default_watches=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
 
   if [[ -d "$flake_dir" ]]; then
-    files_to_watch+=("$flake_dir/devenv.nix" "$flake_dir/devenv.lock" "$flake_dir/devenv.yaml" "$flake_dir/devenv.local.nix")
+    default_watches+=("$flake_dir/devenv.nix" "$flake_dir/devenv.lock" "$flake_dir/devenv.yaml" "$flake_dir/devenv.local.nix")
+
     if [[ -f "$flake_dir/devenv.yaml" ]]; then
       if ! devenv assemble; then
         log_error "$(devenv version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
         exit 0
       fi
-
-      if [[ -f "$flake_dir/.devenv/input-paths.txt" ]]; then
-        for file in $(cat "$flake_dir/.devenv/input-paths.txt"); do
-            files_to_watch+=("$file")
-        done
-      fi
     fi
   fi
 
-  nix_direnv_watch_file "${files_to_watch[@]}"
+  # Watch the default files
+  watch_file "${default_watches[@]}"
 
-  local layout_dir profile_rc
-  layout_dir=$(direnv_layout_dir)
-  profile_rc="${layout_dir}/devenv-profile$(_nix_argsum_suffix "${files_to_watch[@]}").rc"
+  # Fetch and watch files that affect the env
+  local env_watches
+  _devenv_watches env_deps_path env_watches
+  watch_file "${env_watches[@]}"
+
+  local watches
+  _nix_direnv_watches watches
+
+  profile_rc=$(_devenv_profile_rc watches)
 
   local need_update=0
   local file=
-  for file in "${nix_watches[@]}"; do
+  for file in "${watches[@]}"; do
     if [[ "$file" -nt "$profile_rc" ]]; then
       need_update=1
       log_status "$file changed, reloading"
@@ -147,6 +197,15 @@ use_devenv() {
       log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
       exit 0
     fi
+
+    local env_watches
+    _devenv_watches env_deps_path env_watches
+    watch_file "${env_watches[@]}"
+ 
+    # Fetch the final watches and compute the new profile_rc
+    local watches
+    _nix_direnv_watches watches
+    profile_rc=$(_devenv_profile_rc watches)
 
     echo "$env" > "$profile_rc"
     log_status "updated devenv shell cache"
