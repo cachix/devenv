@@ -332,16 +332,16 @@ impl Devenv {
             let copy_script = &copy_script[0];
             let copy_script_string = &copy_script.to_string_lossy();
 
-            let copy_args = [
-                spec,
-                registry.unwrap_or("false").to_string(),
-                copy_args.join(" "),
-            ];
+            let base_args = [spec, registry.unwrap_or("false").to_string()];
+            let command_args: Vec<String> = base_args
+                .into_iter()
+                .chain(copy_args.iter().map(|s| s.to_string()))
+                .collect();
 
-            info!("Running {copy_script_string} {}", copy_args.join(" "));
+            info!("Running {copy_script_string} {}", command_args.join(" "));
 
             let status = std::process::Command::new(copy_script)
-                .args(copy_args)
+                .args(command_args)
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit())
                 .status()
