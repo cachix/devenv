@@ -191,18 +191,12 @@ impl Devenv {
         description: Option<String>,
         host: &str,
         exclude: Vec<PathBuf>,
-        disable_telemetry: bool,
+        disable_analytics: bool,
     ) -> Result<()> {
-        // TODO: get nixpkgs revision and devenv revision
-        let nixpkgs_rev = "";
-        let devenv_rev = "";
-
         let client = reqwest::Client::new();
         let mut request = client
             .post(host)
-            .query(&[("disable_telemetry", disable_telemetry)])
-            .query(&[("nixpkgs", nixpkgs_rev)])
-            .query(&[("devenv", devenv_rev)])
+            .query(&[("disable_analytics", disable_analytics)])
             .header(reqwest::header::USER_AGENT, crate_version!());
 
         let (asyncwriter, asyncreader) = tokio::io::duplex(256 * 1024);

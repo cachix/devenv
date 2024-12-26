@@ -191,7 +191,7 @@ pub enum Commands {
         #[arg(num_args=0.., trailing_var_arg = true)]
         description: Vec<String>,
 
-        #[clap(long, default_value = "https://generate.devenv.sh")]
+        #[clap(long, default_value = "https://devenv.new")]
         host: String,
 
         #[arg(
@@ -203,7 +203,7 @@ pub enum Commands {
 
         // https://consoledonottrack.com/
         #[clap(long, env = "DO_NOT_TRACK", action = clap::ArgAction::SetTrue)]
-        disable_telemetry: bool,
+        disable_analytics: bool,
     },
 
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]
