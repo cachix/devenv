@@ -1825,7 +1825,7 @@ string
 
 
 
-Whether to warn when a new version of devenv is available.
+Whether to warn when a new version of either devenv or the direnv integration is available.
 
 
 
