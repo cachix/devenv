@@ -50,7 +50,7 @@ _nix_import_env() {
   local old_xdg_data_dirs=${XDG_DATA_DIRS:-}
   eval "$(< "$profile_rc")"
   # `nix print-dev-env` will create a temporary directory and use it as TMPDIR
-  # We cannot rely on this directory being availble at all times,
+  # We cannot rely on this directory being available at all times,
   # as it may be garbage collected.
   # Instead - just remove it immediately.
   # Use recursive & force as it may not be empty.
@@ -122,12 +122,13 @@ _nix_direnv_watches() {
 }
 
 _devenv_watches() {
-  local -n path=$1
-  local -n watches=$2
-  if [[ -f $path ]]; then
-    for file in $(cat "$path"); do
-      watches+=("$file")
-    done
+  local path=$1
+  local -n _watches=$2
+  if [[ -f "$path" ]]; then
+    while IFS= read -r file; do
+      file=$(printf "$file")
+      _watches+=("$file")
+    done < "$path"
   fi
 }
 
@@ -137,12 +138,6 @@ _devenv_profile_rc() {
   layout_dir=$(direnv_layout_dir)
   profile="${layout_dir}/devenv-profile$(_nix_argsum_suffix "${_watches[@]}")"
   echo "${profile}.rc"
-}
-
-_devenv_test() {
-  local arg=$1
-
-  echo "$@"
 }
 
 use_devenv() {
@@ -171,9 +166,10 @@ use_devenv() {
 
   # Fetch and watch files that affect the env
   local env_watches
-  _devenv_watches env_deps_path env_watches
+  _devenv_watches "$env_deps_path" env_watches
   watch_file "${env_watches[@]}"
 
+  # Fetch all files that direnv is currently watching
   local watches
   _nix_direnv_watches watches
 
@@ -198,10 +194,11 @@ use_devenv() {
       exit 0
     fi
 
+    # Re-watch files that affect the env
     local env_watches
-    _devenv_watches env_deps_path env_watches
+    _devenv_watches "$env_deps_path" env_watches
     watch_file "${env_watches[@]}"
- 
+
     # Fetch the final watches and compute the new profile_rc
     local watches
     _nix_direnv_watches watches
