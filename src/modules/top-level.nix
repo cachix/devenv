@@ -213,7 +213,6 @@ in
         type = types.package;
         internal = true;
       };
-
     };
   };
 
@@ -265,7 +264,7 @@ in
       pkgs.pkg-config
     ];
 
-    enterShell = ''
+    enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
 
       # set path to locales on non-NixOS Linux hosts
@@ -280,10 +279,10 @@ in
         export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
       fi
 
-      # devenv helper
+      # direnv helper
       if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
-        echo "You have .envrc but direnv command is not installed."
-        echo "Please install direnv: https://direnv.net/docs/installation.html"
+        echo "An .envrc file was detected, but the direnv command is not installed."
+        echo "To use this configuration, please install direnv: https://direnv.net/docs/installation.html"
       fi
 
       mkdir -p "$DEVENV_STATE"

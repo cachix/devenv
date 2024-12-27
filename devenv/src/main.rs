@@ -20,10 +20,9 @@ async fn main() -> Result<()> {
     };
 
     let command = match cli.command {
-        None => return print_version(),
-        Some(Commands::Version) => return print_version(),
+        None | Some(Commands::Version) => return print_version(),
         Some(Commands::Direnvrc) => {
-            print!("{}", include_str!("../../direnvrc"));
+            print!("{}", devenv::DIRENVRC);
             return Ok(());
         }
         Some(cmd) => cmd,

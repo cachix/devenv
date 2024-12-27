@@ -6,6 +6,7 @@ use include_dir::{include_dir, Dir};
 use miette::{bail, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
@@ -22,6 +23,20 @@ const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
+static DIRENVRC: Lazy<String> = Lazy::new(|| {
+    include_str!("../../direnvrc").replace(
+        "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
+        "DEVENV_DIRENVRC_ROLLING_UPGRADE=1",
+    )
+});
+static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
+    DIRENVRC
+        .lines()
+        .find(|line| line.contains("export DEVENV_DIRENVRC_VERSION"))
+        .map(|line| line.split('=').last().unwrap().trim())
+        .and_then(|version| version.parse().ok())
+        .unwrap_or(0)
+});
 // project vars
 const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
@@ -817,6 +832,7 @@ impl Devenv {
             devenv_tmpdir = \"{}\";
             devenv_runtime = \"{}\";
             devenv_istesting = {};
+            devenv_direnvrc_latest_version = {};
             ",
             crate_version!(),
             self.global_options.system,
@@ -829,7 +845,8 @@ impl Devenv {
                 .unwrap_or_else(|| "null".to_string()),
             self.devenv_tmp,
             self.devenv_runtime.display(),
-            is_testing
+            is_testing,
+            DIRENVRC_VERSION
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
@@ -852,7 +869,7 @@ impl Devenv {
         let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
-        std::fs::write(
+        fs::write(
             self.devenv_dotfile.join("input-paths.txt"),
             env.paths
                 .iter()

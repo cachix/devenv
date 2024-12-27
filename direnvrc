@@ -28,6 +28,9 @@ _nix_direnv_preflight () {
   if [[ ! -d "$layout_dir" ]]; then
     mkdir -p "$layout_dir"
   fi
+
+  export DEVENV_DIRENVRC_VERSION=1
+  export DEVENV_DIRENVRC_ROLLING_UPGRADE=0
 }
 
 _nix_export_or_unset() {
