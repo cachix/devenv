@@ -274,11 +274,6 @@ in
         fi
       ''}
 
-      # note what environments are active, but make sure we don't repeat them
-      if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
-        export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
-      fi
-
       # direnv helper
       if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
         echo "An .envrc file was detected, but the direnv command is not installed."

@@ -45,6 +45,11 @@ _nix_export_or_unset() {
 _nix_import_env() {
   local profile_rc=$1
 
+  # Note which environments are active, but make sure we don't repeat them
+  if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
+    export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
+  fi
+
   local old_nix_build_top=${NIX_BUILD_TOP:-__UNSET__}
   local old_tmp=${TMP:-__UNSET__}
   local old_tmpdir=${TMPDIR:-__UNSET__}
