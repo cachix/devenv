@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
     let command = match cli.command {
         None | Some(Commands::Version) => return print_version(),
         Some(Commands::Direnvrc) => {
-            print!("{}", devenv::DIRENVRC);
+            print!("{}", devenv::DIRENVRC.to_string());
             return Ok(());
         }
         Some(cmd) => cmd,

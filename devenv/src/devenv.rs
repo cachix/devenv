@@ -23,13 +23,13 @@ const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
-static DIRENVRC: Lazy<String> = Lazy::new(|| {
+pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
     include_str!("../../direnvrc").replace(
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=1",
     )
 });
-static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
+pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
     DIRENVRC
         .lines()
         .find(|line| line.contains("export DEVENV_DIRENVRC_VERSION"))
@@ -846,7 +846,7 @@ impl Devenv {
             self.devenv_tmp,
             self.devenv_runtime.display(),
             is_testing,
-            DIRENVRC_VERSION
+            DIRENVRC_VERSION.to_string()
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
