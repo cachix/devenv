@@ -264,7 +264,7 @@ pub enum Commands {
     Repl {},
 
     #[command(
-        about = "Deletes previous shell generations. See http://devenv.sh/garbage-collection"
+        about = "Deletes previous shell generations. See https://devenv.sh/garbage-collection"
     )]
     Gc {},
 
@@ -274,8 +274,13 @@ pub enum Commands {
         attributes: Vec<String>,
     },
 
+    #[command(
+        about = "Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation."
+    )]
+    Direnvrc,
+
     #[command(about = "Print the version of devenv.")]
-    Version {},
+    Version,
 
     #[clap(hide = true)]
     Assemble,
