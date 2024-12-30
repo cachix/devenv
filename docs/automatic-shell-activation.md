@@ -9,7 +9,7 @@ This feature relies on a separate tool called [direnv](https://direnv.net) (not 
 
 ## Configure shell activation
 
-To enable automatic shell activation, create a `.envrc` file in your project directory with the following content:
+To enable automatic shell activation, create an `.envrc` file in your project directory with the following content:
 
 ```bash
 eval "$(devenv direnvrc)"
@@ -51,8 +51,44 @@ we recommend [installing Starship](https://starship.rs/guide/).
 
 The `.direnv` directory will be added to your `.gitignore` file by default when you run `devenv init`.
 
-If you need to add it manually, run:
+To add it manually, run:
 
-```
+```shell-session
 echo ".direnv" >> .gitignore
+```
+
+## Manually managing updates to direnvrc
+
+We occasionally make updates to our direnv integration script, also known as the `direnvrc`.
+Devenv will use the latest compatible version if set up using the method described above in [Configure Shell Activation](#configure-shell-activation).
+
+Alternatively, you can pin the `direnvrc` to a specific version from the source repository.
+This approach allows you audit the `direnvrc` script and have full control over when it is updated.
+The downside is that you will have to manually update the URL and content hash of the script for every single project individually.
+
+We strongly recommend using the approach that supports automated upgrades described in [Configure Shell Activation](#configure-shell-activation).
+
+The `direnvrc` can be found at:
+
+```text
+https://raw.githubusercontent.com/cachix/devenv/VERSION/direnvrc
+```
+
+Replace `VERSION` with a valid git tag or branch name.
+
+To use it in your `.envrc`, first compute its sha256 hash:
+
+```shell-session
+direnv fetchurl "https://raw.githubusercontent.com/cachix/devenv/VERSION/direnvrc"
+```
+```shell-session
+Found hash: <HASH>
+```
+
+Then modify your `.envrc`, updating the URL and inserting the computed hash from the previous step:
+
+```bash
+source_url "https://raw.githubusercontent.com/cachix/devenv/VERSION/direnvrc" "<HASH>"
+
+use devenv
 ```
