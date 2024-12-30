@@ -407,7 +407,7 @@ impl Devenv {
             let span = info_span!(
                 "cleanup_symlinks",
                 devenv.user_message = format!(
-                    "Removing non-existing symlinks in {} ...",
+                    "Removing non-existing symlinks in {}",
                     &self.devenv_home_gc.display()
                 )
             );
@@ -425,7 +425,7 @@ impl Devenv {
             let span = info_span!(
                 "nix_gc",
                 devenv.user_message =
-                    "Running garbage collection (this process will take some time) ..."
+                    "Running garbage collection (this process will take some time)"
             );
             info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
             span.in_scope(|| self.nix.gc(to_gc))?;
