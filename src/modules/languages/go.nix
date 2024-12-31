@@ -39,6 +39,9 @@ in
       (buildWithSpecificGo pkgs.go-tools)
       (buildWithSpecificGo pkgs.gopls)
       (buildWithSpecificGo pkgs.gotests)
+
+      # Required by vim-go
+      (buildWithSpecificGo pkgs.iferr)
     ];
 
     hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
