@@ -169,7 +169,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            info!("Creating {}", filename);
+            // info!("Creating {}", filename);
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -283,7 +283,7 @@ impl Devenv {
                 develop_args.extend_from_slice(&args);
             }
             None => {
-                info!("Entering shell");
+                // info!("Entering shell");
             }
         };
 
@@ -448,7 +448,7 @@ impl Devenv {
             .expect("Failed to set tracing subscriber");
 
         let options = self.nix.build(&["optionsJSON"]).await?;
-        debug!("{:?}", options);
+        // debug!("{:?}", options);
         let options_path = options[0]
             .join("share")
             .join("doc")
@@ -498,11 +498,11 @@ impl Devenv {
         };
         let to_gc_len = to_gc.len();
 
-        info!("Found {} active environments.", to_gc_len);
-        info!(
-            "Deleted {} dangling environments (most likely due to previous GC).",
-            removed_symlinks.len()
-        );
+        // info!("Found {} active environments.", to_gc_len);
+        // info!(
+        //     "Deleted {} dangling environments (most likely due to previous GC).",
+        //     removed_symlinks.len()
+        // );
 
         {
             let span = info_span!(
@@ -510,7 +510,7 @@ impl Devenv {
                 devenv.user_message =
                     "Running garbage collection (this process will take some time)"
             );
-            info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
+            // info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
             span.in_scope(|| self.nix.gc(to_gc))?;
         }
 
@@ -518,11 +518,11 @@ impl Devenv {
         let end = std::time::Instant::now();
 
         // TODO: newline before or after
-        info!(
-            "\nDone. Successfully removed {} symlinks in {}s.",
-            to_gc_len - after_gc.len(),
-            (end - start).as_secs_f32()
-        );
+        // info!(
+        //     "\nDone. Successfully removed {} symlinks in {}s.",
+        //     to_gc_len - after_gc.len(),
+        //     (end - start).as_secs_f32()
+        // );
         Ok(())
     }
 
@@ -577,7 +577,7 @@ impl Devenv {
             print_stderr(options_results.with_title()).expect("Failed to print options results");
         }
 
-        info!("Found {search_results_count} packages and {results_options_count} options for '{name}'.");
+        // info!("Found {search_results_count} packages and {results_options_count} options for '{name}'.");
         Ok(())
     }
 
@@ -667,7 +667,7 @@ impl Devenv {
             error!("Tests failed :(");
             bail!("Tests failed");
         } else {
-            info!("Tests passed :)");
+            // info!("Tests passed :)");
             Ok(())
         }
     }
@@ -803,11 +803,11 @@ impl Devenv {
 
                 std::fs::write(self.processes_pid(), process.id().to_string())
                     .expect("Failed to write PROCESSES_PID");
-                info!("PID is {}", process.id());
+                // info!("PID is {}", process.id());
                 if *log_to_file {
-                    info!("See logs:  $ tail -f {}", self.processes_log().display());
+                    // info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
-                info!("Stop:      $ devenv processes stop");
+                // info!("Stop:      $ devenv processes stop");
             } else {
                 let err = cmd.exec();
                 bail!(err);

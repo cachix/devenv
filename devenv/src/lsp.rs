@@ -5,18 +5,43 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 use tracing::{debug, info};
-use tree_sitter::{Node, Parser, Point, Tree, TreeCursor};
+use tracing_subscriber::field::debug;
+use tree_sitter::{Node, Parser, Point, Query, QueryCursor, Tree, TreeCursor};
 use tree_sitter_nix::language;
 
 #[derive(Clone, Debug)]
 pub struct Backend {
     pub client: Client,
-    // pub document_map: DashMap<String, String>,
     pub document_map: DashMap<String, (String, Tree)>,
     pub completion_json: Value,
 }
 
 impl Backend {
+    fn print_ast(&self, node: Node, source: &str, depth: usize) {
+        let indent = "  ".repeat(depth);
+        let node_text = node
+            .utf8_text(source.as_bytes())
+            .unwrap_or("<invalid utf8>");
+        debug!("{}{}: \"{}\"", indent, node.kind(), node_text);
+
+        let mut cursor = node.walk();
+        let mut has_children = false;
+
+        if cursor.goto_first_child() {
+            has_children = true;
+            loop {
+                self.print_ast(cursor.node(), source, depth + 1);
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+
+        if has_children {
+            cursor.goto_parent();
+        }
+    }
+
     pub fn new(client: Client, completion_json: Value) -> Self {
         let mut parser = Parser::new();
         parser
@@ -39,6 +64,7 @@ impl Backend {
         let point = Point::new(position.line as usize, position.character as usize);
 
         let scope_path = self.get_scope(root_node, point, &content);
+        debug!("Scope path: {:?}", scope_path);
         let line_content = content
             .lines()
             .nth(position.line as usize)
@@ -54,6 +80,8 @@ impl Backend {
             .unwrap_or("");
 
         let search_path = [scope_path.clone(), dot_path].concat();
+        debug!("Current word: {:?}", current_word);
+        debug!("Search path: {:?}", search_path);
         let completions = self.search_json(&search_path, current_word);
 
         completions
@@ -77,6 +105,8 @@ impl Backend {
 
     fn update_document(&self, uri: &str, content: String) {
         let tree = self.parse_document(&content);
+        debug!("AST for document {}:", uri);
+        // self.print_ast(tree.root_node(), &content, 0);
         self.document_map.insert(uri.to_string(), (content, tree));
     }
 
@@ -86,51 +116,32 @@ impl Backend {
         let mut scope = Vec::new();
 
         if let Some(node) = root_node.descendant_for_point_range(cursor_position, cursor_position) {
-            let mut cursor = node.walk();
-            self.traverse_up(&mut cursor, &mut scope, source);
-        }
+            debug!("Node kind of current cursor position: {}", node.kind());
+            debug!("Parent: {}", node.parent().map(|n| n.kind()).unwrap_or(""));
+            let mut current_node = node;
+            while let Some(sibling) = current_node.prev_named_sibling() {
+                if sibling.kind() == "formals" {
+                    break;
+                }
+                scope.push(
+                    sibling
+                        .utf8_text(source.as_bytes())
+                        .unwrap_or_default()
+                        .to_string(),
+                );
+                debug!(
+                    "Previous named sibling: kind {}, value {:?}",
+                    sibling.kind(),
+                    sibling.utf8_text(source.as_bytes())
+                );
+                current_node = sibling;
+            }
 
-        scope.reverse();
+            debug!("Prev named siblings: {:?}", scope);
+        }
         debug!("Final scope: {:?}", scope);
+        scope.reverse();
         scope
-    }
-
-    fn traverse_up(&self, cursor: &mut TreeCursor, scope: &mut Vec<String>, source: &str) {
-        loop {
-            let node = cursor.node();
-            debug!(
-                "Current node kind: {}, text: {:?}",
-                node.kind(),
-                node.utf8_text(source.as_bytes())
-            );
-
-            match node.kind() {
-                "attrpath" => {
-                    if let Ok(text) = node.utf8_text(source.as_bytes()) {
-                        let attrs: Vec<String> = text.split('.').map(String::from).collect();
-                        scope.extend(attrs);
-                    }
-                }
-                "binding" => {
-                    if let Some(attrpath) = node.child_by_field_name("attrpath") {
-                        if let Ok(text) = attrpath.utf8_text(source.as_bytes()) {
-                            let attrs: Vec<String> = text.split('.').map(String::from).collect();
-                            scope.extend(attrs);
-                        }
-                    }
-                }
-                "attrset_expression" => {
-                    // We've reached an attribute set, continue traversing up
-                }
-                _ => {
-                    // For other node types, we don't add to the scope
-                }
-            }
-
-            if !cursor.goto_parent() {
-                break;
-            }
-        }
     }
 
     fn get_path(&self, line: &str) -> Vec<String> {
@@ -284,6 +295,7 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        debug!("Triggering completions");
         let uri = params.text_document_position.text_document.uri.to_string();
         let position = params.text_document_position.position;
 
