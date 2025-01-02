@@ -70,6 +70,7 @@ in
       type = types.package;
       description = "The stdenv to use for the developer environment.";
       default = pkgs.stdenv;
+      defaultText = lib.literalExpression "pkgs.stdenv";
     };
 
     unsetEnvVars = lib.mkOption {
