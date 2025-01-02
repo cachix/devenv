@@ -35913,11 +35913,12 @@ outputOf (attribute set)
 
 ```
 {
+  git = pkgs.git;
   foo = {
-    ncdu = <derivation ncdu-2.3>;
+    ncdu = pkgs.ncdu;
   };
-  git = <derivation git-2.44.0>;
 }
+
 ```
 
 *Declared by:*
@@ -65487,7 +65488,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` pkgs.bash `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -65508,7 +65509,7 @@ string
 
 
 *Default:*
-` "bash" `
+` config.package.pname `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -72461,7 +72462,7 @@ package
 
 
 *Default:*
-` <derivation stdenv-linux> `
+` pkgs.stdenv `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -72498,7 +72499,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` pkgs.bash `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -72561,7 +72562,7 @@ string
 
 
 *Default:*
-` "bash" `
+` config.package.pname `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
