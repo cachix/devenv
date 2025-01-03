@@ -719,9 +719,10 @@ impl<'a> Nix<'a> {
                             .map(|s| s.split_whitespace().collect::<Vec<_>>());
 
                         if let Some(trusted_public_keys) = trusted_public_keys {
-                            for (_name, key) in caches.known_keys.iter() {
-                                if !trusted_public_keys.iter().any(|p| p == key) {
-                                    missing_public_keys.push(key.clone());
+                            let mut known_keys = caches.known_keys.values();
+                            for key in trusted_public_keys.iter() {
+                                if !known_keys.any(|k| k == key) {
+                                    missing_public_keys.push(key.to_string());
                                 }
                             }
                         }
