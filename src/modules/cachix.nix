@@ -12,13 +12,13 @@ in
 
     pull = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      description = "What caches to pull from.";
-      default = [ ];
+      description = "Which Cachix caches to pull from.";
+      default = [ "devenv" ];
     };
 
     push = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
-      description = "What cache to push to. Automatically also adds it to the list of caches to pull from.";
+      description = "Which Cachix cache to push to. This cache is also added to `cachix.pull`.";
       default = null;
     };
 
@@ -29,8 +29,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    cachix.pull = [ "devenv" ]
-      ++ (lib.optionals (cfg.push != null) [ config.cachix.push ]);
+    cachix.pull = lib.optional (cfg.push != null) config.cachix.push;
 
     warnings = lib.optionals (!config.devenv.flakesIntegration && lib.versionOlder config.devenv.cliVersion "1.0") [
       ''

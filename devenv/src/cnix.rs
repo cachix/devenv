@@ -607,17 +607,23 @@ impl<'a> Nix<'a> {
                 ..self.options
             };
             let caches_raw = self.eval(&["devenv.cachix"]).await?;
-            let cachix = serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
-            let known_keys = if let Ok(known_keys) =
-                std::fs::read_to_string(self.cachix_trusted_keys.as_path())
-            {
-                serde_json::from_str(&known_keys).expect("Failed to parse JSON")
-            } else {
-                HashMap::new()
-            };
+            let cachix_config: CachixConfig =
+                serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
+
+            // Return empty caches if the Cachix integration is disabled
+            if !cachix_config.enable {
+                *self.cachix_caches.borrow_mut() = Some(CachixCaches::default());
+                return Ok(Ref::map(self.cachix_caches.borrow(), |option| {
+                    option.as_ref().unwrap()
+                }));
+            }
+
+            let known_keys = std::fs::read_to_string(self.cachix_trusted_keys.as_path())
+                .map(|known_keys| serde_json::from_str(&known_keys).expect("Failed to parse JSON"))
+                .unwrap_or_default();
 
             let mut caches = CachixCaches {
-                caches: cachix,
+                caches: cachix_config.caches,
                 known_keys,
             };
 
@@ -626,7 +632,7 @@ impl<'a> Nix<'a> {
             for name in caches.caches.pull.iter() {
                 if !caches.known_keys.contains_key(name) {
                     let mut request =
-                        client.get(&format!("https://cachix.org/api/v1/cache/{}", name));
+                        client.get(format!("https://cachix.org/api/v1/cache/{}", name));
                     if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
                         request = request.bearer_auth(ret);
                     }
@@ -857,13 +863,21 @@ fn display_command(cmd: &std::process::Command) -> String {
     format!("{command} {args}")
 }
 
-#[derive(Deserialize, Clone)]
-pub struct Cachix {
-    pull: Vec<String>,
-    push: Option<String>,
+/// The Cachix module configuration
+#[derive(Deserialize, Default, Clone)]
+pub struct CachixConfig {
+    enable: bool,
+    #[serde(flatten)]
+    caches: Cachix,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Default, Clone)]
+pub struct Cachix {
+    pub pull: Vec<String>,
+    pub push: Option<String>,
+}
+
+#[derive(Deserialize, Default, Clone)]
 pub struct CachixCaches {
     caches: Cachix,
     known_keys: HashMap<String, String>,
