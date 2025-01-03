@@ -18,11 +18,13 @@ let
           type = types.package;
           description = "The package to use to run the script.";
           default = pkgs.bash;
+          defaultText = lib.literalExpression "pkgs.bash";
         };
         binary = lib.mkOption {
           type = types.str;
           description = "Override the binary name if it doesn't match package name";
           default = config.package.pname;
+          defaultText = lib.literalExpression "config.package.pname";
         };
         description = lib.mkOption {
           type = types.str;
