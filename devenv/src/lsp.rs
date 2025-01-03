@@ -1,4 +1,5 @@
-use dashmap::DashMap;
+use super::{cli, cnix, config, lsp, tasks, utils};
+use lsp_textdocument::FullTextDocument;
 use regex::Regex;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
@@ -7,41 +8,16 @@ use tower_lsp::{Client, LanguageServer};
 use tracing::{debug, info};
 use tracing_subscriber::field::debug;
 use tree_sitter::{Node, Parser, Point, Query, QueryCursor, Tree, TreeCursor};
-use tree_sitter_nix::language;
 
-#[derive(Clone, Debug)]
 pub struct Backend {
-    pub client: Client,
-    pub document_map: DashMap<String, (String, Tree)>,
-    pub completion_json: Value,
+    client: Client,
+    curr_doc: std::sync::Arc<tokio::sync::Mutex<Option<FullTextDocument>>>,
+    tree: std::sync::Arc<tokio::sync::Mutex<Option<Tree>>>,
+    completion_json: Value,
+    parser: std::sync::Arc<tokio::sync::Mutex<Parser>>,
 }
 
 impl Backend {
-    fn print_ast(&self, node: Node, source: &str, depth: usize) {
-        let indent = "  ".repeat(depth);
-        let node_text = node
-            .utf8_text(source.as_bytes())
-            .unwrap_or("<invalid utf8>");
-        debug!("{}{}: \"{}\"", indent, node.kind(), node_text);
-
-        let mut cursor = node.walk();
-        let mut has_children = false;
-
-        if cursor.goto_first_child() {
-            has_children = true;
-            loop {
-                self.print_ast(cursor.node(), source, depth + 1);
-                if !cursor.goto_next_sibling() {
-                    break;
-                }
-            }
-        }
-
-        if has_children {
-            cursor.goto_parent();
-        }
-    }
-
     pub fn new(client: Client, completion_json: Value) -> Self {
         let mut parser = Parser::new();
         parser
@@ -49,17 +25,64 @@ impl Backend {
             .expect("Unable to load the nix language file");
         Backend {
             client,
-            document_map: DashMap::new(),
+            curr_doc: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
+            tree: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
             completion_json,
+            parser: std::sync::Arc::new(tokio::sync::Mutex::new(parser)),
         }
     }
 
-    fn get_completion_items(&self, uri: &str, position: Position) -> Vec<CompletionItem> {
-        let (content, tree) = self
-            .document_map
-            .get(uri)
-            .expect("Document not found")
-            .clone();
+    fn text_doc_change_to_tree_sitter_edit(
+        change: &TextDocumentContentChangeEvent,
+        doc: &FullTextDocument,
+    ) -> std::result::Result<tree_sitter::InputEdit, &'static str> {
+        let range = change.range.as_ref().ok_or("Invalid edit range")?;
+        let start = range.start;
+        let end = range.end;
+
+        let start_byte = doc.offset_at(start) as usize;
+        let old_end_byte = doc.offset_at(end) as usize;
+        let new_end_byte = start_byte + change.text.len();
+
+        let new_end_pos = doc.position_at(new_end_byte as u32);
+
+        Ok(tree_sitter::InputEdit {
+            start_byte,
+            old_end_byte,
+            new_end_byte,
+            start_position: Point {
+                row: start.line as usize,
+                column: start.character as usize,
+            },
+            old_end_position: Point {
+                row: end.line as usize,
+                column: end.character as usize,
+            },
+            new_end_position: Point {
+                row: new_end_pos.line as usize,
+                column: new_end_pos.character as usize,
+            },
+        })
+    }
+
+    async fn get_completion_list(&self, uri: &str, position: Position) -> Vec<CompletionItem> {
+        let curr_doc = self.curr_doc.lock().await;
+        let tree = self.tree.lock().await;
+
+        debug!("Current document: {:?}", curr_doc);
+
+        let doc = match &*curr_doc {
+            Some(doc) => doc,
+            None => return vec![],
+        };
+        let tree = match &*tree {
+            Some(tree) => tree,
+            None => return vec![],
+        };
+
+        debug!("Current tree: {:?}", tree);
+
+        let content = doc.get_content(None);
         let root_node = tree.root_node();
         let point = Point::new(position.line as usize, position.character as usize);
 
@@ -92,27 +115,10 @@ impl Backend {
             .collect()
     }
 
-    fn parse_document(&self, content: &str) -> Tree {
-        let mut parser = Parser::new();
-        let nix_grammar = language();
-        parser
-            .set_language(nix_grammar)
-            .expect("Error loading Nix grammar");
-        parser
-            .parse(content, None)
-            .expect("Failed to parse document")
-    }
-
-    fn update_document(&self, uri: &str, content: String) {
-        let tree = self.parse_document(&content);
-        debug!("AST for document {}:", uri);
-        // self.print_ast(tree.root_node(), &content, 0);
-        self.document_map.insert(uri.to_string(), (content, tree));
-    }
-
     fn get_scope(&self, root_node: Node, cursor_position: Point, source: &str) -> Vec<String> {
         debug!("Getting scope for cursor position: {:?}", cursor_position);
         debug!("Source code is: {:?}", source);
+        // self.print_ast(node, source, depth);
         let mut scope = Vec::new();
 
         if let Some(node) = root_node.descendant_for_point_range(cursor_position, cursor_position) {
@@ -188,14 +194,17 @@ impl Backend {
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
-            server_info: None,
+            server_info: Some(ServerInfo {
+                name: String::from("devenv-lsp"),
+                version: Some(String::from(env!("CARGO_PKG_VERSION"))),
+            }),
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
+                    TextDocumentSyncKind::INCREMENTAL,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string(), "\n".to_string()]),
+                    trigger_characters: Some(vec![".".to_string()]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                     ..Default::default()
@@ -260,24 +269,55 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.client
-            .log_message(MessageType::INFO, "file opened!")
-            .await;
-        let uri = params.text_document.uri.to_string();
-        let content = params.text_document.text;
-        self.update_document(&uri, content);
+        let mut curr_doc = self.curr_doc.lock().await;
+        let mut tree = self.tree.lock().await;
+        let mut parser = self.parser.lock().await;
+
+        *curr_doc = Some(lsp_textdocument::FullTextDocument::new(
+            params.text_document.language_id.clone(),
+            params.text_document.version,
+            params.text_document.text.clone(),
+        ));
+        *tree = parser.parse(params.text_document.text, None);
+
         self.client
             .log_message(MessageType::INFO, "file opened!")
             .await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = params.text_document.uri.to_string();
-        let content = params.content_changes[0].text.clone();
-        self.update_document(&uri, content);
-        self.client
-            .log_message(MessageType::INFO, "file changed!")
-            .await;
+        let mut curr_doc = self.curr_doc.lock().await;
+        let mut tree = self.tree.lock().await;
+
+        if let Some(ref mut doc) = *curr_doc {
+            doc.update(&params.content_changes, params.text_document.version);
+            let mut parser = self.parser.lock().await;
+            for change in params.content_changes.iter() {
+                if let Some(ref mut curr_tree) = *tree {
+                    match Self::text_doc_change_to_tree_sitter_edit(change, doc) {
+                        Ok(edit) => {
+                            debug!("Applying edit: {:?}", edit);
+                            curr_tree.edit(&edit);
+                            // Reparse after edit
+                            if let Some(new_tree) =
+                                parser.parse(doc.get_content(None), Some(curr_tree))
+                            {
+                                *curr_tree = new_tree;
+                            }
+                        }
+                        Err(err) => {
+                            self.client
+                                .log_message(
+                                    MessageType::ERROR,
+                                    format!("Failed to edit tree: {}", err),
+                                )
+                                .await;
+                        }
+                    }
+                }
+            }
+        }
+        debug!("Changed Document is {:?}", curr_doc);
     }
 
     async fn did_save(&self, _: DidSaveTextDocumentParams) {
@@ -299,7 +339,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position.text_document.uri.to_string();
         let position = params.text_document_position.position;
 
-        let completion_items = self.get_completion_items(&uri, position);
+        let completion_items = self.get_completion_list(&uri, position).await;
 
         Ok(Some(CompletionResponse::List(CompletionList {
             is_incomplete: false,

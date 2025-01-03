@@ -51,6 +51,7 @@ tree-sitter.workspace = true
 tree-sitter-nix.workspace = true
 fs_extra.workspace = true
 temp-dir.workspace = true
+lsp-textdocument.workspace = true
 
 [build-dependencies]
 cc = "*"

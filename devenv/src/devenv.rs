@@ -468,11 +468,8 @@ impl Devenv {
 
         let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
         info!("Inside the tokio main async lsp");
-        let (service, socket) = LspService::new(|client| lsp::Backend {
-            client,
-            document_map: DashMap::new(),
-            completion_json: completion_json.clone(),
-        });
+        let (service, socket) =
+            LspService::new(|client| lsp::Backend::new(client, completion_json.clone()));
         Server::new(stdin, stdout, socket).serve(service).await;
         Ok(())
     }
