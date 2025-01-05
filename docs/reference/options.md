@@ -923,7 +923,7 @@ package
 
 
 
-What caches to pull from.
+Which Cachix caches to pull from.
 
 
 
@@ -933,7 +933,12 @@ list of string
 
 
 *Default:*
-` [ ] `
+
+```
+[
+  "devenv"
+]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
@@ -944,7 +949,7 @@ list of string
 
 
 
-What cache to push to. Automatically also adds it to the list of caches to pull from.
+Which Cachix cache to push to. This cache is also added to ` cachix.pull `.
 
 
 
