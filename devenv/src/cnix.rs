@@ -697,36 +697,11 @@ impl<'a> Nix<'a> {
                 // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
                 // If not, suggest actions to remedy the issue.
                 if trusted == Some(0) {
-                    let mut missing_caches = Vec::new();
-                    let mut missing_public_keys = Vec::new();
-
-                    if let Ok(nix_conf) = self.get_nix_config().await {
-                        let substituters = nix_conf
-                            .get("substituters")
-                            .map(|s| s.split_whitespace().collect::<Vec<_>>());
-
-                        if let Some(substituters) = substituters {
-                            for cache in caches.caches.pull.iter() {
-                                let cache_url = format!("https://{}.cachix.org", cache);
-                                if !substituters.iter().any(|s| s == &cache_url) {
-                                    missing_caches.push(cache_url);
-                                }
-                            }
-                        }
-
-                        let trusted_public_keys = nix_conf
-                            .get("trusted-public-keys")
-                            .map(|s| s.split_whitespace().collect::<Vec<_>>());
-
-                        if let Some(trusted_public_keys) = trusted_public_keys {
-                            let mut known_keys = caches.known_keys.values();
-                            for key in trusted_public_keys.iter() {
-                                if !known_keys.any(|k| k == key) {
-                                    missing_public_keys.push(key.to_string());
-                                }
-                            }
-                        }
-                    }
+                    let (missing_caches, missing_public_keys) = self
+                        .get_nix_config()
+                        .await
+                        .map(|nix_conf| detect_missing_caches(&caches, nix_conf))
+                        .unwrap_or_default();
 
                     if !missing_caches.is_empty() || !missing_public_keys.is_empty() {
                         if !Path::new("/etc/NIXOS").exists() {
@@ -895,6 +870,50 @@ struct StorePing {
     trusted: Option<u8>,
 }
 
+fn detect_missing_caches(caches: &CachixCaches, nix_conf: NixConf) -> (Vec<String>, Vec<String>) {
+    let mut missing_caches = Vec::new();
+    let mut missing_public_keys = Vec::new();
+
+    let substituters = nix_conf
+        .get("substituters")
+        .map(|s| s.split_whitespace().collect::<Vec<_>>());
+    let extra_substituters = nix_conf
+        .get("extra-substituters")
+        .map(|s| s.split_whitespace().collect::<Vec<_>>());
+    let all_substituters = substituters
+        .into_iter()
+        .flatten()
+        .chain(extra_substituters.into_iter().flatten())
+        .collect::<Vec<_>>();
+
+    for cache in caches.caches.pull.iter() {
+        let cache_url = format!("https://{}.cachix.org", cache);
+        if !all_substituters.iter().any(|s| s == &cache_url) {
+            missing_caches.push(cache_url);
+        }
+    }
+
+    let trusted_public_keys = nix_conf
+        .get("trusted-public-keys")
+        .map(|s| s.split_whitespace().collect::<Vec<_>>());
+    let extra_trusted_public_keys = nix_conf
+        .get("extra-trusted-public-keys")
+        .map(|s| s.split_whitespace().collect::<Vec<_>>());
+    let all_trusted_public_keys = trusted_public_keys
+        .into_iter()
+        .flatten()
+        .chain(extra_trusted_public_keys.into_iter().flatten())
+        .collect::<Vec<_>>();
+
+    for (_name, key) in caches.known_keys.iter() {
+        if !all_trusted_public_keys.iter().any(|p| p == key) {
+            missing_public_keys.push(key.clone());
+        }
+    }
+
+    (missing_caches, missing_public_keys)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -918,5 +937,59 @@ mod tests {
         let store_ping = r#"{"trusted":0,"url":"daemon","version":"2.18.1"}"#;
         let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
         assert_eq!(store_ping.trusted, Some(0));
+    }
+
+    #[test]
+    fn test_missing_substituters() {
+        let mut cachix = CachixCaches::default();
+        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
+        cachix
+            .known_keys
+            .insert("cache1".to_string(), "key1".to_string());
+        cachix
+            .known_keys
+            .insert("cache2".to_string(), "key2".to_string());
+        let nix_conf = NixConf::parse_stdout(
+            r#"
+              substituters = https://cache1.cachix.org https://cache3.cachix.org
+              trusted-public-keys = key1 key3
+            "#
+            .as_bytes(),
+        )
+        .expect("Failed to parse NixConf");
+        assert_eq!(
+            detect_missing_caches(&cachix, nix_conf),
+            (
+                vec!["https://cache2.cachix.org".to_string()],
+                vec!["key2".to_string()]
+            )
+        );
+    }
+
+    #[test]
+    fn test_extra_missing_substituters() {
+        let mut cachix = CachixCaches::default();
+        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
+        cachix
+            .known_keys
+            .insert("cache1".to_string(), "key1".to_string());
+        cachix
+            .known_keys
+            .insert("cache2".to_string(), "key2".to_string());
+        let nix_conf = NixConf::parse_stdout(
+            r#"
+              extra-substituters = https://cache1.cachix.org https://cache3.cachix.org
+              extra-trusted-public-keys = key1 key3
+            "#
+            .as_bytes(),
+        )
+        .expect("Failed to parse NixConf");
+        assert_eq!(
+            detect_missing_caches(&cachix, nix_conf),
+            (
+                vec!["https://cache2.cachix.org".to_string()],
+                vec!["key2".to_string()]
+            )
+        );
     }
 }
