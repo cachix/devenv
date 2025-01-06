@@ -933,12 +933,7 @@ list of string
 
 
 *Default:*
-
-```
-[
-  "devenv"
-]
-```
+` [ "devenv" ] `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
