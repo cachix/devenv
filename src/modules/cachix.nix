@@ -13,7 +13,8 @@ in
     pull = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       description = "Which Cachix caches to pull from.";
-      default = [ "devenv" ];
+      default = [ ];
+      defaultText = lib.literalExpression ''[ "devenv" ]'';
     };
 
     push = lib.mkOption {
@@ -29,7 +30,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    cachix.pull = lib.optional (cfg.push != null) config.cachix.push;
+    cachix.pull = [ "devenv" ]
+      ++ (lib.optional (cfg.push != null) config.cachix.push);
 
     warnings = lib.optionals (!config.devenv.flakesIntegration && lib.versionOlder config.devenv.cliVersion "1.0") [
       ''
