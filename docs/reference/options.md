@@ -2276,6 +2276,31 @@ list of string
 
 
 
+## git-hooks.gitPackage
+
+
+
+The ` git ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```
+pkgs.gitMinimal
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
 ## git-hooks.hooks
 
 
@@ -2960,6 +2985,25 @@ null or package
 
 
 
+## git-hooks.hooks.\<name>.after
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.\<name>.always_run
 
 
@@ -2983,7 +3027,30 @@ boolean
 
 ## git-hooks.hooks.\<name>.args
 
+
+
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.\<name>.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -3145,6 +3212,46 @@ string
 
 
 
+## git-hooks.hooks.\<name>.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.\<name>.language
 
 
@@ -3180,7 +3287,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -3395,6 +3502,27 @@ null or package
 
 
 
+## git-hooks.hooks.alejandra.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.alejandra.always_run
 
 
@@ -3421,6 +3549,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.alejandra.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -3582,6 +3731,46 @@ string
 
 
 
+## git-hooks.hooks.alejandra.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.alejandra.language
 
 
@@ -3617,7 +3806,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -3942,6 +4131,27 @@ null or package
 
 
 
+## git-hooks.hooks.ansible-lint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.ansible-lint.always_run
 
 
@@ -3968,6 +4178,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.ansible-lint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -4129,6 +4360,46 @@ string
 
 
 
+## git-hooks.hooks.ansible-lint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.ansible-lint.language
 
 
@@ -4164,7 +4435,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4421,6 +4692,27 @@ null or package
 
 
 
+## git-hooks.hooks.autoflake.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.autoflake.always_run
 
 
@@ -4447,6 +4739,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.autoflake.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -4608,6 +4921,46 @@ string
 
 
 
+## git-hooks.hooks.autoflake.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.autoflake.language
 
 
@@ -4643,7 +4996,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -4780,8 +5133,6 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 ## git-hooks.hooks.autoflake.types
 
-
-
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
 
@@ -4904,6 +5255,27 @@ null or package
 
 
 
+## git-hooks.hooks.biome.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.biome.always_run
 
 
@@ -4930,6 +5302,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.biome.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -5072,6 +5465,8 @@ boolean
 
 ## git-hooks.hooks.biome.files
 
+
+
 The pattern of files to run on.
 
 
@@ -5083,6 +5478,46 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.biome.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5124,7 +5559,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5402,6 +5837,27 @@ null or package
 
 
 
+## git-hooks.hooks.black.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.black.always_run
 
 
@@ -5428,6 +5884,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.black.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -5589,6 +6066,46 @@ string
 
 
 
+## git-hooks.hooks.black.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.black.language
 
 
@@ -5624,7 +6141,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -5897,6 +6414,27 @@ package
 
 
 
+## git-hooks.hooks.clippy.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.clippy.always_run
 
 
@@ -5923,6 +6461,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.clippy.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -6084,6 +6643,46 @@ string
 
 
 
+## git-hooks.hooks.clippy.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.clippy.language
 
 
@@ -6119,7 +6718,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6418,6 +7017,27 @@ null or package
 
 
 
+## git-hooks.hooks.cmake-format.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.cmake-format.always_run
 
 
@@ -6444,6 +7064,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cmake-format.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -6605,6 +7246,46 @@ string
 
 
 
+## git-hooks.hooks.cmake-format.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.cmake-format.language
 
 
@@ -6628,8 +7309,6 @@ string
 
 ## git-hooks.hooks.cmake-format.name
 
-
-
 The name of the hook. Shown during hook execution.
 
 
@@ -6640,7 +7319,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -6881,6 +7560,27 @@ null or package
 
 
 
+## git-hooks.hooks.credo.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.credo.always_run
 
 
@@ -6907,6 +7607,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.credo.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -7068,6 +7789,46 @@ string
 
 
 
+## git-hooks.hooks.credo.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.credo.language
 
 
@@ -7103,7 +7864,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7132,6 +7893,8 @@ boolean
 
 
 ## git-hooks.hooks.credo.raw
+
+
 
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
@@ -7337,6 +8100,27 @@ null or package
 
 
 
+## git-hooks.hooks.deadnix.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.deadnix.always_run
 
 
@@ -7363,6 +8147,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.deadnix.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -7524,6 +8329,46 @@ string
 
 
 
+## git-hooks.hooks.deadnix.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.deadnix.language
 
 
@@ -7559,7 +8404,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7921,6 +8766,27 @@ null or package
 
 
 
+## git-hooks.hooks.denofmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.denofmt.always_run
 
 
@@ -7947,6 +8813,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.denofmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -8108,6 +8995,46 @@ string
 
 
 
+## git-hooks.hooks.denofmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.denofmt.language
 
 
@@ -8143,7 +9070,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8400,6 +9327,27 @@ null or package
 
 
 
+## git-hooks.hooks.denolint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.denolint.always_run
 
 
@@ -8426,6 +9374,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.denolint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -8587,6 +9556,46 @@ string
 
 
 
+## git-hooks.hooks.denolint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.denolint.language
 
 
@@ -8622,7 +9631,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -8879,6 +9888,27 @@ null or package
 
 
 
+## git-hooks.hooks.dune-fmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.dune-fmt.always_run
 
 
@@ -8905,6 +9935,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.dune-fmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -9066,6 +10117,46 @@ string
 
 
 
+## git-hooks.hooks.dune-fmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.dune-fmt.language
 
 
@@ -9101,7 +10192,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9358,6 +10449,27 @@ null or package
 
 
 
+## git-hooks.hooks.eclint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.eclint.always_run
 
 
@@ -9384,6 +10496,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.eclint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -9545,6 +10678,46 @@ string
 
 
 
+## git-hooks.hooks.eclint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.eclint.language
 
 
@@ -9580,7 +10753,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -9900,6 +11073,27 @@ null or package
 
 
 
+## git-hooks.hooks.eslint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.eslint.always_run
 
 
@@ -9926,6 +11120,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.eslint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -10087,6 +11302,46 @@ string
 
 
 
+## git-hooks.hooks.eslint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.eslint.language
 
 
@@ -10122,7 +11377,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -10379,6 +11634,27 @@ null or package
 
 
 
+## git-hooks.hooks.flake8.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.flake8.always_run
 
 
@@ -10405,6 +11681,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.flake8.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -10566,6 +11863,46 @@ string
 
 
 
+## git-hooks.hooks.flake8.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.flake8.language
 
 
@@ -10601,7 +11938,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -10893,6 +12230,27 @@ null or package
 
 
 
+## git-hooks.hooks.flynt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.flynt.always_run
 
 
@@ -10919,6 +12277,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.flynt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -11080,6 +12459,46 @@ string
 
 
 
+## git-hooks.hooks.flynt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.flynt.language
 
 
@@ -11115,7 +12534,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -11561,6 +12980,27 @@ null or package
 
 
 
+## git-hooks.hooks.golines.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.golines.always_run
 
 
@@ -11587,6 +13027,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.golines.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -11748,6 +13209,46 @@ string
 
 
 
+## git-hooks.hooks.golines.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.golines.language
 
 
@@ -11783,7 +13284,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12024,6 +13525,27 @@ null or package
 
 
 
+## git-hooks.hooks.headache.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.headache.always_run
 
 
@@ -12050,6 +13572,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.headache.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -12211,6 +13754,46 @@ string
 
 
 
+## git-hooks.hooks.headache.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.headache.language
 
 
@@ -12246,7 +13829,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12482,6 +14065,27 @@ null or package
 
 
 
+## git-hooks.hooks.hlint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.hlint.always_run
 
 
@@ -12508,6 +14112,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.hlint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -12669,6 +14294,46 @@ string
 
 
 
+## git-hooks.hooks.hlint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.hlint.language
 
 
@@ -12704,7 +14369,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -12940,6 +14605,27 @@ null or package
 
 
 
+## git-hooks.hooks.hpack.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.hpack.always_run
 
 
@@ -12966,6 +14652,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.hpack.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -13127,6 +14834,46 @@ string
 
 
 
+## git-hooks.hooks.hpack.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.hpack.language
 
 
@@ -13162,7 +14909,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13398,6 +15145,27 @@ null or package
 
 
 
+## git-hooks.hooks.isort.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.isort.always_run
 
 
@@ -13424,6 +15192,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.isort.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -13585,6 +15374,46 @@ string
 
 
 
+## git-hooks.hooks.isort.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.isort.language
 
 
@@ -13620,7 +15449,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -13877,6 +15706,27 @@ null or package
 
 
 
+## git-hooks.hooks.lacheck.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.lacheck.always_run
 
 
@@ -13903,6 +15753,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.lacheck.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -14064,6 +15935,46 @@ string
 
 
 
+## git-hooks.hooks.lacheck.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.lacheck.language
 
 
@@ -14099,7 +16010,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -14314,6 +16225,27 @@ null or package
 
 
 
+## git-hooks.hooks.latexindent.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.latexindent.always_run
 
 
@@ -14340,6 +16272,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.latexindent.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -14501,6 +16454,46 @@ string
 
 
 
+## git-hooks.hooks.latexindent.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.latexindent.language
 
 
@@ -14536,7 +16529,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -14772,6 +16765,27 @@ null or package
 
 
 
+## git-hooks.hooks.lua-ls.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.lua-ls.always_run
 
 
@@ -14798,6 +16812,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.lua-ls.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -14959,6 +16994,46 @@ string
 
 
 
+## git-hooks.hooks.lua-ls.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.lua-ls.language
 
 
@@ -14994,7 +17069,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -15251,6 +17326,27 @@ null or package
 
 
 
+## git-hooks.hooks.lychee.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.lychee.always_run
 
 
@@ -15277,6 +17373,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.lychee.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -15438,6 +17555,46 @@ string
 
 
 
+## git-hooks.hooks.lychee.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.lychee.language
 
 
@@ -15473,7 +17630,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -15730,6 +17887,27 @@ null or package
 
 
 
+## git-hooks.hooks.markdownlint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.markdownlint.always_run
 
 
@@ -15756,6 +17934,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.markdownlint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -15917,6 +18116,46 @@ string
 
 
 
+## git-hooks.hooks.markdownlint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.markdownlint.language
 
 
@@ -15952,7 +18191,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -16188,6 +18427,27 @@ null or package
 
 
 
+## git-hooks.hooks.mdl.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.mdl.always_run
 
 
@@ -16214,6 +18474,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.mdl.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -16375,6 +18656,46 @@ string
 
 
 
+## git-hooks.hooks.mdl.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.mdl.language
 
 
@@ -16410,7 +18731,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -16877,6 +19198,27 @@ null or package
 
 
 
+## git-hooks.hooks.mkdocs-linkcheck.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.mkdocs-linkcheck.always_run
 
 
@@ -16903,6 +19245,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.mkdocs-linkcheck.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -17064,6 +19427,46 @@ string
 
 
 
+## git-hooks.hooks.mkdocs-linkcheck.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.mkdocs-linkcheck.language
 
 
@@ -17099,7 +19502,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -17444,6 +19847,27 @@ null or package
 
 
 
+## git-hooks.hooks.mypy.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.mypy.always_run
 
 
@@ -17470,6 +19894,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.mypy.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -17631,6 +20076,46 @@ string
 
 
 
+## git-hooks.hooks.mypy.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.mypy.language
 
 
@@ -17666,7 +20151,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -17906,6 +20391,27 @@ null or package
 
 
 
+## git-hooks.hooks.nixfmt-classic.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.nixfmt-classic.always_run
 
 
@@ -17932,6 +20438,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.nixfmt-classic.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -18093,6 +20620,46 @@ string
 
 
 
+## git-hooks.hooks.nixfmt-classic.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.nixfmt-classic.language
 
 
@@ -18128,7 +20695,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -18364,6 +20931,27 @@ null or package
 
 
 
+## git-hooks.hooks.nixfmt-rfc-style.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.nixfmt-rfc-style.always_run
 
 
@@ -18390,6 +20978,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.nixfmt-rfc-style.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -18551,6 +21160,46 @@ string
 
 
 
+## git-hooks.hooks.nixfmt-rfc-style.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.nixfmt-rfc-style.language
 
 
@@ -18586,7 +21235,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -18822,6 +21471,27 @@ null or package
 
 
 
+## git-hooks.hooks.no-commit-to-branch.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.no-commit-to-branch.always_run
 
 
@@ -18848,6 +21518,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.no-commit-to-branch.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -19009,6 +21700,46 @@ string
 
 
 
+## git-hooks.hooks.no-commit-to-branch.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.no-commit-to-branch.language
 
 
@@ -19044,7 +21775,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -19327,6 +22058,27 @@ null or package
 
 
 
+## git-hooks.hooks.ormolu.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.ormolu.always_run
 
 
@@ -19353,6 +22105,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.ormolu.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -19514,6 +22287,46 @@ string
 
 
 
+## git-hooks.hooks.ormolu.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.ormolu.language
 
 
@@ -19549,7 +22362,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -19806,6 +22619,27 @@ null or package
 
 
 
+## git-hooks.hooks.php-cs-fixer.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.php-cs-fixer.always_run
 
 
@@ -19832,6 +22666,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.php-cs-fixer.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -19993,6 +22848,46 @@ string
 
 
 
+## git-hooks.hooks.php-cs-fixer.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.php-cs-fixer.language
 
 
@@ -20028,7 +22923,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -20268,6 +23163,27 @@ null or package
 
 
 
+## git-hooks.hooks.phpcbf.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.phpcbf.always_run
 
 
@@ -20294,6 +23210,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.phpcbf.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -20455,6 +23392,46 @@ string
 
 
 
+## git-hooks.hooks.phpcbf.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.phpcbf.language
 
 
@@ -20490,7 +23467,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -20730,6 +23707,27 @@ null or package
 
 
 
+## git-hooks.hooks.phpcs.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.phpcs.always_run
 
 
@@ -20756,6 +23754,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.phpcs.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -20917,6 +23936,46 @@ string
 
 
 
+## git-hooks.hooks.phpcs.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.phpcs.language
 
 
@@ -20952,7 +24011,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -21192,6 +24251,27 @@ null or package
 
 
 
+## git-hooks.hooks.phpstan.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.phpstan.always_run
 
 
@@ -21218,6 +24298,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.phpstan.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -21379,6 +24480,46 @@ string
 
 
 
+## git-hooks.hooks.phpstan.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.phpstan.language
 
 
@@ -21414,7 +24555,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -21654,6 +24795,27 @@ null or package
 
 
 
+## git-hooks.hooks.prettier.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.prettier.always_run
 
 
@@ -21680,6 +24842,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.prettier.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -21841,6 +25024,46 @@ string
 
 
 
+## git-hooks.hooks.prettier.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.prettier.language
 
 
@@ -21876,7 +25099,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -22900,6 +26123,27 @@ null or package
 
 
 
+## git-hooks.hooks.psalm.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.psalm.always_run
 
 
@@ -22926,6 +26170,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.psalm.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -23087,6 +26352,46 @@ string
 
 
 
+## git-hooks.hooks.psalm.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.psalm.language
 
 
@@ -23122,7 +26427,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -23362,6 +26667,27 @@ null or package
 
 
 
+## git-hooks.hooks.pylint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.pylint.always_run
 
 
@@ -23388,6 +26714,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pylint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -23549,6 +26896,46 @@ string
 
 
 
+## git-hooks.hooks.pylint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.pylint.language
 
 
@@ -23584,7 +26971,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -23866,6 +27253,27 @@ null or package
 
 
 
+## git-hooks.hooks.pyright.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.pyright.always_run
 
 
@@ -23892,6 +27300,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pyright.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -24053,6 +27482,46 @@ string
 
 
 
+## git-hooks.hooks.pyright.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.pyright.language
 
 
@@ -24088,7 +27557,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -24328,6 +27797,27 @@ null or package
 
 
 
+## git-hooks.hooks.pyupgrade.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.pyupgrade.always_run
 
 
@@ -24354,6 +27844,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pyupgrade.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -24515,6 +28026,46 @@ string
 
 
 
+## git-hooks.hooks.pyupgrade.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.pyupgrade.language
 
 
@@ -24550,7 +28101,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -24790,6 +28341,27 @@ null or package
 
 
 
+## git-hooks.hooks.reuse.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.reuse.always_run
 
 
@@ -24816,6 +28388,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.reuse.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -24977,6 +28570,46 @@ string
 
 
 
+## git-hooks.hooks.reuse.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.reuse.language
 
 
@@ -25012,7 +28645,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -25253,6 +28886,27 @@ null or package
 
 
 
+## git-hooks.hooks.revive.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.revive.always_run
 
 
@@ -25279,6 +28933,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.revive.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -25440,6 +29115,46 @@ string
 
 
 
+## git-hooks.hooks.revive.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.revive.language
 
 
@@ -25475,7 +29190,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -25711,6 +29426,27 @@ null or package
 
 
 
+## git-hooks.hooks.ripsecrets.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.ripsecrets.always_run
 
 
@@ -25737,6 +29473,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.ripsecrets.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -25898,6 +29655,46 @@ string
 
 
 
+## git-hooks.hooks.ripsecrets.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.ripsecrets.language
 
 
@@ -25933,7 +29730,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -26208,6 +30005,27 @@ package
 
 
 
+## git-hooks.hooks.rustfmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.rustfmt.always_run
 
 
@@ -26234,6 +30052,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.rustfmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -26395,6 +30234,46 @@ string
 
 
 
+## git-hooks.hooks.rustfmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.rustfmt.language
 
 
@@ -26430,7 +30309,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -26872,6 +30751,27 @@ null or package
 
 
 
+## git-hooks.hooks.shfmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.shfmt.always_run
 
 
@@ -26898,6 +30798,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.shfmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -27059,6 +30980,46 @@ string
 
 
 
+## git-hooks.hooks.shfmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.shfmt.language
 
 
@@ -27094,7 +31055,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -27330,6 +31291,27 @@ null or package
 
 
 
+## git-hooks.hooks.sort-file-contents.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.sort-file-contents.always_run
 
 
@@ -27356,6 +31338,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.sort-file-contents.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -27517,6 +31520,46 @@ string
 
 
 
+## git-hooks.hooks.sort-file-contents.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.sort-file-contents.language
 
 
@@ -27552,7 +31595,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -27809,6 +31852,27 @@ null or package
 
 
 
+## git-hooks.hooks.statix.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.statix.always_run
 
 
@@ -27835,6 +31899,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.statix.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -27996,6 +32081,46 @@ string
 
 
 
+## git-hooks.hooks.statix.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.statix.language
 
 
@@ -28031,7 +32156,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -28377,6 +32502,27 @@ package
 
 
 
+## git-hooks.hooks.treefmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.treefmt.always_run
 
 
@@ -28403,6 +32549,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.treefmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -28564,6 +32731,46 @@ string
 
 
 
+## git-hooks.hooks.treefmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.treefmt.language
 
 
@@ -28599,7 +32806,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -28667,6 +32874,27 @@ boolean
 
 
 
+## git-hooks.hooks.treefmt.settings.fail-on-change
+
+
+
+Fail if some files require re-formatting.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## git-hooks.hooks.treefmt.settings.formatters
 
 
@@ -28682,6 +32910,27 @@ list of package
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.treefmt.settings.no-cache
+
+
+
+Ignore the evaluation cache entirely.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -28835,6 +33084,27 @@ null or package
 
 
 
+## git-hooks.hooks.typos.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.typos.always_run
 
 
@@ -28861,6 +33131,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.typos.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -29022,6 +33313,46 @@ string
 
 
 
+## git-hooks.hooks.typos.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.typos.language
 
 
@@ -29057,7 +33388,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -29646,6 +33977,27 @@ null or package
 
 
 
+## git-hooks.hooks.vale.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.vale.always_run
 
 
@@ -29672,6 +34024,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.vale.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -29833,6 +34206,46 @@ string
 
 
 
+## git-hooks.hooks.vale.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.vale.language
 
 
@@ -29868,7 +34281,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -30158,6 +34571,27 @@ null or package
 
 
 
+## git-hooks.hooks.yamlfmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.yamlfmt.always_run
 
 
@@ -30184,6 +34618,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.yamlfmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -30345,6 +34800,46 @@ string
 
 
 
+## git-hooks.hooks.yamlfmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.yamlfmt.language
 
 
@@ -30380,7 +34875,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -30621,6 +35116,27 @@ null or package
 
 
 
+## git-hooks.hooks.yamllint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.yamllint.always_run
 
 
@@ -30647,6 +35163,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.yamllint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -30808,6 +35345,46 @@ string
 
 
 
+## git-hooks.hooks.yamllint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.yamllint.language
 
 
@@ -30843,7 +35420,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -31225,6 +35802,32 @@ null or string
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.settings.rust.check.cargoDeps
+
+
+
+Cargo dependencies needed to run the checks.
+
+
+
+*Type:*
+null or (attribute set)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; }" `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -35914,9 +40517,9 @@ outputOf (attribute set)
 ```
 {
   foo = {
-    ncdu = <derivation ncdu-2.3>;
+    ncdu = <derivation ncdu-2.7>;
   };
-  git = <derivation git-2.44.0>;
+  git = <derivation git-2.47.0>;
 }
 ```
 
@@ -36054,6 +40657,31 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## pre-commit.gitPackage
+
+
+
+The ` git ` package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```
+pkgs.gitMinimal
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -36744,6 +41372,27 @@ null or package
 
 
 
+## pre-commit.hooks.\<name>.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.\<name>.always_run
 
 
@@ -36770,6 +41419,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.\<name>.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -36931,6 +41601,46 @@ string
 
 
 
+## pre-commit.hooks.\<name>.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.\<name>.language
 
 
@@ -36966,7 +41676,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -37181,6 +41891,27 @@ null or package
 
 
 
+## pre-commit.hooks.alejandra.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.alejandra.always_run
 
 
@@ -37207,6 +41938,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.alejandra.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -37368,6 +42120,46 @@ string
 
 
 
+## pre-commit.hooks.alejandra.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.alejandra.language
 
 
@@ -37403,7 +42195,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -37728,6 +42520,27 @@ null or package
 
 
 
+## pre-commit.hooks.ansible-lint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.ansible-lint.always_run
 
 
@@ -37754,6 +42567,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.ansible-lint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -37915,6 +42749,46 @@ string
 
 
 
+## pre-commit.hooks.ansible-lint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.ansible-lint.language
 
 
@@ -37950,7 +42824,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -38207,6 +43081,27 @@ null or package
 
 
 
+## pre-commit.hooks.autoflake.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.autoflake.always_run
 
 
@@ -38233,6 +43128,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.autoflake.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -38394,6 +43310,46 @@ string
 
 
 
+## pre-commit.hooks.autoflake.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.autoflake.language
 
 
@@ -38429,7 +43385,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -38690,6 +43646,27 @@ null or package
 
 
 
+## pre-commit.hooks.biome.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.biome.always_run
 
 
@@ -38716,6 +43693,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.biome.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -38877,6 +43875,46 @@ string
 
 
 
+## pre-commit.hooks.biome.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.biome.language
 
 
@@ -38912,7 +43950,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -39190,6 +44228,27 @@ null or package
 
 
 
+## pre-commit.hooks.black.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.black.always_run
 
 
@@ -39216,6 +44275,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.black.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -39377,6 +44457,46 @@ string
 
 
 
+## pre-commit.hooks.black.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.black.language
 
 
@@ -39412,7 +44532,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -39685,6 +44805,27 @@ package
 
 
 
+## pre-commit.hooks.clippy.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.clippy.always_run
 
 
@@ -39711,6 +44852,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.clippy.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -39872,6 +45034,46 @@ string
 
 
 
+## pre-commit.hooks.clippy.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.clippy.language
 
 
@@ -39907,7 +45109,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -40206,6 +45408,27 @@ null or package
 
 
 
+## pre-commit.hooks.cmake-format.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.cmake-format.always_run
 
 
@@ -40232,6 +45455,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cmake-format.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -40393,6 +45637,46 @@ string
 
 
 
+## pre-commit.hooks.cmake-format.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.cmake-format.language
 
 
@@ -40428,7 +45712,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -40669,6 +45953,27 @@ null or package
 
 
 
+## pre-commit.hooks.credo.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.credo.always_run
 
 
@@ -40695,6 +46000,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.credo.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -40856,6 +46182,46 @@ string
 
 
 
+## pre-commit.hooks.credo.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.credo.language
 
 
@@ -40891,7 +46257,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -41127,6 +46493,27 @@ null or package
 
 
 
+## pre-commit.hooks.deadnix.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.deadnix.always_run
 
 
@@ -41153,6 +46540,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.deadnix.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -41314,6 +46722,46 @@ string
 
 
 
+## pre-commit.hooks.deadnix.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.deadnix.language
 
 
@@ -41349,7 +46797,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -41711,6 +47159,27 @@ null or package
 
 
 
+## pre-commit.hooks.denofmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.denofmt.always_run
 
 
@@ -41737,6 +47206,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.denofmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -41898,6 +47388,46 @@ string
 
 
 
+## pre-commit.hooks.denofmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.denofmt.language
 
 
@@ -41933,7 +47463,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -42190,6 +47720,27 @@ null or package
 
 
 
+## pre-commit.hooks.denolint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.denolint.always_run
 
 
@@ -42216,6 +47767,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.denolint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -42377,6 +47949,46 @@ string
 
 
 
+## pre-commit.hooks.denolint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.denolint.language
 
 
@@ -42412,7 +48024,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -42669,6 +48281,27 @@ null or package
 
 
 
+## pre-commit.hooks.dune-fmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.dune-fmt.always_run
 
 
@@ -42695,6 +48328,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.dune-fmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -42856,6 +48510,46 @@ string
 
 
 
+## pre-commit.hooks.dune-fmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.dune-fmt.language
 
 
@@ -42891,7 +48585,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -43148,6 +48842,27 @@ null or package
 
 
 
+## pre-commit.hooks.eclint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.eclint.always_run
 
 
@@ -43174,6 +48889,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.eclint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -43335,6 +49071,46 @@ string
 
 
 
+## pre-commit.hooks.eclint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.eclint.language
 
 
@@ -43370,7 +49146,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -43690,6 +49466,27 @@ null or package
 
 
 
+## pre-commit.hooks.eslint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.eslint.always_run
 
 
@@ -43716,6 +49513,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.eslint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -43877,6 +49695,46 @@ string
 
 
 
+## pre-commit.hooks.eslint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.eslint.language
 
 
@@ -43912,7 +49770,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -44169,6 +50027,27 @@ null or package
 
 
 
+## pre-commit.hooks.flake8.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.flake8.always_run
 
 
@@ -44195,6 +50074,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.flake8.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -44356,6 +50256,46 @@ string
 
 
 
+## pre-commit.hooks.flake8.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.flake8.language
 
 
@@ -44391,7 +50331,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -44683,6 +50623,27 @@ null or package
 
 
 
+## pre-commit.hooks.flynt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.flynt.always_run
 
 
@@ -44709,6 +50670,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.flynt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -44870,6 +50852,46 @@ string
 
 
 
+## pre-commit.hooks.flynt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.flynt.language
 
 
@@ -44905,7 +50927,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -45351,6 +51373,27 @@ null or package
 
 
 
+## pre-commit.hooks.golines.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.golines.always_run
 
 
@@ -45377,6 +51420,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.golines.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -45538,6 +51602,46 @@ string
 
 
 
+## pre-commit.hooks.golines.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.golines.language
 
 
@@ -45573,7 +51677,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -45814,6 +51918,27 @@ null or package
 
 
 
+## pre-commit.hooks.headache.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.headache.always_run
 
 
@@ -45840,6 +51965,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.headache.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -46001,6 +52147,46 @@ string
 
 
 
+## pre-commit.hooks.headache.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.headache.language
 
 
@@ -46036,7 +52222,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -46272,6 +52458,27 @@ null or package
 
 
 
+## pre-commit.hooks.hlint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.hlint.always_run
 
 
@@ -46298,6 +52505,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.hlint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -46459,6 +52687,46 @@ string
 
 
 
+## pre-commit.hooks.hlint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.hlint.language
 
 
@@ -46494,7 +52762,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -46730,6 +52998,27 @@ null or package
 
 
 
+## pre-commit.hooks.hpack.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.hpack.always_run
 
 
@@ -46756,6 +53045,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.hpack.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -46917,6 +53227,46 @@ string
 
 
 
+## pre-commit.hooks.hpack.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.hpack.language
 
 
@@ -46952,7 +53302,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -47188,6 +53538,27 @@ null or package
 
 
 
+## pre-commit.hooks.isort.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.isort.always_run
 
 
@@ -47214,6 +53585,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.isort.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -47375,6 +53767,46 @@ string
 
 
 
+## pre-commit.hooks.isort.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.isort.language
 
 
@@ -47410,7 +53842,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -47667,6 +54099,27 @@ null or package
 
 
 
+## pre-commit.hooks.lacheck.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.lacheck.always_run
 
 
@@ -47693,6 +54146,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lacheck.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -47854,6 +54328,46 @@ string
 
 
 
+## pre-commit.hooks.lacheck.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.lacheck.language
 
 
@@ -47889,7 +54403,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -48104,6 +54618,27 @@ null or package
 
 
 
+## pre-commit.hooks.latexindent.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.latexindent.always_run
 
 
@@ -48130,6 +54665,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.latexindent.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -48291,6 +54847,46 @@ string
 
 
 
+## pre-commit.hooks.latexindent.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.latexindent.language
 
 
@@ -48326,7 +54922,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -48562,6 +55158,27 @@ null or package
 
 
 
+## pre-commit.hooks.lua-ls.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.lua-ls.always_run
 
 
@@ -48588,6 +55205,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lua-ls.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -48749,6 +55387,46 @@ string
 
 
 
+## pre-commit.hooks.lua-ls.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.lua-ls.language
 
 
@@ -48784,7 +55462,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -49041,6 +55719,27 @@ null or package
 
 
 
+## pre-commit.hooks.lychee.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.lychee.always_run
 
 
@@ -49067,6 +55766,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.lychee.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -49228,6 +55948,46 @@ string
 
 
 
+## pre-commit.hooks.lychee.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.lychee.language
 
 
@@ -49263,7 +56023,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -49520,6 +56280,27 @@ null or package
 
 
 
+## pre-commit.hooks.markdownlint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.markdownlint.always_run
 
 
@@ -49546,6 +56327,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.markdownlint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -49707,6 +56509,46 @@ string
 
 
 
+## pre-commit.hooks.markdownlint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.markdownlint.language
 
 
@@ -49742,7 +56584,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -49978,6 +56820,27 @@ null or package
 
 
 
+## pre-commit.hooks.mdl.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.mdl.always_run
 
 
@@ -50004,6 +56867,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.mdl.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -50165,6 +57049,46 @@ string
 
 
 
+## pre-commit.hooks.mdl.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.mdl.language
 
 
@@ -50200,7 +57124,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -50667,6 +57591,27 @@ null or package
 
 
 
+## pre-commit.hooks.mkdocs-linkcheck.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.mkdocs-linkcheck.always_run
 
 
@@ -50693,6 +57638,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.mkdocs-linkcheck.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -50854,6 +57820,46 @@ string
 
 
 
+## pre-commit.hooks.mkdocs-linkcheck.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.mkdocs-linkcheck.language
 
 
@@ -50889,7 +57895,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -51234,6 +58240,27 @@ null or package
 
 
 
+## pre-commit.hooks.mypy.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.mypy.always_run
 
 
@@ -51260,6 +58287,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.mypy.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -51421,6 +58469,46 @@ string
 
 
 
+## pre-commit.hooks.mypy.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.mypy.language
 
 
@@ -51456,7 +58544,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -51696,6 +58784,27 @@ null or package
 
 
 
+## pre-commit.hooks.nixfmt-classic.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.nixfmt-classic.always_run
 
 
@@ -51722,6 +58831,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.nixfmt-classic.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -51883,6 +59013,46 @@ string
 
 
 
+## pre-commit.hooks.nixfmt-classic.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.nixfmt-classic.language
 
 
@@ -51918,7 +59088,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -52154,6 +59324,27 @@ null or package
 
 
 
+## pre-commit.hooks.nixfmt-rfc-style.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.nixfmt-rfc-style.always_run
 
 
@@ -52180,6 +59371,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.nixfmt-rfc-style.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -52341,6 +59553,46 @@ string
 
 
 
+## pre-commit.hooks.nixfmt-rfc-style.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.nixfmt-rfc-style.language
 
 
@@ -52376,7 +59628,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -52612,6 +59864,27 @@ null or package
 
 
 
+## pre-commit.hooks.no-commit-to-branch.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.no-commit-to-branch.always_run
 
 
@@ -52638,6 +59911,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.no-commit-to-branch.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -52799,6 +60093,46 @@ string
 
 
 
+## pre-commit.hooks.no-commit-to-branch.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.no-commit-to-branch.language
 
 
@@ -52834,7 +60168,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -53117,6 +60451,27 @@ null or package
 
 
 
+## pre-commit.hooks.ormolu.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.ormolu.always_run
 
 
@@ -53143,6 +60498,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.ormolu.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -53304,6 +60680,46 @@ string
 
 
 
+## pre-commit.hooks.ormolu.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.ormolu.language
 
 
@@ -53339,7 +60755,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -53596,6 +61012,27 @@ null or package
 
 
 
+## pre-commit.hooks.php-cs-fixer.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.php-cs-fixer.always_run
 
 
@@ -53622,6 +61059,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.php-cs-fixer.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -53783,6 +61241,46 @@ string
 
 
 
+## pre-commit.hooks.php-cs-fixer.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.php-cs-fixer.language
 
 
@@ -53818,7 +61316,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -54058,6 +61556,27 @@ null or package
 
 
 
+## pre-commit.hooks.phpcbf.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.phpcbf.always_run
 
 
@@ -54084,6 +61603,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.phpcbf.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -54245,6 +61785,46 @@ string
 
 
 
+## pre-commit.hooks.phpcbf.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.phpcbf.language
 
 
@@ -54280,7 +61860,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -54520,6 +62100,27 @@ null or package
 
 
 
+## pre-commit.hooks.phpcs.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.phpcs.always_run
 
 
@@ -54546,6 +62147,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.phpcs.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -54707,6 +62329,46 @@ string
 
 
 
+## pre-commit.hooks.phpcs.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.phpcs.language
 
 
@@ -54742,7 +62404,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -54982,6 +62644,27 @@ null or package
 
 
 
+## pre-commit.hooks.phpstan.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.phpstan.always_run
 
 
@@ -55008,6 +62691,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.phpstan.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -55169,6 +62873,46 @@ string
 
 
 
+## pre-commit.hooks.phpstan.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.phpstan.language
 
 
@@ -55204,7 +62948,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -55444,6 +63188,27 @@ null or package
 
 
 
+## pre-commit.hooks.prettier.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.prettier.always_run
 
 
@@ -55470,6 +63235,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.prettier.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -55631,6 +63417,46 @@ string
 
 
 
+## pre-commit.hooks.prettier.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.prettier.language
 
 
@@ -55666,7 +63492,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -56690,6 +64516,27 @@ null or package
 
 
 
+## pre-commit.hooks.psalm.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.psalm.always_run
 
 
@@ -56716,6 +64563,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.psalm.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -56877,6 +64745,46 @@ string
 
 
 
+## pre-commit.hooks.psalm.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.psalm.language
 
 
@@ -56912,7 +64820,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -57152,6 +65060,27 @@ null or package
 
 
 
+## pre-commit.hooks.pylint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.pylint.always_run
 
 
@@ -57178,6 +65107,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pylint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -57339,6 +65289,46 @@ string
 
 
 
+## pre-commit.hooks.pylint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.pylint.language
 
 
@@ -57374,7 +65364,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -57656,6 +65646,27 @@ null or package
 
 
 
+## pre-commit.hooks.pyright.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.pyright.always_run
 
 
@@ -57682,6 +65693,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pyright.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -57843,6 +65875,46 @@ string
 
 
 
+## pre-commit.hooks.pyright.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.pyright.language
 
 
@@ -57878,7 +65950,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -58118,6 +66190,27 @@ null or package
 
 
 
+## pre-commit.hooks.pyupgrade.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.pyupgrade.always_run
 
 
@@ -58144,6 +66237,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pyupgrade.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -58305,6 +66419,46 @@ string
 
 
 
+## pre-commit.hooks.pyupgrade.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.pyupgrade.language
 
 
@@ -58340,7 +66494,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -58580,6 +66734,27 @@ null or package
 
 
 
+## pre-commit.hooks.reuse.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.reuse.always_run
 
 
@@ -58606,6 +66781,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.reuse.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -58767,6 +66963,46 @@ string
 
 
 
+## pre-commit.hooks.reuse.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.reuse.language
 
 
@@ -58802,7 +67038,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -59043,6 +67279,27 @@ null or package
 
 
 
+## pre-commit.hooks.revive.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.revive.always_run
 
 
@@ -59069,6 +67326,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.revive.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -59230,6 +67508,46 @@ string
 
 
 
+## pre-commit.hooks.revive.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.revive.language
 
 
@@ -59265,7 +67583,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -59501,6 +67819,27 @@ null or package
 
 
 
+## pre-commit.hooks.ripsecrets.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.ripsecrets.always_run
 
 
@@ -59527,6 +67866,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.ripsecrets.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -59688,6 +68048,46 @@ string
 
 
 
+## pre-commit.hooks.ripsecrets.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.ripsecrets.language
 
 
@@ -59723,7 +68123,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -59998,6 +68398,27 @@ package
 
 
 
+## pre-commit.hooks.rustfmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.rustfmt.always_run
 
 
@@ -60024,6 +68445,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.rustfmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -60185,6 +68627,46 @@ string
 
 
 
+## pre-commit.hooks.rustfmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.rustfmt.language
 
 
@@ -60220,7 +68702,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -60662,6 +69144,27 @@ null or package
 
 
 
+## pre-commit.hooks.shfmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.shfmt.always_run
 
 
@@ -60688,6 +69191,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.shfmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -60849,6 +69373,46 @@ string
 
 
 
+## pre-commit.hooks.shfmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.shfmt.language
 
 
@@ -60884,7 +69448,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -61120,6 +69684,27 @@ null or package
 
 
 
+## pre-commit.hooks.sort-file-contents.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.sort-file-contents.always_run
 
 
@@ -61146,6 +69731,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.sort-file-contents.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -61307,6 +69913,46 @@ string
 
 
 
+## pre-commit.hooks.sort-file-contents.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.sort-file-contents.language
 
 
@@ -61342,7 +69988,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -61599,6 +70245,27 @@ null or package
 
 
 
+## pre-commit.hooks.statix.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.statix.always_run
 
 
@@ -61625,6 +70292,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.statix.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -61786,6 +70474,46 @@ string
 
 
 
+## pre-commit.hooks.statix.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.statix.language
 
 
@@ -61821,7 +70549,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -62167,6 +70895,27 @@ package
 
 
 
+## pre-commit.hooks.treefmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.treefmt.always_run
 
 
@@ -62193,6 +70942,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.treefmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -62354,6 +71124,46 @@ string
 
 
 
+## pre-commit.hooks.treefmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.treefmt.language
 
 
@@ -62389,7 +71199,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -62457,6 +71267,27 @@ boolean
 
 
 
+## pre-commit.hooks.treefmt.settings.fail-on-change
+
+
+
+Fail if some files require re-formatting.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.hooks.treefmt.settings.formatters
 
 
@@ -62472,6 +71303,27 @@ list of package
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.treefmt.settings.no-cache
+
+
+
+Ignore the evaluation cache entirely.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -62625,6 +71477,27 @@ null or package
 
 
 
+## pre-commit.hooks.typos.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.typos.always_run
 
 
@@ -62651,6 +71524,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.typos.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -62812,6 +71706,46 @@ string
 
 
 
+## pre-commit.hooks.typos.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.typos.language
 
 
@@ -62847,7 +71781,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -63436,6 +72370,27 @@ null or package
 
 
 
+## pre-commit.hooks.vale.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.vale.always_run
 
 
@@ -63462,6 +72417,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.vale.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -63623,6 +72599,46 @@ string
 
 
 
+## pre-commit.hooks.vale.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.vale.language
 
 
@@ -63658,7 +72674,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -63948,6 +72964,27 @@ null or package
 
 
 
+## pre-commit.hooks.yamlfmt.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.yamlfmt.always_run
 
 
@@ -63974,6 +73011,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.yamlfmt.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -64135,6 +73193,46 @@ string
 
 
 
+## pre-commit.hooks.yamlfmt.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.yamlfmt.language
 
 
@@ -64170,7 +73268,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -64411,6 +73509,27 @@ null or package
 
 
 
+## pre-commit.hooks.yamllint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.yamllint.always_run
 
 
@@ -64437,6 +73556,27 @@ boolean
 
 
 List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.yamllint.before
+
+
+
+List of hooks that should run after this hook.
 
 
 
@@ -64598,6 +73738,46 @@ string
 
 
 
+## pre-commit.hooks.yamllint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.yamllint.language
 
 
@@ -64633,7 +73813,7 @@ string
 
 
 *Default:*
-internal name, same as ` id `
+the attribute name the hook submodule is bound to, same as ` id `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -65015,6 +74195,32 @@ null or string
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.settings.rust.check.cargoDeps
+
+
+
+Cargo dependencies needed to run the checks.
+
+
+
+*Type:*
+null or (attribute set)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; }" `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -65487,7 +74693,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` <derivation bash-5.2p37> `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -69870,6 +79076,8 @@ The available extensions are:
  - jsonb_deep_sum
  - lantern
  - periods
+ - pg-gvm
+ - pg-semver
  - pg_auto_failover
  - pg_bigm
  - pg_cron
@@ -69892,6 +79100,7 @@ The available extensions are:
  - pg_uuidv7
  - pgaudit
  - pgjwt
+ - pgmq
  - pgroonga
  - pgrouting
  - pgsodium
@@ -69903,10 +79112,11 @@ The available extensions are:
  - plr
  - plv8
  - postgis
- - promscale_extension
  - repmgr
  - rum
  - smlar
+ - sqlite_fdw
+ - system_stats
  - tds_fdw
  - temporal_tables
  - timescaledb
@@ -72498,7 +81708,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` <derivation bash-5.2p37> `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
