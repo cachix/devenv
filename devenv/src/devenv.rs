@@ -447,24 +447,51 @@ impl Devenv {
         let _guard = tracing::subscriber::set_global_default(subscriber)
             .expect("Failed to set tracing subscriber");
 
-        let options = self.nix.build(&["optionsJSON"]).await?;
-        // debug!("{:?}", options);
-        let options_path = options[0]
-            .join("share")
-            .join("doc")
-            .join("nixos")
-            .join("options.json");
-        let options_contents = fs::read(options_path).expect("Failed to read options.json");
-        let options_json: serde_json::Value =
-            serde_json::from_slice(&options_contents).expect("Failed to parse options.json");
-        let mut flatten_json = utils::flatten(options_json);
-        let filter_keys = vec![
-            String::from("declarations"),
-            String::from("loc"),
-            String::from("readOnly"),
-        ];
-        let filter_keys_refs: Vec<&str> = filter_keys.iter().map(|s| s.as_str()).collect();
-        let completion_json = utils::filter_json(&mut flatten_json, filter_keys_refs);
+        let cached_options_path = self.devenv_dotfile.join("options.json");
+
+        // Get options.json either from cache or build it
+        let completion_json = if cached_options_path.exists() {
+            // Use cached version
+            let cached_contents = fs::read(&cached_options_path)
+                .map_err(|e| miette::miette!("Failed to read cached options.json: {}", e))?;
+            let cached_json: serde_json::Value = serde_json::from_slice(&cached_contents)
+                .map_err(|e| miette::miette!("Failed to parse cached options.json: {}", e))?;
+            let mut flatten_json = utils::flatten(cached_json);
+            let filter_keys = vec![
+                String::from("declarations"),
+                String::from("loc"),
+                String::from("readOnly"),
+            ];
+            let filter_keys_refs: Vec<&str> = filter_keys.iter().map(|s| s.as_str()).collect();
+
+            utils::filter_json(&mut flatten_json, filter_keys_refs)
+        } else {
+            // Generate new options.json
+            let options = self.nix.build(&["optionsJSON"]).await?;
+            let options_path = options[0]
+                .join("share")
+                .join("doc")
+                .join("nixos")
+                .join("options.json");
+
+            let options_contents = fs::read(&options_path)
+                .map_err(|e| miette::miette!("Failed to read options.json: {}", e))?;
+            let options_json: serde_json::Value = serde_json::from_slice(&options_contents)
+                .map_err(|e| miette::miette!("Failed to parse options.json: {}", e))?;
+
+            // Cache the generated options.json
+            fs::write(&cached_options_path, &options_contents)
+                .map_err(|e| miette::miette!("Failed to write cached options.json: {}", e))?;
+
+            let mut flatten_json = utils::flatten(options_json);
+            let filter_keys = vec![
+                String::from("declarations"),
+                String::from("loc"),
+                String::from("readOnly"),
+            ];
+            let filter_keys_refs: Vec<&str> = filter_keys.iter().map(|s| s.as_str()).collect();
+            utils::filter_json(&mut flatten_json, filter_keys_refs)
+        };
 
         let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
         info!("Inside the tokio main async lsp");

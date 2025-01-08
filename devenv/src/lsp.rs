@@ -1,13 +1,12 @@
-use super::{cli, cnix, config, lsp, tasks, utils};
 use lsp_textdocument::FullTextDocument;
 use regex::Regex;
+use serde::de;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 use tracing::{debug, info};
-use tracing_subscriber::field::debug;
-use tree_sitter::{Node, Parser, Point, Query, QueryCursor, Tree, TreeCursor};
+use tree_sitter::{Node, Parser, Point, Tree};
 
 pub struct Backend {
     client: Client,
@@ -15,20 +14,67 @@ pub struct Backend {
     tree: std::sync::Arc<tokio::sync::Mutex<Option<Tree>>>,
     completion_json: Value,
     parser: std::sync::Arc<tokio::sync::Mutex<Parser>>,
+    root_level_json_completion: Vec<String>, // New field
 }
 
 impl Backend {
     pub fn new(client: Client, completion_json: Value) -> Self {
         let mut parser = Parser::new();
+        let json_search_result =
+            Backend::search_json_static(&completion_json, &["".to_string()], "");
+        let root_level_json_completion = json_search_result
+            .iter()
+            .map(|(k, _)| k.clone())
+            .collect::<Vec<String>>();
         parser
             .set_language(tree_sitter_nix::language())
             .expect("Unable to load the nix language file");
+
         Backend {
             client,
             curr_doc: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
             tree: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
             completion_json,
             parser: std::sync::Arc::new(tokio::sync::Mutex::new(parser)),
+            root_level_json_completion: root_level_json_completion,
+        }
+    }
+
+    fn search_json_static(
+        completion_json: &Value,
+        path: &[String],
+        partial_key: &str,
+    ) -> Vec<(String, Option<String>)> {
+        let mut current = completion_json;
+
+        for key in path {
+            match current.get(key) {
+                Some(value) => current = value,
+                None => {
+                    current = completion_json;
+                    break;
+                }
+            }
+        }
+
+        match current {
+            Value::Object(map) => map
+                .iter()
+                .filter(|(k, _)| {
+                    k.to_lowercase().contains(&partial_key.to_lowercase()) || partial_key.is_empty()
+                })
+                .map(|(k, v)| {
+                    let description = match v {
+                        Value::Object(obj) => obj
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .map(String::from),
+                        _ => None,
+                    };
+                    (k.clone(), description)
+                })
+                .collect(),
+            _ => Vec::new(),
         }
     }
 
@@ -65,11 +111,50 @@ impl Backend {
         })
     }
 
-    async fn get_completion_list(&self, uri: &str, position: Position) -> Vec<CompletionItem> {
+    fn print_ast(&self, node: Node, source: &str, depth: usize) {
+        let indent = "  ".repeat(depth);
+        println!(
+            "{}{} [{}:{}] - [{}:{}]  -> {}",
+            indent,
+            node.kind(),
+            node.start_position().row,
+            node.start_position().column,
+            node.end_position().row,
+            node.end_position().column,
+            node.utf8_text(source.as_bytes()).unwrap_or_default()
+        );
+
+        debug!(
+            "{}{} [{}:{}] - [{}:{}]  -> {}",
+            indent,
+            node.kind(),
+            node.start_position().row,
+            node.start_position().column,
+            node.end_position().row,
+            node.end_position().column,
+            node.utf8_text(source.as_bytes()).unwrap_or_default()
+        );
+
+        // Recursively print children
+        let mut cursor = node.walk();
+        if cursor.goto_first_child() {
+            loop {
+                self.print_ast(cursor.node(), source, depth + 1);
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+    }
+
+    async fn get_completion_list(
+        &self,
+        uri: &str,
+        position: Position,
+        params: &CompletionParams,
+    ) -> Vec<CompletionItem> {
         let curr_doc = self.curr_doc.lock().await;
         let tree = self.tree.lock().await;
-
-        debug!("Current document: {:?}", curr_doc);
 
         let doc = match &*curr_doc {
             Some(doc) => doc,
@@ -80,20 +165,37 @@ impl Backend {
             None => return vec![],
         };
 
-        debug!("Current tree: {:?}", tree);
-
         let content = doc.get_content(None);
         let root_node = tree.root_node();
         let point = Point::new(position.line as usize, position.character as usize);
 
         let scope_path = self.get_scope(root_node, point, &content);
         debug!("Scope path: {:?}", scope_path);
+        println!("Scope path: {:?}", scope_path);
         let line_content = content
             .lines()
             .nth(position.line as usize)
             .unwrap_or_default();
         let line_until_cursor = &line_content[..position.character as usize];
         let dot_path = self.get_path(line_until_cursor);
+
+        if let Some(context) = &params.context {
+            if let Some(trigger_char) = &context.trigger_character {
+                if trigger_char == "=" {
+                    let search_path = [scope_path.clone(), dot_path].concat();
+                    let default_value = self.get_default_value(&search_path);
+                    if default_value.is_empty() {
+                        return vec![];
+                    }
+                    return vec![CompletionItem {
+                        label: format!("= {}", default_value),
+                        kind: Some(CompletionItemKind::VALUE),
+                        insert_text: Some(format!("= {}", default_value)),
+                        ..Default::default()
+                    }];
+                }
+            }
+        }
 
         let re = Regex::new(r".*\W(.*)").unwrap();
         let current_word = re
@@ -105,6 +207,7 @@ impl Backend {
         let search_path = [scope_path.clone(), dot_path].concat();
         debug!("Current word: {:?}", current_word);
         debug!("Search path: {:?}", search_path);
+        println!("Search path: {:?}", search_path);
         let completions = self.search_json(&search_path, current_word);
 
         completions
@@ -115,65 +218,214 @@ impl Backend {
             .collect()
     }
 
-    fn get_scope(&self, root_node: Node, cursor_position: Point, source: &str) -> Vec<String> {
-        debug!("Getting scope for cursor position: {:?}", cursor_position);
-        debug!("Source code is: {:?}", source);
-        // self.print_ast(node, source, depth);
-        let mut scope = Vec::new();
+    // Add this helper method
+    fn get_default_value(&self, path: &[String]) -> String {
+        let mut current = &self.completion_json;
 
-        if let Some(node) = root_node.descendant_for_point_range(cursor_position, cursor_position) {
-            debug!("Node kind of current cursor position: {}", node.kind());
-            debug!("Parent: {}", node.parent().map(|n| n.kind()).unwrap_or(""));
-            let mut current_node = node;
-            while let Some(sibling) = current_node.prev_named_sibling() {
-                if sibling.kind() == "formals" {
+        for key in path {
+            match current.get(key) {
+                Some(value) => current = value,
+                None => return String::new(),
+            }
+        }
+
+        match current {
+            Value::Object(map) => {
+                if let Some(Value::String(default)) = map.get("default") {
+                    default.clone()
+                } else {
+                    String::new()
+                }
+            }
+            _ => String::new(),
+        }
+    }
+
+    fn extract_scope_from_sibling(&self, current_node: Node, source: &str) -> Vec<String> {
+        let mut scope = Vec::new();
+        let mut current_node = current_node;
+
+        while let Some(sibling) = current_node.prev_named_sibling() {
+            let sibling_value = sibling.utf8_text(source.as_bytes()).unwrap_or_default();
+            let sibling_kind = sibling.kind();
+            println!(
+                "Sibling kind: {:?} | value: {:?}",
+                sibling_kind, sibling_value
+            );
+
+            if sibling_kind == "attrpath" {
+                if self
+                    .root_level_json_completion
+                    .contains(&&sibling_value.to_string())
+                {
+                    scope.push(sibling_value.to_string());
                     break;
                 }
-                scope.push(
-                    sibling
-                        .utf8_text(source.as_bytes())
-                        .unwrap_or_default()
-                        .to_string(),
-                );
-                debug!(
-                    "Previous named sibling: kind {}, value {:?}",
-                    sibling.kind(),
-                    sibling.utf8_text(source.as_bytes())
-                );
-                current_node = sibling;
+                scope.push(sibling_value.to_string());
             }
 
-            debug!("Prev named siblings: {:?}", scope);
+            current_node = sibling
         }
-        debug!("Final scope: {:?}", scope);
-        scope.reverse();
+
+        // scope.reverse();
         scope
     }
 
-    fn get_path(&self, line: &str) -> Vec<String> {
-        let parts: Vec<&str> = line.split('.').collect();
+    fn get_scope(&self, root_node: Node, cursor_position: Point, source: &str) -> Vec<String> {
+        // self.print_ast(root_node, source, 0);
+        debug!("Getting scope for cursor position: {:?}", cursor_position);
 
-        let path = parts[..parts.len() - 1]
-            .iter()
-            .map(|&s| s.trim().to_string())
-            .collect();
-        return path;
+        let node = match root_node.descendant_for_point_range(cursor_position, cursor_position) {
+            Some(node) => node,
+            None => return Vec::new(),
+        };
+
+        // Try different node types in order of priority
+        let scope = self
+            .try_error_node(node, cursor_position, root_node, source)
+            .or_else(|| self.try_formals_node(node, source))
+            .or_else(|| self.try_attrset_node(node, source))
+            .or_else(|| self.try_attrpath_node(node, source))
+            .unwrap_or_default();
+
+        debug!("Final scope: {:?}", scope);
+        scope
+    }
+
+    fn try_error_node(
+        &self,
+        node: Node,
+        cursor_position: Point,
+        root_node: Node,
+        source: &str,
+    ) -> Option<Vec<String>> {
+        if node.kind() != "ERROR" {
+            return None;
+        }
+        debug!("Inside the ERROR current_node kind");
+        let prev_point = Point {
+            row: cursor_position.row,
+            column: cursor_position.column.saturating_sub(1),
+        };
+        root_node
+            .descendant_for_point_range(prev_point, prev_point)
+            .map(|new_node| {
+                debug!("new node kind: {:?}", new_node.kind());
+                if new_node.kind() == "=" {
+                    let mut scope = self.try_formals_node(node, source);
+                    debug!("Scope: {:?}", scope);
+                }
+                let mut scope = self.extract_scope_from_sibling(new_node, source);
+                debug!("Scope: {:?}", scope);
+                if scope.is_empty() {
+                    debug!("Scope is empty, trying parent");
+                    if let Some(parent_node) = new_node.parent() {
+                        debug!(
+                            "Parent node kind: {:?}, with value {:?}",
+                            parent_node.kind(),
+                            parent_node.utf8_text(source.as_bytes()).unwrap_or_default()
+                        );
+                        scope = self
+                            .try_formals_node(parent_node, source)
+                            .unwrap_or_default();
+                    }
+                }
+                scope.reverse();
+                scope
+            })
+    }
+
+    fn try_formals_node(&self, node: Node, source: &str) -> Option<Vec<String>> {
+        let mut current_node = node;
+        while current_node.kind() != "formals" {
+            current_node = current_node.parent()?;
+        }
+
+        if current_node.kind() == "formals" {
+            let mut scope = self.extract_scope_from_sibling(current_node, source);
+            scope.reverse();
+            Some(scope)
+        } else {
+            None
+        }
+    }
+
+    fn try_attrset_node(&self, node: Node, source: &str) -> Option<Vec<String>> {
+        debug!("Trying attrset_expression node");
+        let mut current_node = node;
+        while current_node.kind() != "attrset_expression" {
+            current_node = current_node.parent()?;
+        }
+
+        if current_node.kind() == "attrset_expression" {
+            let mut scope = self.extract_scope_from_sibling(current_node, source);
+            scope.reverse();
+            Some(scope)
+        } else {
+            None
+        }
+    }
+
+    fn try_attrpath_node(&self, node: Node, source: &str) -> Option<Vec<String>> {
+        debug!("Trying attrpath node");
+        let mut current_node = node;
+        while current_node.kind() != "attrpath" {
+            current_node = current_node.parent()?;
+        }
+
+        if current_node.kind() == "attrpath" {
+            let mut scope = self.extract_scope_from_sibling(current_node, source);
+            scope.reverse();
+            Some(scope)
+        } else {
+            None
+        }
+    }
+
+    fn get_path(&self, line: &str) -> Vec<String> {
+        let mut path = Vec::new();
+
+        // Handle empty or whitespace-only lines
+        if line.trim().is_empty() {
+            return path;
+        }
+
+        // Split by dots and handle the special case where we're typing after a dot
+        let parts: Vec<&str> = line.split('.').collect();
+        if parts.len() > 1 {
+            // Take all complete parts before the cursor
+            for part in &parts[..parts.len() - 1] {
+                let trimmed = part.trim();
+                if !trimmed.is_empty() {
+                    path.push(trimmed.to_string());
+                }
+            }
+        }
+
+        path
     }
 
     fn search_json(&self, path: &[String], partial_key: &str) -> Vec<(String, Option<String>)> {
         let mut current = &self.completion_json;
+
+        // First try the exact path
         for key in path {
-            if let Some(value) = current.get(key) {
-                current = value;
-            } else {
-                return Vec::new();
+            match current.get(key) {
+                Some(value) => current = value,
+                None => {
+                    // If exact path fails, try searching at root level
+                    current = &self.completion_json;
+                    break;
+                }
             }
         }
 
         match current {
             Value::Object(map) => map
                 .iter()
-                .filter(|(k, _)| k.starts_with(partial_key))
+                .filter(|(k, _)| {
+                    k.to_lowercase().contains(&partial_key.to_lowercase()) || partial_key.is_empty()
+                })
                 .map(|(k, v)| {
                     let description = match v {
                         Value::Object(obj) => obj
@@ -204,7 +456,7 @@ impl LanguageServer for Backend {
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string()]),
+                    trigger_characters: Some(vec![".".to_string(), "=".to_string()]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                     ..Default::default()
@@ -339,10 +591,10 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position.text_document.uri.to_string();
         let position = params.text_document_position.position;
 
-        let completion_items = self.get_completion_list(&uri, position).await;
+        let completion_items = self.get_completion_list(&uri, position, &params).await;
 
         Ok(Some(CompletionResponse::List(CompletionList {
-            is_incomplete: false,
+            is_incomplete: true,
             items: completion_items,
         })))
     }

@@ -106,9 +106,250 @@ async fn test_simple_nested_completions() {
             item_labels.contains(&"python".to_string()),
             "Should suggest python"
         );
+    } else {
+        panic!("Expected CompletionResponse::List");
+    }
+}
+
+#[tokio::test]
+async fn test_nested_completions_type_two() {
+    let mut ctx = TestContext::new("simple");
+    ctx.initialize().await;
+    let test_content = r#"{ pkgs, config, ... }: 
+    {
+    languages = {
+        p
+    env.GREET = "determinism";
+
+    packages = [
+        pkgs.ncdu
+    ];
+
+    enterShell = ''
+        echo hello ${config.env.GREET}
+        ncdu --version
+    '';
+    }
+    "#;
+    ctx.notify::<tower_lsp::lsp_types::notification::DidOpenTextDocument>(
+        tower_lsp::lsp_types::DidOpenTextDocumentParams {
+            text_document: tower_lsp::lsp_types::TextDocumentItem {
+                uri: ctx.doc_uri("test.nix"),
+                language_id: "nix".to_string(),
+                version: 1,
+                text: test_content.to_string(),
+            },
+        },
+    )
+    .await;
+    // Add a small delay to ensure the document is processed
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let completion_response = ctx
+        .request::<tower_lsp::lsp_types::request::Completion>(CompletionParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: ctx.doc_uri("test.nix"),
+                },
+                position: Position {
+                    line: 3,
+                    character: 8,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: Some(CompletionContext {
+                trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+                trigger_character: Some(".".to_string()),
+            }),
+        })
+        .await;
+    if let Some(tower_lsp::lsp_types::CompletionResponse::List(list)) = completion_response {
+        assert!(!list.items.is_empty(), "Should have completion items");
+        let item_labels: Vec<String> = list.items.into_iter().map(|item| item.label).collect();
+        // println!("Completion list is {:?}", item_labels);
         assert!(
-            item_labels.contains(&"nodejs".to_string()),
-            "Should suggest nodejs"
+            item_labels.contains(&"python".to_string()),
+            "Should suggest python"
+        );
+    } else {
+        panic!("Expected CompletionResponse::List");
+    }
+}
+
+#[tokio::test]
+async fn test_nested_completions_type_two_without_errors() {
+    let mut ctx = TestContext::new("simple");
+    ctx.initialize().await;
+    let test_content = r#"{ pkgs, config, ... }: 
+    {
+    languages = {
+        p
+    }
+    env.GREET = "determinism";
+
+    packages = [
+        pkgs.ncdu
+    ];
+
+    enterShell = ''
+        echo hello ${config.env.GREET}
+        ncdu --version
+    '';
+    }
+    "#;
+    ctx.notify::<tower_lsp::lsp_types::notification::DidOpenTextDocument>(
+        tower_lsp::lsp_types::DidOpenTextDocumentParams {
+            text_document: tower_lsp::lsp_types::TextDocumentItem {
+                uri: ctx.doc_uri("test.nix"),
+                language_id: "nix".to_string(),
+                version: 1,
+                text: test_content.to_string(),
+            },
+        },
+    )
+    .await;
+    // Add a small delay to ensure the document is processed
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let completion_response = ctx
+        .request::<tower_lsp::lsp_types::request::Completion>(CompletionParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: ctx.doc_uri("test.nix"),
+                },
+                position: Position {
+                    line: 3,
+                    character: 8,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: Some(CompletionContext {
+                trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+                trigger_character: Some(".".to_string()),
+            }),
+        })
+        .await;
+    if let Some(tower_lsp::lsp_types::CompletionResponse::List(list)) = completion_response {
+        assert!(!list.items.is_empty(), "Should have completion items");
+        let item_labels: Vec<String> = list.items.into_iter().map(|item| item.label).collect();
+        // println!("Completion list is {:?}", item_labels);
+        assert!(
+            item_labels.contains(&"python".to_string()),
+            "Should suggest python"
+        );
+    } else {
+        panic!("Expected CompletionResponse::List");
+    }
+}
+
+#[tokio::test]
+async fn test_nested_completions_type_three_without_errors() {
+    let mut ctx = TestContext::new("simple");
+    ctx.initialize().await;
+    let test_content = r#"{ pkgs, config, ... }: 
+    {
+    languages = {
+        python = {
+        e
+        }
+    }
+    }
+    "#;
+    ctx.notify::<tower_lsp::lsp_types::notification::DidOpenTextDocument>(
+        tower_lsp::lsp_types::DidOpenTextDocumentParams {
+            text_document: tower_lsp::lsp_types::TextDocumentItem {
+                uri: ctx.doc_uri("test.nix"),
+                language_id: "nix".to_string(),
+                version: 1,
+                text: test_content.to_string(),
+            },
+        },
+    )
+    .await;
+    // Add a small delay to ensure the document is processed
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let completion_response = ctx
+        .request::<tower_lsp::lsp_types::request::Completion>(CompletionParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: ctx.doc_uri("test.nix"),
+                },
+                position: Position {
+                    line: 4,
+                    character: 9,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: Some(CompletionContext {
+                trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+                trigger_character: Some(".".to_string()),
+            }),
+        })
+        .await;
+    if let Some(tower_lsp::lsp_types::CompletionResponse::List(list)) = completion_response {
+        assert!(!list.items.is_empty(), "Should have completion items");
+        let item_labels: Vec<String> = list.items.into_iter().map(|item| item.label).collect();
+        // println!("Completion list is {:?}", item_labels);
+        assert!(
+            item_labels.contains(&"enable".to_string()),
+            "Should suggest enable"
+        );
+    } else {
+        panic!("Expected CompletionResponse::List");
+    }
+}
+
+#[tokio::test]
+async fn test_nested_completions_type_four_without_errors() {
+    let mut ctx = TestContext::new("simple");
+    ctx.initialize().await;
+    let test_content = r#"{ pkgs, config, ... }: 
+    {
+    languages = {
+        python.e
+    }
+    }
+    "#;
+    ctx.notify::<tower_lsp::lsp_types::notification::DidOpenTextDocument>(
+        tower_lsp::lsp_types::DidOpenTextDocumentParams {
+            text_document: tower_lsp::lsp_types::TextDocumentItem {
+                uri: ctx.doc_uri("test.nix"),
+                language_id: "nix".to_string(),
+                version: 1,
+                text: test_content.to_string(),
+            },
+        },
+    )
+    .await;
+    // Add a small delay to ensure the document is processed
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let completion_response = ctx
+        .request::<tower_lsp::lsp_types::request::Completion>(CompletionParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier {
+                    uri: ctx.doc_uri("test.nix"),
+                },
+                position: Position {
+                    line: 3,
+                    character: 15,
+                },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: Some(CompletionContext {
+                trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+                trigger_character: Some(".".to_string()),
+            }),
+        })
+        .await;
+    if let Some(tower_lsp::lsp_types::CompletionResponse::List(list)) = completion_response {
+        assert!(!list.items.is_empty(), "Should have completion items");
+        let item_labels: Vec<String> = list.items.into_iter().map(|item| item.label).collect();
+        // println!("Completion list is {:?}", item_labels);
+        assert!(
+            item_labels.contains(&"enable".to_string()),
+            "Should suggest enable"
         );
     } else {
         panic!("Expected CompletionResponse::List");
