@@ -30,7 +30,7 @@ in
       };
 
       webhookUrl = lib.mkOption {
-        type = lib.types.str;
+        type = types.nullOr types.str;
         default = "";
         description = ''
           WEBHOOK_URL for n8n, in case we're running behind a reverse proxy.
