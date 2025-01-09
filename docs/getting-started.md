@@ -114,7 +114,7 @@ $ devenv init
 === "Nix env (newcomers)"
 
     ```
-    nix-env --upgrade --attr devenv
+    nix-env --upgrade --attr devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
     ```
 
 === "Nix profiles (requires experimental flags)"
