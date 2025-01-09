@@ -31,10 +31,10 @@
 
     We recommend installing a newer version from nixpkgs to avoid running into evaluation errors.
 
-    === "Newcomers"
+    === "Nix env (newcomers)"
 
         ```
-        nix-env -iA bashInteractive -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+        nix-env --install --attr bashInteractive -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
         ```
 
     === "Nix profiles (requires experimental flags)"
@@ -62,7 +62,7 @@
 === "Newcomers"
 
     ```
-    nix-env -iA devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+    nix-env --install --attr devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
     ```
 
 === "Nix profiles (requires experimental flags)"
@@ -78,11 +78,6 @@
       pkgs.devenv
     ];
     ```
-
-
-!!! Updating
-
-    To update, refer to the specific upgrade instructions provided in the documentation for the installer you used from the options above. 
 
 
 ## Initial set up
@@ -111,3 +106,37 @@ $ devenv init
 - About ``.envrc`` in [Automatic shell activation](automatic-shell-activation.md).
 - About ``devenv.yaml`` in [Inputs](inputs.md) and [Composing using imports](composing-using-imports.md).
 - About ``devenv.nix`` in the **Writing devenv.nix** section, starting with [the basics](basics.md).
+
+## Updating
+
+### Update devenv CLI
+
+=== "Nix env (newcomers)"
+
+    ```
+    nix-env --upgrade --attr devenv
+    ```
+
+=== "Nix profiles (requires experimental flags)"
+
+    ```
+    nix profile upgrade devenv
+    ```
+
+=== "NixOS/nix-darwin/home-manager"
+
+    Update nixpkgs to get the latest version of devenv.
+
+    For detailed upgrade instructions specific to your setup, please refer to the documentation for your particular system: NixOS, nix-darwin (for macOS), or home-manager, as applicable.
+
+### Update project inputs
+
+Inputs, like nixpkgs and devenv modules, are downloaded and pinned in a `devenv.lock` lockfile.
+
+These should be periodically updated with:
+
+```
+devenv update
+```
+
+Learn more about [Inputs](inputs.md).
