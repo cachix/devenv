@@ -1,7 +1,11 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
-  devenv = import ./../../package.nix { inherit pkgs inputs; build_tasks = true; };
+  devenv = pkgs.callPackage ./../../package.nix {
+    build_tasks = true;
+    inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
+    inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
+  };
   taskType = types.submodule
     ({ name, config, ... }:
       let
@@ -27,10 +31,12 @@ let
             type = types.str;
             description = "Override the binary name if it doesn't match package name";
             default = config.package.pname;
+            defaultText = lib.literalExpression "config.package.pname";
           };
           package = lib.mkOption {
             type = types.package;
             default = pkgs.bash;
+            defaultText = lib.literalExpression "pkgs.bash";
             description = "Package to install for this task.";
           };
           command = lib.mkOption {

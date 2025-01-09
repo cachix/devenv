@@ -10,7 +10,7 @@ let
   );
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
-  package = pkgs.callPackage "${pkgs.path}/pkgs/development/interpreters/python/wrapper.nix" {
+  package = pkgs.callPackage ../../python-wrapper.nix {
     python = cfg.package;
     requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
     makeWrapperArgs = [
@@ -159,6 +159,7 @@ let
           echo "$ACTUAL_UV_CHECKSUM" > "$UV_CHECKSUM_FILE"
         else
           echo "uv sync failed. Run 'uv sync' manually." >&2
+          exit 1
         fi
       fi
     }
@@ -166,6 +167,7 @@ let
     if [ ! -f "pyproject.toml" ]
     then
       echo "No pyproject.toml found. Make sure you have a pyproject.toml file in your project." >&2
+      exit 1
     else
       _devenv_uv_sync
     fi
@@ -208,6 +210,7 @@ let
           echo "$ACTUAL_POETRY_CHECKSUM" > "$POETRY_CHECKSUM_FILE"
         else
           echo "Poetry install failed. Run 'poetry install' manually."
+          exit 1
         fi
       fi
     }
@@ -215,6 +218,7 @@ let
     if [ ! -f "pyproject.toml" ]
     then
       echo "No pyproject.toml found. Run 'poetry init' to create one." >&2
+      exit 1
     else
       _devenv_init_poetry_venv
       ${lib.optionalString cfg.poetry.install.enable ''
@@ -241,7 +245,7 @@ in
 
     manylinux.enable = lib.mkOption {
       type = lib.types.bool;
-      default = pkgs.stdenv.isLinux;
+      default = false;
       description = ''
         Whether to install manylinux2014 libraries.
 

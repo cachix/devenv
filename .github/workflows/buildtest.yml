@@ -13,50 +13,62 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[self-hosted, linux, X64], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
+        os:
+          [
+            [self-hosted, linux, X64],
+            [macos-13],
+            [self-hosted, macOS, ARM64],
+            [self-hosted, linux, ARM64],
+          ]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v30
-      with:
-        extra_nix_config: |
-          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@v15
-      with:
-        name: devenv
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - id: build
-      run: |
-        bin=$(nix build --print-out-paths)
-        echo "bin=$bin" >> $GITHUB_OUTPUT
-    - name: Run tests
-      run: ./result/bin/devenv test
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - id: build
+        run: |
+          bin=$(nix build --print-out-paths)
+          echo "bin=$bin" >> $GITHUB_OUTPUT
+      - name: Run tests
+        run: ./result/bin/devenv test
 
   tests:
     needs: build
     strategy:
       fail-fast: false
       matrix:
-        os: [[self-hosted, linux, X64], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
+        os:
+          [
+            [self-hosted, linux, X64],
+            [macos-13],
+            [self-hosted, macOS, ARM64],
+            [self-hosted, linux, ARM64],
+          ]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v30
-      with:
-        extra_nix_config: |
-          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@v15
-      with:
-        name: devenv
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - name: Build devenv
-      run: |
-        nix build
-        echo "$PWD/result/bin" >> $GITHUB_PATH
-    - name: Run devenv-test-cli
-      run: devenv shell devenv-test-cli
-    - name: Run tests
-      run: devenv-run-tests tests
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build devenv
+        run: |
+          nix build
+          echo "$PWD/result/bin" >> $GITHUB_PATH
+      - name: Run devenv-test-cli
+        run: devenv shell devenv-test-cli
+      - name: Run tests
+        run: devenv-run-tests tests
 
   pin:
     needs: build
@@ -69,13 +81,14 @@ jobs:
     outputs:
       examples: ${{ steps.set-examples.outputs.examples }}
     steps:
-    - name: Checkout base repo
-      uses: actions/checkout@v4
-    - name: Fetch examples to run
-      id: set-examples
-      run: |
-        json=$(nix shell nixpkgs#tree -c tree -J -L 1 examples | nix shell nixpkgs#jq -c jq -c '[.[0].contents[] | .name]')
-        echo "examples=$json" >> $GITHUB_OUTPUT
+      - name: Checkout base repo
+        uses: actions/checkout@v4
+      - name: Fetch examples to run
+        id: set-examples
+        run: |
+          set -euxo pipefail
+          json=$(nix shell nixpkgs#tree -c tree -J -L 1 examples | nix shell nixpkgs#jq -c jq -c '[.[0].contents[] | .name]')
+          echo "examples=$json" >> $GITHUB_OUTPUT
 
   examples:
     name: ${{ matrix.example }} (${{ join(matrix.os) }})
@@ -83,26 +96,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[self-hosted, linux, X64], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
+        os:
+          [
+            [self-hosted, linux, X64],
+            [macos-13],
+            [self-hosted, macOS, ARM64],
+            [self-hosted, linux, ARM64],
+          ]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
     steps:
-    - run: sudo rm -rf /opt&
-    - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v30
-      with:
-        extra_nix_config: |
-          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@v15
-      with:
-        name: devenv
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - name: Build devenv
-      run: |
-        nix build
-        echo "$PWD/result/bin" >> $GITHUB_PATH
-    - name: Run examples
-      run: devenv-run-tests --only ${{ matrix.example }} examples
+      - run: sudo rm -rf /opt&
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build devenv
+        run: |
+          nix build
+          echo "$PWD/result/bin" >> $GITHUB_PATH
+      - name: Run examples
+        run: devenv-run-tests --only ${{ matrix.example }} examples
 
   direnv:
     name: direnv (${{ join(matrix.os) }})
@@ -110,33 +129,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, Linux, ARM64]]
+        os:
+          [
+            [ubuntu-latest],
+            [macos-13],
+            [self-hosted, macOS, ARM64],
+            [self-hosted, Linux, ARM64],
+          ]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v30
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
-    - uses: cachix/cachix-action@v15
-      with:
-        name: devenv
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - name: Build devenv
-      run: |
-        nix build
-        echo "$PWD/result/bin" >> $GITHUB_PATH
-    - run: |
-        mkdir -p ~/.config/direnv/
-        cat > ~/.config/direnv/direnv.toml << 'EOF'
-        [global]
-        strict_env = true
-        EOF
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build devenv
+        run: |
+          nix build
+          echo "$PWD/result/bin" >> $GITHUB_PATH
+      - run: |
+          mkdir -p ~/.config/direnv/
+          cat > ~/.config/direnv/direnv.toml << 'EOF'
+          [global]
+          strict_env = true
+          EOF
 
-        devenv_dir=$PWD
-        tmp="$(mktemp -d)"
-        pushd "$tmp"
-          nix shell nixpkgs#direnv -c devenv --override-input devenv path:$devenv_dir?dir=src/modules init
-        popd
+          devenv_dir=$PWD
+          tmp="$(mktemp -d)"
+          pushd "$tmp"
+            nix shell nixpkgs#direnv -c devenv --override-input devenv path:$devenv_dir?dir=src/modules init
+          popd
 
   fish-zsh:
     name: zsh/fish (${{ join(matrix.os) }})
@@ -144,20 +169,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-13], [self-hosted, macOS, ARM64], [self-hosted, linux, ARM64]]
+        os:
+          [
+            [ubuntu-latest],
+            [macos-13],
+            [self-hosted, macOS, ARM64],
+            [self-hosted, linux, ARM64],
+          ]
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v30
-      with:
-        nix_path: nixpkgs=channel:nixos-unstable
-    - uses: cachix/cachix-action@v15
-      with:
-        name: devenv
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
-    - name: Build devenv
-      run: nix build
-    - name: Test devenv in fish and zsh
-      run: |
-        nix shell nixpkgs#zsh -c zsh -c "./result/bin/devenv version"
-        nix shell nixpkgs#fish -c fish -c "./result/bin/devenv version"
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build devenv
+        run: nix build
+      - name: Test devenv in fish and zsh
+        run: |
+          nix shell nixpkgs#zsh -c zsh -c "./result/bin/devenv version"
+          nix shell nixpkgs#fish -c fish -c "./result/bin/devenv version"
