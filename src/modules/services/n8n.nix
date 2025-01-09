@@ -31,7 +31,7 @@ in
 
       webhookUrl = lib.mkOption {
         type = types.nullOr types.str;
-        default = "";
+        default = null;
         description = ''
           WEBHOOK_URL for n8n, in case we're running behind a reverse proxy.
           This cannot be set through configuration and must reside in an environment variable.
