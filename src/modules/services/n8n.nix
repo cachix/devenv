@@ -4,8 +4,6 @@
 , ...
 }:
 
-with lib;
-
 let
   inherit (lib) types;
   cfg = config.services.n8n;
