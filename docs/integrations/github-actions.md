@@ -111,6 +111,14 @@ defaults:
     shell: devenv shell bash -- -e {0}
 ```
 
+When setting the default shell, the "Install devenv.sh" step must be amended as follows, so that it does not attempt to use a devenv shell:
+
+```yaml
+- name: Install devenv.sh
+  shell: bash
+  run: nix profile install nixpkgs#devenv
+```
+
 ### Complete Example
 
 Let's put all of the above together in a complete example workflow.
