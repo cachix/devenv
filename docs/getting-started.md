@@ -13,8 +13,35 @@
 === "macOS"
 
     ```
-    sh <(curl -L https://nixos.org/nix/install)
+    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
     ```
+
+    !!! note "Experimental installer"
+        We recommend using the above experimental installer.
+        It can handle OS upgrades and has better support for Apple silicon.
+
+        If you'd like to stick with the official release installer, use:
+        ```
+        sh <(curl -L https://nixos.org/nix/install)
+        ```
+
+    **Upgrade Bash**
+
+    macOS ships with an ancient version of Bash due to licensing reasons.
+
+    We recommend installing a newer version from nixpkgs to avoid running into evaluation errors.
+
+    === "Newcomers"
+
+        ```
+        nix-env -iA bashInteractive -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+        ```
+
+    === "Nix profiles (requires experimental flags)"
+
+        ```
+        nix profile install nixpkgs#bashInteractive
+        ```
 
 === "Windows (WSL2)"
 
@@ -28,13 +55,6 @@
     docker run -it nixos/nix
     ```
 
-!!! note
-
-    We recommended that you use the experimental installer on macOS to avoid issues with Apple Silicon chips:
-
-    ```
-    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
-    ```
 
 ### 2. Install [devenv](https://github.com/cachix/devenv)
 
@@ -48,7 +68,7 @@
 === "Nix profiles (requires experimental flags)"
 
     ```
-    nix profile install --accept-flake-config nixpkgs#devenv
+    nix profile install nixpkgs#devenv
     ```
 
 === "NixOS/nix-darwin/home-manager"
@@ -63,6 +83,7 @@
 !!! Updating
 
     To update, refer to the specific upgrade instructions provided in the documentation for the installer you used from the options above. 
+
 
 ## Initial set up
 
