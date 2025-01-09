@@ -23,7 +23,7 @@ in
 
       port = lib.mkOption {
         type = types.port;
-        default = 5432;
+        default = 5678;
         description = ''
           The TCP port to accept connections.
         '';
