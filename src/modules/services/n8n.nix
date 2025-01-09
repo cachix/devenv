@@ -53,12 +53,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [{
-      assertion = cfg.enable;
-      message = ''
-        To use n8n, you have to enable it. (services.n8n.enable = true;)
-      '';
-    }];
     env = {
       N8N_PORT = cfg.port;
       N8N_LISTEN_ADDRESS = cfg.address;
