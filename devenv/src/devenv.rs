@@ -1,7 +1,9 @@
-use super::{cli, cnix, config, log, tasks};
+use super::{cli, cnix, config, lsp, tasks, utils};
+use crate::log::{DevenvFormat, DevenvLayer};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
+use dashmap::DashMap;
 use include_dir::{include_dir, Dir};
 use miette::{bail, Result};
 use nix::sys::signal;
@@ -11,12 +13,16 @@ use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
 use std::io::Write;
+use std::io::{self, BufWriter};
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+use tower_lsp::{LspService, Server};
 use tracing::{debug, error, info, info_span, warn, Instrument};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::{prelude::*, EnvFilter};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -163,7 +169,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            info!("Creating {}", filename);
+            // info!("Creating {}", filename);
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -277,7 +283,7 @@ impl Devenv {
                 develop_args.extend_from_slice(&args);
             }
             None => {
-                info!("Entering shell");
+                // info!("Entering shell");
             }
         };
 
@@ -409,6 +415,92 @@ impl Devenv {
         .await
     }
 
+    pub async fn lsp(&mut self) -> Result<()> {
+        self.assemble(false)?;
+        // Setup file logging
+        let file = std::fs::File::create("/tmp/devenv-lsp.log")
+            .expect("Couldn't create devenv-lsp.log file");
+        let file = BufWriter::new(file);
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file);
+
+        // Create a dedicated subscriber for LSP
+        let subscriber = tracing_subscriber::registry()
+            .with(
+                EnvFilter::builder()
+                    .with_default_directive(LevelFilter::DEBUG.into())
+                    .from_env_lossy(),
+            )
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(io::stderr)
+                    .with_ansi(false)
+                    .event_format(DevenvFormat::default()),
+            )
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking)
+                    .with_ansi(false),
+            )
+            .with(DevenvLayer::new());
+
+        // Set as global default for LSP session
+        let _guard = tracing::subscriber::set_global_default(subscriber)
+            .expect("Failed to set tracing subscriber");
+
+        let cached_options_path = self.devenv_dotfile.join("options.json");
+
+        // Get options.json either from cache or build it
+        let completion_json = if cached_options_path.exists() {
+            // Use cached version
+            let cached_contents = fs::read(&cached_options_path)
+                .map_err(|e| miette::miette!("Failed to read cached options.json: {}", e))?;
+            let cached_json: serde_json::Value = serde_json::from_slice(&cached_contents)
+                .map_err(|e| miette::miette!("Failed to parse cached options.json: {}", e))?;
+            let mut flatten_json = utils::flatten(cached_json);
+            let filter_keys = vec![
+                String::from("declarations"),
+                String::from("loc"),
+                String::from("readOnly"),
+            ];
+            let filter_keys_refs: Vec<&str> = filter_keys.iter().map(|s| s.as_str()).collect();
+
+            utils::filter_json(&mut flatten_json, filter_keys_refs)
+        } else {
+            // Generate new options.json
+            let options = self.nix.build(&["optionsJSON"]).await?;
+            let options_path = options[0]
+                .join("share")
+                .join("doc")
+                .join("nixos")
+                .join("options.json");
+
+            let options_contents = fs::read(&options_path)
+                .map_err(|e| miette::miette!("Failed to read options.json: {}", e))?;
+            let options_json: serde_json::Value = serde_json::from_slice(&options_contents)
+                .map_err(|e| miette::miette!("Failed to parse options.json: {}", e))?;
+
+            // Cache the generated options.json
+            fs::write(&cached_options_path, &options_contents)
+                .map_err(|e| miette::miette!("Failed to write cached options.json: {}", e))?;
+
+            let mut flatten_json = utils::flatten(options_json);
+            let filter_keys = vec![
+                String::from("declarations"),
+                String::from("loc"),
+                String::from("readOnly"),
+            ];
+            let filter_keys_refs: Vec<&str> = filter_keys.iter().map(|s| s.as_str()).collect();
+            utils::filter_json(&mut flatten_json, filter_keys_refs)
+        };
+
+        let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
+        info!("Inside the tokio main async lsp");
+        let (service, socket) =
+            LspService::new(|client| lsp::Backend::new(client, completion_json.clone()));
+        Server::new(stdin, stdout, socket).serve(service).await;
+        Ok(())
+    }
+
     pub fn repl(&mut self) -> Result<()> {
         self.assemble(false)?;
         self.nix.repl()
@@ -430,11 +522,11 @@ impl Devenv {
         };
         let to_gc_len = to_gc.len();
 
-        info!("Found {} active environments.", to_gc_len);
-        info!(
-            "Deleted {} dangling environments (most likely due to previous GC).",
-            removed_symlinks.len()
-        );
+        // info!("Found {} active environments.", to_gc_len);
+        // info!(
+        //     "Deleted {} dangling environments (most likely due to previous GC).",
+        //     removed_symlinks.len()
+        // );
 
         {
             let span = info_span!(
@@ -442,7 +534,7 @@ impl Devenv {
                 devenv.user_message =
                     "Running garbage collection (this process will take some time)"
             );
-            info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
+            // info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
             span.in_scope(|| self.nix.gc(to_gc))?;
         }
 
@@ -450,11 +542,11 @@ impl Devenv {
         let end = std::time::Instant::now();
 
         // TODO: newline before or after
-        info!(
-            "\nDone. Successfully removed {} symlinks in {}s.",
-            to_gc_len - after_gc.len(),
-            (end - start).as_secs_f32()
-        );
+        // info!(
+        //     "\nDone. Successfully removed {} symlinks in {}s.",
+        //     to_gc_len - after_gc.len(),
+        //     (end - start).as_secs_f32()
+        // );
         Ok(())
     }
 
@@ -509,7 +601,7 @@ impl Devenv {
             print_stderr(options_results.with_title()).expect("Failed to print options results");
         }
 
-        info!("Found {search_results_count} packages and {results_options_count} options for '{name}'.");
+        // info!("Found {search_results_count} packages and {results_options_count} options for '{name}'.");
         Ok(())
     }
 
@@ -599,7 +691,7 @@ impl Devenv {
             error!("Tests failed :(");
             bail!("Tests failed");
         } else {
-            info!("Tests passed :)");
+            // info!("Tests passed :)");
             Ok(())
         }
     }
@@ -735,11 +827,11 @@ impl Devenv {
 
                 std::fs::write(self.processes_pid(), process.id().to_string())
                     .expect("Failed to write PROCESSES_PID");
-                info!("PID is {}", process.id());
+                // info!("PID is {}", process.id());
                 if *log_to_file {
-                    info!("See logs:  $ tail -f {}", self.processes_log().display());
+                    // info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
-                info!("Stop:      $ devenv processes stop");
+                // info!("Stop:      $ devenv processes stop");
             } else {
                 let err = cmd.exec();
                 bail!(err);

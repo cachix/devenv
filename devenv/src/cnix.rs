@@ -284,7 +284,7 @@ impl<'a> Nix<'a> {
             .filter_map(|path_buf| path_buf.to_str())
             .collect();
         for path in paths {
-            info!("Deleting {}...", path);
+            // info!("Deleting {}...", path);
             let args: Vec<&str> = ["store", "delete", path].to_vec();
             let cmd = self.prepare_command("nix", &args, &self.options);
             // we ignore if this command fails, because root might be in use
@@ -424,7 +424,7 @@ impl<'a> Nix<'a> {
             if self.global_options.nix_debugger
                 && cmd.get_program().to_string_lossy().ends_with("bin/nix")
             {
-                info!("Starting Nix debugger ...");
+                // info!("Starting Nix debugger ...");
                 cmd.arg("--debugger").exec();
             }
 
@@ -457,7 +457,7 @@ impl<'a> Nix<'a> {
             match cachix_caches {
                 Err(e) => {
                     warn!("Failed to get cachix caches due to evaluation error");
-                    debug!("{}", e);
+                    // debug!("{}", e);
                 }
                 Ok(cachix_caches) => {
                     push_cache = cachix_caches.caches.push.clone();
@@ -585,7 +585,7 @@ impl<'a> Nix<'a> {
         cmd.current_dir(&self.devenv_root);
 
         if self.global_options.verbose {
-            debug!("Running command: {}", display_command(&cmd));
+            // debug!("Running command: {}", display_command(&cmd));
         }
         Ok(cmd)
     }
@@ -672,17 +672,17 @@ impl<'a> Nix<'a> {
                     "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
                 };
 
-                info!(
-                    devenv.is_user_message = true,
-                    "Using Cachix: {}",
-                    caches.caches.pull.join(", "),
-                );
+                // info!(
+                //     devenv.is_user_message = true,
+                //     "Using Cachix: {}",
+                //     caches.caches.pull.join(", "),
+                // );
                 if !new_known_keys.is_empty() {
                     for (name, pubkey) in new_known_keys.iter() {
-                        info!(
-                            "Trusting {}.cachix.org on first use with the public key {}",
-                            name, pubkey
-                        );
+                        // info!(
+                        //     "Trusting {}.cachix.org on first use with the public key {}",
+                        //     name, pubkey
+                        // );
                     }
                     caches.known_keys.extend(new_known_keys);
                 }
@@ -801,11 +801,11 @@ impl<'a> Nix<'a> {
 fn symlink_force(link_path: &Path, target: &Path) {
     let _lock = dotlock::Dotlock::create(target.with_extension("lock")).unwrap();
 
-    debug!(
-        "Creating symlink {} -> {}",
-        link_path.display(),
-        target.display()
-    );
+    // debug!(
+    //     "Creating symlink {} -> {}",
+    //     link_path.display(),
+    //     target.display()
+    // );
 
     if target.exists() {
         fs::remove_file(target).unwrap_or_else(|_| panic!("Failed to remove {}", target.display()));
