@@ -70,6 +70,7 @@ in
       type = types.package;
       description = "The stdenv to use for the developer environment.";
       default = pkgs.stdenv;
+      defaultText = lib.literalExpression "pkgs.stdenv";
     };
 
     unsetEnvVars = lib.mkOption {
@@ -186,16 +187,11 @@ in
         # - free to create as an unprivileged user across OSes
         default =
           let
-            runtimeEnv = builtins.getEnv "DEVENV_RUNTIME";
-
             hashedRoot = builtins.hashString "sha256" config.devenv.state;
-
             # same length as git's abbreviated commit hashes
             shortHash = builtins.substring 0 7 hashedRoot;
           in
-          if runtimeEnv != ""
-          then runtimeEnv
-          else "${config.devenv.tmpdir}/devenv-${shortHash}";
+          "${config.devenv.tmpdir}/devenv-${shortHash}";
       };
 
       tmpdir = lib.mkOption {
@@ -213,7 +209,6 @@ in
         type = types.package;
         internal = true;
       };
-
     };
   };
 
@@ -265,8 +260,18 @@ in
       pkgs.pkg-config
     ];
 
-    enterShell = ''
+    enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
+
+      # override temp directories after "nix develop"
+      for var in TMP TMPDIR TEMP TEMPDIR; do
+        if [ -n "''${!var-}" ]; then
+          export "$var"=${config.devenv.tmpdir}
+        fi
+      done
+      if [ -n "''${NIX_BUILD_TOP-}" ]; then
+        unset NIX_BUILD_TOP
+      fi
 
       # set path to locales on non-NixOS Linux hosts
       ${lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
@@ -275,15 +280,10 @@ in
         fi
       ''}
 
-      # note what environments are active, but make sure we don't repeat them
-      if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
-        export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
-      fi
-
-      # devenv helper
+      # direnv helper
       if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
-        echo "You have .envrc but direnv command is not installed."
-        echo "Please install direnv: https://direnv.net/docs/installation.html"
+        echo "An .envrc file was detected, but the direnv command is not installed."
+        echo "To use this configuration, please install direnv: https://direnv.net/docs/installation.html"
       fi
 
       mkdir -p "$DEVENV_STATE"

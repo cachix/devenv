@@ -1,11 +1,12 @@
 use super::command::FilePath;
 use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqliteRow, SqliteSynchronous};
-use sqlx::{Acquire, Row, SqlitePool};
+use sqlx::{migrate::MigrateDatabase, Acquire, Row, SqlitePool};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::error;
 
 pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx::Error> {
     let conn_options = SqliteConnectOptions::from_str(database_url.as_ref())?
@@ -19,7 +20,14 @@ pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx
 
     let pool = SqlitePool::connect_with(conn_options).await?;
 
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    if let Err(err) = sqlx::migrate!().run(&pool).await {
+        error!(error = %err, "Failed to migrate the Nix evaluation cache database. Attempting to recreate the database.");
+
+        // Delete the database and rerun the migrations
+        Sqlite::drop_database(database_url.as_ref()).await?;
+
+        sqlx::migrate!().run(&pool).await?;
+    }
 
     Ok(pool)
 }
