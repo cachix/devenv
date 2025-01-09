@@ -13,7 +13,7 @@ in
 {
   options = {
     services.n8n = {
-      enable = mkEnableOption "n8n";
+      enable = lib.mkEnableOption "n8n";
 
       address = lib.mkOption {
         type = types.str;
