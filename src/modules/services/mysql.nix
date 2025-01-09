@@ -115,7 +115,7 @@ with lib; let
         echo "Adding user: ${user.name}"
         ${optionalString (user.password != null) "password='${user.password}'"}
         (
-          if [ "${user.name}" = "root" ] && [ -n ${user.password} ]; then
+          if [ "${user.name}" = "root" ] && [ -n "$password" ]; then
             echo "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';"
           else
             echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"

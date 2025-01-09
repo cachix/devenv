@@ -79,6 +79,11 @@
                 container.isBuilding = pkgs.lib.mkForce true;
                 containers.${container_name}.isBuilding = true;
               })
+              ({ options, ... }: {
+                config.devenv = pkgs.lib.optionalAttrs (builtins.hasAttr "direnvrcLatestVersion" options.devenv) {
+                  direnvrcLatestVersion = devenv_direnvrc_latest_version;
+                };
+              })
             ] ++ (map importModule (devenv.imports or [ ])) ++ [
               ./devenv.nix
               (devenv.devenv or { })

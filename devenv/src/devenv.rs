@@ -6,6 +6,7 @@ use include_dir::{include_dir, Dir};
 use miette::{bail, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use std::collections::HashMap;
@@ -22,6 +23,20 @@ const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
+pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
+    include_str!("../../direnvrc").replace(
+        "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
+        "DEVENV_DIRENVRC_ROLLING_UPGRADE=1",
+    )
+});
+pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
+    DIRENVRC
+        .lines()
+        .find(|line| line.contains("export DEVENV_DIRENVRC_VERSION"))
+        .map(|line| line.split('=').last().unwrap().trim())
+        .and_then(|version| version.parse().ok())
+        .unwrap_or(0)
+});
 // project vars
 const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
@@ -332,16 +347,16 @@ impl Devenv {
             let copy_script = &copy_script[0];
             let copy_script_string = &copy_script.to_string_lossy();
 
-            let copy_args = [
-                spec,
-                registry.unwrap_or("false").to_string(),
-                copy_args.join(" "),
-            ];
+            let base_args = [spec, registry.unwrap_or("false").to_string()];
+            let command_args: Vec<String> = base_args
+                .into_iter()
+                .chain(copy_args.iter().map(|s| s.to_string()))
+                .collect();
 
-            info!("Running {copy_script_string} {}", copy_args.join(" "));
+            info!("Running {copy_script_string} {}", command_args.join(" "));
 
             let status = std::process::Command::new(copy_script)
-                .args(copy_args)
+                .args(command_args)
                 .stdout(std::process::Stdio::inherit())
                 .stderr(std::process::Stdio::inherit())
                 .status()
@@ -407,7 +422,7 @@ impl Devenv {
             let span = info_span!(
                 "cleanup_symlinks",
                 devenv.user_message = format!(
-                    "Removing non-existing symlinks in {} ...",
+                    "Removing non-existing symlinks in {}",
                     &self.devenv_home_gc.display()
                 )
             );
@@ -425,7 +440,7 @@ impl Devenv {
             let span = info_span!(
                 "nix_gc",
                 devenv.user_message =
-                    "Running garbage collection (this process will take some time) ..."
+                    "Running garbage collection (this process will take some time)"
             );
             info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
             span.in_scope(|| self.nix.gc(to_gc))?;
@@ -773,7 +788,7 @@ impl Devenv {
                 $ devenv init
             "});
         }
-        std::fs::create_dir_all(&self.devenv_dot_gc)
+        fs::create_dir_all(&self.devenv_dot_gc)
             .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_dot_gc.display()));
 
         let mut flake_inputs = HashMap::new();
@@ -817,6 +832,7 @@ impl Devenv {
             devenv_tmpdir = \"{}\";
             devenv_runtime = \"{}\";
             devenv_istesting = {};
+            devenv_direnvrc_latest_version = {};
             ",
             crate_version!(),
             self.global_options.system,
@@ -829,11 +845,18 @@ impl Devenv {
                 .unwrap_or_else(|| "null".to_string()),
             self.devenv_tmp,
             self.devenv_runtime.display(),
-            is_testing
+            is_testing,
+            DIRENVRC_VERSION.to_string()
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
-        std::fs::write(self.devenv_root.join(DEVENV_FLAKE), flake)
-            .expect("Failed to write flake.nix");
+        let flake_path = self.devenv_root.join(DEVENV_FLAKE);
+
+        // Avoid writing the flake if it hasn't changed.
+        // direnv's watch_file triggers a reload based solely on mtime, which becomes annoying if we constantly touch this file.
+        let existing_flake = fs::read_to_string(&flake_path).unwrap_or_default();
+        if flake != existing_flake {
+            fs::write(flake_path, flake).expect("Failed to write flake.nix");
+        }
 
         self.assembled = true;
         Ok(())
@@ -846,7 +869,7 @@ impl Devenv {
         let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
-        std::fs::write(
+        fs::write(
             self.devenv_dotfile.join("input-paths.txt"),
             env.paths
                 .iter()

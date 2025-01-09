@@ -34,7 +34,7 @@
         clickhouse = {
           endpoint = "tcp://127.0.0.1:9000?dial_timeout=10s&compress=lz4";
           database = "otel";
-          ttl_days = 3;
+          ttl = "72h";
           logs_table_name = "otel_logs";
           traces_table_name = "otel_traces";
           metrics_table_name = "otel_metrics";

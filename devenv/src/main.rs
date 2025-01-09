@@ -20,8 +20,11 @@ async fn main() -> Result<()> {
     };
 
     let command = match cli.command {
-        None => return print_version(),
-        Some(Commands::Version { .. }) => return print_version(),
+        None | Some(Commands::Version) => return print_version(),
+        Some(Commands::Direnvrc) => {
+            print!("{}", devenv::DIRENVRC.to_string());
+            return Ok(());
+        }
         Some(cmd) => cmd,
     };
 
@@ -156,6 +159,7 @@ async fn main() -> Result<()> {
             config::write_json_schema();
             Ok(())
         }
-        Commands::Version {} => unreachable!(),
+        Commands::Direnvrc => unreachable!(),
+        Commands::Version => unreachable!(),
     }
 }

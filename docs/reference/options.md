@@ -923,7 +923,7 @@ package
 
 
 
-What caches to pull from.
+Which Cachix caches to pull from.
 
 
 
@@ -933,7 +933,7 @@ list of string
 
 
 *Default:*
-` [ ] `
+` [ "devenv" ] `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
@@ -944,7 +944,7 @@ list of string
 
 
 
-What cache to push to. Automatically also adds it to the list of caches to pull from.
+Which Cachix cache to push to. This cache is also added to ` cachix.pull `.
 
 
 
@@ -1825,7 +1825,7 @@ string
 
 
 
-Whether to warn when a new version of devenv is available.
+Whether to warn when a new version of either devenv or the direnv integration is available.
 
 
 
@@ -33937,7 +33937,7 @@ boolean
 
 
 *Default:*
-` true `
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
@@ -35913,11 +35913,12 @@ outputOf (attribute set)
 
 ```
 {
+  git = pkgs.git;
   foo = {
-    ncdu = <derivation ncdu-2.3>;
+    ncdu = pkgs.ncdu;
   };
-  git = <derivation git-2.44.0>;
 }
+
 ```
 
 *Declared by:*
@@ -65487,7 +65488,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` pkgs.bash `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -65508,7 +65509,7 @@ string
 
 
 *Default:*
-` "bash" `
+` config.package.pname `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -68859,7 +68860,7 @@ package
 
 
 *Default:*
-` pkgs.mongodb `
+` pkgs.mongodb-ce `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
@@ -72461,7 +72462,7 @@ package
 
 
 *Default:*
-` <derivation stdenv-linux> `
+` pkgs.stdenv `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -72498,7 +72499,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p26> `
+` pkgs.bash `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -72561,7 +72562,7 @@ string
 
 
 *Default:*
-` "bash" `
+` config.package.pname `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)

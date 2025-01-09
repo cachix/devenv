@@ -9,7 +9,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.dotnetCorePackages.sdk_7_0;
+      default = pkgs.dotnetCorePackages.sdk_8_0;
       defaultText = lib.literalExpression "pkgs.dotnet-sdk";
       description = "The .NET SDK package to use.";
     };
