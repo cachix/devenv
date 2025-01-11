@@ -1,0 +1,14 @@
+Type: Package
+Package: myPackage
+Title: Devenv test R Package
+Version: 0.0.0.1
+Imports:
+  readr,
+  stringr,
+  nonexistentpackage
+Depends:
+  data.table,
+  yaml
+Suggests:
+  testthat (>= 3.0.0)
+Encoding: UTF-8
