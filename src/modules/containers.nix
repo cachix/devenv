@@ -182,7 +182,7 @@ let
     echo "Copying container $container to $dest"
     echo
 
-    ${nix2container.skopeo-nix2container}/bin/skopeo --insecure-policy copy "nix:$container" "$dest" "''${args[@]}"
+    ${nix2container.skopeo-nix2container}/bin/skopeo --insecure-policy copy "nix:$container" "$dest" ''${args[@]}
   '';
   containerOptions = types.submodule ({ name, config, ... }: {
     options = {
