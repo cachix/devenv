@@ -15,6 +15,7 @@
 ![License: Apache 2.0](https://img.shields.io/github/license/cachix/devenv)
 [![Version](https://img.shields.io/github/v/release/cachix/devenv?color=green&label=version&sort=semver)](https://github.com/cachix/devenv/releases)
 [![CI](https://github.com/cachix/devenv/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv/actions/workflows/buildtest.yml?branch=main)
+[![Gurubase](https://img.shields.io/badge/Gurubase-Ask%20devenv%20Guru-006BFF)](https://gurubase.io/g/devenv)
 
 Running ``devenv init`` generates ``devenv.nix``:
 
