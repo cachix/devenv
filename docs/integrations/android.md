@@ -45,7 +45,10 @@ For a more tailored development environment you can specify specific options:
       "intel-android-sysimage-license"
       "mips-android-sysimage-license"
     ];
-    android-studio = pkgs.android-studio;
+    android-studio = {
+      enable = true;
+      package = pkgs.android-studio;
+    };
   };
 }
 ```
@@ -94,4 +97,3 @@ The following config works with the flutter starter project.
   };
 }
 ```
-
