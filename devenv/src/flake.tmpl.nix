@@ -3,11 +3,12 @@
     let
       __DEVENV_VARS__
         in {
-        pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
-      pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
-      treefmt-nix.url = "github:numtide/treefmt-nix";
-      nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
-      devenv.url = "github:cachix/devenv?dir=src/modules";
+        treefmt-nix.url = "github:numtide/treefmt-nix";
+        git-hooks.url = "github:cachix/git-hooks.nix";
+        git-hooks.inputs.nixpkgs.follows = "nixpkgs";
+        pre-commit-hooks.follows = "git-hooks";
+        nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
+        devenv.url = "github:cachix/devenv?dir=src/modules";
       } // (if builtins.pathExists (devenv_dotfile + "/flake.json")
       then builtins.fromJSON (builtins.readFile (devenv_dotfile +  "/flake.json"))
       else { });
@@ -79,6 +80,11 @@
                 container.isBuilding = pkgs.lib.mkForce true;
                 containers.${container_name}.isBuilding = true;
               })
+              ({ options, ... }: {
+                config.devenv = pkgs.lib.optionalAttrs (builtins.hasAttr "direnvrcLatestVersion" options.devenv) {
+                  direnvrcLatestVersion = devenv_direnvrc_latest_version;
+                };
+              })
             ] ++ (map importModule (devenv.imports or [ ])) ++ [
               ./devenv.nix
               (devenv.devenv or { })
@@ -89,6 +95,7 @@
 
           options = pkgs.nixosOptionsDoc {
             options = builtins.removeAttrs project.options [ "_module" ];
+            warningsAreErrors = false;
             # Unpack Nix types, e.g. literalExpression, mDoc.
             transformOptions =
               let isDocType = v: builtins.elem v [ "literalDocBook" "literalExpression" "literalMD" "mdDoc" ];
@@ -101,14 +108,32 @@
                   v
               );
           };
+
+          build = options: config:
+            lib.concatMapAttrs
+              (name: option:
+                if builtins.hasAttr "type" option then
+                  if option.type.name == "output" || option.type.name == "outputOf" then {
+                    ${name} = config.${name};
+                  } else { }
+                else
+                  let v = build option config.${name};
+                  in if v != { } then {
+                    ${name} = v;
+                  } else { }
+              )
+              options;
         in
         {
           packages."${system}" = {
             optionsJSON = options.optionsJSON;
+            # deprecated
             inherit (config) info procfileScript procfileEnv procfile;
             ci = config.ciDerivation;
           };
           devenv = config;
+          build = build project.options project.config;
           devShell."${system}" = config.shell;
         };
       }
+
