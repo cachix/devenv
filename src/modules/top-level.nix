@@ -70,6 +70,7 @@ in
       type = types.package;
       description = "The stdenv to use for the developer environment.";
       default = pkgs.stdenv;
+      defaultText = lib.literalExpression "pkgs.stdenv";
     };
 
     unsetEnvVars = lib.mkOption {
@@ -136,6 +137,17 @@ in
       '';
     };
 
+    hardeningDisable = lib.mkOption {
+      type = types.listOf types.str;
+      internal = true;
+      default = [ ];
+      example = [ "fortify" ];
+      description = ''
+        This options allows modules to disable selected hardening modules.
+        Currently used only for Go
+      '';
+    };
+
     warnings = lib.mkOption {
       type = types.listOf types.str;
       internal = true;
@@ -175,16 +187,11 @@ in
         # - free to create as an unprivileged user across OSes
         default =
           let
-            runtimeEnv = builtins.getEnv "DEVENV_RUNTIME";
-
             hashedRoot = builtins.hashString "sha256" config.devenv.state;
-
             # same length as git's abbreviated commit hashes
             shortHash = builtins.substring 0 7 hashedRoot;
           in
-          if runtimeEnv != ""
-          then runtimeEnv
-          else "${config.devenv.tmpdir}/devenv-${shortHash}";
+          "${config.devenv.tmpdir}/devenv-${shortHash}";
       };
 
       tmpdir = lib.mkOption {
@@ -202,13 +209,15 @@ in
         type = types.package;
         internal = true;
       };
-
     };
   };
 
   imports = [
     ./info.nix
+    ./outputs.nix
+    ./files.nix
     ./processes.nix
+    ./outputs.nix
     ./scripts.nix
     ./update-check.nix
     ./containers.nix
@@ -216,6 +225,7 @@ in
     ./lib.nix
     ./tests.nix
     ./cachix.nix
+    ./tasks.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -250,8 +260,18 @@ in
       pkgs.pkg-config
     ];
 
-    enterShell = ''
+    enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
+
+      # override temp directories after "nix develop"
+      for var in TMP TMPDIR TEMP TEMPDIR; do
+        if [ -n "''${!var-}" ]; then
+          export "$var"=${config.devenv.tmpdir}
+        fi
+      done
+      if [ -n "''${NIX_BUILD_TOP-}" ]; then
+        unset NIX_BUILD_TOP
+      fi
 
       # set path to locales on non-NixOS Linux hosts
       ${lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
@@ -260,15 +280,10 @@ in
         fi
       ''}
 
-      # note what environments are active, but make sure we don't repeat them
-      if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
-        export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
-      fi
-
-      # devenv helper
+      # direnv helper
       if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
-        echo "You have .envrc but direnv command is not installed."
-        echo "Please install direnv: https://direnv.net/docs/installation.html"
+        echo "An .envrc file was detected, but the direnv command is not installed."
+        echo "To use this configuration, please install direnv: https://direnv.net/docs/installation.html"
       fi
 
       mkdir -p "$DEVENV_STATE"
@@ -284,6 +299,7 @@ in
 
     shell = performAssertions (
       (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
+        hardeningDisable = config.hardeningDisable;
         name = "devenv-shell";
         packages = config.packages;
         shellHook = ''

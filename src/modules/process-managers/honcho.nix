@@ -1,10 +1,13 @@
 { pkgs, config, lib, ... }:
 let
-  cfg = config.process-managers.honcho;
+  cfg = config.process.managers.honcho;
 in
 {
-  options.process-managers.honcho = {
-    enable = lib.mkEnableOption "honcho as process-manager";
+  options.process.managers.honcho = {
+    enable = lib.mkEnableOption "honcho as the process manager" // {
+      internal = true;
+    };
+
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.honcho;
@@ -12,9 +15,17 @@ in
       description = "The honcho package to use.";
     };
   };
+
   config = lib.mkIf cfg.enable {
-    processManagerCommand = ''
-      ${cfg.package}/bin/honcho start -f ${config.procfile} --env ${config.procfileEnv} "$@" &
+    process.manager.args = {
+      "f" = config.procfile;
+      "env" = config.procfileEnv;
+    };
+
+    process.manager.command = lib.mkDefault ''
+      ${cfg.package}/bin/honcho start \
+        ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
+        "$@" &
     '';
 
     packages = [ cfg.package ];

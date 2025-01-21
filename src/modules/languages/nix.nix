@@ -2,6 +2,14 @@
 
 let
   cfg = config.languages.nix;
+  cachix = lib.getBin config.cachix.package;
+
+  # a bit of indirection to prevent mkShell from overriding the installed Nix
+  vulnix = pkgs.buildEnv {
+    name = "vulnix";
+    paths = [ pkgs.vulnix ];
+    pathsToLink = [ "/bin" ];
+  };
 in
 {
   options.languages.nix = {
@@ -16,11 +24,10 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      cachix
       statix
-      vulnix
       deadnix
       cfg.lsp.package
-    ];
+      vulnix
+    ] ++ (lib.optional config.cachix.enable cachix);
   };
 }

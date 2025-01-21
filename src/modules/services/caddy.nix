@@ -144,7 +144,7 @@ in
       default = false;
       type = types.bool;
       description = ''
-        Use saved config, if any (and prefer over configuration passed with [`caddy.config`](#caddyconfig)).
+        Use saved config, if any (and prefer over configuration passed with [`caddy.config`](#servicescaddyconfig)).
       '';
     };
 
@@ -168,7 +168,7 @@ in
 
     dataDir = mkOption {
       default = "${config.env.DEVENV_STATE}/caddy";
-      defaultText = literalExpression ''"${config.env.DEVENV_STATE}/caddy"'';
+      defaultText = literalExpression "\"\${config.env.DEVENV_STATE}/caddy\"";
       type = types.path;
       description = ''
         The data directory, for storing certificates. Before 17.09, this

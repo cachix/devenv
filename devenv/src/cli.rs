@@ -1,26 +1,65 @@
+use crate::log::LogFormat;
 use clap::{crate_version, Parser, Subcommand};
 use std::path::PathBuf;
+use tracing::error;
 
 #[derive(Parser)]
 #[command(
+    name = "devenv",
     color = clap::ColorChoice::Auto,
     // for --clean to work with subcommands
     subcommand_precedence_over_arg = true,
     dont_delimit_trailing_values = true,
     about = format!("https://devenv.sh {}: Fast, Declarative, Reproducible, and Composable Developer Environments", crate_version!())
 )]
-pub(crate) struct Cli {
+pub struct Cli {
     #[command(subcommand)]
-    pub(crate) command: Commands,
+    pub command: Option<Commands>,
 
     #[command(flatten)]
-    pub(crate) global_options: GlobalOptions,
+    pub global_options: GlobalOptions,
 }
 
-#[derive(Parser, Clone)]
+impl Cli {
+    /// Parse the CLI arguments with clap and resolve any conflicting options.
+    pub fn parse_and_resolve_options() -> Self {
+        let mut cli = Self::parse();
+        cli.global_options.resolve_overrides();
+        cli
+    }
+}
+
+#[derive(Clone, Debug, Parser)]
 pub struct GlobalOptions {
-    #[arg(short, long, global = true, help = "Enable debug log level.")]
+    #[arg(
+        short = 'V',
+        long,
+        global = true,
+        help = "Print version information",
+        long_help = "Print version information and exit"
+    )]
+    pub version: bool,
+
+    #[arg(short, long, global = true, help = "Enable additional debug logs.")]
     pub verbose: bool,
+
+    #[arg(
+        short,
+        long,
+        global = true,
+        conflicts_with = "verbose",
+        help = "Silence all logs"
+    )]
+    pub quiet: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Configure the output format of the logs.",
+        default_value_t,
+        value_enum
+    )]
+    pub log_format: LogFormat,
 
     #[arg(short = 'j', long,
         global = true, help = "Maximum number of Nix builds at any time.",
@@ -30,7 +69,7 @@ pub struct GlobalOptions {
     #[arg(
         short = 'u',
         long,
-        help = "Maximum number CPU cores being used by a single build..",
+        help = "Maximum number CPU cores being used by a single build.",
         default_value = "2"
     )]
     pub cores: u8,
@@ -45,6 +84,25 @@ pub struct GlobalOptions {
         help = "Relax the hermeticity of the environment."
     )]
     pub impure: bool,
+
+    #[arg(long, global = true, help = "Cache the results of Nix evaluation.")]
+    #[arg(
+        long_help = "Cache the results of Nix evaluation. Use --no-eval-cache to disable caching."
+    )]
+    #[arg(default_value_t = true, overrides_with = "no_eval_cache")]
+    pub eval_cache: bool,
+
+    /// Disable the evaluation cache. Sets `eval_cache` to false.
+    #[arg(long, global = true, hide = true)]
+    #[arg(overrides_with = "eval_cache")]
+    no_eval_cache: bool,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Force a refresh of the Nix evaluation cache."
+    )]
+    pub refresh_eval_cache: bool,
 
     #[arg(
         long,
@@ -91,11 +149,17 @@ pub struct GlobalOptions {
 impl Default for GlobalOptions {
     fn default() -> Self {
         Self {
+            version: false,
             verbose: false,
+            quiet: false,
+            log_format: LogFormat::default(),
             max_jobs: max_jobs(),
             cores: 2,
             system: default_system(),
             impure: false,
+            eval_cache: true,
+            no_eval_cache: false,
+            refresh_eval_cache: false,
             offline: false,
             clean: None,
             nix_debugger: false,
@@ -105,8 +169,18 @@ impl Default for GlobalOptions {
     }
 }
 
+impl GlobalOptions {
+    /// Resolve conflicting options.
+    // TODO: https://github.com/clap-rs/clap/issues/815
+    pub fn resolve_overrides(&mut self) {
+        if self.no_eval_cache {
+            self.eval_cache = false;
+        }
+    }
+}
+
 #[derive(Subcommand, Clone)]
-pub(crate) enum Commands {
+pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
     Init {
         target: Option<PathBuf>,
@@ -150,6 +224,12 @@ pub(crate) enum Commands {
         command: ProcessesCommand,
     },
 
+    #[command(about = "Run tasks. https://devenv.sh/tasks/")]
+    Tasks {
+        #[command(subcommand)]
+        command: TasksCommand,
+    },
+
     #[command(about = "Run tests. http://devenv.sh/tests/", alias = "ci")]
     Test {
         #[arg(short, long, help = "Don't override .devenv to a temporary directory.")]
@@ -184,7 +264,7 @@ pub(crate) enum Commands {
     Repl {},
 
     #[command(
-        about = "Deletes previous shell generations. See http://devenv.sh/garbage-collection"
+        about = "Deletes previous shell generations. See https://devenv.sh/garbage-collection"
     )]
     Gc {},
 
@@ -194,8 +274,13 @@ pub(crate) enum Commands {
         attributes: Vec<String>,
     },
 
+    #[command(
+        about = "Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation."
+    )]
+    Direnvrc,
+
     #[command(about = "Print the version of devenv.")]
-    Version {},
+    Version,
 
     #[clap(hide = true)]
     Assemble,
@@ -212,7 +297,7 @@ pub(crate) enum Commands {
 
 #[derive(Subcommand, Clone)]
 #[clap(about = "Start or stop processes. https://devenv.sh/processes/")]
-pub(crate) enum ProcessesCommand {
+pub enum ProcessesCommand {
     #[command(alias = "start", about = "Start processes in the foreground.")]
     Up {
         process: Option<String>,
@@ -227,11 +312,18 @@ pub(crate) enum ProcessesCommand {
 }
 
 #[derive(Subcommand, Clone)]
+#[clap(about = "Run tasks. https://devenv.sh/tasks/")]
+pub enum TasksCommand {
+    #[command(about = "Run tasks.")]
+    Run { tasks: Vec<String> },
+}
+
+#[derive(Subcommand, Clone)]
 #[clap(
     about = "Build, copy, or run a container. https://devenv.sh/containers/",
     arg_required_else_help(true)
 )]
-pub(crate) enum ContainerCommand {
+pub enum ContainerCommand {
     #[command(about = "Build a container.")]
     Build { name: String },
 
@@ -244,7 +336,7 @@ pub(crate) enum ContainerCommand {
 
 #[derive(Subcommand, Clone)]
 #[clap(about = "Add an input to devenv.yaml. https://devenv.sh/inputs/")]
-pub(crate) enum InputsCommand {
+pub enum InputsCommand {
     #[command(about = "Add an input to devenv.yaml.")]
     Add {
         #[arg(help = "The name of the input.")]
@@ -283,10 +375,10 @@ pub fn default_system() -> String {
 
 fn max_jobs() -> u8 {
     let num_cpus = std::thread::available_parallelism().unwrap_or_else(|e| {
-        eprintln!("Failed to get number of logical CPUs: {}", e);
-        std::num::NonZeroUsize::new(1).unwrap()
+        error!("Failed to get number of logical CPUs: {}", e);
+        std::num::NonZeroUsize::new(4).unwrap()
     });
-    (num_cpus.get() / 2).try_into().unwrap()
+    std::cmp::max(num_cpus.get().div_ceil(2), 2) as u8
 }
 
 #[cfg(test)]

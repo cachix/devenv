@@ -18,7 +18,7 @@ in
       type = lib.types.package;
       description = "Which compiler of Solidity to use.";
       default = pkgs.solc;
-      defaultText = lib.literalExpression "pkgs.elixir";
+      defaultText = lib.literalExpression "pkgs.solc";
     };
 
     foundry = {

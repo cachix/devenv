@@ -1,0 +1,40 @@
+nav:
+  - Home: index.md
+  - Guide:
+    - Getting started: getting-started.md
+    - Files and variables: files-and-variables.md
+    - Writing devenv.nix:
+      - Basics: basics.md
+      - Packages: packages.md
+      - Scripts: scripts.md
+      - Tasks: tasks.md
+      - Languages:
+        - Overview: languages.md
+        - Supported languages: supported-languages
+      - Processes:
+        - Overview: processes.md
+        - Supported process managers: supported-process-managers
+      - Services:
+        - Overview: services.md
+        - Supported services: supported-services
+      - Containers: containers.md
+      - Binary caching: binary-caching.md
+      - Git hooks: git-hooks.md
+      - Tests: tests.md
+      - Outputs: outputs.md
+      - Common patterns: common-patterns.md
+    - Writing devenv.yaml:
+      - Inputs: inputs.md
+      - Imports: composing-using-imports.md
+    - Overview:
+      - Automatic shell activation: automatic-shell-activation.md
+      - Garbage collection: garbage-collection.md
+    - Guides: guides
+    - Integrations: integrations
+    - Tutorial: https://github.com/cachix/nixcon-2024-workshop
+    - Examples: examples.md
+    - Editor support: editor-support
+  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix
+  - Reference: reference
+  - Blog: blog
+  - Community: community

@@ -19,7 +19,7 @@ pkgs.writeScriptBin "devenv" ''
 
   case $command in
     up)
-      procfilescript=$(nix build '.#${shellPrefix (config._module.args.name or "default")}devenv-up' --no-link --print-out-paths --impure)
+      procfilescript=$(nix build '.#${shellPrefix (config._module.args.name or "default")}devenv-up' --no-link --print-out-paths --no-pure-eval)
       if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"
         exit 1
@@ -27,9 +27,16 @@ pkgs.writeScriptBin "devenv" ''
         exec $procfilescript "$@"
       fi
       ;;
+
+    test)
+      testscript=$(nix build '.#${shellPrefix (config._module.args.name or "default")}devenv-test' --no-link --print-out-paths --no-pure-eval)    
+      exec $testscript "$@"
+      ;;
+  
     version)
       echo "devenv: ${version}"
       ;;
+
     *)
       echo "https://devenv.sh (version ${version}): Fast, Declarative, Reproducible, and Composable Developer Environments"
       echo 
@@ -39,6 +46,7 @@ pkgs.writeScriptBin "devenv" ''
       echo
       echo "Commands:"
       echo
+      echo "test            Runs tests"
       echo "up              Starts processes in foreground. See http://devenv.sh/processes"
       echo "version         Display devenv version"
       echo

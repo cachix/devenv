@@ -42,7 +42,7 @@ let
 
   mkHome = path: (pkgs.runCommand "devenv-container-home" { } ''
     mkdir -p $out${homeDir}
-    cp -R ${path}/* $out${homeDir}/
+    cp -R ${path}/. $out${homeDir}/
   '');
 
   mkMultiHome = paths: map mkHome paths;
@@ -107,8 +107,9 @@ let
           pkgs.bashInteractive
           pkgs.su
           pkgs.sudo
+          pkgs.dockerTools.usrBinEnv
         ];
-        pathsToLink = "/bin";
+        pathsToLink = [ "/bin" "/usr/bin" ];
       })
       mkEtc
       mkTmp
@@ -116,12 +117,19 @@ let
 
     maxLayers = cfg.maxLayers;
 
-    layers = [
-      (nix2container.nix2container.buildLayer {
-        perms = map mkPerm (mkMultiHome (homeRoots cfg));
-        copyToRoot = mkMultiHome (homeRoots cfg);
-      })
-    ];
+    layers =
+      if cfg.enableLayerDeduplication
+      then
+        builtins.foldl'
+          (layers: layer:
+            layers ++ [
+              (nix2container.nix2container.buildLayer (layer // { inherit layers; }))
+            ]
+          )
+          [ ]
+          cfg.layers
+      else builtins.map (layer: nix2container.nix2container.buildLayer layer) cfg.layers
+    ;
 
     perms = [
       {
@@ -195,7 +203,7 @@ let
         type = types.either types.path (types.listOf types.path);
         description = "Add a path to the container. Defaults to the whole git repo.";
         default = self;
-        defaultText = "self";
+        defaultText = lib.literalExpression "self";
       };
 
       startupCommand = lib.mkOption {
@@ -233,6 +241,110 @@ let
         default = 1;
       };
 
+      enableLayerDeduplication = (lib.mkEnableOption ''
+        layer deduplication using the approach described at https://blog.eigenvalue.net/2023-nix2container-everything-once/
+      '') // { default = true; };
+
+      layers = lib.mkOption {
+        type = types.listOf (types.submoduleWith {
+          modules = [
+            {
+              options = {
+                deps = lib.mkOption {
+                  type = types.listOf types.package;
+                  description = "A list of store paths to include in the layer.";
+                  default = [ ];
+                };
+                copyToRoot = lib.mkOption {
+                  type = types.listOf types.package;
+                  description = ''
+                    A list of derivations copied to the image root directory.
+
+                    Store path prefixes ``/nix/store/hash-path`` are removed in order to relocate them to the image ``/``.
+                  '';
+                  default = [ ];
+                };
+                reproducible = lib.mkOption {
+                  type = types.bool;
+                  description = "Whether the layer should be reproducible.";
+                  default = true;
+                };
+                maxLayers = lib.mkOption {
+                  type = types.int;
+                  description = "The maximum number of layers to create.";
+                  default = 1;
+                };
+                perms = lib.mkOption {
+                  description = ''
+                    A list of file permissions which are set when the tar layer is created.
+
+                    These permissions are not written to the Nix store.
+                  '';
+                  default = [ ];
+                  type = types.listOf (types.submoduleWith {
+                    modules = [
+                      {
+                        options = {
+                          path = lib.mkOption {
+                            type = types.pathInStore;
+                            description = "A store path.";
+                          };
+                          regex = lib.mkOption {
+                            type = types.nullOr types.str;
+                            description = "A regex pattern to select files or directories to apply the ``mode`` to.";
+                            example = ".*";
+                            default = null;
+                          };
+                          mode = lib.mkOption {
+                            type = types.nullOr types.str;
+                            description = "The numeric permissions mode to apply to all of the files matched by the ``regex``.";
+                            example = "644";
+                            default = null;
+                          };
+                          gid = lib.mkOption {
+                            type = types.nullOr types.int;
+                            description = "The group ID to apply to all of the files matched by the ``regex``.";
+                            example = "1000";
+                            default = null;
+                          };
+                          uid = lib.mkOption {
+                            type = types.nullOr types.int;
+                            description = "The user ID to apply to all of the files matched by the ``regex``.";
+                            example = "1000";
+                            default = null;
+                          };
+                          uname = lib.mkOption {
+                            type = types.nullOr types.str;
+                            description = "The user name to apply to all of the files matched by the ``regex``.";
+                            example = "root";
+                            default = null;
+                          };
+                          gname = lib.mkOption {
+                            type = types.nullOr types.str;
+                            description = "The group name to apply to all of the files matched by the ``regex``.";
+                            example = "root";
+                            default = null;
+                          };
+                        };
+                      }
+                    ];
+                  });
+                };
+                ignore = lib.mkOption {
+                  type = types.nullOr types.pathInStore;
+                  default = null;
+                  description = ''
+                    A store path to ignore when building the layer. This is mainly useful to ignore the configuration file from the container layer.
+                  '';
+                };
+              };
+            }
+          ];
+        });
+        description = "The layers to create.";
+        default = [ ];
+      };
+
       isBuilding = lib.mkOption {
         type = types.bool;
         default = false;
@@ -259,6 +371,13 @@ let
         '';
       };
     };
+
+    config.layers = [
+      {
+        perms = map mkPerm (mkMultiHome (homeRoots config));
+        copyToRoot = mkMultiHome (homeRoots config);
+      }
+    ];
   });
 in
 {

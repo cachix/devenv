@@ -10,7 +10,7 @@ in
     debugger = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default =
-        if lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gdb
+        if !(pkgs.stdenv.isAarch64 && pkgs.stdenv.isLinux) && lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gdb
         then pkgs.gdb
         else null;
       defaultText = lib.literalExpression "pkgs.gdb";

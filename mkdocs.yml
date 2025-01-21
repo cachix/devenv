@@ -1,11 +1,17 @@
 site_name: devenv
-site_description: 'Fast, Declarative, Reproducible, and Composable Developer Environments using Nix'
-site_url: 'https://devenv.sh'
-repo_name: 'cachix/devenv'
-repo_url: 'https://github.com/cachix/devenv'
-edit_uri: 'edit/main/docs'
+site_description: "Fast, Declarative, Reproducible, and Composable Developer Environments using Nix"
+site_url: "https://devenv.sh"
+repo_name: "cachix/devenv"
+repo_url: "https://github.com/cachix/devenv"
+edit_uri: "edit/main/docs"
+strict: true
+validation:
+  omitted_files: warn
+  absolute_links: info  # Or 'relative_to_docs' - new in MkDocs 1.6
+  unrecognized_links: warn
+  anchors: warn  # New in MkDocs 1.6
 extra_css:
-  - assets/output.css
+  - assets/top-level.css
 theme:
   name: material
   logo: assets/logo.webp
@@ -15,81 +21,52 @@ theme:
   custom_dir: docs/overrides
   palette:
     primary: white
-    accent: '#FBFBFB'
+    accent: "#FBFBFB"
   features:
-    - tabs
-    - instant
-    - search.share
-    - navigation.tabs
-    - navigation.tabs.sticky
-    - navigation.expand
-    - navigation.instant
-    - navigation.tracking
+    - content.action.edit
     - content.code.annotate
     - content.code.copy
+
+    # Lazily process components on the page, like code blocks.
+    # Mounting all of code blocks on the reference doc page takes several
+    # seconds, even on a powerful machine.
+    - content.lazy
+
     - content.tabs.link
-    - content.action.edit
-nav:
-  - Home: index.md
-  - Documentation:
-    - Getting Started: getting-started.md
-    - Files And Variables: files-and-variables.md
-    - Writing devenv.nix:
-      - Basics: basics.md
-      - Packages: packages.md
-      - Scripts: scripts.md
-      - Languages: languages.md
-      - Processes: processes.md
-      - Services: services.md
-      - Containers: containers.md
-      - Binary Caching: binary-caching.md
-      - Pre-Commit Hooks: pre-commit-hooks.md
-      - Tests: tests.md
-      - Common Patterns: common-patterns.md
-    - Writing devenv.yaml:
-      - Inputs: inputs.md
-      - Imports: composing-using-imports.md
-    - Overview:
-      - Automatic Shell Activation: automatic-shell-activation.md
-      - Garbage Collection: garbage-collection.md
-    - Guides:
-      - Using With Flakes: guides/using-with-flakes.md
-      - Using With flake.parts: guides/using-with-flake-parts.md
-    - Integrations:
-      - .env: integrations/dotenv.md
-      - GitHub Actions: integrations/github-actions.md
-      - Codespaces / devcontainer: integrations/codespaces-devcontainer.md
-      - Difftastic: integrations/difftastic.md
-      - Android: integrations/android.md
-    - Examples: examples.md
-    - Editor Support:
-      - VSCode: editor-support/vscode.md
-      - PhpStorm: editor-support/phpstorm.md
-    - Roadmap: roadmap.md
-    - Reference:
-      - devenv.yaml: reference/yaml-options.md
-      - devenv.nix: reference/options.md
-  - Blog:
-      - blog/index.md
-  - Community:
-      - Get Involved: community/get-involved.md
-      - Contributing: community/contributing.md
+    - instant
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.share
+    - tabs
+    - toc.follow
+
+# Exclude doc templates
+exclude_docs: |
+  /individual-docs/**/*.md
 
 plugins:
-  blog: {}
   search: {}
   markdownextradata: {}
   include-markdown: {}
+  awesome-pages: {}
+  blog: {}
   social:
     cards_layout_options:
       background_color: "#FBFBFB"
       color: "#425C82"
   rss:
-     use_git: false
-     match_path: blog/posts/.*
-     date_from_meta:
-       as_creation: date
-       as_update: date
+    use_git: false
+    match_path: blog/posts/.*
+    date_from_meta:
+      as_creation: date
+      as_update: date
 extra:
   social:
     - icon: fontawesome/brands/twitter
@@ -107,8 +84,14 @@ markdown_extensions:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.tabbed:
       alternate_style: true
   - pymdownx.tasklist
   - pymdownx.tilde
+  - md_in_html
+  - attr_list

@@ -20,7 +20,10 @@
 
   services.postgres.enable = true;
 
-  processes.rails.exec = "cd blog && rails server";
+  processes.rails = {
+    exec = "cd blog && rails server";
+    process-compose.depends_on.postgres.condition = "process_healthy";
+  };
 
   enterShell = ''
     export PATH="$DEVENV_ROOT/blog/bin:$PATH"

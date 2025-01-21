@@ -1,12 +1,20 @@
+<p align="center">
+  <a href="https://devenv.sh">
+    <picture>
+      <source media="(prefers-color-scheme: light)" srcset="logos/devenv-horizontal-light-bg.svg">
+      <source media="(prefers-color-scheme: dark)" srcset="logos/devenv-horizontal-dark-bg.svg">
+      <img src="logos/devenv-horizontal-light-bg.svg" width="500px" alt="devenv logo">
+    </picture>
+  </a>
+</p>
+
 # [devenv.sh](https://devenv.sh) - Fast, Declarative, Reproducible, and Composable Developer Environments
 
-[![Built with Nix](https://builtwithnix.org/badge.svg)](https://builtwithnix.org)
-[![Discord channel](https://img.shields.io/discord/1036369714731036712?color=7389D8&label=discord&logo=discord&logoColor=ffffff)](https://discord.gg/naMgvexb6q)
+[![Built with Nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
+[![Discord channel](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FnaMgvexb6q%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord%20users&color=green&style=flat)](https://discord.gg/naMgvexb6q)
 ![License: Apache 2.0](https://img.shields.io/github/license/cachix/devenv)
 [![Version](https://img.shields.io/github/v/release/cachix/devenv?color=green&label=version&sort=semver)](https://github.com/cachix/devenv/releases)
 [![CI](https://github.com/cachix/devenv/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv/actions/workflows/buildtest.yml?branch=main)
-
-![logo](docs/assets/logo.webp)
 
 Running ``devenv init`` generates ``devenv.nix``:
 
@@ -39,8 +47,8 @@ Running ``devenv init`` generates ``devenv.nix``:
   # https://devenv.sh/services/
   services.postgres.enable = true;
 
-  # https://devenv.sh/pre-commit-hooks/
-  pre-commit.hooks.shellcheck.enable = true;
+  # https://devenv.sh/git-hooks/
+  git-hooks.hooks.shellcheck.enable = true;
 
   # https://devenv.sh/treefmt/
   treefmt.programs.nixpkgs-fmt.enable = true;
