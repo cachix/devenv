@@ -69,7 +69,17 @@ in
     stdenv = lib.mkOption {
       type = types.package;
       description = "The stdenv to use for the developer environment.";
-      default = pkgs.stdenv;
+      default =
+        if pkgs.stdenv.isDarwin
+        then
+          pkgs.stdenv.override
+            (prev: {
+              # Remove the default apple-sdk on macOS.
+              # Prefer to expose the system SDK, or let the user specify the SDK in `packages`.
+              extraBuildInputs =
+                builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
+            })
+        else pkgs.stdenv;
       defaultText = lib.literalExpression "pkgs.stdenv";
     };
 
@@ -297,17 +307,28 @@ in
       ln -snf ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 
-    shell = performAssertions (
-      (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-        hardeningDisable = config.hardeningDisable;
-        name = "devenv-shell";
-        packages = config.packages;
-        shellHook = ''
-          ${lib.optionalString config.devenv.debug "set -x"}
-          ${config.enterShell}
-        '';
-      } // config.env)
-    );
+    shell =
+      let
+        # `mkShell` merges `packages` into `nativeBuildInputs`.
+        # This distinction is generally not important for devShells, except when it comes to setup hooks and their run order.
+        # On macOS, the default apple-sdk is added the stdenv via `extraBuildInputs`.
+        # If we don't remove it from stdenv, then it's setup hooks will clobber any SDK added to `packages`.
+        isAppleSDK = pkg: builtins.match ".*apple-sdk.*" (pkg.pname or "") != null;
+        partitionedPkgs = builtins.partition isAppleSDK config.packages;
+        buildInputs = partitionedPkgs.right;
+        nativeBuildInputs = partitionedPkgs.wrong;
+      in
+      performAssertions (
+        (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
+          name = "devenv-shell";
+          hardeningDisable = config.hardeningDisable;
+          inherit buildInputs nativeBuildInputs;
+          shellHook = ''
+            ${lib.optionalString config.devenv.debug "set -x"}
+            ${config.enterShell}
+          '';
+        } // config.env)
+      );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
