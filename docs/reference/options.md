@@ -81173,6 +81173,38 @@ package
 
 
 
+## services.temporal.dynamicConfig
+
+
+
+Dynamic configuration for the Temporal server.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  "frontend.namespacerps" = "2500";
+  "frontend.rps" = "2500";
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
+
+
+
 ## services.temporal.ip
 
 
