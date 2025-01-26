@@ -176,7 +176,7 @@ Keep an eye out for updates and join the discussion:
 
 - Attend ["devenv is switching to Tvix" talk at NixCon](https://talks.nixcon.org/nixcon-2024/talk/AM7K7F/) to learn more about our progress and plans.
 - If you'd like to help out by hacking on Rust and Tvix, join us at [OceanSprint](https://oceansprint.org/) for a week of hacking.
-- Join the [devenv Discord community](https://discord.gg/nix).
+- Join the [devenv Discord community](https://discord.gg/naMgvexb6q).
 - Join [#tvix-dev on Matrix](https://matrix.to/#/#tvix-dev:hackint.org)
 - Subscribe to the mailing list for future announcements at the bottom of the page.
 
