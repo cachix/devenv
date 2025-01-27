@@ -3,7 +3,7 @@ use devenv::{log, Devenv, DevenvOptions};
 use std::{
     env, fs,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::{Command, ExitCode, Stdio},
 };
 
 #[derive(Parser, Debug)]
@@ -49,88 +49,90 @@ async fn run_tests_in_directory(
         for path in paths {
             let path = path?.path();
             let path = path.as_path();
-            if path.is_dir() {
-                let dir_name_path = path.file_name().unwrap();
-                let dir_name = dir_name_path.to_str().unwrap();
 
-                if !args.only.is_empty() {
-                    let mut found = false;
-                    for only in &args.only {
-                        if path.ends_with(only) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if !found {
-                        continue;
-                    }
-                } else {
-                    for exclude in &args.exclude {
-                        if path.ends_with(exclude) {
-                            eprintln!("Skipping {}", dir_name);
-                            continue;
-                        }
-                    }
-                }
-
-                let mut config = devenv::config::Config::load_from(path)?;
-                for input in args.override_input.chunks_exact(2) {
-                    config.add_input(&input[0].clone(), &input[1].clone(), &[]);
-                }
-
-                // Override the input for the devenv module
-                config.add_input(
-                    "devenv",
-                    &format!("path:{:}?dir=src/modules", cwd.to_str().unwrap()),
-                    &[],
-                );
-
-                let tmpdir = tempdir::TempDir::new_in(path, ".devenv")
-                    .expect("Failed to create temporary directory");
-
-                let options = DevenvOptions {
-                    config,
-                    devenv_root: Some(cwd.join(path)),
-                    devenv_dotfile: Some(tmpdir.path().to_path_buf()),
-                    ..Default::default()
-                };
-                let mut devenv = Devenv::new(options).await;
-
-                eprintln!("  Running {}", dir_name);
-
-                env::set_current_dir(path).expect("failed to set current dir");
-
-                // A script to patch files in the working directory before the shell.
-                let patch_script = ".patch.sh";
-
-                // Run .patch.sh if it exists
-                if PathBuf::from(patch_script).exists() {
-                    eprintln!("    Running {patch_script}");
-                    let _ = Command::new("bash").arg(patch_script).status()?;
-                }
-
-                // A script to run inside the shell before the test.
-                let setup_script = ".setup.sh";
-
-                // Run .setup.sh if it exists
-                if PathBuf::from(setup_script).exists() {
-                    eprintln!("    Running {setup_script}");
-                    devenv
-                        .shell(&Some(format!("./{setup_script}")), &[], false)
-                        .await?;
-                }
-
-                // TODO: wait for processes to shut down before exiting
-                let status = devenv.test().await;
-                let result = TestResult {
-                    name: dir_name.to_string(),
-                    passed: status.is_ok(),
-                };
-                test_results.push(result);
-
-                // Restore the current directory
-                env::set_current_dir(&cwd).expect("failed to set current dir");
+            if !path.is_dir() {
+                // eprintln!("Skipping {}. Expected a directory.", path.display());
+                continue;
             }
+
+            let dir_name_path = path.file_name().unwrap();
+            let dir_name = dir_name_path.to_str().unwrap();
+
+            if !args.only.is_empty() {
+                if !args.only.iter().any(|only| path.ends_with(only)) {
+                    continue;
+                }
+            } else if args.exclude.iter().any(|exclude| path.ends_with(exclude)) {
+                eprintln!("Skipping {}", dir_name);
+                continue;
+            }
+
+            let mut config = devenv::config::Config::load_from(path)?;
+            for input in args.override_input.chunks_exact(2) {
+                config.add_input(&input[0].clone(), &input[1].clone(), &[]);
+            }
+
+            // Override the input for the devenv module
+            config.add_input(
+                "devenv",
+                &format!("path:{:}?dir=src/modules", cwd.to_str().unwrap()),
+                &[],
+            );
+
+            let tmpdir = tempdir::TempDir::new(&format!("devenv-run-tests-{}", dir_name))
+                .expect("Failed to create temporary directory");
+            let devenv_root = tmpdir.path().to_path_buf();
+            let devenv_dotfile = tmpdir.path().join(".devenv");
+
+            // Copy the contents of the test directory to the temporary directory
+            Command::new("cp")
+                .arg("-r")
+                .arg(format!("{}/.", path.display()))
+                .arg(&devenv_root)
+                .output()?;
+
+            env::set_current_dir(&devenv_root).expect("failed to switch to the test directory");
+
+            let options = DevenvOptions {
+                config,
+                devenv_root: Some(devenv_root.clone()),
+                devenv_dotfile: Some(devenv_dotfile),
+                ..Default::default()
+            };
+            let mut devenv = Devenv::new(options).await;
+
+            eprintln!("  Running {}", dir_name);
+
+            // A script to patch files in the working directory before the shell.
+            let patch_script = ".patch.sh";
+
+            // Run .patch.sh if it exists
+            if PathBuf::from(patch_script).exists() {
+                eprintln!("    Running {patch_script}");
+                let _ = Command::new("bash").arg(patch_script).status()?;
+            }
+
+            // A script to run inside the shell before the test.
+            let setup_script = ".setup.sh";
+
+            // Run .setup.sh if it exists
+            if PathBuf::from(setup_script).exists() {
+                eprintln!("    Running {setup_script}");
+                devenv
+                    .shell(&Some(format!("./{setup_script}")), &[], false)
+                    .await?;
+            }
+
+            // TODO: wait for processes to shut down before exiting
+            let status = devenv.test().await;
+            let result = TestResult {
+                name: dir_name.to_string(),
+                passed: status.is_ok(),
+            };
+            test_results.push(result);
+
+            // Restore the current directory
+            env::set_current_dir(&cwd).expect("failed to set current dir");
         }
     }
 
@@ -138,13 +140,19 @@ async fn run_tests_in_directory(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
     log::init_tracing_default();
 
     // If DEVENV_RUN_TESTS is set, run the tests.
     if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
         let args = Args::parse();
-        return run(&args).await;
+        match run(&args).await {
+            Ok(_) => return Ok(ExitCode::SUCCESS),
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                return Ok(ExitCode::FAILURE);
+            }
+        };
     }
 
     // Otherwise, run the tests in a subprocess with a fresh environment.
@@ -169,9 +177,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let output = cmd.output()?;
     if output.status.success() {
-        Ok(())
+        Ok(ExitCode::SUCCESS)
     } else {
-        Err("Tests failed".into())
+        Ok(ExitCode::FAILURE)
     }
 }
 
