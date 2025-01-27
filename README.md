@@ -87,8 +87,8 @@ Options:
           Enable debug log level.
   -j, --max-jobs <MAX_JOBS>
           Maximum number of Nix builds at any time. [default: 8]
-  -j, --cores <CORES>
-          Maximum number CPU cores being used by a single build.. [default: 2]
+  -u, --cores <CORES>
+          Maximum number CPU cores being used by a single build. [default: 2]
   -s, --system <SYSTEM>
           [default: x86_64-linux]
   -i, --impure
