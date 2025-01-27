@@ -164,7 +164,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     cmd.env_clear()
         .env("DEVENV_RUN_TESTS", "1")
         .env("DEVENV_NIX", env::var("DEVENV_NIX").unwrap_or_default())
-        .env("PATH", path);
+        .env("PATH", path)
+        .env("HOME", env::var("HOME").unwrap_or_default());
 
     let output = cmd.output()?;
     if output.status.success() {
