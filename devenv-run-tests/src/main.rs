@@ -91,6 +91,10 @@ async fn run_tests_in_directory(
                 .arg(&devenv_root)
                 .output()?;
 
+            // Initialize a git repository in the temporary directory.
+            // This helps Nix Flakes and git-hooks find the root of the project.
+            Command::new("git").arg("init").output()?;
+
             env::set_current_dir(&devenv_root).expect("failed to switch to the test directory");
 
             let options = DevenvOptions {
