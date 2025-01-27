@@ -1,7 +1,10 @@
 use clap::Parser;
 use devenv::{log, Devenv, DevenvOptions};
-use std::path::PathBuf;
-use std::{env, fs};
+use std::{
+    env, fs,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -33,14 +36,14 @@ struct TestResult {
 async fn run_tests_in_directory(
     args: &Args,
 ) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
-    println!("Running Tests");
+    eprintln!("Running Tests");
 
-    let cwd = std::env::current_dir()?;
+    let cwd = env::current_dir()?;
 
     let mut test_results = vec![];
 
     for directory in &args.directories {
-        println!("Running in directory {}", directory.display());
+        eprintln!("Running in directory {}", directory.display());
         let paths = fs::read_dir(directory)?;
 
         for path in paths {
@@ -64,7 +67,7 @@ async fn run_tests_in_directory(
                 } else {
                     for exclude in &args.exclude {
                         if path.ends_with(exclude) {
-                            println!("Skipping {}", dir_name);
+                            eprintln!("Skipping {}", dir_name);
                             continue;
                         }
                     }
@@ -93,7 +96,7 @@ async fn run_tests_in_directory(
                 };
                 let mut devenv = Devenv::new(options).await;
 
-                println!("  Running {}", dir_name);
+                eprintln!("  Running {}", dir_name);
 
                 env::set_current_dir(path).expect("failed to set current dir");
 
@@ -102,10 +105,8 @@ async fn run_tests_in_directory(
 
                 // Run .patch.sh if it exists
                 if PathBuf::from(patch_script).exists() {
-                    println!("    Running {patch_script}");
-                    let _ = std::process::Command::new("bash")
-                        .arg(patch_script)
-                        .status()?;
+                    eprintln!("    Running {patch_script}");
+                    let _ = Command::new("bash").arg(patch_script).status()?;
                 }
 
                 // A script to run inside the shell before the test.
@@ -113,7 +114,7 @@ async fn run_tests_in_directory(
 
                 // Run .setup.sh if it exists
                 if PathBuf::from(setup_script).exists() {
-                    println!("    Running {setup_script}");
+                    eprintln!("    Running {setup_script}");
                     devenv
                         .shell(&Some(format!("./{setup_script}")), &[], false)
                         .await?;
@@ -140,33 +141,54 @@ async fn run_tests_in_directory(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::init_tracing_default();
 
-    let args = Args::parse();
+    // If DEVENV_RUN_TESTS is set, run the tests.
+    if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
+        let args = Args::parse();
+        return run(&args).await;
+    }
 
-    let executable_path = std::env::current_exe()?;
+    // Otherwise, run the tests in a subprocess with a fresh environment.
+    let executable_path = env::current_exe()?;
     let executable_dir = executable_path.parent().unwrap();
-    std::env::set_var(
-        "PATH",
-        format!(
-            "{}:{}",
-            executable_dir.display(),
-            std::env::var("PATH").unwrap_or_default()
-        ),
+    let path = format!(
+        "{}:{}",
+        executable_dir.display(),
+        env::var("PATH").unwrap_or_default()
     );
 
-    let test_results = run_tests_in_directory(&args).await?;
+    let mut cmd = Command::new(&executable_path);
+    cmd.stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .args(env::args().skip(1));
+    cmd.env_clear()
+        .env("DEVENV_RUN_TESTS", "1")
+        .env("DEVENV_NIX", env::var("DEVENV_NIX").unwrap_or_default())
+        .env("PATH", path);
+
+    let output = cmd.output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err("Tests failed".into())
+    }
+}
+
+async fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
+    let test_results = run_tests_in_directory(args).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
 
-    println!();
+    eprintln!();
 
     for result in test_results {
         if !result.passed {
-            println!("{}: Failed", result.name);
+            eprintln!("{}: Failed", result.name);
         };
     }
 
-    println!();
-    println!("Ran {} tests, {} failed.", num_tests, num_failed_tests);
+    eprintln!();
+    eprintln!("Ran {} tests, {} failed.", num_tests, num_failed_tests);
 
     if num_failed_tests > 0 {
         Err("Some tests failed".into())
