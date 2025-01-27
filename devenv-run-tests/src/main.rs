@@ -50,8 +50,8 @@ async fn run_tests_in_directory(
             let path = path?.path();
             let path = path.as_path();
 
+            // Skip files
             if !path.is_dir() {
-                // eprintln!("Skipping {}. Expected a directory.", path.display());
                 continue;
             }
 
@@ -79,23 +79,28 @@ async fn run_tests_in_directory(
                 &[],
             );
 
-            let tmpdir = tempdir::TempDir::new(&format!("devenv-run-tests-{}", dir_name))
-                .expect("Failed to create temporary directory");
+            let tmpdir = tempdir::TempDir::new(&format!("devenv-run-tests-{}", dir_name))?;
             let devenv_root = tmpdir.path().to_path_buf();
             let devenv_dotfile = tmpdir.path().join(".devenv");
 
             // Copy the contents of the test directory to the temporary directory
-            Command::new("cp")
+            let copy_content_status = Command::new("cp")
                 .arg("-r")
                 .arg(format!("{}/.", path.display()))
                 .arg(&devenv_root)
-                .output()?;
+                .status()?;
+            if !copy_content_status.success() {
+                return Err("Failed to copy test directory".into());
+            }
+
+            env::set_current_dir(&devenv_root)?;
 
             // Initialize a git repository in the temporary directory.
             // This helps Nix Flakes and git-hooks find the root of the project.
-            Command::new("git").arg("init").output()?;
-
-            env::set_current_dir(&devenv_root).expect("failed to switch to the test directory");
+            let git_init_status = Command::new("git").arg("init").status()?;
+            if !git_init_status.success() {
+                return Err("Failed to initialize the git repository".into());
+            }
 
             let options = DevenvOptions {
                 config,
@@ -136,7 +141,7 @@ async fn run_tests_in_directory(
             test_results.push(result);
 
             // Restore the current directory
-            env::set_current_dir(&cwd).expect("failed to set current dir");
+            env::set_current_dir(&cwd)?;
         }
     }
 
