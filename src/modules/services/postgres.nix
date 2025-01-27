@@ -17,24 +17,19 @@ let
         if value == "*" || value == "0.0.0.0" then "127.0.0.1"
         else if value == "::" then "::1"
         else value;
-
-      # Parse a single address, handling IPv6 addresses in brackets
-      parseAddress = address:
-        let
-          trimmed = lib.trim address;
-          ipv4Match = builtins.match "\\d+\\.\\d+\\.\\d+\\.\\d+" trimmed;
-          ipv6Match = builtins.match "\\[.*\\]" trimmed;
-          match =
-            if ipv4Match != null then
-              builtins.head ipv4Match
-            else if ipv4Match != null then
-              builtins.head ipv6Match
-            else
-              trimmed;
-        in
-        convertSpecialValue match;
     in
-    map parseAddress (lib.splitString "," input);
+    lib.pipe input [
+      (lib.splitString ",")
+      (map lib.trim)
+      (map convertSpecialValue)
+      (builtins.filter (x: x != ""))
+    ];
+
+  # Fetch the first element of a list or return null if the list is empty.
+  headWithDefault = default: input:
+    if input == [ ]
+    then default
+    else builtins.head input;
 
   postgresPkg =
     if cfg.extensions != null
@@ -384,10 +379,11 @@ in
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
     env.PGHOST =
       let
+        parsedAddress = headWithDefault null (parseListenAddresses cfg.listen_addresses);
         host =
-          if cfg.listen_addresses == ""
-          then runtimeDir
-          else parseListenAddresses cfg.listen_addresses;
+          if cfg.listen_addresses != ""
+          then parsedAddress
+          else runtimeDir;
       in
       lib.mkDefault host;
     env.PGPORT =
