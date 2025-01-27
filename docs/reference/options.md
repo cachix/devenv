@@ -36926,7 +36926,7 @@ boolean
 
 
 
-Which package of Elixir to use.
+Which Elixir package to use.
 
 
 
