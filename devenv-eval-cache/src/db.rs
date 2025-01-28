@@ -25,7 +25,7 @@ pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx
 
         // Delete the database and rerun the migrations
         Sqlite::drop_database(database_url.as_ref()).await?;
-
+        Sqlite::create_database(database_url.as_ref()).await?;
         sqlx::migrate!().run(&pool).await?;
     }
 
