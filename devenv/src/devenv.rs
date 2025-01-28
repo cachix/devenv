@@ -872,7 +872,7 @@ impl Devenv {
         use devenv_eval_cache::command::{FileInputDesc, Input};
         fs::write(
             // TODO: update direnvrc to use this
-            self.devenv_dotfile.join("cache-inputs.txt"),
+            self.devenv_dotfile.join("input-paths.txt"),
             env.inputs
                 .iter()
                 .filter_map(|input| match input {
