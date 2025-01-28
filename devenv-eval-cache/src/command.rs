@@ -276,7 +276,7 @@ impl Input {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileInputDesc {
     pub path: PathBuf,
     pub is_directory: bool,
@@ -287,6 +287,12 @@ pub struct FileInputDesc {
 impl Ord for FileInputDesc {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.path.cmp(&other.path)
+    }
+}
+
+impl PartialOrd for FileInputDesc {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -312,7 +318,7 @@ impl FileInputDesc {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnvInputDesc {
     pub name: String,
     pub content_hash: String,
@@ -321,6 +327,12 @@ pub struct EnvInputDesc {
 impl Ord for EnvInputDesc {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.name.cmp(&other.name)
+    }
+}
+
+impl PartialOrd for EnvInputDesc {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -437,11 +449,11 @@ async fn query_cached_output(
                 let inputs = Arc::clone(&inputs);
                 set.spawn_blocking(move || match &inputs[index] {
                     Input::File(file) => {
-                        let res = check_file_state(&file);
+                        let res = check_file_state(file);
                         (index, res)
                     }
                     Input::Env(env) => {
-                        let res = check_env_state(&env);
+                        let res = check_env_state(env);
                         (index, res)
                     }
                 });
