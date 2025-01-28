@@ -106,7 +106,13 @@ async fn run_tests_in_directory(
                 config,
                 devenv_root: Some(devenv_root.clone()),
                 devenv_dotfile: Some(devenv_dotfile),
-                ..Default::default()
+                global_options: Some(devenv::GlobalOptions {
+                    // Avoid caching between setup and shell.
+                    // Because setup runs inside the shell, we can cache the shell before it's fully set up (e.g. dotenv test)
+                    // TODO(sander): remove once `pathExists` can be cache-busted
+                    eval_cache: false,
+                    ..Default::default()
+                }),
             };
             let mut devenv = Devenv::new(options).await;
 
