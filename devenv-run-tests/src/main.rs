@@ -97,7 +97,10 @@ async fn run_tests_in_directory(
 
             // Initialize a git repository in the temporary directory.
             // This helps Nix Flakes and git-hooks find the root of the project.
-            let git_init_status = Command::new("git").arg("init").status()?;
+            let git_init_status = Command::new("git")
+                .arg("init")
+                .arg("--initial-branch=main")
+                .status()?;
             if !git_init_status.success() {
                 return Err("Failed to initialize the git repository".into());
             }
