@@ -4,6 +4,7 @@ use sqlx::SqlitePool;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tracing::{debug, trace};
@@ -148,13 +149,6 @@ impl<'a> CachedCommand<'a> {
         let mut sources = Vec::new();
 
         for op in ops.into_iter() {
-            if let Op::GetEnv { name } = op {
-                if let Ok(env_input) = EnvInputDesc::new(name) {
-                    env_inputs.push(env_input);
-                }
-                continue;
-            }
-
             match op {
                 Op::CopiedSource { source, .. }
                 | Op::EvaluatedFile { source }
@@ -168,6 +162,13 @@ impl<'a> CachedCommand<'a> {
                 {
                     sources.push(source);
                 }
+
+                Op::GetEnv { name } => {
+                    if let Ok(env_input) = EnvInputDesc::new(name) {
+                        env_inputs.push(env_input);
+                    }
+                }
+
                 _ => {}
             }
         }
@@ -416,7 +417,6 @@ async fn query_cached_output(
             .await
             .map_err(CommandError::Sqlx)?;
 
-        use std::sync::Arc;
         let mut inputs = files
             .into_iter()
             .map(Input::from)
@@ -465,8 +465,7 @@ async fn query_cached_output(
                         FileState::MetadataModified { modified_at, .. } => {
                             if let Input::File(file) = &inputs[index] {
                                 // TODO: batch with query builder?
-                                let path = file.path.to_string_lossy().to_string();
-                                db::update_file_modified_at(pool, path, modified_at)
+                                db::update_file_modified_at(pool, &file.path, modified_at)
                                     .await
                                     .map_err(CommandError::Sqlx)?;
                             }
