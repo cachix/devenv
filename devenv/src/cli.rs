@@ -95,7 +95,7 @@ pub struct GlobalOptions {
     /// Disable the evaluation cache. Sets `eval_cache` to false.
     #[arg(long, global = true, hide = true)]
     #[arg(overrides_with = "eval_cache")]
-    no_eval_cache: bool,
+    pub no_eval_cache: bool,
 
     #[arg(
         long,
