@@ -50,6 +50,9 @@ Running ``devenv init`` generates ``devenv.nix``:
   # https://devenv.sh/git-hooks/
   git-hooks.hooks.shellcheck.enable = true;
 
+  # https://devenv.sh/treefmt/
+  treefmt.programs.nixpkgs-fmt.enable = true;
+
   # https://devenv.sh/processes/
   processes.ping.exec = "ping localhost";
 }

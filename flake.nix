@@ -14,6 +14,12 @@
       flake-compat.follows = "";
     };
   };
+  inputs.treefmt-nix = {
+    url = "github:numtide/treefmt-nix";
+    inputs = {
+      nixpkgs.follows = "nixpkgs";
+    };
+  };
   inputs.flake-compat = {
     url = "github:edolstra/flake-compat";
     flake = false;
@@ -40,7 +46,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, git-hooks, nix, ... }@inputs:
+  outputs = { self, nixpkgs, git-hooks, treefmt-nix, nix, ... }@inputs:
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
@@ -62,6 +68,7 @@
           sources = [
             { name = "${self}"; url = "https://github.com/cachix/devenv/blob/main"; }
             { name = "${git-hooks}"; url = "https://github.com/cachix/git-hooks.nix/blob/master"; }
+            { name = "${treefmt-nix}"; url = "https://github.com/numtide/treefmt-nix/blob/main"; }
           ];
           rewriteSource = decl:
             let
@@ -260,3 +267,4 @@
       };
     };
 }
+
