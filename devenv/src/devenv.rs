@@ -871,7 +871,6 @@ impl Devenv {
 
         use devenv_eval_cache::command::{FileInputDesc, Input};
         fs::write(
-            // TODO: update direnvrc to use this
             self.devenv_dotfile.join("input-paths.txt"),
             env.inputs
                 .iter()
@@ -879,7 +878,7 @@ impl Devenv {
                     Input::File(FileInputDesc { path, .. }) => {
                         Some(path.to_string_lossy().to_string())
                     }
-                    // TODO: update direnvrc to handle env vars
+                    // TODO(sander): update direnvrc to handle env vars if possible
                     _ => None,
                 })
                 .collect::<Vec<_>>()
