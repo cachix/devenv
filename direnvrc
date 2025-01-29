@@ -88,26 +88,6 @@ nix_direnv_watch_file() {
   watch_file "$@"
 }
 
-_nix_direnv_watches() {
-  local -n _watches=$1
-  if [[ -z ${DIRENV_WATCHES-} ]]; then
-    return
-  fi
-  while IFS= read -r line; do
-    local regex='"[Pp]ath": "(.+)"$'
-    if [[ $line =~ $regex ]]; then
-      local path="${BASH_REMATCH[1]}"
-      if [[ $path == "${XDG_DATA_HOME:-${HOME:-/var/empty}/.local/share}/direnv/allow/"* ]]; then
-        continue
-      fi
-      # expand new lines and other json escapes
-      # shellcheck disable=2059
-      path=$(printf "$path")
-      _watches+=("$path")
-    fi
-  done < <($direnv show_dump "${DIRENV_WATCHES}")
-}
-
 _devenv_watches() {
   local path=$1
   local -n _watches=$2
@@ -140,7 +120,8 @@ use_devenv() {
     fi
   fi
 
-  # Watch the default files
+  # Watch the default files.
+  # Even if evaluation fails, these files should still trigger a reload.
   watch_file "${default_watches[@]}"
 
   # Fetch and watch files that affect the env
@@ -148,12 +129,9 @@ use_devenv() {
   _devenv_watches "$env_deps_path" env_watches
   watch_file "${env_watches[@]}"
 
-  # Fetch all files that direnv is currently watching
-  local watches
-  _nix_direnv_watches watches
-
+  # Build the environment
   local env
-  if ! env=$("${DEVENV_BIN}" print-dev-env --quiet); then
+  if ! env=$("${DEVENV_BIN}" print-dev-env); then
     log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
     exit 0
   fi
@@ -163,9 +141,6 @@ use_devenv() {
   _devenv_watches "$env_deps_path" env_watches
   watch_file "${env_watches[@]}"
 
-  # Fetch the final watches
-  local watches
-  _nix_direnv_watches watches
-
+  # Import the environment
   _nix_import_env "$env"
 }
