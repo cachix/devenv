@@ -36,7 +36,12 @@ async fn main() -> Result<()> {
         log::Level::default()
     };
 
-    log::init_tracing(level, cli.global_options.log_format);
+    // log::init_tracing(level, cli.global_options.log_format);
+
+    // Only initialize tracing if we're not running LSP
+    if !matches!(command, Commands::Lsp { .. }) {
+        log::init_tracing(level, cli.global_options.log_format);
+    }
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
@@ -136,6 +141,7 @@ async fn main() -> Result<()> {
         Commands::Gc {} => devenv.gc(),
         Commands::Info {} => devenv.info().await,
         Commands::Repl {} => devenv.repl(),
+        Commands::Lsp {} => devenv.lsp().await,
         Commands::Build { attributes } => devenv.build(&attributes).await,
         Commands::Update { name } => devenv.update(&name).await,
         Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach).await,
