@@ -182,9 +182,7 @@ impl GlobalOptions {
 #[derive(Subcommand, Clone)]
 pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
-    Init {
-        target: Option<PathBuf>,
-    },
+    Init { target: Option<PathBuf> },
 
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]
     Shell {
@@ -193,16 +191,12 @@ pub enum Commands {
     },
 
     #[command(about = "Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/")]
-    Update {
-        name: Option<String>,
-    },
+    Update { name: Option<String> },
 
     #[command(
         about = "Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file"
     )]
-    Search {
-        name: String,
-    },
+    Search { name: String },
 
     #[command(
         alias = "show",
@@ -261,10 +255,13 @@ pub enum Commands {
         command: InputsCommand,
     },
 
+    #[command(
+        about = "Launch an interactive environment for inspecting the devenv configuration."
+    )]
     Repl {},
 
     #[command(
-        about = "Deletes previous shell generations. See https://devenv.sh/garbage-collection"
+        about = "Delete previous shell generations. See https://devenv.sh/garbage-collection"
     )]
     Gc {},
 
