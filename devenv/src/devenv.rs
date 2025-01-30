@@ -1,4 +1,4 @@
-use super::{cli, cnix, config, log, tasks};
+use super::{cli, cnix, config, tasks};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -869,11 +869,18 @@ impl Devenv {
         let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
+        use devenv_eval_cache::command::{FileInputDesc, Input};
         fs::write(
             self.devenv_dotfile.join("input-paths.txt"),
-            env.paths
+            env.inputs
                 .iter()
-                .map(|fp| fp.path.to_string_lossy())
+                .filter_map(|input| match input {
+                    Input::File(FileInputDesc { path, .. }) => {
+                        Some(path.to_string_lossy().to_string())
+                    }
+                    // TODO(sander): update direnvrc to handle env vars if possible
+                    _ => None,
+                })
                 .collect::<Vec<_>>()
                 .join("\n"),
         )

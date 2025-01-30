@@ -403,7 +403,7 @@ impl<'a> Nix<'a> {
                 status: output.status,
                 stdout: output.stdout,
                 stderr: output.stderr,
-                paths: vec![],
+                inputs: vec![],
             }
         };
 

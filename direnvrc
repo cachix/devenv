@@ -43,7 +43,7 @@ _nix_export_or_unset() {
 }
 
 _nix_import_env() {
-  local profile_rc=$1
+  local env=$1
 
   # Note which environments are active, but make sure we don't repeat them
   if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
@@ -56,7 +56,7 @@ _nix_import_env() {
   local old_temp=${TEMP:-__UNSET__}
   local old_tempdir=${TEMPDIR:-__UNSET__}
   local old_xdg_data_dirs=${XDG_DATA_DIRS:-}
-  eval "$(< "$profile_rc")"
+  eval "$env"
   # `nix print-dev-env` will create a temporary directory and use it as TMPDIR
   # We cannot rely on this directory being available at all times,
   # as it may be garbage collected.
@@ -83,50 +83,9 @@ _nix_import_env() {
   done
 }
 
-_nix_argsum_suffix() {
-  local out checksum content
-
-  args=("$@")
-  sorted_args=$(printf "%s\n" "${args[@]}" | sort -u)
-
-  content=$(cat "${sorted_args[@]}" 2>/dev/null)
-
-  if has sha1sum; then
-    out=$(sha1sum <<< "$content")
-  elif has shasum; then
-    out=$(shasum <<< "$content")
-  else
-    log_status "not hashing your cache, please install sha1sum"
-    # degrate gracefully both tools are not present
-    return
-  fi
-  read -r checksum _ <<< "$out"
-  echo "-$checksum"
-}
-
 nix_direnv_watch_file() {
   log_error "nix_direnv_watch_file is deprecated. Use watch_file instead."
   watch_file "$@"
-}
-
-_nix_direnv_watches() {
-  local -n _watches=$1
-  if [[ -z ${DIRENV_WATCHES-} ]]; then
-    return
-  fi
-  while IFS= read -r line; do
-    local regex='"[Pp]ath": "(.+)"$'
-    if [[ $line =~ $regex ]]; then
-      local path="${BASH_REMATCH[1]}"
-      if [[ $path == "${XDG_DATA_HOME:-${HOME:-/var/empty}/.local/share}/direnv/allow/"* ]]; then
-        continue
-      fi
-      # expand new lines and other json escapes
-      # shellcheck disable=2059
-      path=$(printf "$path")
-      _watches+=("$path")
-    fi
-  done < <($direnv show_dump "${DIRENV_WATCHES}")
 }
 
 _devenv_watches() {
@@ -138,14 +97,6 @@ _devenv_watches() {
       _watches+=("$file")
     done < "$path"
   fi
-}
-
-_devenv_profile_rc() {
-  local -n _watches=$1
-  local layout_dir profile
-  layout_dir=$(direnv_layout_dir)
-  profile="${layout_dir}/devenv-profile$(_nix_argsum_suffix "${_watches[@]}")"
-  echo "${profile}.rc"
 }
 
 use_devenv() {
@@ -169,7 +120,8 @@ use_devenv() {
     fi
   fi
 
-  # Watch the default files
+  # Watch the default files.
+  # Even if evaluation fails, these files should still trigger a reload.
   watch_file "${default_watches[@]}"
 
   # Fetch and watch files that affect the env
@@ -177,46 +129,18 @@ use_devenv() {
   _devenv_watches "$env_deps_path" env_watches
   watch_file "${env_watches[@]}"
 
-  # Fetch all files that direnv is currently watching
-  local watches
-  _nix_direnv_watches watches
-
-  profile_rc=$(_devenv_profile_rc watches)
-
-  local need_update=0
-  local file=
-  for file in "${watches[@]}"; do
-    if [[ "$file" -nt "$profile_rc" ]]; then
-      need_update=1
-      log_status "$file changed, reloading"
-      break
-    fi
-  done
-
-  if [[ ! -e "$profile_rc" || "$need_update" == "1" ]];
-  then
-    # We need to update our cache
-    local env
-    if ! env=$("${DEVENV_BIN}" print-dev-env); then
-      log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
-      exit 0
-    fi
-
-    # Re-watch files that affect the env
-    local env_watches
-    _devenv_watches "$env_deps_path" env_watches
-    watch_file "${env_watches[@]}"
-
-    # Fetch the final watches and compute the new profile_rc
-    local watches
-    _nix_direnv_watches watches
-    profile_rc=$(_devenv_profile_rc watches)
-
-    echo "$env" > "$profile_rc"
-    log_status "updated devenv shell cache"
-    _nix_import_env "$profile_rc"
-  else
-    log_status "using cached devenv shell"
-    _nix_import_env "$profile_rc"
+  # Build the environment
+  local env
+  if ! env=$("${DEVENV_BIN}" print-dev-env); then
+    log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
+    exit 0
   fi
+
+  # Re-watch files that affect the env
+  local env_watches
+  _devenv_watches "$env_deps_path" env_watches
+  watch_file "${env_watches[@]}"
+
+  # Import the environment
+  _nix_import_env "$env"
 }
