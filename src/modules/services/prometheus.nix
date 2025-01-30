@@ -166,7 +166,7 @@ in
             port = cfg.port;
             path = "/-/ready";
           };
-          initial_delay_seconds = 5;
+          initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
           success_threshold = 1;
