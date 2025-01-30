@@ -34,7 +34,7 @@
         local port=$1
         local timeout=''${2:-15}
 
-        timeout $timeout bash -c "until echo > /dev/tcp/localhost/$port; do sleep 0.5; done"
+        timeout $timeout bash -c "until ${pkgs.libressl.nc}/bin/nc -z localhost $port 2>/dev/null; do sleep 0.5; done"
       }
 
       export -f wait_for_port
