@@ -1,5 +1,5 @@
 # TODO: build using Nix: https://github.com/microsoft/vscode-dev-containers/blob/main/containers/alpine/.devcontainer/base.Dockerfile
-FROM mcr.microsoft.com/devcontainers/base:jammy
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 ARG VERSION=latest
 
 ADD nix.conf /nix.conf
