@@ -14,8 +14,9 @@ RUN apt-get update && \
 # Install Nix
 # NOTE: The extra conf file does not apply to the install script itself.
 # We need to disable the syscall filter beforehand.
-RUN NIX_CONFIG='filter-syscalls = false' \
-    curl -L ${NIX_INSTALL_SCRIPT} | \
+RUN mkdir -p -m 0755 /etc/nix
+RUN echo "filter-syscalls = false" > /etc/nix/nix.conf
+RUN curl -L ${NIX_INSTALL_SCRIPT} | \
     sh -s -- \
       --daemon \
       --no-channel-add \
