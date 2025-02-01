@@ -12,7 +12,14 @@ RUN apt-get update && \
     apt-get install -y bash curl git sudo xz-utils
 
 # Install Nix
-RUN curl -L ${NIX_INSTALL_SCRIPT} | sh -s -- --daemon --no-channel-add --nix-extra-conf-file /tmp/nix.conf
+# NOTE: The extra conf file does not apply to the install script itself.
+# We need to disable the syscall filter beforehand.
+RUN NIX_CONFIG='filter-syscalls = false' \
+    curl -L ${NIX_INSTALL_SCRIPT} | \
+    sh -s -- \
+      --daemon \
+      --no-channel-add \
+      --nix-extra-conf-file /tmp/nix.conf
 
 # Add Nix to PATH
 ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
