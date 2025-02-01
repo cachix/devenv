@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 ARG VERSION=latest
+ARG DEVENV_INSTALL_URI=github:cachix/devenv/$VERSION
 # To pin a Nix version: https://releases.nixos.org/nix/nix-2.24.9/install
 ARG NIX_INSTALL_SCRIPT=https://nixos.org/nix/install
 
@@ -22,7 +23,7 @@ RUN /nix-entrypoint.sh sleep 5
 # Install devenv and dependencies
 RUN nix profile install nixpkgs#direnv nixpkgs#cachix
 RUN USER=root cachix use devenv
-RUN nix profile install github:cachix/devenv/$VERSION --accept-flake-config
+RUN nix profile install $DEVENV_INSTALL_URI --accept-flake-config
 
 # Clean up
 RUN rm -rf ~/.cache/nix && \
