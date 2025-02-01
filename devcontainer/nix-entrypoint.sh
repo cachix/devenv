@@ -1,6 +1,6 @@
 #!/bin/bash
-# Attempt to start daemon
-set +e 
+# Attempt to start the nix-daemon
+set +e
 if ! pidof nix-daemon > /dev/null 2>&1; then
     start_ok=false
     if [ "$(id -u)" = "0" ]; then
@@ -19,8 +19,7 @@ if ! pidof nix-daemon > /dev/null 2>&1; then
         fi
     fi
     if [ "${start_ok}" = "false" ]; then
-            echo -e 'Failed to start nix-daemon as root. Set multiUser to false in your feature configuraiton if you would\nprefer to run the container as a non-root. You may also start the daemon manually if you have sudo\ninstalled and configured for your user by running "sudo -c nix-daemon &"'
+        echo -e 'Failed to start nix-daemon as root. Set multiUser to false in your feature configuraiton if you would\nprefer to run the container as a non-root. You may also start the daemon manually if you have sudo\ninstalled and configured for your user by running "sudo -c nix-daemon &"'
     fi
 fi
-sudo setfacl --remove-default /tmp
 exec "$@"
