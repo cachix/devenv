@@ -248,10 +248,10 @@ pub enum Input {
 }
 
 impl Input {
-    pub fn content_hash(&self) -> Option<String> {
+    pub fn content_hash(&self) -> Option<&str> {
         match self {
-            Self::File(desc) => desc.content_hash.clone(),
-            Self::Env(desc) => desc.content_hash.clone(),
+            Self::File(desc) => desc.content_hash.as_deref(),
+            Self::Env(desc) => desc.content_hash.as_deref(),
         }
     }
 
