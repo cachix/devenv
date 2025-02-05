@@ -258,7 +258,7 @@ impl Input {
     pub fn compute_input_hash(inputs: &[Self]) -> String {
         inputs
             .iter()
-            .filter_map(|input| input.content_hash())
+            .filter_map(Input::content_hash)
             .collect::<String>()
     }
 

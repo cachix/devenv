@@ -469,7 +469,7 @@ mod tests {
         let input_hash = hash::digest(
             &inputs
                 .iter()
-                .filter_map(|fp| fp.content_hash())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
@@ -520,7 +520,7 @@ mod tests {
         let input_hash1 = hash::digest(
             &inputs1
                 .iter()
-                .filter_map(|p| p.content_hash())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
@@ -557,7 +557,7 @@ mod tests {
         let input_hash2 = hash::digest(
             &inputs2
                 .iter()
-                .filter_map(|p| p.content_hash())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
@@ -627,7 +627,7 @@ mod tests {
         let input_hash = hash::digest(
             &inputs1
                 .iter()
-                .filter_map(|p| p.content_hash())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
@@ -654,7 +654,7 @@ mod tests {
         let input_hash2 = hash::digest(
             &inputs2
                 .iter()
-                .filter_map(|p| p.content_hash())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
