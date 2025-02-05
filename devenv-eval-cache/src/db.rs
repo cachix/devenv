@@ -220,7 +220,7 @@ where
         let id: i64 = sqlx::query(insert_file_input)
             .bind(path.to_path_buf().into_os_string().as_bytes())
             .bind(is_directory)
-            .bind(content_hash)
+            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
             .bind(modified_at)
             .fetch_one(&mut *conn)
             .await?
@@ -268,7 +268,7 @@ where
         let id: i64 = sqlx::query(insert_env_input)
             .bind(command_id)
             .bind(name)
-            .bind(content_hash)
+            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
             .fetch_one(&mut *conn)
             .await?
             .get(0);
@@ -456,20 +456,20 @@ mod tests {
             Input::File(FileInputDesc {
                 path: "/path/to/file1".into(),
                 is_directory: false,
-                content_hash: "hash1".to_string(),
+                content_hash: Some("hash1".to_string()),
                 modified_at,
             }),
             Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
             }),
         ];
         let input_hash = hash::digest(
             &inputs
                 .iter()
-                .map(|fp| fp.content_hash())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
@@ -507,18 +507,22 @@ mod tests {
             Input::File(FileInputDesc {
                 path: "/path/to/file1".into(),
                 is_directory: false,
-                content_hash: "hash1".to_string(),
+                content_hash: Some("hash1".to_string()),
                 modified_at,
             }),
             Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
             }),
         ];
-        let input_hash1 =
-            hash::digest(&inputs1.iter().map(|p| p.content_hash()).collect::<String>());
+        let input_hash1 = hash::digest(
+            &inputs1
+                .iter()
+                .filter_map(Input::content_hash)
+                .collect::<String>(),
+        );
 
         let (command_id1, file_ids1, _) = insert_command_with_inputs(
             &pool,
@@ -540,18 +544,22 @@ mod tests {
             Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
             }),
             Input::File(FileInputDesc {
                 path: "/path/to/file3".into(),
                 is_directory: false,
-                content_hash: "hash3".to_string(),
+                content_hash: Some("hash3".to_string()),
                 modified_at,
             }),
         ];
-        let input_hash2 =
-            hash::digest(&inputs2.iter().map(|p| p.content_hash()).collect::<String>());
+        let input_hash2 = hash::digest(
+            &inputs2
+                .iter()
+                .filter_map(Input::content_hash)
+                .collect::<String>(),
+        );
 
         let (command_id2, file_ids2, _) = insert_command_with_inputs(
             &pool,
@@ -606,18 +614,22 @@ mod tests {
             Input::File(FileInputDesc {
                 path: "/path/to/file1".into(),
                 is_directory: false,
-                content_hash: "hash1".to_string(),
+                content_hash: Some("hash1".to_string()),
                 modified_at,
             }),
             Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
             }),
         ];
-        let input_hash =
-            hash::digest(&inputs1.iter().map(|p| p.content_hash()).collect::<String>());
+        let input_hash = hash::digest(
+            &inputs1
+                .iter()
+                .filter_map(Input::content_hash)
+                .collect::<String>(),
+        );
 
         let (_command_id1, file_ids1, _) =
             insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash, output, &inputs1)
@@ -629,18 +641,22 @@ mod tests {
             Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
             }),
             Input::File(FileInputDesc {
                 path: "/path/to/file3".into(),
                 is_directory: false,
-                content_hash: "hash3".to_string(),
+                content_hash: Some("hash3".to_string()),
                 modified_at,
             }),
         ];
-        let input_hash2 =
-            hash::digest(&inputs2.iter().map(|p| p.content_hash()).collect::<String>());
+        let input_hash2 = hash::digest(
+            &inputs2
+                .iter()
+                .filter_map(Input::content_hash)
+                .collect::<String>(),
+        );
 
         let (command_id2, file_ids2, _) =
             insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash2, output, &inputs2)
