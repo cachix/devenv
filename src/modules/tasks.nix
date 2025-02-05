@@ -31,10 +31,12 @@ let
             type = types.str;
             description = "Override the binary name if it doesn't match package name";
             default = config.package.pname;
+            defaultText = lib.literalExpression "config.package.pname";
           };
           package = lib.mkOption {
             type = types.package;
             default = pkgs.bash;
+            defaultText = lib.literalExpression "pkgs.bash";
             description = "Package to install for this task.";
           };
           command = lib.mkOption {

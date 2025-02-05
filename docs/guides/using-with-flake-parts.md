@@ -26,7 +26,7 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
     devenv.url = "github:cachix/devenv";
   };
 

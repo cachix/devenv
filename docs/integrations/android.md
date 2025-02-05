@@ -21,7 +21,7 @@ For a more tailored development environment you can specify specific options:
     platforms.version = [ "32" "34" ];
     systemImageTypes = [ "google_apis_playstore" ];
     abis = [ "arm64-v8a" "x86_64" ];
-    cmakeVersions = [ "3.22.1" ];
+    cmake.version = [ "3.22.1" ];
     cmdLineTools.version = "11.0";
     tools.version = "26.1.1";
     platformTools.version = "34.0.5";
@@ -45,7 +45,10 @@ For a more tailored development environment you can specify specific options:
       "intel-android-sysimage-license"
       "mips-android-sysimage-license"
     ];
-    android-studio = pkgs.android-studio;
+    android-studio = {
+      enable = true;
+      package = pkgs.android-studio;
+    };
   };
 }
 ```
@@ -94,4 +97,3 @@ The following config works with the flutter starter project.
   };
 }
 ```
-

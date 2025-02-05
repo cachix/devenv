@@ -40,10 +40,7 @@
     },
     "flake-parts": {
       "inputs": {
-        "nixpkgs-lib": [
-          "nix",
-          "nixpkgs"
-        ]
+        "nixpkgs-lib": ["nix", "nixpkgs"]
       },
       "locked": {
         "lastModified": 1712014858,
@@ -63,10 +60,7 @@
       "inputs": {
         "flake-compat": [],
         "gitignore": "gitignore",
-        "nixpkgs": [
-          "nixpkgs"
-        ],
-        "nixpkgs-stable": []
+        "nixpkgs": ["nixpkgs"]
       },
       "locked": {
         "lastModified": 1734425854,
@@ -84,10 +78,7 @@
     },
     "gitignore": {
       "inputs": {
-        "nixpkgs": [
-          "git-hooks",
-          "nixpkgs"
-        ]
+        "nixpkgs": ["git-hooks", "nixpkgs"]
       },
       "locked": {
         "lastModified": 1709087332,

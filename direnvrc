@@ -28,6 +28,9 @@ _nix_direnv_preflight () {
   if [[ ! -d "$layout_dir" ]]; then
     mkdir -p "$layout_dir"
   fi
+
+  export DEVENV_DIRENVRC_VERSION=1
+  export DEVENV_DIRENVRC_ROLLING_UPGRADE=0
 }
 
 _nix_export_or_unset() {
@@ -40,7 +43,12 @@ _nix_export_or_unset() {
 }
 
 _nix_import_env() {
-  local profile_rc=$1
+  local env=$1
+
+  # Note which environments are active, but make sure we don't repeat them
+  if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
+    export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
+  fi
 
   local old_nix_build_top=${NIX_BUILD_TOP:-__UNSET__}
   local old_tmp=${TMP:-__UNSET__}
@@ -48,9 +56,9 @@ _nix_import_env() {
   local old_temp=${TEMP:-__UNSET__}
   local old_tempdir=${TEMPDIR:-__UNSET__}
   local old_xdg_data_dirs=${XDG_DATA_DIRS:-}
-  eval "$(< "$profile_rc")"
+  eval "$env"
   # `nix print-dev-env` will create a temporary directory and use it as TMPDIR
-  # We cannot rely on this directory being availble at all times,
+  # We cannot rely on this directory being available at all times,
   # as it may be garbage collected.
   # Instead - just remove it immediately.
   # Use recursive & force as it may not be empty.
@@ -75,27 +83,20 @@ _nix_import_env() {
   done
 }
 
-_nix_argsum_suffix() {
-  local out checksum content
-
-  content=$(cat "$@" 2>/dev/null)
-
-  if has sha1sum; then
-    out=$(sha1sum <<< "$content")
-  elif has shasum; then
-    out=$(shasum <<< "$content")
-  else
-    log_status "not hashing your cache, please install sha1sum"
-    # degrate gracefully both tools are not present
-    return
-  fi
-  read -r checksum _ <<< "$out"
-  echo "-$checksum"
+nix_direnv_watch_file() {
+  log_error "nix_direnv_watch_file is deprecated. Use watch_file instead."
+  watch_file "$@"
 }
 
-nix_direnv_watch_file() {
-  watch_file "$@"
-  nix_watches+=("$@")
+_devenv_watches() {
+  local path=$1
+  local -n _watches=$2
+  if [[ -f "$path" ]]; then
+    while IFS= read -r file; do
+      file=$(printf "$file")
+      _watches+=("$file")
+    done < "$path"
+  fi
 }
 
 use_devenv() {
@@ -103,56 +104,43 @@ use_devenv() {
 
   flake_expr="${1:-.}"
   flake_dir="${flake_expr%#*}"
+  env_deps_path="$flake_dir/.devenv/input-paths.txt"
 
-  local files_to_watch
-  files_to_watch=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
+  local default_watches
+  default_watches=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
 
   if [[ -d "$flake_dir" ]]; then
-    files_to_watch+=("$flake_dir/devenv.nix" "$flake_dir/devenv.lock" "$flake_dir/devenv.yaml" "$flake_dir/devenv.local.nix")
+    default_watches+=("$flake_dir/devenv.nix" "$flake_dir/devenv.lock" "$flake_dir/devenv.yaml" "$flake_dir/devenv.local.nix")
+
     if [[ -f "$flake_dir/devenv.yaml" ]]; then
       if ! devenv assemble; then
         log_error "$(devenv version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
         exit 0
       fi
-
-      if [[ -f "$flake_dir/.devenv/input-paths.txt" ]]; then
-        for file in $(cat "$flake_dir/.devenv/input-paths.txt"); do
-            files_to_watch+=("$file")
-        done
-      fi
     fi
   fi
 
-  nix_direnv_watch_file "${files_to_watch[@]}"
+  # Watch the default files.
+  # Even if evaluation fails, these files should still trigger a reload.
+  watch_file "${default_watches[@]}"
 
-  local layout_dir profile_rc
-  layout_dir=$(direnv_layout_dir)
-  profile_rc="${layout_dir}/devenv-profile$(_nix_argsum_suffix "${files_to_watch[@]}").rc"
+  # Fetch and watch files that affect the env
+  local env_watches
+  _devenv_watches "$env_deps_path" env_watches
+  watch_file "${env_watches[@]}"
 
-  local need_update=0
-  local file=
-  for file in "${nix_watches[@]}"; do
-    if [[ "$file" -nt "$profile_rc" ]]; then
-      need_update=1
-      log_status "$file changed, reloading"
-      break
-    fi
-  done
-
-  if [[ ! -e "$profile_rc" || "$need_update" == "1" ]];
-  then
-    # We need to update our cache
-    local env
-    if ! env=$("${DEVENV_BIN}" print-dev-env); then
-      log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
-      exit 0
-    fi
-
-    echo "$env" > "$profile_rc"
-    log_status "updated devenv shell cache"
-    _nix_import_env "$profile_rc"
-  else
-    log_status "using cached devenv shell"
-    _nix_import_env "$profile_rc"
+  # Build the environment
+  local env
+  if ! env=$("${DEVENV_BIN}" print-dev-env); then
+    log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
+    exit 0
   fi
+
+  # Re-watch files that affect the env
+  local env_watches
+  _devenv_watches "$env_deps_path" env_watches
+  watch_file "${env_watches[@]}"
+
+  # Import the environment
+  _nix_import_env "$env"
 }

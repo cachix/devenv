@@ -62,9 +62,9 @@ And ``devenv shell`` activates the environment.
 
 ```
 $ devenv
-https://devenv.sh 1.0.1: Fast, Declarative, Reproducible, and Composable Developer Environments
+https://devenv.sh 1.3.1: Fast, Declarative, Reproducible, and Composable Developer Environments
 
-Usage: devenv [OPTIONS] <COMMAND>
+Usage: devenv [OPTIONS] [COMMAND]
 
 Commands:
   init       Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.
@@ -73,36 +73,51 @@ Commands:
   search     Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file
   info       Print information about this developer environment.
   up         Start processes in the foreground. https://devenv.sh/processes/
-  processes  Start or stop processes.
+  processes  Start or stop processes. https://devenv.sh/processes/
+  tasks      Run tasks. https://devenv.sh/tasks/
   test       Run tests. http://devenv.sh/tests/
   container  Build, copy, or run a container. https://devenv.sh/containers/
   inputs     Add an input to devenv.yaml. https://devenv.sh/inputs/
-  gc         Deletes previous shell generations. See http://devenv.sh/garbage-collection
+  repl       Launch an interactive environment for inspecting the devenv configuration.
+  gc         Delete previous shell generations. See https://devenv.sh/garbage-collection
   build      Build any attribute in devenv.nix.
+  direnvrc   Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation.
   version    Print the version of devenv.
   help       Print this message or the help of the given subcommand(s)
 
 Options:
+  -V, --version
+          Print version information
   -v, --verbose
-          Enable debug log level.
+          Enable additional debug logs.
+  -q, --quiet
+          Silence all logs
+      --log-format <LOG_FORMAT>
+          Configure the output format of the logs. [default: cli] [possible values: cli, tracing-full]
   -j, --max-jobs <MAX_JOBS>
-          Maximum number of Nix builds at any time. [default: 8]
-  -j, --cores <CORES>
-          Maximum number CPU cores being used by a single build.. [default: 2]
+          Maximum number of Nix builds at any time. [default: 5]
+  -u, --cores <CORES>
+          Maximum number CPU cores being used by a single build. [default: 2]
   -s, --system <SYSTEM>
-          [default: x86_64-linux]
+          [default: aarch64-darwin]
   -i, --impure
           Relax the hermeticity of the environment.
+      --eval-cache
+          Cache the results of Nix evaluation.
+      --refresh-eval-cache
+          Force a refresh of the Nix evaluation cache.
+      --offline
+          Disable substituters and consider all previously downloaded files up-to-date.
   -c, --clean [<CLEAN>...]
           Ignore existing environment variables when entering the shell. Pass a list of comma-separated environment variables to let through.
-  -d, --nix-debugger
-          Enter Nix debugger on failure.
+      --nix-debugger
+          Enter the Nix debugger on failure.
   -n, --nix-option <NIX_OPTION> <NIX_OPTION>
           Pass additional options to nix commands, see `man nix.conf` for full list.
   -o, --override-input <OVERRIDE_INPUT> <OVERRIDE_INPUT>
           Override inputs in devenv.yaml.
   -h, --help
-          Print help
+          Print help (see more with '--help')
 ```
 
 ## Documentation

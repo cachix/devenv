@@ -566,6 +566,7 @@ dependencies = [
  "miette",
  "nix",
  "nix-conf-parser",
+ "once_cell",
  "petgraph",
  "regex",
  "reqwest",

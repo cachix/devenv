@@ -95,7 +95,7 @@ pub struct GlobalOptions {
     /// Disable the evaluation cache. Sets `eval_cache` to false.
     #[arg(long, global = true, hide = true)]
     #[arg(overrides_with = "eval_cache")]
-    no_eval_cache: bool,
+    pub no_eval_cache: bool,
 
     #[arg(
         long,
@@ -182,9 +182,7 @@ impl GlobalOptions {
 #[derive(Subcommand, Clone)]
 pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
-    Init {
-        target: Option<PathBuf>,
-    },
+    Init { target: Option<PathBuf> },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
     Generate {
@@ -213,16 +211,12 @@ pub enum Commands {
     },
 
     #[command(about = "Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/")]
-    Update {
-        name: Option<String>,
-    },
+    Update { name: Option<String> },
 
     #[command(
         about = "Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file"
     )]
-    Search {
-        name: String,
-    },
+    Search { name: String },
 
     #[command(
         alias = "show",
@@ -281,10 +275,13 @@ pub enum Commands {
         command: InputsCommand,
     },
 
+    #[command(
+        about = "Launch an interactive environment for inspecting the devenv configuration."
+    )]
     Repl {},
 
     #[command(
-        about = "Deletes previous shell generations. See http://devenv.sh/garbage-collection"
+        about = "Delete previous shell generations. See https://devenv.sh/garbage-collection"
     )]
     Gc {},
 
@@ -294,8 +291,13 @@ pub enum Commands {
         attributes: Vec<String>,
     },
 
+    #[command(
+        about = "Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation."
+    )]
+    Direnvrc,
+
     #[command(about = "Print the version of devenv.")]
-    Version {},
+    Version,
 
     #[clap(hide = true)]
     Assemble,

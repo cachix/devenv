@@ -8,6 +8,14 @@
           ncdu = pkgs.ncdu;
         };
       };
+      defaultText = lib.literalExpression ''
+        {
+          git = pkgs.git;
+          foo = {
+            ncdu = pkgs.ncdu;
+          };
+        }
+      '';
       description = ''
         Nix outputs for `devenv build` consumption.
       '';

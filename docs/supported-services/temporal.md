@@ -5,6 +5,8 @@
 
 ## services\.temporal\.enable
 
+
+
 Whether to enable Temporal process\.
 
 
@@ -39,6 +41,33 @@ package
 
 *Default:*
 ` pkgs.temporal-cli `
+
+
+
+## services\.temporal\.dynamicConfig
+
+Dynamic configuration for the Temporal server\.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  "frontend.namespacerps" = "2500";
+  "frontend.rps" = "2500";
+}
+```
 
 
 

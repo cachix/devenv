@@ -923,7 +923,7 @@ package
 
 
 
-What caches to pull from.
+Which Cachix caches to pull from.
 
 
 
@@ -933,7 +933,7 @@ list of string
 
 
 *Default:*
-` [ ] `
+` [ "devenv" ] `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix](https://github.com/cachix/devenv/blob/main/src/modules/cachix.nix)
@@ -944,7 +944,7 @@ list of string
 
 
 
-What cache to push to. Automatically also adds it to the list of caches to pull from.
+Which Cachix cache to push to. This cache is also added to ` cachix.pull `.
 
 
 
@@ -1825,7 +1825,7 @@ string
 
 
 
-Whether to warn when a new version of devenv is available.
+Whether to warn when a new version of either devenv or the direnv integration is available.
 
 
 
@@ -2375,7 +2375,7 @@ Format Cabal files
 
 **` cabal2nix `**
 
-Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` default.nix ` files
+Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` .nix ` files
 
 **` cargo-check `**
 
@@ -5631,17 +5631,32 @@ boolean
 
 
 
-` biome ` binary path. E.g. if you want to use the ` biome ` in ` node_modules `, use ` ./node_modules/.bin/biome `.
+` biome ` binary path.
+For example, if you want to use the ` biome ` binary from ` node_modules `, use ` "./node_modules/.bin/biome" `.
+Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
 *Default:*
-` null `
+
+```
+"${tools.biome}/bin/biome"
+
+```
+
+
+
+*Example:*
+
+```
+"./node_modules/.bin/biome"
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6324,6 +6339,546 @@ boolean
 
 
 
+## git-hooks.hooks.cabal2nix
+
+
+
+cabal2nix hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.settings.outputFilename
+
+
+
+The name of the output file generated after running ` cabal2nix `.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "default.nix" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.cabal2nix.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.clippy
 
 
@@ -6747,8 +7302,6 @@ boolean
 
 
 ## git-hooks.hooks.clippy.raw
-
-
 
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
@@ -11449,17 +12002,32 @@ boolean
 
 
 
-` eslint ` binary path. E.g. if you want to use the ` eslint ` in ` node_modules `, use ` ./node_modules/.bin/eslint `.
+` eslint ` binary path.
+For example, if you want to use the ` eslint ` binary from ` node_modules `, use ` "./node_modules/.bin/eslint" `.
+Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
 *Default:*
-` ${tools.eslint}/bin/eslint `
+
+```
+"${tools.eslint}/bin/eslint"
+
+```
+
+
+
+*Example:*
+
+```
+"./node_modules/.bin/eslint"
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12010,7 +12578,7 @@ boolean
 
 
 
-flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
+flake8 binary path. Should be used to specify flake8 binary from your Python environment.
 
 
 
@@ -14446,7 +15014,7 @@ Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project ro
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
@@ -19574,12 +20142,12 @@ boolean
 
 
 
-mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck binary from your Nix-managed Python environment.
+mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck binary from your Python environment.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
@@ -25192,12 +25760,14 @@ one of “always”, “avoid”
 
 
 
-` prettier ` binary path. E.g. if you want to use the ` prettier ` in ` node_modules `, use ` ./node_modules/.bin/prettier `.
+` prettier ` binary path.
+For example, if you want to use the ` prettier ` binary from ` node_modules `, use ` "./node_modules/.bin/prettier" `.
+Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
@@ -25205,6 +25775,15 @@ null or path
 
 ```
 "${tools.prettier}/bin/prettier"
+
+```
+
+
+
+*Example:*
+
+```
+"./node_modules/.bin/prettier"
 
 ```
 
@@ -25455,7 +26034,7 @@ Multiple values are accepted.
 
 
 *Type:*
-list of path
+list of (string or path)
 
 
 
@@ -27043,7 +27622,7 @@ boolean
 
 
 
-Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
+Pylint binary path. Should be used to specify Pylint binary from your Python environment.
 
 
 
@@ -28173,7 +28752,7 @@ boolean
 
 
 
-pyupgrade binary path. Should be used to specify the pyupgrade binary from your Nix-managed Python environment.
+pyupgrade binary path. Should be used to specify the pyupgrade binary from your Python environment.
 
 
 
@@ -33548,10 +34127,10 @@ string
 ''
   [files]
   ignore-dot = true
-  
+
   [default]
   binary = false
-  
+
   [type.py]
   extend-glob = []
 ''
@@ -35558,9 +36137,9 @@ string
 ```
 ''
   ---
-  
+
   extends: relaxed
-  
+
   rules:
     indentation: enable
 ''
@@ -36345,7 +36924,7 @@ boolean
 
 
 
-Which package of Elixir to use.
+Which Elixir package to use.
 
 
 
@@ -40516,11 +41095,13 @@ outputOf (attribute set)
 
 ```
 {
+  git = pkgs.git;
   foo = {
     ncdu = <derivation ncdu-2.7>;
   };
   git = <derivation git-2.47.0>;
 }
+
 ```
 
 *Declared by:*
@@ -40762,7 +41343,7 @@ Format Cabal files
 
 **` cabal2nix `**
 
-Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` default.nix ` files
+Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` .nix ` files
 
 **` cargo-check `**
 
@@ -44022,17 +44603,32 @@ boolean
 
 
 
-` biome ` binary path. E.g. if you want to use the ` biome ` in ` node_modules `, use ` ./node_modules/.bin/biome `.
+` biome ` binary path.
+For example, if you want to use the ` biome ` binary from ` node_modules `, use ` "./node_modules/.bin/biome" `.
+Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
 *Default:*
-` null `
+
+```
+"${tools.biome}/bin/biome"
+
+```
+
+
+
+*Example:*
+
+```
+"./node_modules/.bin/biome"
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -44695,6 +45291,546 @@ list of string
 
 
 ## pre-commit.hooks.black.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix
+
+
+
+cabal2nix hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.settings.outputFilename
+
+
+
+The name of the output file generated after running ` cabal2nix `.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "default.nix" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.cabal2nix.verbose
 
 
 
@@ -49842,17 +50978,32 @@ boolean
 
 
 
-` eslint ` binary path. E.g. if you want to use the ` eslint ` in ` node_modules `, use ` ./node_modules/.bin/eslint `.
+` eslint ` binary path.
+For example, if you want to use the ` eslint ` binary from ` node_modules `, use ` "./node_modules/.bin/eslint" `.
+Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
 *Default:*
-` ${tools.eslint}/bin/eslint `
+
+```
+"${tools.eslint}/bin/eslint"
+
+```
+
+
+
+*Example:*
+
+```
+"./node_modules/.bin/eslint"
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -50403,7 +51554,7 @@ boolean
 
 
 
-flake8 binary path. Should be used to specify flake8 binary from your Nix-managed Python environment.
+flake8 binary path. Should be used to specify flake8 binary from your Python environment.
 
 
 
@@ -52839,7 +53990,7 @@ Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project ro
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
@@ -57967,12 +59118,12 @@ boolean
 
 
 
-mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck binary from your Nix-managed Python environment.
+mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck binary from your Python environment.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
@@ -63585,12 +64736,14 @@ one of “always”, “avoid”
 
 
 
-` prettier ` binary path. E.g. if you want to use the ` prettier ` in ` node_modules `, use ` ./node_modules/.bin/prettier `.
+` prettier ` binary path.
+For example, if you want to use the ` prettier ` binary from ` node_modules `, use ` "./node_modules/.bin/prettier" `.
+Use a string instead of a path to avoid having to Git track the file in projects that use Nix flakes.
 
 
 
 *Type:*
-null or path
+null or string or path
 
 
 
@@ -63598,6 +64751,15 @@ null or path
 
 ```
 "${tools.prettier}/bin/prettier"
+
+```
+
+
+
+*Example:*
+
+```
+"./node_modules/.bin/prettier"
 
 ```
 
@@ -63848,7 +65010,7 @@ Multiple values are accepted.
 
 
 *Type:*
-list of path
+list of (string or path)
 
 
 
@@ -65436,7 +66598,7 @@ boolean
 
 
 
-Pylint binary path. Should be used to specify Pylint binary from your Nix-managed Python environment.
+Pylint binary path. Should be used to specify Pylint binary from your Python environment.
 
 
 
@@ -66566,7 +67728,7 @@ boolean
 
 
 
-pyupgrade binary path. Should be used to specify the pyupgrade binary from your Nix-managed Python environment.
+pyupgrade binary path. Should be used to specify the pyupgrade binary from your Python environment.
 
 
 
@@ -71941,10 +73103,10 @@ string
 ''
   [files]
   ignore-dot = true
-  
+
   [default]
   binary = false
-  
+
   [type.py]
   extend-glob = []
 ''
@@ -73951,9 +75113,9 @@ string
 ```
 ''
   ---
-  
+
   extends: relaxed
-  
+
   rules:
     indentation: enable
 ''
@@ -74693,7 +75855,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p37> `
+` pkgs.bash `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -74714,7 +75876,7 @@ string
 
 
 *Default:*
-` "bash" `
+` config.package.pname `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -75146,7 +76308,7 @@ strings concatenated with “\\n”
   {
     debug
   }
-  
+
   # Site block
   example.com {
     encode gzip
@@ -77072,7 +78234,7 @@ strings concatenated with “\\n”
 ```
 ''
   log4j.rootLogger=INFO, stdout
-  
+
   log4j.appender.stdout=org.apache.log4j.ConsoleAppender
   log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
   log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
@@ -80014,6 +81176,38 @@ package
 
 
 
+## services.temporal.dynamicConfig
+
+
+
+Dynamic configuration for the Temporal server.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  "frontend.namespacerps" = "2500";
+  "frontend.rps" = "2500";
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/temporal.nix)
+
+
+
 ## services.temporal.ip
 
 
@@ -81253,7 +82447,7 @@ strings concatenated with “\\n”
 ```
 ''
   vcl 4.0;
-  
+
   backend default {
     .host = "127.0.0.1";
     .port = "80";
@@ -81671,7 +82865,7 @@ package
 
 
 *Default:*
-` <derivation stdenv-linux> `
+` pkgs.stdenv `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
@@ -81708,7 +82902,7 @@ package
 
 
 *Default:*
-` <derivation bash-5.2p37> `
+` pkgs.bash `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -81771,7 +82965,7 @@ string
 
 
 *Default:*
-` "bash" `
+` config.package.pname `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
@@ -81934,5 +83128,3 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
-
-
