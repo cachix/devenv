@@ -1,8 +1,8 @@
 use std::path::Path;
 use std::{fs, io};
 
-pub(crate) fn digest(input: &str) -> String {
-    let hash = blake3::hash(input.as_bytes());
+pub(crate) fn digest<T: AsRef<str>>(input: T) -> String {
+    let hash = blake3::hash(input.as_ref().as_bytes());
     hash.to_hex().as_str().to_string()
 }
 
