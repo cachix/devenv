@@ -136,7 +136,7 @@ async fn main() -> Result<()> {
             description,
             host,
             exclude,
-            disable_analytics,
+            disable_telemetry,
         } => {
             devenv
                 .generate(
@@ -147,7 +147,7 @@ async fn main() -> Result<()> {
                     },
                     &host,
                     exclude,
-                    disable_analytics,
+                    disable_telemetry,
                 )
                 .await
         }

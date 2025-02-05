@@ -201,7 +201,7 @@ pub enum Commands {
 
         // https://consoledonottrack.com/
         #[clap(long, env = "DO_NOT_TRACK", action = clap::ArgAction::SetTrue)]
-        disable_analytics: bool,
+        disable_telemetry: bool,
     },
 
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]

@@ -206,12 +206,12 @@ impl Devenv {
         description: Option<String>,
         host: &str,
         exclude: Vec<PathBuf>,
-        disable_analytics: bool,
+        disable_telemetry: bool,
     ) -> Result<()> {
         let client = reqwest::Client::new();
         let mut request = client
             .post(host)
-            .query(&[("disable_analytics", disable_analytics)])
+            .query(&[("disable_telemetry", disable_telemetry)])
             .header(reqwest::header::USER_AGENT, crate_version!());
 
         let (asyncwriter, asyncreader) = tokio::io::duplex(256 * 1024);
