@@ -2873,7 +2873,7 @@ Format TOML files with taplo fmt
 
 **` terraform-format `**
 
-Format terraform (` .tf `) files.
+Format Terraform (` .tf `) files.
 
 **` terraform-validate `**
 
@@ -7861,6 +7861,8 @@ string
 
 
 ## git-hooks.hooks.cmake-format.name
+
+
 
 The name of the hook. Shown during hook execution.
 
@@ -34127,10 +34129,10 @@ string
 ''
   [files]
   ignore-dot = true
-
+  
   [default]
   binary = false
-
+  
   [type.py]
   extend-glob = []
 ''
@@ -36137,9 +36139,9 @@ string
 ```
 ''
   ---
-
+  
   extends: relaxed
-
+  
   rules:
     indentation: enable
 ''
@@ -41097,9 +41099,8 @@ outputOf (attribute set)
 {
   git = pkgs.git;
   foo = {
-    ncdu = <derivation ncdu-2.7>;
+    ncdu = pkgs.ncdu;
   };
-  git = <derivation git-2.47.0>;
 }
 
 ```
@@ -41841,7 +41842,7 @@ Format TOML files with taplo fmt
 
 **` terraform-format `**
 
-Format terraform (` .tf `) files.
+Format Terraform (` .tf `) files.
 
 **` terraform-validate `**
 
@@ -73103,10 +73104,10 @@ string
 ''
   [files]
   ignore-dot = true
-
+  
   [default]
   binary = false
-
+  
   [type.py]
   extend-glob = []
 ''
@@ -75113,9 +75114,9 @@ string
 ```
 ''
   ---
-
+  
   extends: relaxed
-
+  
   rules:
     indentation: enable
 ''
@@ -76308,7 +76309,7 @@ strings concatenated with “\\n”
   {
     debug
   }
-
+  
   # Site block
   example.com {
     encode gzip
@@ -78234,7 +78235,7 @@ strings concatenated with “\\n”
 ```
 ''
   log4j.rootLogger=INFO, stdout
-
+  
   log4j.appender.stdout=org.apache.log4j.ConsoleAppender
   log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
   log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
@@ -80623,6 +80624,375 @@ attribute set of (boolean or floating point number or signed integer or string)
 
 
 
+## services.prometheus.enable
+
+
+
+Whether to enable Prometheus monitoring system.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.package
+
+
+
+Which package of Prometheus to use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.prometheus `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.advanced.storage
+
+
+
+Storage configuration
+
+
+
+*Type:*
+attribute set
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.advanced.tsdb
+
+
+
+TSDB configuration
+
+
+
+*Type:*
+attribute set
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.alerting
+
+
+
+Alerting configuration
+
+
+
+*Type:*
+null or (attribute set)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.experimentalFeatures.enableExemplars
+
+
+
+Enable exemplar storage
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.experimentalFeatures.enableOTLP
+
+
+
+Enable OTLP receiver
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.experimentalFeatures.enableTracing
+
+
+
+Enable tracing
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.extraArgs
+
+
+
+Additional arguments to pass to Prometheus
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.globalConfig
+
+
+
+Global Prometheus configuration
+
+
+
+*Type:*
+attribute set
+
+
+
+*Default:*
+
+```
+{
+  evaluation_interval = "1m";
+  scrape_interval = "1m";
+  scrape_timeout = "10s";
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.port
+
+
+
+Port for Prometheus web interface
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 9090 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.remoteRead
+
+
+
+Remote read configurations
+
+
+
+*Type:*
+list of (attribute set)
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.remoteWrite
+
+
+
+Remote write configurations
+
+
+
+*Type:*
+list of (attribute set)
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.ruleFiles
+
+
+
+List of rule files to load
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.scrapeConfigs
+
+
+
+List of scrape configurations
+
+
+
+*Type:*
+list of (attribute set)
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.storage.path
+
+
+
+Path where Prometheus will store its database
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/home/runner/work/devenv/devenv/.devenv/state/prometheus" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
+## services.prometheus.storage.retentionTime
+
+
+
+How long to retain data
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "15d" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/prometheus.nix)
+
+
+
 ## services.rabbitmq.enable
 
 
@@ -82447,7 +82817,7 @@ strings concatenated with “\\n”
 ```
 ''
   vcl 4.0;
-
+  
   backend default {
     .host = "127.0.0.1";
     .port = "80";
@@ -83128,3 +83498,5 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
