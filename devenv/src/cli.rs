@@ -184,6 +184,26 @@ pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
     Init { target: Option<PathBuf> },
 
+    #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
+    Generate {
+        #[arg(num_args=0.., trailing_var_arg = true)]
+        description: Vec<String>,
+
+        #[clap(long, default_value = "https://devenv.new")]
+        host: String,
+
+        #[arg(
+            long,
+            help = "Paths to exclude during generation.",
+            value_name = "PATH"
+        )]
+        exclude: Vec<PathBuf>,
+
+        // https://consoledonottrack.com/
+        #[clap(long, env = "DO_NOT_TRACK", action = clap::ArgAction::SetTrue)]
+        disable_telemetry: bool,
+    },
+
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]
     Shell {
         cmd: Option<String>,

@@ -25,10 +25,11 @@ xtask = { path = "xtask" }
 
 ansiterm = "0.12.2"
 blake3 = "1.5.4"
-clap = { version = "4.5.1", features = ["derive", "cargo"] }
+clap = { version = "4.5.1", features = ["derive", "cargo", "env"] }
 cli-table = "0.4.7"
 console = "0.15.8"
 dotlock = "0.5.0"
+dialoguer = "0.11.0"
 futures = "0.3.30"
 hex = "0.4.3"
 include_dir = "0.7.3"
@@ -40,7 +41,7 @@ nix = { version = "0.28.0", features = ["signal"] }
 petgraph = "0.6.5"
 pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 regex = "1.10.3"
-reqwest = "0.11.26"
+reqwest = { version = "0.11.26", features = ["json", "stream"] }
 schemars = "0.8.16"
 schematic = { version = "0.14.3", features = [
     "schema",
@@ -72,6 +73,7 @@ tokio = { version = "1.39.3", features = [
 which = "6.0.0"
 whoami = "1.5.1"
 xdg = "2.5.2"
+tokio-tar = "0.3.1"
 
 # Always build optimized sqlx-macro to speed up query checks
 [profile.dev.package.sqlx-macros]

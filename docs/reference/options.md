@@ -7862,8 +7862,6 @@ string
 
 ## git-hooks.hooks.cmake-format.name
 
-
-
 The name of the hook. Shown during hook execution.
 
 
@@ -34129,10 +34127,10 @@ string
 ''
   [files]
   ignore-dot = true
-  
+
   [default]
   binary = false
-  
+
   [type.py]
   extend-glob = []
 ''
@@ -36139,9 +36137,9 @@ string
 ```
 ''
   ---
-  
+
   extends: relaxed
-  
+
   rules:
     indentation: enable
 ''
@@ -41099,8 +41097,9 @@ outputOf (attribute set)
 {
   git = pkgs.git;
   foo = {
-    ncdu = pkgs.ncdu;
+    ncdu = <derivation ncdu-2.7>;
   };
+  git = <derivation git-2.47.0>;
 }
 
 ```
@@ -73104,10 +73103,10 @@ string
 ''
   [files]
   ignore-dot = true
-  
+
   [default]
   binary = false
-  
+
   [type.py]
   extend-glob = []
 ''
@@ -75114,9 +75113,9 @@ string
 ```
 ''
   ---
-  
+
   extends: relaxed
-  
+
   rules:
     indentation: enable
 ''
@@ -76309,7 +76308,7 @@ strings concatenated with “\\n”
   {
     debug
   }
-  
+
   # Site block
   example.com {
     encode gzip
@@ -78235,7 +78234,7 @@ strings concatenated with “\\n”
 ```
 ''
   log4j.rootLogger=INFO, stdout
-  
+
   log4j.appender.stdout=org.apache.log4j.ConsoleAppender
   log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
   log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
@@ -80239,6 +80238,8 @@ The available extensions are:
  - jsonb_deep_sum
  - lantern
  - periods
+ - pg-gvm
+ - pg-semver
  - pg_auto_failover
  - pg_bigm
  - pg_cron
@@ -80261,6 +80262,7 @@ The available extensions are:
  - pg_uuidv7
  - pgaudit
  - pgjwt
+ - pgmq
  - pgroonga
  - pgrouting
  - pgsodium
@@ -80272,10 +80274,11 @@ The available extensions are:
  - plr
  - plv8
  - postgis
- - promscale_extension
  - repmgr
  - rum
  - smlar
+ - sqlite_fdw
+ - system_stats
  - tds_fdw
  - temporal_tables
  - timescaledb
@@ -82444,7 +82447,7 @@ strings concatenated with “\\n”
 ```
 ''
   vcl 4.0;
-  
+
   backend default {
     .host = "127.0.0.1";
     .port = "80";
@@ -83125,5 +83128,3 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
-
-

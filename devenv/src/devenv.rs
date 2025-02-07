@@ -3,12 +3,13 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, Result};
+use miette::{bail, IntoDiagnostic, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
+use similar::{ChangeTag, TextDiff};
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
@@ -154,14 +155,6 @@ impl Devenv {
             std::fs::create_dir_all(&target).expect("Failed to create target directory");
         }
 
-        // fails if any of the required files already exists
-        for filename in REQUIRED_FILES {
-            let file_path = target.join(filename);
-            if file_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
-                bail!("File already exists {}", file_path.display());
-            }
-        }
-
         for filename in REQUIRED_FILES {
             info!("Creating {}", filename);
 
@@ -183,7 +176,15 @@ impl Devenv {
                     })
                     .expect("Failed to append to existing file");
             } else {
-                std::fs::write(&target_path, path.contents()).expect("Failed to write file");
+                if target_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
+                    if let Some(utf8_contents) = path.contents_utf8() {
+                        confirm_overwrite(&target_path, utf8_contents.to_string())?;
+                    } else {
+                        bail!("Failed to read file contents as UTF-8");
+                    }
+                } else {
+                    std::fs::write(&target_path, path.contents()).expect("Failed to write file");
+                }
             }
         }
 
@@ -197,6 +198,120 @@ impl Devenv {
             .arg("allow")
             .current_dir(&target)
             .exec();
+        Ok(())
+    }
+
+    pub async fn generate(
+        &mut self,
+        description: Option<String>,
+        host: &str,
+        exclude: Vec<PathBuf>,
+        disable_telemetry: bool,
+    ) -> Result<()> {
+        let client = reqwest::Client::new();
+        let mut request = client
+            .post(host)
+            .query(&[("disable_telemetry", disable_telemetry)])
+            .header(reqwest::header::USER_AGENT, crate_version!());
+
+        let (asyncwriter, asyncreader) = tokio::io::duplex(256 * 1024);
+        let streamreader = tokio_util::io::ReaderStream::new(asyncreader);
+
+        let (body_sender, body) = match description {
+            Some(desc) => {
+                request = request.query(&[("q", desc)]);
+                (None, None)
+            }
+            None => {
+                let git_output = std::process::Command::new("git")
+                    .args(["ls-files", "-z"])
+                    .output()
+                    .map_err(|_| {
+                        miette::miette!("Failed to get list of files from git ls-files")
+                    })?;
+
+                let files = String::from_utf8_lossy(&git_output.stdout)
+                    .split('\0')
+                    .filter(|s| !s.is_empty())
+                    .filter(|s| !binaryornot::is_binary(s).unwrap_or(false))
+                    .map(PathBuf::from)
+                    .collect::<Vec<_>>();
+
+                if files.is_empty() {
+                    warn!("No files found. Are you in a git repository?");
+                    return Ok(());
+                }
+
+                if let Some(stderr) = String::from_utf8(git_output.stderr).ok() {
+                    if !stderr.is_empty() {
+                        warn!("{}", &stderr);
+                    }
+                }
+
+                let body = reqwest::Body::wrap_stream(streamreader);
+
+                request = request
+                    .body(body)
+                    .header(reqwest::header::CONTENT_TYPE, "application/x-tar");
+
+                (Some(tokio_tar::Builder::new(asyncwriter)), Some(files))
+            }
+        };
+
+        info!("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
+
+        let response_future = request.send();
+
+        let tar_task = async {
+            if let (Some(mut builder), Some(files)) = (body_sender, body) {
+                for path in files {
+                    if path.is_file() && !exclude.iter().any(|exclude| path.starts_with(exclude)) {
+                        builder.append_path(&path).await?;
+                    }
+                }
+                builder.finish().await?;
+            }
+            Ok::<(), std::io::Error>(())
+        };
+
+        let (response, _) = tokio::join!(response_future, tar_task);
+
+        let response = response.into_diagnostic()?;
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = &response
+                .text()
+                .await
+                .unwrap_or_else(|_| "No error details available".to_string());
+            bail!(
+                "Failed to generate (HTTP {}): {}",
+                &status.as_u16(),
+                match serde_json::from_str::<serde_json::Value>(error_text) {
+                    Ok(json) => json["message"]
+                        .as_str()
+                        .map(String::from)
+                        .unwrap_or_else(|| error_text.clone()),
+                    Err(_) => error_text.clone(),
+                }
+            );
+        }
+
+        let response_json: GenerateResponse = response.json().await.expect("Failed to parse JSON.");
+
+        confirm_overwrite(Path::new("devenv.nix"), response_json.devenv_nix)?;
+        confirm_overwrite(Path::new("devenv.yaml"), response_json.devenv_yaml)?;
+
+        info!(
+            "{}",
+            indoc::formatdoc!("
+              Generated devenv.nix and devenv.yaml 🎉
+
+              Treat these as templates and open an issue at https://github.com/cachix/devenv/issues if you think we can do better!
+
+              Start by running:
+
+                $ devenv shell
+            "));
         Ok(())
     }
 
@@ -891,6 +1006,46 @@ impl Devenv {
             gc_root,
         })
     }
+}
+
+fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
+    if std::fs::metadata(file).is_ok() {
+        // first output the old version and propose new changes
+        let before = std::fs::read_to_string(file).expect("Failed to read file");
+
+        let diff = TextDiff::from_lines(&before, &contents);
+
+        println!("\nChanges that will be made to {}:", file.to_string_lossy());
+        for change in diff.iter_all_changes() {
+            let sign = match change.tag() {
+                ChangeTag::Delete => "\x1b[31m-\x1b[0m",
+                ChangeTag::Insert => "\x1b[32m+\x1b[0m",
+                ChangeTag::Equal => " ",
+            };
+            print!("{}{}", sign, change);
+        }
+
+        let confirm = dialoguer::Confirm::new()
+            .with_prompt(format!(
+                "{} already exists. Do you want to overwrite it?",
+                file.to_string_lossy()
+            ))
+            .interact()
+            .into_diagnostic()?;
+
+        if confirm {
+            std::fs::write(file, contents).into_diagnostic()?;
+        }
+    } else {
+        std::fs::write(file, contents).into_diagnostic()?;
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct GenerateResponse {
+    devenv_nix: String,
+    devenv_yaml: String,
 }
 
 pub struct DevEnv {
