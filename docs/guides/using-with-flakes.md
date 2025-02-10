@@ -1,4 +1,4 @@
-Many experienced Nix users prefer to use [Nix flakes](https://nixos.wiki/wiki/Flakes),
+Many experienced Nix users prefer to use [Nix flakes](https://wiki.nixos.org/wiki/Flakes),
 although devenv is considered a superior interface since it's way simpler,
 but lacks integration with existing tooling.
 
