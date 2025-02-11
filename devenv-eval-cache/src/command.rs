@@ -1,7 +1,7 @@
 use futures::future::join_all;
 use miette::Diagnostic;
 use sqlx::SqlitePool;
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
 use std::sync::Arc;
@@ -91,17 +91,29 @@ impl<'a> CachedCommand<'a> {
 
         let mut child = cmd.spawn().map_err(CommandError::Io)?;
 
-        let mut stdout = child.stdout.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
+
+        let stdout_reader = BufReader::new(stdout);
+        let stderr_reader = BufReader::new(stderr);
+
+        let stdout_thread = std::thread::spawn(move || {
+            let mut output = Vec::new();
+            let mut lines = stdout_reader.lines();
+            while let Some(Ok(line)) = lines.next() {
+                output.extend_from_slice(line.as_bytes());
+                output.push(b'\n');
+            }
+            output
+        });
 
         let on_stderr = self.on_stderr.take();
 
-        let stderr_thread = tokio::spawn(async move {
-            let reader = BufReader::new(stderr);
+        let stderr_thread = std::thread::spawn(move || {
             let mut raw_lines: Vec<u8> = Vec::new();
             let mut ops = Vec::new();
 
-            let mut lines = reader.lines();
+            let mut lines = stderr_reader.lines();
             while let Some(Ok(line)) = lines.next() {
                 if let Some(log) = InternalLog::parse(&line).and_then(Result::ok) {
                     if let Some(ref f) = &on_stderr {
@@ -126,15 +138,9 @@ impl<'a> CachedCommand<'a> {
             (ops, raw_lines)
         });
 
-        let stdout_thread = tokio::spawn(async move {
-            let mut output = Vec::new();
-            stdout.read_to_end(&mut output).map(|_| output)
-        });
-
         let status = child.wait().map_err(CommandError::Io)?;
-
-        let stdout = stdout_thread.await.unwrap().map_err(CommandError::Io)?;
-        let (ops, stderr) = stderr_thread.await.unwrap();
+        let stdout = stdout_thread.join().unwrap();
+        let (ops, stderr) = stderr_thread.join().unwrap();
 
         if !status.success() {
             return Ok(Output {
