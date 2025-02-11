@@ -1,6 +1,7 @@
 nav:
    - .env: dotenv.md
+   - Android: android.md
+   - Wordpress: wordpress.md
    - GitHub Actions: github-actions.md
    - Codespaces / devcontainer: codespaces-devcontainer.md
    - Difftastic: difftastic.md
-   - Android: android.md
