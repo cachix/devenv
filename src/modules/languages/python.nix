@@ -40,9 +40,6 @@ let
   };
 
   initVenvScript =
-    let
-      USE_UV_SYNC = cfg.uv.sync.enable && builtins.compareVersions cfg.uv.package.version "0.4.4" >= 0;
-    in
     ''
       pushd "${cfg.directory}"
 
@@ -56,11 +53,7 @@ let
       devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
       venv_python="$(${readlink} "$devenv_interpreter_path")"
 
-      # if uv sync is enabled issue a warning that this is being ignored and dependencies will be installed from pyproject.toml
-      ${lib.optionalString (USE_UV_SYNC && cfg.venv.requirements != null) ''
-        echo "Warning: uv sync is enabled, and requirements are being ignored. Dependencies will be installed from pyproject.toml."
-      ''}
-      requirements="${lib.optionalString (!USE_UV_SYNC && cfg.venv.requirements != null) ''${requirements}''}"
+      requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
 
       # recreate venv if necessary
       if [ -z $venv_python ] || [ $profile_python != $venv_python ]
@@ -164,12 +157,20 @@ let
       fi
     }
 
+    # if a requirements file is specified issue a warning that this is being ignored and dependencies will be installed from pyproject.toml
+    ${lib.optionalString (cfg.venv.requirements != null) ''
+      echo "Warning: uv sync is enabled, and requirements are being ignored. Dependencies will be installed from pyproject.toml."
+    ''}
+
     if [ ! -f "pyproject.toml" ]
     then
       echo "No pyproject.toml found. Make sure you have a pyproject.toml file in your project." >&2
       exit 1
     else
       _devenv_uv_sync
+      ${lib.optionalString cfg.venv.enable ''
+        source "$VENV_PATH"/bin/activate
+      ''}
     fi
 
     popd
@@ -459,7 +460,7 @@ in
     ];
 
     tasks = {
-      "devenv:python:virtualenv" = lib.mkIf cfg.venv.enable {
+      "devenv:python:virtualenv" = lib.mkIf (cfg.venv.enable && !cfg.uv.sync.enable) {
         description = "Initialize Python virtual environment";
         exec = initVenvScript;
         exports = [ "PATH" "VIRTUAL_ENV" ];
@@ -477,9 +478,8 @@ in
       "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
         description = "Initialize uv sync";
         exec = initUvScript;
-        exports = [ "PATH" ];
-        before = [ "devenv:enterShell" ]
-          ++ lib.optional cfg.venv.enable "devenv:python:virtualenv";
+        exports = [ "PATH" "VIRTUAL_ENV" ];
+        before = [ "devenv:enterShell" ];
       };
     };
 
