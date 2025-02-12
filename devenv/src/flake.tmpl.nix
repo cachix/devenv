@@ -135,5 +135,6 @@
           });
           devenv = config;
           build = build project.options project.config;
+          templates = config.templates;
         };
       }
