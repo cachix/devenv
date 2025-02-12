@@ -145,7 +145,7 @@ impl Devenv {
         self.devenv_dotfile.join("processes.pid")
     }
 
-    pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
+    pub async fn init(&self, target: &Option<PathBuf>, template: &Option<String>) -> Result<()> {
         let target = target
             .clone()
             .unwrap_or_else(|| fs::canonicalize(".").expect("Failed to get current directory"));
@@ -153,6 +153,11 @@ impl Devenv {
         // create directory target if not exists
         if !target.exists() {
             std::fs::create_dir_all(&target).expect("Failed to create target directory");
+        }
+
+        if let Some(template) = template {
+            self.nix.init(&target, template).await?;
+            return Ok(());
         }
 
         for filename in REQUIRED_FILES {
