@@ -62,12 +62,13 @@ And ``devenv shell`` activates the environment.
 
 ```
 $ devenv
-https://devenv.sh 1.3.1: Fast, Declarative, Reproducible, and Composable Developer Environments
+https://devenv.sh 1.4.0: Fast, Declarative, Reproducible, and Composable Developer Environments
 
 Usage: devenv [OPTIONS] [COMMAND]
 
 Commands:
   init       Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.
+  generate   Generate devenv.yaml and devenv.nix using AI
   shell      Activate the developer environment. https://devenv.sh/basics/
   update     Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/
   search     Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file
