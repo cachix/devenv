@@ -241,6 +241,13 @@ impl<'a> Nix<'a> {
         Ok(())
     }
 
+    pub async fn init(&self, template: &String) -> Result<()> {
+        self.run_nix("nix", &["flake", "init", "-t", &template], &self.options)
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn metadata(&self) -> Result<String> {
         let options = Options {
             cache_output: true,

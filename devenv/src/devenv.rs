@@ -145,7 +145,12 @@ impl Devenv {
         self.devenv_dotfile.join("processes.pid")
     }
 
-    pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
+    pub async fn init(&self, target: &Option<PathBuf>, template: &Option<String>) -> Result<()> {
+        if let Some(template) = template {
+            self.nix.init(template).await?;
+            return Ok(());
+        }
+
         let target = target
             .clone()
             .unwrap_or_else(|| fs::canonicalize(".").expect("Failed to get current directory"));

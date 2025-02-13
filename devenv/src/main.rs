@@ -131,7 +131,7 @@ async fn main() -> Result<()> {
             };
             Ok(())
         }
-        Commands::Init { target } => devenv.init(&target),
+        Commands::Init { target, template } => devenv.init(&target, &template).await,
         Commands::Generate {
             description,
             host,
