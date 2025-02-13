@@ -74,7 +74,7 @@
                 />
                 <button
                     type="submit"
-                    onclick="window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value)"
+                    onclick="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value)"
                     class="px-6 py-2 bg-blue-900 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-900 focus:ring-offset-2 shadow-sm"
                 >
                     Generate
