@@ -80239,8 +80239,6 @@ The available extensions are:
  - jsonb_deep_sum
  - lantern
  - periods
- - pg-gvm
- - pg-semver
  - pg_auto_failover
  - pg_bigm
  - pg_cron
@@ -80263,7 +80261,6 @@ The available extensions are:
  - pg_uuidv7
  - pgaudit
  - pgjwt
- - pgmq
  - pgroonga
  - pgrouting
  - pgsodium
@@ -80275,11 +80272,10 @@ The available extensions are:
  - plr
  - plv8
  - postgis
+ - promscale_extension
  - repmgr
  - rum
  - smlar
- - sqlite_fdw
- - system_stats
  - tds_fdw
  - temporal_tables
  - timescaledb

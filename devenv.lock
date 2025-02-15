@@ -252,7 +252,6 @@
     "root": {
       "inputs": {
         "devenv": "devenv",
-        "fenix": "fenix",
         "git-hooks": "git-hooks",
         "nix": "nix",
         "nixpkgs": "nixpkgs_2",
@@ -260,6 +259,7 @@
           "git-hooks"
         ]
       }
+<<<<<<< HEAD
     },
     "rust-analyzer-src": {
       "flake": false,
@@ -276,6 +276,8 @@
         "repo": "rust-analyzer",
         "type": "github"
       }
+=======
+>>>>>>> parent of 59e7fed6 (Merge pull request #1700 from cachix/devenv-generate)
     }
   },
   "root": "root",
