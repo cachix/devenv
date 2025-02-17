@@ -13,7 +13,7 @@
 === "macOS"
 
     ```
-    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
+    curl -L https://github.com/NixOS/experimental-nix-installer/releases/download/0.27.0/nix-installer.sh | sh -s -- install
     ```
 
     !!! note "Experimental installer"
