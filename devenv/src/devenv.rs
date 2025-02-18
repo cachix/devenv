@@ -203,16 +203,116 @@ impl Devenv {
 
     pub async fn generate(
         &mut self,
-        _description: Option<String>,
-        _host: &str,
-        _exclude: Vec<PathBuf>,
-        _disable_telemetry: bool,
+        description: Option<String>,
+        host: &str,
+        exclude: Vec<PathBuf>,
+        disable_telemetry: bool,
     ) -> Result<()> {
-        bail!(indoc::formatdoc! {"
-          Generating devenv.nix has been temporarily removed.
+        let client = reqwest::Client::new();
+        let mut request = client
+            .post(host)
+            .query(&[("disable_telemetry", disable_telemetry)])
+            .header(reqwest::header::USER_AGENT, crate_version!());
 
-          For more information, see: https://github.com/cachix/devenv/issues/1733
-        "})
+        let (asyncwriter, asyncreader) = tokio::io::duplex(256 * 1024);
+        let streamreader = tokio_util::io::ReaderStream::new(asyncreader);
+
+        let (body_sender, body) = match description {
+            Some(desc) => {
+                request = request.query(&[("q", desc)]);
+                (None, None)
+            }
+            None => {
+                let git_output = std::process::Command::new("git")
+                    .args(["ls-files", "-z"])
+                    .output()
+                    .map_err(|_| {
+                        miette::miette!("Failed to get list of files from git ls-files")
+                    })?;
+
+                let files = String::from_utf8_lossy(&git_output.stdout)
+                    .split('\0')
+                    .filter(|s| !s.is_empty())
+                    .filter(|s| !binaryornot::is_binary(s).unwrap_or(false))
+                    .map(PathBuf::from)
+                    .collect::<Vec<_>>();
+
+                if files.is_empty() {
+                    warn!("No files found. Are you in a git repository?");
+                    return Ok(());
+                }
+
+                if let Some(stderr) = String::from_utf8(git_output.stderr).ok() {
+                    if !stderr.is_empty() {
+                        warn!("{}", &stderr);
+                    }
+                }
+
+                let body = reqwest::Body::wrap_stream(streamreader);
+
+                request = request
+                    .body(body)
+                    .header(reqwest::header::CONTENT_TYPE, "application/x-tar");
+
+                (Some(tokio_tar::Builder::new(asyncwriter)), Some(files))
+            }
+        };
+
+        info!("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
+
+        let response_future = request.send();
+
+        let tar_task = async {
+            if let (Some(mut builder), Some(files)) = (body_sender, body) {
+                for path in files {
+                    if path.is_file() && !exclude.iter().any(|exclude| path.starts_with(exclude)) {
+                        builder.append_path(&path).await?;
+                    }
+                }
+                builder.finish().await?;
+            }
+            Ok::<(), std::io::Error>(())
+        };
+
+        let (response, _) = tokio::join!(response_future, tar_task);
+
+        let response = response.into_diagnostic()?;
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = &response
+                .text()
+                .await
+                .unwrap_or_else(|_| "No error details available".to_string());
+            bail!(
+                "Failed to generate (HTTP {}): {}",
+                &status.as_u16(),
+                match serde_json::from_str::<serde_json::Value>(error_text) {
+                    Ok(json) => json["message"]
+                        .as_str()
+                        .map(String::from)
+                        .unwrap_or_else(|| error_text.clone()),
+                    Err(_) => error_text.clone(),
+                }
+            );
+        }
+
+        let response_json: GenerateResponse = response.json().await.expect("Failed to parse JSON.");
+
+        confirm_overwrite(Path::new("devenv.nix"), response_json.devenv_nix)?;
+        confirm_overwrite(Path::new("devenv.yaml"), response_json.devenv_yaml)?;
+
+        info!(
+            "{}",
+            indoc::formatdoc!("
+              Generated devenv.nix and devenv.yaml 🎉
+
+              Treat these as templates and open an issue at https://github.com/cachix/devenv/issues if you think we can do better!
+
+              Start by running:
+
+                $ devenv shell
+            "));
+        Ok(())
     }
 
     pub fn inputs_add(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
