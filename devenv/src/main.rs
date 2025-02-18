@@ -1,3 +1,5 @@
+use std::{os::unix::process::CommandExt, process::Command};
+
 use clap::crate_version;
 use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
@@ -22,7 +24,7 @@ async fn main() -> Result<()> {
     let command = match cli.command {
         None | Some(Commands::Version) => return print_version(),
         Some(Commands::Direnvrc) => {
-            print!("{}", devenv::DIRENVRC.to_string());
+            print!("{}", *devenv::DIRENVRC);
             return Ok(());
         }
         Some(cmd) => cmd,
@@ -132,25 +134,21 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Init { target } => devenv.init(&target),
-        Commands::Generate {
-            description,
-            host,
-            exclude,
-            disable_telemetry,
-        } => {
-            devenv
-                .generate(
-                    if description.is_empty() {
-                        None
-                    } else {
-                        Some(description.join(" "))
-                    },
-                    &host,
-                    exclude,
-                    disable_telemetry,
-                )
-                .await
-        }
+        Commands::Generate { .. } => match which::which("devenv-generate") {
+            Ok(devenv_generate) => {
+                let error = Command::new(devenv_generate)
+                    .args(std::env::args().skip(1).filter(|arg| arg != "generate"))
+                    .exec();
+                miette::bail!("failed to execute devenv-generate {error}");
+            }
+            Err(_) => {
+                miette::bail!(indoc::formatdoc! {"
+                    devenv-generate was not found in PATH
+
+                    It was moved to a separate binary due to https://github.com/cachix/devenv/issues/1733
+                "})
+            }
+        },
         Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
         Commands::Info {} => devenv.info().await,

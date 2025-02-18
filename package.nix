@@ -24,6 +24,7 @@ rustPlatform.buildRustPackage {
     ".*Cargo\.toml"
     ".*Cargo\.lock"
     ".*devenv(/.*)?"
+    ".*devenv-generate(/.*)?"
     ".*devenv-eval-cache(/.*)?"
     ".*devenv-run-tests(/.*)?"
     ".*devenv-tasks(/.*)?"
