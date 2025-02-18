@@ -7,9 +7,8 @@ ARG NIX_INSTALL_SCRIPT=https://nixos.org/nix/install
 COPY --chmod=0755 nix-entrypoint.sh /nix-entrypoint.sh
 COPY nix.conf /tmp/nix.conf
 
-# Update and install dependencies
-RUN apt-get update && \
-    apt-get install -y bash curl git sudo xz-utils
+# Install dependencies
+RUN apt-get install -y bash curl git sudo xz-utils
 
 # Install Nix
 # NOTE: The extra conf file does not apply to the install script itself.
