@@ -1814,7 +1814,7 @@ string
 
 
 *Default:*
-` "1.4.0" `
+` "1.4.1" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
