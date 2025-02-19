@@ -23,8 +23,6 @@ in
     '';
 
     enterTest = ''
-      set -e
-
       wait_for_port ${toString port}
 
       # Give meilisearch time to initialize
