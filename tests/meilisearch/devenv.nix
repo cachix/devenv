@@ -27,7 +27,7 @@ in
 
       wait_for_port ${toString port}
 
-      # Wait for configure-mysql to finish.
+      # Give meilisearch time to initialize
       sleep 5
 
       meilisearch-healthcheck
