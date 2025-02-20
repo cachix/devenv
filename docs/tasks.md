@@ -59,7 +59,7 @@ Tasks can also use another package for execution, for example when entering the 
 
 {
   tasks = {
-    "python:hello"" = {
+    "python:hello" = {
       exec = ''
         print("Hello world from Python!")
       '';
