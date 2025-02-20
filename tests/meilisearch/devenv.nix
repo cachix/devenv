@@ -13,7 +13,7 @@ in
     };
 
     scripts.meilisearch-healthcheck.exec = ''
-      RUNNING=$(${pkgs.curl}/bin/curl 127.0.0.1:${toString port}/health | grep "available")
+      RUNNING=$(${pkgs.curl}/bin/curl -s 127.0.0.1:${toString port}/health | grep "available")
 
       if [[ -z "$RUNNING" ]]; then
         exit 1
@@ -25,10 +25,7 @@ in
     enterTest = ''
       wait_for_port ${toString port}
 
-      # Give meilisearch time to initialize
-      sleep 5
-
-      meilisearch-healthcheck
+      timeout 5 bash -c "until meilisearch-healthcheck; do sleep 1; done"
     '';
   };
 }
