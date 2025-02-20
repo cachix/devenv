@@ -38,6 +38,7 @@ jobs:
       - id: build
         run: |
           bin=$(nix build --print-out-paths)
+          echo "$bin"
           echo "bin=$bin" >> $GITHUB_OUTPUT
       - name: Run tests
         run: ./result/bin/devenv test
