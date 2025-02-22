@@ -83325,17 +83325,17 @@ list of string
 
 
 
-Override the binary name if it doesn’t match package name
+Override the binary name from the default ` package.meta.mainProgram `.
 
 
 
 *Type:*
-string
+null or string
 
 
 
 *Default:*
-` config.package.pname `
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
