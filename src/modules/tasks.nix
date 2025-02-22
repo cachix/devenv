@@ -118,8 +118,8 @@ in
 
     assertions = [
       {
-        assertion = lib.all (task: task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
-        message = "The 'exports' option can only be set when 'binary' is set to 'bash'.";
+        assertion = lib.all (task: lib.hasPrefix "bash" task.binary || task.exports == [ ]) (lib.attrValues config.tasks);
+        message = "The 'exports' option for a task can only be set when 'binary' is set to 'bash' or 'bash-interactive'.";
       }
     ];
 
