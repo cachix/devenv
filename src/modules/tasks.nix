@@ -13,8 +13,14 @@ let
           if builtins.isNull command
           then null
           else
+            let
+              binary =
+                if config.binary != null
+                then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+                else pkgs.lib.getExe config.package;
+            in
             pkgs.writeScript name ''
-              #!${pkgs.lib.getBin config.package}/bin/${config.binary}
+              #!${binary}
               ${lib.optionalString (!isStatus) "set -e"}
               ${command}
               ${lib.optionalString (config.exports != [] && !isStatus) "${devenv}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
@@ -28,10 +34,9 @@ let
             description = "Command to execute the task.";
           };
           binary = lib.mkOption {
-            type = types.str;
-            description = "Override the binary name if it doesn't match package name";
-            default = config.package.pname;
-            defaultText = lib.literalExpression "config.package.pname";
+            type = types.nullOr types.str;
+            description = "Override the binary name if it differs from from the output of `lib.getExe`.";
+            default = null;
           };
           package = lib.mkOption {
             type = types.package;
