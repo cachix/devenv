@@ -35,7 +35,7 @@ let
           };
           binary = lib.mkOption {
             type = types.nullOr types.str;
-            description = "Override the binary name if it differs from from the output of `lib.getExe`.";
+            description = "Override the binary name from the default `package.meta.mainProgram`.";
             default = null;
           };
           package = lib.mkOption {
@@ -123,8 +123,8 @@ in
 
     assertions = [
       {
-        assertion = lib.all (task: lib.hasPrefix "bash" task.binary || task.exports == [ ]) (lib.attrValues config.tasks);
-        message = "The 'exports' option for a task can only be set when 'binary' is set to 'bash' or 'bash-interactive'.";
+        assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
+        message = "The 'exports' option for a task can only be set when 'package' is a bash package.";
       }
     ];
 
