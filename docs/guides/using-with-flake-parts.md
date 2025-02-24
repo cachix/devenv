@@ -1,11 +1,6 @@
-If you're familiar with the Nix language and ecosystem, `devenv` can be used without the `devenv` CLI by integrating into [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/) using [flake-parts](https://flake.parts).
-
-Using a `devenv` configuration in flakes is useful for projects that need to define other Nix flake features in addition to the development shell.
-Additional flake features may include the Nix package for the project, or NixOS and Home Manager modules related to the project.
-Using the same lock file for the development shell and other features ensures that everything is based on the same `nixpkgs`.
-
-A Nix flake needs to consist of at least the input declarations from `devenv.yaml`, as well as the `devenv` configuration that you would usually find in `devenv.nix`.
-`flake.lock` is the lock file for Nix flakes, the equivalent of `devenv.lock`.
+Many experienced Nix users prefer to use [Nix flakes](https://wiki.nixos.org/wiki/Flakes),
+although devenv is considered a superior interface since it's way simpler,
+but lacks integration with existing tooling.
 
 ## Getting started
 
@@ -26,7 +21,7 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
     devenv.url = "github:cachix/devenv";
   };
 

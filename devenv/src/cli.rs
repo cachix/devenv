@@ -95,7 +95,7 @@ pub struct GlobalOptions {
     /// Disable the evaluation cache. Sets `eval_cache` to false.
     #[arg(long, global = true, hide = true)]
     #[arg(overrides_with = "eval_cache")]
-    no_eval_cache: bool,
+    pub no_eval_cache: bool,
 
     #[arg(
         long,
@@ -182,8 +182,26 @@ impl GlobalOptions {
 #[derive(Subcommand, Clone)]
 pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
-    Init {
-        target: Option<PathBuf>,
+    Init { target: Option<PathBuf> },
+
+    #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
+    Generate {
+        #[arg(num_args=0.., trailing_var_arg = true)]
+        description: Vec<String>,
+
+        #[clap(long, default_value = "https://devenv.new")]
+        host: String,
+
+        #[arg(
+            long,
+            help = "Paths to exclude during generation.",
+            value_name = "PATH"
+        )]
+        exclude: Vec<PathBuf>,
+
+        // https://consoledonottrack.com/
+        #[clap(long, env = "DO_NOT_TRACK", action = clap::ArgAction::SetTrue)]
+        disable_telemetry: bool,
     },
 
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]
@@ -193,16 +211,12 @@ pub enum Commands {
     },
 
     #[command(about = "Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/")]
-    Update {
-        name: Option<String>,
-    },
+    Update { name: Option<String> },
 
     #[command(
         about = "Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file"
     )]
-    Search {
-        name: String,
-    },
+    Search { name: String },
 
     #[command(
         alias = "show",
@@ -261,10 +275,13 @@ pub enum Commands {
         command: InputsCommand,
     },
 
+    #[command(
+        about = "Launch an interactive environment for inspecting the devenv configuration."
+    )]
     Repl {},
 
     #[command(
-        about = "Deletes previous shell generations. See https://devenv.sh/garbage-collection"
+        about = "Delete previous shell generations. See https://devenv.sh/garbage-collection"
     )]
     Gc {},
 

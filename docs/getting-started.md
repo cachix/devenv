@@ -13,8 +13,35 @@
 === "macOS"
 
     ```
-    sh <(curl -L https://nixos.org/nix/install)
+    curl -L https://github.com/NixOS/experimental-nix-installer/releases/download/0.27.0/nix-installer.sh | sh -s -- install
     ```
+
+    !!! note "Experimental installer"
+        We recommend using the above experimental installer.
+        It can handle OS upgrades and has better support for Apple silicon.
+
+        If you'd like to stick with the official release installer, use:
+        ```
+        sh <(curl -L https://nixos.org/nix/install)
+        ```
+
+    **Upgrade Bash**
+
+    macOS ships with an ancient version of Bash due to licensing reasons.
+
+    We recommend installing a newer version from nixpkgs to avoid running into evaluation errors.
+
+    === "Nix env (newcomers)"
+
+        ```
+        nix-env --install --attr bashInteractive -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+        ```
+
+    === "Nix profiles (requires experimental flags)"
+
+        ```
+        nix profile install nixpkgs#bashInteractive
+        ```
 
 === "Windows (WSL2)"
 
@@ -28,13 +55,6 @@
     docker run -it nixos/nix
     ```
 
-!!! note
-
-    We recommended that you use the experimental installer on macOS to avoid issues with Apple Silicon chips:
-
-    ```
-    curl -L https://raw.githubusercontent.com/NixOS/experimental-nix-installer/main/nix-installer.sh | sh -s install
-    ```
 
 ### 2. Install [devenv](https://github.com/cachix/devenv)
 
@@ -42,13 +62,13 @@
 === "Newcomers"
 
     ```
-    nix-env -iA devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+    nix-env --install --attr devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
     ```
 
 === "Nix profiles (requires experimental flags)"
 
     ```
-    nix profile install --accept-flake-config nixpkgs#devenv
+    nix profile install nixpkgs#devenv
     ```
 
 === "NixOS/nix-darwin/home-manager"
@@ -59,10 +79,6 @@
     ];
     ```
 
-
-!!! Updating
-
-    To update, refer to the specific upgrade instructions provided in the documentation for the installer you used from the options above. 
 
 ## Initial set up
 
@@ -90,3 +106,37 @@ $ devenv init
 - About ``.envrc`` in [Automatic shell activation](automatic-shell-activation.md).
 - About ``devenv.yaml`` in [Inputs](inputs.md) and [Composing using imports](composing-using-imports.md).
 - About ``devenv.nix`` in the **Writing devenv.nix** section, starting with [the basics](basics.md).
+
+## Updating
+
+### Update devenv CLI
+
+=== "Nix env (newcomers)"
+
+    ```
+    nix-env --upgrade --attr devenv -f https://github.com/NixOS/nixpkgs/tarball/nixpkgs-unstable
+    ```
+
+=== "Nix profiles (requires experimental flags)"
+
+    ```
+    nix profile upgrade devenv
+    ```
+
+=== "NixOS/nix-darwin/home-manager"
+
+    Update nixpkgs to get the latest version of devenv.
+
+    For detailed upgrade instructions specific to your setup, please refer to the documentation for your particular system: NixOS, nix-darwin (for macOS), or home-manager, as applicable.
+
+### Update project inputs
+
+Inputs, like nixpkgs and devenv modules, are downloaded and pinned in a `devenv.lock` lockfile.
+
+These should be periodically updated with:
+
+```
+devenv update
+```
+
+Learn more about [Inputs](inputs.md).

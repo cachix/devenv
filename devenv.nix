@@ -15,13 +15,12 @@
     pkgs.watchexec
     pkgs.openssl
     pkgs.sqlx-cli
-  ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
-    frameworks.SystemConfiguration
-  ]);
+  ];
 
   languages.nix.enable = true;
   # for cli
   languages.rust.enable = true;
+  languages.rust.channel = "stable";
   # for docs
   languages.python.enable = true;
   # it breaks glibc

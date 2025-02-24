@@ -2,11 +2,15 @@ name: "Build & Test"
 
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
   push:
     branches:
       - main
     tags:
       - v*
+    paths-ignore:
+      - "docs/**"
 
 jobs:
   build:

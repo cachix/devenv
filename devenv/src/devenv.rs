@@ -1,14 +1,15 @@
-use super::{cli, cnix, config, log, tasks};
+use super::{cli, cnix, config, tasks};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, Result};
+use miette::{bail, IntoDiagnostic, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
+use similar::{ChangeTag, TextDiff};
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
@@ -154,14 +155,6 @@ impl Devenv {
             std::fs::create_dir_all(&target).expect("Failed to create target directory");
         }
 
-        // fails if any of the required files already exists
-        for filename in REQUIRED_FILES {
-            let file_path = target.join(filename);
-            if file_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
-                bail!("File already exists {}", file_path.display());
-            }
-        }
-
         for filename in REQUIRED_FILES {
             info!("Creating {}", filename);
 
@@ -183,7 +176,15 @@ impl Devenv {
                     })
                     .expect("Failed to append to existing file");
             } else {
-                std::fs::write(&target_path, path.contents()).expect("Failed to write file");
+                if target_path.exists() && !EXISTING_REQUIRED_FILES.contains(&filename) {
+                    if let Some(utf8_contents) = path.contents_utf8() {
+                        confirm_overwrite(&target_path, utf8_contents.to_string())?;
+                    } else {
+                        bail!("Failed to read file contents as UTF-8");
+                    }
+                } else {
+                    std::fs::write(&target_path, path.contents()).expect("Failed to write file");
+                }
             }
         }
 
@@ -193,7 +194,7 @@ impl Devenv {
         };
 
         // run direnv allow
-        std::process::Command::new(direnv)
+        let _ = std::process::Command::new(direnv)
             .arg("allow")
             .current_dir(&target)
             .exec();
@@ -869,11 +870,18 @@ impl Devenv {
         let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
+        use devenv_eval_cache::command::{FileInputDesc, Input};
         fs::write(
             self.devenv_dotfile.join("input-paths.txt"),
-            env.paths
+            env.inputs
                 .iter()
-                .map(|fp| fp.path.to_string_lossy())
+                .filter_map(|input| match input {
+                    Input::File(FileInputDesc { path, .. }) => {
+                        Some(path.to_string_lossy().to_string())
+                    }
+                    // TODO(sander): update direnvrc to handle env vars if possible
+                    _ => None,
+                })
                 .collect::<Vec<_>>()
                 .join("\n"),
         )
@@ -884,6 +892,40 @@ impl Devenv {
             gc_root,
         })
     }
+}
+
+fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
+    if std::fs::metadata(file).is_ok() {
+        // first output the old version and propose new changes
+        let before = std::fs::read_to_string(file).expect("Failed to read file");
+
+        let diff = TextDiff::from_lines(&before, &contents);
+
+        println!("\nChanges that will be made to {}:", file.to_string_lossy());
+        for change in diff.iter_all_changes() {
+            let sign = match change.tag() {
+                ChangeTag::Delete => "\x1b[31m-\x1b[0m",
+                ChangeTag::Insert => "\x1b[32m+\x1b[0m",
+                ChangeTag::Equal => " ",
+            };
+            print!("{}{}", sign, change);
+        }
+
+        let confirm = dialoguer::Confirm::new()
+            .with_prompt(format!(
+                "{} already exists. Do you want to overwrite it?",
+                file.to_string_lossy()
+            ))
+            .interact()
+            .into_diagnostic()?;
+
+        if confirm {
+            std::fs::write(file, contents).into_diagnostic()?;
+        }
+    } else {
+        std::fs::write(file, contents).into_diagnostic()?;
+    }
+    Ok(())
 }
 
 pub struct DevEnv {

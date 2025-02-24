@@ -1,13 +1,6 @@
-If you're familiar with the Nix language and ecosystem, `devenv` can be integrated with [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/).
-
-You can define your own packages, NixOS and Home Manager modules, and benefit from the `devenv` development features.
-The development shell will share the same inputs and lock file as all the other outputs of your flake, ensuring that your entire project is using the same `nixpkgs` revision.
-
-With flakes, you no longer need dedicated configuration files for `devenv`:
-
-* The inputs from `devenv.yaml` are replaced by the flake's inputs.
-* `devenv.nix` becomes a `devShell` module in `flake.nix`.
-* `devenv.lock` is replaced by `flake.lock`.
+Many experienced Nix users prefer to use [Nix flakes](https://wiki.nixos.org/wiki/Flakes),
+although devenv is considered a superior interface since it's way simpler,
+but lacks integration with existing tooling.
 
 ## Getting started
 
@@ -37,7 +30,7 @@ Here's a minimal `flake.nix` to start you off that includes:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
     devenv.url = "github:cachix/devenv";
   };
 
@@ -148,7 +141,7 @@ The `flake.nix` file contains multiple `devShells`. For example:
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
     devenv.url = "github:cachix/devenv";
   };
 

@@ -5,8 +5,10 @@
     To be able to generate containers on macOS, you will need to use a remote Linux builder.
 
     The easiest ways to do so are:
-    - [Set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
-    - [Use the nix-darwin linux-builder module](https://github.com/LnL7/nix-darwin/blob/master/modules/nix/linux-builder.nix).
+
+    - [Nixcademy Tutorial: Build and Deploy Linux Systems from macOS](https://nixcademy.com/posts/macos-linux-builder/)
+    - [Official Nixpkgs documentation: Set the remote builder up using Nix](https://nixos.org/manual/nixpkgs/unstable/#sec-darwin-builder).
+    - [Official nix-darwin documentation: Use the nix-darwin linux-builder module](https://github.com/LnL7/nix-darwin/blob/master/modules/nix/linux-builder.nix).
 
 Use `devenv container build <name>` to generate an [OCI container](https://opencontainers.org/) from your development environment.
 

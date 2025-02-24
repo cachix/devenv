@@ -26,6 +26,10 @@ jobs:
 
       - name: Set up QEMU for multi-arch builds
         uses: docker/setup-qemu-action@v3
+        with:
+          # https://github.com/docker/setup-qemu-action/issues/198
+          # v9.2+ causes a segfault
+          image: tonistiigi/binfmt:qemu-v7.0.0-28
 
       - name: Set up Docker Buildx
         id: buildx

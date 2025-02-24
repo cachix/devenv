@@ -265,11 +265,14 @@ in
       { java.enable = true; }
       (lib.mkIf cfg.flutter.enable {
         dart.enable = true;
-        java.jdk.package = pkgs.jdk11;
+        # By default, Flutter uses the JDK version that ships Android Studio.
+        # Sync with https://developer.android.com/build/jdks
+        java.jdk.package = pkgs.jdk17;
       })
       (lib.mkIf cfg.reactNative.enable {
         javascript.enable = true;
         javascript.npm.enable = true;
+        # Sync with https://reactnative.dev/docs/set-up-your-environment
         java.jdk.package = pkgs.jdk17;
       })
     ];

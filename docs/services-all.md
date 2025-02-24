@@ -23,6 +23,7 @@
   services.opensearch.enable = true;
   services.opentelemetry-collector.enable = true;
   services.postgres.enable = true;
+  services.prometheus.enable = true;
   services.rabbitmq.enable = true;
   services.redis.enable = true;
   services.sqld.enable = true;

@@ -62,17 +62,66 @@
                 • Run
                 <a href="/tests" class="text-[#425C82] font-medium">tests</a> •
                 Enforce
-                <a href="/git-hooks" class="text-[#425C82] font-medium"
+                <a href="/pre-commit-hooks" class="text-[#425C82] font-medium"
                     >git hooks</a
                 >
             </p>
-            <div class="mt-10 flex items-center justify-center gap-x-6">
-                <a
-                    href="/getting-started/"
-                    class="rounded-md bg-black px-3.5 py-2.5 font-semibold text-white shadow-sm hover:to-[#425C82] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
-                    >Get started</a
+            <div class="flex mt-10 gap-2" id="generate">
+                <input
+                    type="text"
+                    name="q"
+                    class="w-full px-4 py-2 rounded-lg ring-1 ring-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-900 focus:border-transparent shadow-sm"
+                />
+                <button
+                    type="submit"
+                    onclick="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value)"
+                    class="px-6 py-2 bg-blue-900 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-900 focus:ring-offset-2 shadow-sm"
                 >
+                    Generate
+                </button>
             </div>
+
+            <script>
+                window.onload = function () {
+                    const placeholders = [
+                        "Rust with mydb in PostgreSQL",
+                        "Python using uv and scikit-learn",
+                        "Node.js with Redis backend",
+                        "Go microservice with MySQL",
+                        "Ruby on Rails with React frontend",
+                        "Android and Flutter",
+                    ];
+
+                    const input = document.querySelector("#generate input");
+                    let index = 0;
+                    let typing = false;
+                    let charIndex = 0;
+                    let currentText = "";
+
+                    let timer;
+                    const startTyping = () => {
+                        if (!typing) {
+                            typing = true;
+                            currentText = placeholders[index];
+                            charIndex = 0;
+                            index = (index + 1) % placeholders.length;
+                        }
+
+                        if (charIndex < currentText.length) {
+                            input.setAttribute(
+                                "placeholder",
+                                currentText.substring(0, charIndex + 1),
+                            );
+                            charIndex++;
+                            timer = setTimeout(startTyping, 50);
+                        } else {
+                            typing = false;
+                            timer = setTimeout(startTyping, 800);
+                        }
+                    };
+                    startTyping();
+                };
+            </script>
         </div>
     </div>
 </div>
@@ -649,7 +698,7 @@ $
                         <strong
                             >PostgreSQL, Redis, MySQL, RabbitMQ, WireMock,
                             MinIO, Caddy, ElasticSearch, OpenTelemetry
-                            Collector</strong
+                            Collector, Prometheus</strong
                         >, and
                         <a
                             class="text-[#425C82] font-semibold"
@@ -1064,10 +1113,11 @@ imports:
 </div>
 
 <div class="mx-auto text-center max-w-7xl md:px-6 lg:px-8">
-    <h2 class="text-2xl mb-6">Built by</h2>
-    <a href="https://cachix.org"
-        ><img src="/assets/images/cachix.webp" width="250px"
-    /></a>
+    <a
+        href="/getting-started/"
+        class="rounded-md bg-black px-3.5 py-2.5 font-semibold text-white shadow-sm hover:to-[#425C82] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+        >Get started</a
+    >
 </div>
 
 <script src="/assets/highlight.min.js"></script>

@@ -76,7 +76,7 @@ in
 
     env.MEILI_DB_PATH = config.env.DEVENV_STATE + "/meilisearch";
     env.MEILI_HTTP_ADDR = "${cfg.listenAddress}:${toString cfg.listenPort}";
-    env.MEILI_NO_ANALYTICS = toString cfg.noAnalytics;
+    env.MEILI_NO_ANALYTICS = lib.boolToString cfg.noAnalytics;
     env.MEILI_ENV = cfg.environment;
     env.MEILI_DUMP_DIR = config.env.MEILI_DB_PATH + "/dumps";
     env.MEILI_LOG_LEVEL = cfg.logLevel;

@@ -1,6 +1,11 @@
 # yaml-language-server: $schema=./docs/devenv.schema.json
 inputs:
-  devenv:
-    url: path:.?dir=src/modules
+  fenix:
+    url: github:nix-community/fenix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
   nix:
     url: github:domenkozar/nix/devenv-2.24
+  devenv:
+    url: path:.?dir=src/modules
