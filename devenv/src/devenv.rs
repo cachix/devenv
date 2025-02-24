@@ -194,25 +194,11 @@ impl Devenv {
         };
 
         // run direnv allow
-        std::process::Command::new(direnv)
+        let _ = std::process::Command::new(direnv)
             .arg("allow")
             .current_dir(&target)
             .exec();
         Ok(())
-    }
-
-    pub async fn generate(
-        &mut self,
-        _description: Option<String>,
-        _host: &str,
-        _exclude: Vec<PathBuf>,
-        _disable_telemetry: bool,
-    ) -> Result<()> {
-        bail!(indoc::formatdoc! {"
-          Generating devenv.nix has been temporarily removed.
-
-          For more information, see: https://github.com/cachix/devenv/issues/1733
-        "})
     }
 
     pub fn inputs_add(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
@@ -940,12 +926,6 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
         std::fs::write(file, contents).into_diagnostic()?;
     }
     Ok(())
-}
-
-#[derive(Deserialize)]
-struct GenerateResponse {
-    devenv_nix: String,
-    devenv_yaml: String,
 }
 
 pub struct DevEnv {

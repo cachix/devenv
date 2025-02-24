@@ -182,7 +182,7 @@ impl<'a> Nix<'a> {
 
     pub fn repl(&self) -> Result<()> {
         let mut cmd = self.prepare_command("nix", &["repl", "."], &self.options)?;
-        cmd.exec();
+        let _ = cmd.exec();
         Ok(())
     }
 
@@ -425,7 +425,7 @@ impl<'a> Nix<'a> {
                 && cmd.get_program().to_string_lossy().ends_with("bin/nix")
             {
                 info!("Starting Nix debugger ...");
-                cmd.arg("--debugger").exec();
+                let _ = cmd.arg("--debugger").exec();
             }
 
             if options.bail_on_error {
