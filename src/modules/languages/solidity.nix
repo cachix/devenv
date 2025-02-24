@@ -5,7 +5,7 @@ let
 
   foundry = config.lib.getInput {
     name = "foundry";
-    url = "github:shazow/foundry.nix";
+    url = "github:shazow/foundry.nix/monthly";
     attribute = "languages.solidity.foundry.package";
     follows = [ "nixpkgs" ];
   };
