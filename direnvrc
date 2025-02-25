@@ -102,8 +102,7 @@ _devenv_watches() {
 use_devenv() {
   _nix_direnv_preflight
 
-  flake_expr="${1:-.}"
-  flake_dir="${flake_expr%#*}"
+  flake_dir="${1:-.}"
   env_deps_path="$flake_dir/.devenv/input-paths.txt"
 
   local default_watches
@@ -129,12 +128,17 @@ use_devenv() {
   _devenv_watches "$env_deps_path" env_watches
   watch_file "${env_watches[@]}"
 
+  pushd "$flake_dir"
+
   # Build the environment
   local env
-  if ! env=$("${DEVENV_BIN}" print-dev-env); then
+  if ! env=$("${DEVENV_BIN}" print-dev-env "${@:2}"); then
     log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
+    popd
     exit 0
   fi
+
+  popd
 
   # Re-watch files that affect the env
   local env_watches
