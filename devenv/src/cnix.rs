@@ -14,8 +14,8 @@ use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, info, warn};
 
-pub struct Nix<'a> {
-    pub options: Options<'a>,
+pub struct Nix {
+    pub options: Options,
     pool: SqlitePool,
     // TODO: all these shouldn't be here
     config: config::Config,
@@ -29,7 +29,7 @@ pub struct Nix<'a> {
 }
 
 #[derive(Clone)]
-pub struct Options<'a> {
+pub struct Options {
     /// Run `exec` to replace the shell with the command.
     pub replace_shell: bool,
     /// Error out if the command returns a non-zero status code.
@@ -41,10 +41,10 @@ pub struct Options<'a> {
     /// Log the stdout of the command.
     pub logging_stdout: bool,
     /// Extra flags to pass to nix commands.
-    pub nix_flags: &'a [&'a str],
+    pub nix_flags: &'static [&'static str],
 }
 
-impl Default for Options<'_> {
+impl Default for Options {
     fn default() -> Self {
         Self {
             replace_shell: false,
@@ -68,7 +68,7 @@ impl Default for Options<'_> {
     }
 }
 
-impl<'a> Nix<'a> {
+impl Nix {
     pub async fn new<P: AsRef<Path>>(
         config: config::Config,
         global_options: cli::GlobalOptions,
@@ -298,7 +298,7 @@ impl<'a> Nix<'a> {
         &self,
         command: &str,
         args: &[&str],
-        options: &Options<'a>,
+        options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         let cmd = self.prepare_command(command, args, options)?;
         self.run_nix_command(cmd, options).await
@@ -308,7 +308,7 @@ impl<'a> Nix<'a> {
         &self,
         command: &str,
         args: &[&str],
-        options: &Options<'a>,
+        options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         let cmd = self
             .prepare_command_with_substituters(command, args, options)
@@ -319,7 +319,7 @@ impl<'a> Nix<'a> {
     async fn run_nix_command(
         &self,
         mut cmd: std::process::Command,
-        options: &Options<'a>,
+        options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::Verbosity;
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
@@ -444,7 +444,7 @@ impl<'a> Nix<'a> {
         &self,
         command: &str,
         args: &[&str],
-        options: &Options<'a>,
+        options: &Options,
     ) -> Result<std::process::Command> {
         let mut final_args = Vec::new();
         let known_keys_str;
@@ -532,7 +532,7 @@ impl<'a> Nix<'a> {
         &self,
         command: &str,
         args: &[&str],
-        options: &Options<'a>,
+        options: &Options,
     ) -> Result<std::process::Command> {
         let mut flags = options.nix_flags.to_vec();
         flags.push("--max-jobs");
