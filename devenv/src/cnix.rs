@@ -186,15 +186,20 @@ impl Nix {
         Ok(())
     }
 
-    pub async fn build(&self, attributes: &[&str]) -> Result<Vec<PathBuf>> {
+    pub async fn build(
+        &self,
+        attributes: &[&str],
+        options: Option<Options>,
+    ) -> Result<Vec<PathBuf>> {
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
 
-        let options = Options {
+        let options = options.unwrap_or(Options {
             cache_output: true,
             ..self.options
-        };
+        });
+
         // TODO: use eval underneath
         let mut args: Vec<String> = vec![
             "build".to_string(),
@@ -272,7 +277,18 @@ impl Nix {
     pub async fn search(&self, name: &str) -> Result<devenv_eval_cache::Output> {
         self.run_nix_with_substituters(
             "nix",
-            &["search", "--inputs-from", ".", "--json", "nixpkgs", name],
+            &[
+                "search",
+                "--inputs-from",
+                ".",
+                "--quiet",
+                "--option",
+                "eval-cache",
+                "true",
+                "--json",
+                "nixpkgs",
+                name,
+            ],
             &self.options,
         )
         .await
