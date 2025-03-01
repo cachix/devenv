@@ -36,12 +36,13 @@ let
         };
       };
 
-      config.scriptPackage = let
-        binary =
-          if config.binary != null
-          then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
-          else pkgs.lib.getExe config.package;
-      in
+      config.scriptPackage =
+        let
+          binary =
+            if config.binary != null
+            then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+            else pkgs.lib.getExe config.package;
+        in
         lib.hiPrioSet (
           pkgs.writeScriptBin name ''
             #!${binary}
