@@ -15,7 +15,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "devenv";
-  version = "1.4.0";
+  version = "1.4.1";
 
   # WARN: building this from src/modules/tasks.nix fails.
   # There is something being prepended to the path, hence the .*.
@@ -24,6 +24,7 @@ rustPlatform.buildRustPackage {
     ".*Cargo\.toml"
     ".*Cargo\.lock"
     ".*devenv(/.*)?"
+    ".*devenv-generate(/.*)?"
     ".*devenv-eval-cache(/.*)?"
     ".*devenv-run-tests(/.*)?"
     ".*devenv-tasks(/.*)?"

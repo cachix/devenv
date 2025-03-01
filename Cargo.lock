@@ -550,7 +550,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "binaryornot",
  "clap",
@@ -608,6 +608,28 @@ dependencies = [
  "tempdir",
  "thiserror",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "devenv-generate"
+version = "1.4.1"
+dependencies = [
+ "binaryornot",
+ "clap",
+ "console",
+ "devenv",
+ "dialoguer",
+ "indoc",
+ "miette",
+ "once_cell",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "similar",
+ "tokio",
+ "tokio-tar",
+ "tokio-util",
  "tracing",
 ]
 
@@ -2459,9 +2481,9 @@ dependencies = [
 
 [[package]]
 name = "similar"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1de1d4f81173b03af4c0cbed3c898f6bff5b870e4a7f5d6f4057d62a7a4b686e"
+checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "slab"
@@ -3000,6 +3022,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",

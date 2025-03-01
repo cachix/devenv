@@ -19,10 +19,10 @@ jobs:
       matrix:
         os:
           [
-            [self-hosted, linux, X64],
-            [macos-13],
-            [self-hosted, macOS, ARM64],
             [self-hosted, linux, ARM64],
+            [self-hosted, linux, X64],
+            [self-hosted, macOS, ARM64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -38,6 +38,7 @@ jobs:
       - id: build
         run: |
           bin=$(nix build --print-out-paths)
+          echo "$bin"
           echo "bin=$bin" >> $GITHUB_OUTPUT
       - name: Run tests
         run: ./result/bin/devenv test
@@ -49,10 +50,10 @@ jobs:
       matrix:
         os:
           [
-            [self-hosted, linux, X64],
-            [macos-13],
-            [self-hosted, macOS, ARM64],
             [self-hosted, linux, ARM64],
+            [self-hosted, linux, X64],
+            [self-hosted, macOS, ARM64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -102,10 +103,10 @@ jobs:
       matrix:
         os:
           [
-            [self-hosted, linux, X64],
-            [macos-13],
-            [self-hosted, macOS, ARM64],
             [self-hosted, linux, ARM64],
+            [self-hosted, linux, X64],
+            [self-hosted, macOS, ARM64],
+            [macos-13],
           ]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
@@ -135,10 +136,10 @@ jobs:
       matrix:
         os:
           [
-            [ubuntu-latest],
-            [macos-13],
+            [self-hosted, linux, ARM64],
+            [self-hosted, linux, X64],
             [self-hosted, macOS, ARM64],
-            [self-hosted, Linux, ARM64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -175,10 +176,10 @@ jobs:
       matrix:
         os:
           [
-            [ubuntu-latest],
-            [macos-13],
-            [self-hosted, macOS, ARM64],
             [self-hosted, linux, ARM64],
+            [self-hosted, linux, X64],
+            [self-hosted, macOS, ARM64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:

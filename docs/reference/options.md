@@ -1814,7 +1814,7 @@ string
 
 
 *Default:*
-` "1.3.1" `
+` "1.4.1" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -75500,7 +75500,7 @@ The process manager to use when running processes with ` devenv up `.
 
 
 *Type:*
-one of “hivemind”, “honcho”, “overmind”, “process-compose”
+one of “hivemind”, “honcho”, “mprocs”, “overmind”, “process-compose”
 
 
 
@@ -75556,6 +75556,50 @@ package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)
+
+
+
+## process.managers.mprocs.package
+
+
+
+The mprocs package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.mprocs `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
+
+
+
+## process.managers.mprocs.settings
+
+
+
+Top-level mprocs.yaml options
+
+https://github.com/pvolok/mprocs?tab=readme-ov-file\#config
+
+
+
+*Type:*
+YAML value
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/mprocs.nix)
 
 
 
@@ -75867,17 +75911,17 @@ package
 
 
 
-Override the binary name if it doesn’t match package name
+Override the binary name from the default ` package.meta.mainProgram `
 
 
 
 *Type:*
-string
+null or string
 
 
 
 *Default:*
-` config.package.pname `
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -83325,17 +83369,17 @@ list of string
 
 
 
-Override the binary name if it doesn’t match package name
+Override the binary name from the default ` package.meta.mainProgram `.
 
 
 
 *Type:*
-string
+null or string
 
 
 
 *Default:*
-` config.package.pname `
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)

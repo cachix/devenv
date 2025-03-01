@@ -20,7 +20,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [[ubuntu-latest], [macos-latest], [self-hosted, macOS], [self-hosted, linux, ARM64]]
+        os: [
+          [self-hosted, linux, ARM64],
+          [self-hosted, linux, X64],
+          [self-hosted, macOS, ARM64],
+          [self-hosted, macOS, X64],
+        ]
 
     runs-on: ${{ matrix.os }}
 

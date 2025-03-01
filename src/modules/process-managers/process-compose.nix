@@ -83,6 +83,9 @@ in
       "config" = cfg.configFile;
       "disable-dotenv" = true;
       "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
+      # Prevent the TUI from immediately closing if all processes fail.
+      # Improves the UX by letting users inspect the logs.
+      "keep-project" = cfg.tui.enable;
       "unix-socket" =
         if cfg.unixSocket.enable
         then cfg.unixSocket.path
