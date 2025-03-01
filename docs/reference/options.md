@@ -2209,7 +2209,7 @@ pkgs.pre-commit
 
 
 
-Whether to add the generated pre-commit-config.yaml to the garbage collector roots.
+Whether to add the generated pre-commit config to the garbage collector roots.
 This prevents Nix from garbage-collecting the tools used by hooks.
 
 
@@ -2221,6 +2221,48 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## git-hooks.configFile
+
+
+
+The pre-commit configuration file.
+
+
+
+*Type:*
+package *(read only)*
+
+
+
+*Default:*
+` "<derivation>" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## git-hooks.configPath
+
+
+
+The path to the generated pre-commit configuration file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` ".pre-commit-config.yaml" `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -2277,8 +2319,6 @@ list of string
 
 
 ## git-hooks.gitPackage
-
-
 
 The ` git ` package to use.
 
@@ -2445,6 +2485,10 @@ Experimental linter/analyzer for Makefiles
 
 LaTeX semantic checker
 
+**` circleci `**
+
+Validate CircleCI config files.
+
 **` clang-format `**
 
 Format your code using ` clang-format `.
@@ -2486,6 +2530,14 @@ A tool that automatically formats Crystal source code
 **` cspell `**
 
 A Spell Checker for Code
+
+**` dart-analyze `**
+
+Dart analyzer
+
+**` dart-format `**
+
+Dart formatter
 
 **` deadnix `**
 
@@ -2583,6 +2635,10 @@ Haskell code prettifier.
 
 Auto-formatter for modern Fortran code.
 
+**` gitlint `**
+
+Linting for your git commit messages
+
 **` gofmt `**
 
 A tool that automatically formats Go source code
@@ -2667,6 +2723,10 @@ A fast, async, stream-based link checker that finds broken hyperlinks and mail a
 
 Style checker and linter for markdown files.
 
+**` mdformat `**
+
+CommonMark compliant Markdown formatter
+
 **` mdl `**
 
 A tool to check markdown files and flag style issues.
@@ -2731,6 +2791,10 @@ A tool to indent OCaml code.
 
 OCaml package manager configuration checker.
 
+**` openapi-spec-validator `**
+
+A tool to validate OpenAPI spec files
+
 **` ormolu `**
 
 Haskell code prettifier.
@@ -2768,6 +2832,10 @@ Opinionated multi-language code formatter.
 **` pretty-format-json `**
 
 Formats JSON files.
+
+**` proselint `**
+
+A linter for prose.
 
 **` psalm `**
 
@@ -2986,6 +3054,8 @@ null or package
 
 
 ## git-hooks.hooks.\<name>.after
+
+
 
 List of hooks that should run before this hook.
 
@@ -5091,8 +5161,6 @@ null or string
 
 ## git-hooks.hooks.autoflake.settings.flags
 
-
-
 Flags passed to autoflake.
 
 
@@ -5132,6 +5200,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## git-hooks.hooks.autoflake.types
+
+
 
 List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
 
@@ -6955,8 +7025,6 @@ package
 
 ## git-hooks.hooks.clippy.packageOverrides.clippy
 
-
-
 The clippy package to use
 
 
@@ -7302,6 +7370,8 @@ boolean
 
 
 ## git-hooks.hooks.clippy.raw
+
+
 
 Raw fields of a pre-commit hook. This is mostly for internal use but
 exposed in case you need to work around something.
@@ -26646,6 +26716,1226 @@ boolean
 
 
 
+## git-hooks.hooks.pretty-format-json
+
+
+
+pretty-format-json hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.settings.autofix
+
+
+
+Automatically format JSON files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.settings.indent
+
+
+
+Control the indentation (either a number for a number of spaces or a string of whitespace). Defaults to 2 spaces.
+
+
+
+*Type:*
+null or signed integer or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.settings.no-ensure-ascii
+
+
+
+Preserve unicode characters instead of converting to escape sequences.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.settings.no-sort-keys
+
+
+
+When autofixing, retain the original key ordering (instead of sorting the keys).
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.settings.top-keys
+
+
+
+Keys to keep at the top of mappings.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.pretty-format-json.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint
+
+
+
+proselint hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.proselint.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.settings.config
+
+
+
+Multiline-string configuration passed as config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
+```
+''
+  {
+    "checks": {
+      "typography.diacritical_marks": false
+    }
+  }
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.proselint.settings.configPath
+
+
+
+Path to the config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.proselint.settings.flags
+
+
+
+Flags passed to proselint.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.proselint.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.proselint.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## git-hooks.hooks.psalm
 
 
@@ -35550,6 +36840,27 @@ string
 
 
 
+## git-hooks.hooks.yamlfmt.settings.lint-only
+
+
+
+Only lint the files, do not format them in place.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## git-hooks.hooks.yamlfmt.stages
 
 
@@ -36304,6 +37615,27 @@ boolean
 
 
 
+## git-hooks.installStages
+
+
+
+The stages to install the hooks to.
+
+
+
+*Type:*
+list of (string or anything) *(read only)*
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
 ## git-hooks.installationScript
 
 
@@ -36356,7 +37688,7 @@ the entire project.
 
 
 *Type:*
-package *(read only)*
+package
 
 
 
@@ -41178,7 +42510,7 @@ pkgs.pre-commit
 
 
 
-Whether to add the generated pre-commit-config.yaml to the garbage collector roots.
+Whether to add the generated pre-commit config to the garbage collector roots.
 This prevents Nix from garbage-collecting the tools used by hooks.
 
 
@@ -41190,6 +42522,48 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## pre-commit.configFile
+
+
+
+The pre-commit configuration file.
+
+
+
+*Type:*
+package *(read only)*
+
+
+
+*Default:*
+` "<derivation>" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
+## pre-commit.configPath
+
+
+
+The path to the generated pre-commit configuration file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` ".pre-commit-config.yaml" `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -41414,6 +42788,10 @@ Experimental linter/analyzer for Makefiles
 
 LaTeX semantic checker
 
+**` circleci `**
+
+Validate CircleCI config files.
+
 **` clang-format `**
 
 Format your code using ` clang-format `.
@@ -41455,6 +42833,14 @@ A tool that automatically formats Crystal source code
 **` cspell `**
 
 A Spell Checker for Code
+
+**` dart-analyze `**
+
+Dart analyzer
+
+**` dart-format `**
+
+Dart formatter
 
 **` deadnix `**
 
@@ -41552,6 +42938,10 @@ Haskell code prettifier.
 
 Auto-formatter for modern Fortran code.
 
+**` gitlint `**
+
+Linting for your git commit messages
+
 **` gofmt `**
 
 A tool that automatically formats Go source code
@@ -41636,6 +43026,10 @@ A fast, async, stream-based link checker that finds broken hyperlinks and mail a
 
 Style checker and linter for markdown files.
 
+**` mdformat `**
+
+CommonMark compliant Markdown formatter
+
 **` mdl `**
 
 A tool to check markdown files and flag style issues.
@@ -41700,6 +43094,10 @@ A tool to indent OCaml code.
 
 OCaml package manager configuration checker.
 
+**` openapi-spec-validator `**
+
+A tool to validate OpenAPI spec files
+
 **` ormolu `**
 
 Haskell code prettifier.
@@ -41737,6 +43135,10 @@ Opinionated multi-language code formatter.
 **` pretty-format-json `**
 
 Formats JSON files.
+
+**` proselint `**
+
+A linter for prose.
 
 **` psalm `**
 
@@ -65621,6 +67023,1226 @@ boolean
 
 
 
+## pre-commit.hooks.pretty-format-json
+
+
+
+pretty-format-json hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.settings.autofix
+
+
+
+Automatically format JSON files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.settings.indent
+
+
+
+Control the indentation (either a number for a number of spaces or a string of whitespace). Defaults to 2 spaces.
+
+
+
+*Type:*
+null or signed integer or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.settings.no-ensure-ascii
+
+
+
+Preserve unicode characters instead of converting to escape sequences.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.settings.no-sort-keys
+
+
+
+When autofixing, retain the original key ordering (instead of sorting the keys).
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.settings.top-keys
+
+
+
+Keys to keep at the top of mappings.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.pretty-format-json.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint
+
+
+
+proselint hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.proselint.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.settings.config
+
+
+
+Multiline-string configuration passed as config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+
+```
+''
+  {
+    "checks": {
+      "typography.diacritical_marks": false
+    }
+  }
+''
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.proselint.settings.configPath
+
+
+
+Path to the config file.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.proselint.settings.flags
+
+
+
+Flags passed to proselint.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.proselint.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.proselint.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
 ## pre-commit.hooks.psalm
 
 
@@ -74525,6 +77147,27 @@ string
 
 
 
+## pre-commit.hooks.yamlfmt.settings.lint-only
+
+
+
+Only lint the files, do not format them in place.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## pre-commit.hooks.yamlfmt.stages
 
 
@@ -75279,6 +77922,27 @@ boolean
 
 
 
+## pre-commit.installStages
+
+
+
+The stages to install the hooks to.
+
+
+
+*Type:*
+list of (string or anything) *(read only)*
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
 ## pre-commit.installationScript
 
 
@@ -75331,7 +77995,7 @@ the entire project.
 
 
 *Type:*
-package *(read only)*
+package
 
 
 
