@@ -22,7 +22,7 @@ jobs:
             [self-hosted, linux, ARM64],
             [self-hosted, linux, X64],
             [self-hosted, macOS, ARM64],
-            [self-hosted, macOS, X64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -53,7 +53,7 @@ jobs:
             [self-hosted, linux, ARM64],
             [self-hosted, linux, X64],
             [self-hosted, macOS, ARM64],
-            [self-hosted, macOS, X64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -106,7 +106,7 @@ jobs:
             [self-hosted, linux, ARM64],
             [self-hosted, linux, X64],
             [self-hosted, macOS, ARM64],
-            [self-hosted, macOS, X64],
+            [macos-13],
           ]
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.os }}
@@ -139,7 +139,7 @@ jobs:
             [self-hosted, linux, ARM64],
             [self-hosted, linux, X64],
             [self-hosted, macOS, ARM64],
-            [self-hosted, macOS, X64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:
@@ -179,7 +179,7 @@ jobs:
             [self-hosted, linux, ARM64],
             [self-hosted, linux, X64],
             [self-hosted, macOS, ARM64],
-            [self-hosted, macOS, X64],
+            [macos-13],
           ]
     runs-on: ${{ matrix.os }}
     steps:
