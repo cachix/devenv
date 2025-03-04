@@ -53,7 +53,7 @@ pub struct Devenv {
     pub config: config::Config,
     pub global_options: cli::GlobalOptions,
 
-    nix: cnix::Nix<'static>,
+    nix: cnix::Nix,
 
     // All kinds of paths
     devenv_root: PathBuf,
@@ -314,7 +314,7 @@ impl Devenv {
 
             let container_store_path = self
                 .nix
-                .build(&[&format!("devenv.containers.{name}.derivation")])
+                .build(&[&format!("devenv.containers.{name}.derivation")], None)
                 .await?;
             let container_store_path = container_store_path[0]
                 .to_str()
@@ -343,7 +343,7 @@ impl Devenv {
         async move {
             let copy_script = self
                 .nix
-                .build(&[&format!("devenv.containers.{name}.copyScript")])
+                .build(&[&format!("devenv.containers.{name}.copyScript")], None)
                 .await?;
             let copy_script = &copy_script[0];
             let copy_script_string = &copy_script.to_string_lossy();
@@ -393,7 +393,7 @@ impl Devenv {
         async move {
             let run_script = self
                 .nix
-                .build(&[&format!("devenv.containers.{name}.dockerRun")])
+                .build(&[&format!("devenv.containers.{name}.dockerRun")], None)
                 .await?;
 
             let status = std::process::Command::new(&run_script[0])
@@ -462,7 +462,15 @@ impl Devenv {
     pub async fn search(&mut self, name: &str) -> Result<()> {
         self.assemble(false)?;
 
-        let options = self.nix.build(&["optionsJSON"]).await?;
+        let build_options = cnix::Options {
+            logging: false,
+            cache_output: true,
+            ..Default::default()
+        };
+        let options = self
+            .nix
+            .build(&["optionsJSON"], Some(build_options))
+            .await?;
         let options_path = options[0]
             .join("share")
             .join("doc")
@@ -531,7 +539,7 @@ impl Devenv {
             // TODO: No newline
             let span = info_span!("tasks_run", devenv.user_message = "Evaluating tasks");
             self.nix
-                .build(&["devenv.task.config"])
+                .build(&["devenv.task.config"], None)
                 .instrument(span)
                 .await?
         };
@@ -566,7 +574,10 @@ impl Devenv {
         // collect tests
         let test_script = {
             let span = info_span!("test", devenv.user_message = "Building tests");
-            self.nix.build(&["devenv.test"]).instrument(span).await?
+            self.nix
+                .build(&["devenv.test"], None)
+                .instrument(span)
+                .await?
         };
         let test_script = test_script[0].to_string_lossy().to_string();
 
@@ -643,7 +654,10 @@ impl Devenv {
         };
         let paths = self
             .nix
-            .build(&attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>())
+            .build(
+                &attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
+                None,
+            )
             .await?;
         for path in paths {
             println!("{}", path.display());
@@ -668,7 +682,7 @@ impl Devenv {
             devenv.user_message = "Building processes"
         );
         let proc_script_string = async {
-            let proc_script = self.nix.build(&["procfileScript"]).await?;
+            let proc_script = self.nix.build(&["procfileScript"], None).await?;
             let proc_script_string = proc_script[0]
                 .to_str()
                 .expect("Failed to get proc script path")
