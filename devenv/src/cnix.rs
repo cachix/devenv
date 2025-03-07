@@ -36,6 +36,7 @@ pub struct Options {
     pub bail_on_error: bool,
     /// Cache the output of the command. This is opt-in per command.
     pub cache_output: bool,
+    pub refresh_cached_output: bool,
     /// Enable logging.
     pub logging: bool,
     /// Log the stdout of the command.
@@ -51,6 +52,7 @@ impl Default for Options {
             bail_on_error: true,
             // Individual commands opt into caching
             cache_output: false,
+            refresh_cached_output: false,
             logging: true,
             logging_stdout: false,
             nix_flags: &[
@@ -131,8 +133,13 @@ impl Nix {
         json: bool,
         gc_root: &PathBuf,
     ) -> Result<devenv_eval_cache::Output> {
+        // Refresh the cache if the GC root is not a valid path.
+        // This can happen if the store path is forcefully removed: GC'd or the Nix store is
+        // tampered with.
+        let refresh_cached_output = fs::canonicalize(gc_root).is_err();
         let options = Options {
             cache_output: true,
+            refresh_cached_output,
             ..self.options
         };
         let gc_root_str = gc_root.to_str().expect("gc root should be utf-8");
@@ -144,19 +151,25 @@ impl Nix {
             .run_nix_with_substituters("nix", &args, &options)
             .await?;
 
+        // Delete any old generations of this profile.
         let options = Options {
             logging: false,
             ..self.options
         };
-
         let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
         self.run_nix("nix-env", &args, &options).await?;
+
+        // Save the GC root for this profile.
         let now_ns = get_now_with_nanoseconds();
         let target = format!("{}-shell", now_ns);
-        symlink_force(
-            &fs::canonicalize(gc_root).expect("to resolve gc_root"),
-            &self.devenv_home_gc.join(target),
-        );
+        if let Ok(resolved_gc_root) = fs::canonicalize(gc_root) {
+            symlink_force(&resolved_gc_root, &self.devenv_home_gc.join(target));
+        } else {
+            warn!(
+                "Failed to resolve the GC root path to the Nix store: {}. Try running devenv again with --refresh-eval-cache.",
+                gc_root.display()
+            );
+        }
 
         Ok(env)
     }
@@ -374,7 +387,7 @@ impl Nix {
             // Ignore anything in .devenv.
             cached_cmd.unwatch_path(&self.devenv_dotfile);
 
-            if self.global_options.refresh_eval_cache {
+            if self.global_options.refresh_eval_cache || options.refresh_cached_output {
                 cached_cmd.force_refresh();
             }
 
