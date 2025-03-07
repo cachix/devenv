@@ -40,20 +40,28 @@ in
     description = "Integration with https://github.com/cachix/git-hooks.nix";
   };
 
-  config = lib.mkIf ((lib.filterAttrs (id: value: value.enable) cfg.hooks) != { }) {
-    ci = [ cfg.run ];
-    # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
-    packages = lib.mkAfter ([ packageBin ] ++ (cfg.enabledPackages or [ ]));
-    tasks = {
-      # TODO: split installation script into status + exec
-      "devenv:git-hooks:install" = {
-        exec = cfg.installationScript;
-        before = [ "devenv:enterShell" ];
+  config = lib.mkMerge [
+    # Always run installation script to keep .pre-commit-config.yaml in sync
+    {
+      tasks = {
+        # TODO: split installation script into status + exec
+        "devenv:git-hooks:install" = {
+          exec = cfg.installationScript;
+          before = [ "devenv:enterShell" ];
+        };
       };
-      "devenv:git-hooks:run" = {
-        exec = "pre-commit run -a";
-        before = [ "devenv:enterTest" ];
+    }
+    (lib.mkIf ((lib.filterAttrs (id: value: value.enable) cfg.hooks) != { }) {
+      ci = [ cfg.run ];
+      # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
+      packages = lib.mkAfter ([ packageBin ] ++ (cfg.enabledPackages or [ ]));
+      tasks = {
+        "devenv:git-hooks:run" = {
+          exec = "pre-commit run -a";
+          before = [ "devenv:enterTest" ];
+        };
       };
-    };
-  };
+    })
+  ];
+
 }
