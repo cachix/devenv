@@ -87,9 +87,9 @@ in
       sdk = lib.mkOption {
         type = types.nullOr types.package;
         description = ''
-          The Apple SDK to use for the developer environment.
+          The Apple SDK to add to the developer environment on macOS.
 
-          If set to `null`, the system SDK will be used.
+          If set to `null`, the system SDK can be used if the shell allows access to external environment variables.
         '';
         default = if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null;
         defaultText = lib.literalExpression "if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null";
