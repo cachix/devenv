@@ -75,12 +75,25 @@ in
           pkgs.stdenv.override
             (prev: {
               # Remove the default apple-sdk on macOS.
-              # Prefer to expose the system SDK, or let the user specify the SDK in `packages`.
+              # Allow users to specify an optional SDK in `apple.sdk`.
               extraBuildInputs =
                 builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
             })
         else pkgs.stdenv;
       defaultText = lib.literalExpression "pkgs.stdenv";
+    };
+
+    apple = {
+      sdk = lib.mkOption {
+        type = types.nullOr types.package;
+        description = ''
+          The Apple SDK to use for the developer environment.
+
+          If set to `null`, the system SDK will be used.
+        '';
+        default = if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null;
+        defaultText = lib.literalExpression "if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null";
+      };
     };
 
     unsetEnvVars = lib.mkOption {
@@ -268,7 +281,8 @@ in
     packages = [
       # needed to make sure we can load libs
       pkgs.pkg-config
-    ];
+    ]
+    ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
 
     enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
@@ -311,8 +325,8 @@ in
       let
         # `mkShell` merges `packages` into `nativeBuildInputs`.
         # This distinction is generally not important for devShells, except when it comes to setup hooks and their run order.
-        # On macOS, the default apple-sdk is added the stdenv via `extraBuildInputs`.
-        # If we don't remove it from stdenv, then it's setup hooks will clobber any SDK added to `packages`.
+        # On macOS, the default apple-sdk is added to stdenv via `extraBuildInputs`.
+        # If we don't remove it from stdenv, then its setup hooks will clobber any SDK added to `packages`.
         isAppleSDK = pkg: builtins.match ".*apple-sdk.*" (pkg.pname or "") != null;
         partitionedPkgs = builtins.partition isAppleSDK config.packages;
         buildInputs = partitionedPkgs.right;
@@ -322,7 +336,8 @@ in
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
           name = "devenv-shell";
           hardeningDisable = config.hardeningDisable;
-          inherit buildInputs nativeBuildInputs;
+          # inherit buildInputs nativeBuildInputs;
+          inherit (config) packages;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}
             ${config.enterShell}
