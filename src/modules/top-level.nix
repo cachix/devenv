@@ -336,8 +336,7 @@ in
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
           name = "devenv-shell";
           hardeningDisable = config.hardeningDisable;
-          # inherit buildInputs nativeBuildInputs;
-          inherit (config) packages;
+          inherit buildInputs nativeBuildInputs;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}
             ${config.enterShell}

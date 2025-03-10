@@ -1,4 +1,6 @@
 {
+  apple.sdk = null;
+
   # Test that there is no default SDK set on macOS.
   enterTest = ''
     variables_to_check=(

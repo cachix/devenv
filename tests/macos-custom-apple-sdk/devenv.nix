@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 {
-  packages = [ pkgs.apple-sdk ];
+  apple.sdk = pkgs.apple-sdk;
 
   # Test that the above SDK is picked up by xcode-select.
   enterTest = ''
