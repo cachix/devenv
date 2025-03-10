@@ -606,9 +606,9 @@ string
 
 
 
-The Apple SDK to use for the developer environment.
+The Apple SDK to add to the developer environment on macOS.
 
-If set to ` null `, the system SDK will be used.
+If set to ` null `, the system SDK can be used if the shell allows access to external environment variables.
 
 
 
