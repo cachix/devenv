@@ -52,13 +52,13 @@ let
               psql --dbname postgres <<'EOF'
               DO $$
                   BEGIN
-                      CREATE ROLE ${database.user} WITH LOGIN PASSWORD '${database.pass}';
+                      CREATE ROLE "${database.user}" WITH LOGIN PASSWORD '${database.pass}';
                       EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
                   END
               $$;
-              GRANT ALL PRIVILEGES ON DATABASE ${database.name} TO ${database.user};
+              GRANT ALL PRIVILEGES ON DATABASE "${database.name}" TO "${database.user}";
               \c ${database.name}
-              GRANT ALL PRIVILEGES ON SCHEMA public TO ${database.user};
+              GRANT ALL PRIVILEGES ON SCHEMA public TO "${database.user}";
               EOF
             ''}
               ${lib.optionalString (database.schema != null) ''
