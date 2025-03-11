@@ -69,18 +69,21 @@ in
     stdenv = lib.mkOption {
       type = types.package;
       description = "The stdenv to use for the developer environment.";
-      default =
-        if pkgs.stdenv.isDarwin
+      default = pkgs.stdenv;
+      defaultText = lib.literalExpression "pkgs.stdenv";
+
+      # Remove the default apple-sdk on macOS.
+      # Allow users to specify an optional SDK in `apple.sdk`.
+      apply = stdenv:
+        if stdenv.isDarwin
         then
-          pkgs.stdenv.override
+          stdenv.override
             (prev: {
-              # Remove the default apple-sdk on macOS.
-              # Allow users to specify an optional SDK in `apple.sdk`.
               extraBuildInputs =
                 builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
             })
-        else pkgs.stdenv;
-      defaultText = lib.literalExpression "pkgs.stdenv";
+        else stdenv;
+
     };
 
     apple = {
