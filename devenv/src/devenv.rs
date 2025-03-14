@@ -107,7 +107,6 @@ impl Devenv {
             .expect("Failed to create DEVENV_HOME directory");
         std::fs::create_dir_all(&devenv_home_gc)
             .expect("Failed to create DEVENV_HOME_GC directory");
-        std::fs::create_dir_all(&devenv_dot_gc).expect("Failed to create .devenv/gc directory");
 
         let nix = cnix::Nix::new(
             options.config.clone(),
