@@ -91,7 +91,7 @@
         grep -F 'nix-develop started succesfully' <./console
         grep -F "$(${lib.getExe pkgs.hello})" <./console
         # Test that a container can be built
-        if $(uname) == "Linux"
+        if [ "$(uname)" = "Linux" ]
         then
           nix build --override-input devenv-root "file+file://"<(printf %s "$PWD") --accept-flake-config --show-trace .#container-processes
         fi
