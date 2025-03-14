@@ -42442,6 +42442,42 @@ outputOf (attribute set)
 
 
 
+## overlays
+
+
+
+List of overlays to apply to pkgs. Each overlay is a function that takes two arguments: final and prev. Supported by devenv 1.4.2 or newer.
+
+
+
+*Type:*
+list of function that evaluates to a(n) function that evaluates to a(n) (attribute set)
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  (final: prev: {
+    hello = prev.hello.overrideAttrs (oldAttrs: {
+      patches = (oldAttrs.patches or []) ++ [ ./hello-fix.patch ];
+    });
+  })
+]
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## pre-commit
 
 
