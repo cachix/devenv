@@ -15,7 +15,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "devenv";
-  version = "1.4.1";
+  version = "1.4.2";
 
   # WARN: building this from src/modules/tasks.nix fails.
   # There is something being prepended to the path, hence the .*.

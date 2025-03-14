@@ -1,10 +1,8 @@
-- bump version in devenv/Cargo.toml
-- `cargo build`
-- bump version in package.nix
 - git commit
 - git tag
 - git push --tags
 - create a release on github
+- bump version in devenv/Cargo.toml and package.nix
 
 # Once nixpkgs has been updated
 
