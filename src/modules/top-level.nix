@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
 let
   types = lib.types;
   # Returns a list of all the entries in a folder
@@ -58,6 +58,21 @@ in
       type = types.lines;
       description = "Bash code to execute when entering the shell.";
       default = "";
+    };
+
+    overlays = lib.mkOption {
+      type = types.listOf (types.functionTo (types.functionTo types.attrs));
+      description = "List of overlays to apply to pkgs. Each overlay is a function that takes two arguments: final and prev. Supported by devenv 1.4.2 or newer.";
+      default = [ ];
+      example = lib.literalExpression ''
+        [
+          (final: prev: {
+            hello = prev.hello.overrideAttrs (oldAttrs: {
+              patches = (oldAttrs.patches or []) ++ [ ./hello-fix.patch ];
+            });
+          })
+        ]
+      '';
     };
 
     packages = lib.mkOption {
@@ -243,6 +258,12 @@ in
           See https://devenv.sh/guides/using-with-flakes/ how to use it with flakes.
         '';
       }
+      {
+        assertion = config.devenv.flakesIntegration || config.overlays == [ ] || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
+        message = ''
+          Using overlays requires devenv 1.4.2 or higher, while your current version is ${config.devenv.cliVersion}.
+        '';
+      }
     ];
     # use builtins.toPath to normalize path if root is "/" (container)
     devenv.state = builtins.toPath (config.devenv.dotfile + "/state");
@@ -311,6 +332,8 @@ in
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
+
+    _module.args.pkgs = bootstrapPkgs.appendOverlays config.overlays;
 
     ci = [ config.shell ];
     ciDerivation = pkgs.runCommand "ci" { } "echo ${toString config.ci} > $out";
