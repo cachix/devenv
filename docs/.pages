@@ -21,6 +21,7 @@ nav:
       - Binary caching: binary-caching.md
       - Git hooks: git-hooks.md
       - Tests: tests.md
+      - Overlays: overlays.md
       - Outputs: outputs.md
       - Common patterns: common-patterns.md
     - Writing devenv.yaml:
