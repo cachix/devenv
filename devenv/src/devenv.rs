@@ -1777,6 +1777,7 @@ impl Devenv {
             devenv_tmpdir: &self.devenv_tmp,
             devenv_runtime: &self.devenv_runtime,
             devenv_istesting: is_testing,
+            devenv_sandbox: config.sandbox.as_ref(),
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
             container_name: self.container_name.as_deref(),
             active_profiles: &active_profiles,

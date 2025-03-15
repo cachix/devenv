@@ -4,7 +4,7 @@
 //! when assembling the devenv environment. The struct is serialized to Nix syntax
 //! using the `ser_nix` crate and inserted into the flake template.
 
-use crate::config::{Config, NixpkgsConfig};
+use crate::config::{Config, NixpkgsConfig, SandboxConfig};
 use miette::{Result, miette};
 use ser_nix::NixLiteral;
 use serde::Serialize;
@@ -302,6 +302,9 @@ pub struct NixArgs<'a> {
     /// Whether the environment is being assembled for testing
     pub devenv_istesting: bool,
 
+    /// Sandbox configuration
+    pub devenv_sandbox: Option<&'a SandboxConfig>,
+
     /// Latest direnvrc version number available
     pub devenv_direnvrc_latest_version: u8,
 
@@ -386,6 +389,7 @@ mod tests {
             devenv_tmpdir: &tmpdir,
             devenv_runtime: &runtime,
             devenv_istesting: false,
+            devenv_sandbox: None,
             devenv_direnvrc_latest_version: 5,
             container_name,
             active_profiles: &profiles,
@@ -491,6 +495,7 @@ mod tests {
             devenv_tmpdir: &tmpdir,
             devenv_runtime: &runtime,
             devenv_istesting: false,
+            devenv_sandbox: None,
             devenv_direnvrc_latest_version: 5,
             container_name: None,
             active_profiles: &profiles,

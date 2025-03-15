@@ -34,3 +34,6 @@ imports:
   - devenv-claude-agents
   - ./docs
   - ./devenv-nix-backend
+
+sandbox:
+  enable: false

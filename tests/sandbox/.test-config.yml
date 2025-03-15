@@ -1,0 +1,7 @@
+# Run test script directly (outside enterTest) but it will invoke devenv shell
+use_shell: false
+
+# Landlock is Linux-specific
+broken_systems:
+  - aarch64-darwin
+  - x86_64-darwin

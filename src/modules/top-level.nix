@@ -1,6 +1,7 @@
 { config, pkgs, lib, bootstrapPkgs ? null, ... }:
 let
   types = lib.types;
+
   # Returns a list of all the entries in a folder
   listEntries = path:
     map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
@@ -19,6 +20,57 @@ let
   };
 
   failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+
+  sandboxer = pkgs.rustPlatform.buildRustPackage {
+    pname = "sandboxer";
+    version = "0.0.1";
+    src = pkgs.fetchFromGitHub {
+      owner = "landlock-lsm";
+      repo = "landlockconfig";
+      rev = "8b6b59b339181f9fa1ec6f7889564ba154c1a47d";
+      hash = "sha256-4LOauaC3eTLvERp9E7HIcunzkJ7HHcLkLAmaSbisr/c=";
+    };
+    # Upstream doesn't have a Cargo.lock file yet, so we provide one
+    postUnpack = ''
+      cp ${./landlockconfig.Cargo.lock} source/Cargo.lock
+    '';
+    cargoLock = {
+      lockFile = ./landlockconfig.Cargo.lock;
+    };
+    installPhase = ''
+      mkdir -p $out/bin
+      cp target/*/release/examples/sandboxer $out/bin/
+    '';
+    cargoBuildFlags = [
+      "--example"
+      "sandboxer"
+    ];
+  };
+  sandboxer-settings = pkgs.writers.writeTOML "sandboxer.toml" {
+    abi = 5;
+    path_beneath = [
+      {
+        allowed_access = [ "abi.read_write" ];
+        parent = [
+          config.devenv.root
+          config.devenv.runtime
+          config.devenv.tmpdir
+          "/proc"
+          "/tmp"
+          "/dev/tty"
+          "/dev/null"
+        ];
+      }
+      {
+        allowed_access = [ "abi.read_execute" ];
+        parent = [
+          "/nix"
+          "/proc/stat"
+        ];
+      }
+    ];
+  };
+  sandbox = lib.optionalString config.devenv.sandbox.enable "${sandboxer}/bin/sandboxer --toml ${sandboxer-settings} --";
 
   performAssertions =
     let
@@ -229,6 +281,24 @@ in
         internal = true;
       };
 
+      sandbox = lib.mkOption {
+        type = types.submodule {
+          options = {
+            enable = lib.mkOption {
+              type = types.bool;
+              readOnly = true;
+              description = ''
+                Enable the sandbox. This option is controlled by the `sandbox.enable` setting
+                in devenv.yaml and cannot be overridden in devenv.nix.
+              '';
+            };
+          };
+        };
+        readOnly = true;
+        default = config._module.args.devenvSandbox or { enable = false; };
+        description = "Sandbox configuration";
+      };
+
       runtime = lib.mkOption {
         type = types.str;
         internal = true;
@@ -372,9 +442,28 @@ in
         # On macOS, the default apple-sdk is added to stdenv via `extraBuildInputs`.
         # If we don't remove it from stdenv, then its setup hooks will clobber any SDK added to `packages`.
         isAppleSDK = pkg: builtins.match ".*apple-sdk.*" (pkg.pname or "") != null;
-        partitionedPkgs = builtins.partition isAppleSDK config.packages;
+        partitionedPkgs = builtins.partition isAppleSDK wrappedPackages;
         buildInputs = partitionedPkgs.right;
         nativeBuildInputs = partitionedPkgs.wrong;
+        wrappedPackages = if config.devenv.sandbox.enable then map wrapBinaries config.packages else config.packages;
+        wrapBinaries =
+          pkg:
+          pkgs.stdenv.mkDerivation {
+            name = "wrapped-${pkg.name}";
+            src = [ pkg ];
+            buildInputs = [ pkgs.makeWrapper ];
+
+            postBuild = ''
+              mkdir -p $out/bin
+              for bin in $src/bin/*; do
+                 if [ -x "$bin" ] && [ -f "$bin" ]; then
+                  echo "exec ${sandbox} $bin \"\$@\"" > $out/bin/$(basename $bin)
+                  chmod +x $out/bin/$(basename $bin)
+                 fi
+               done
+            '';
+          };
+        shellHook = pkgs.writeShellScriptBin "shellHook" config.enterShell;
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
@@ -382,7 +471,7 @@ in
           inherit buildInputs nativeBuildInputs;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}
-            ${config.enterShell}
+            ${sandbox} "${shellHook}/bin/shellHook"
           '';
         } // config.env)
       );
