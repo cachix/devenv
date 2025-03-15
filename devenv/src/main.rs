@@ -152,7 +152,7 @@ async fn main() -> Result<()> {
         Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
         Commands::Info {} => devenv.info().await,
-        Commands::Repl {} => devenv.repl(),
+        Commands::Repl {} => devenv.repl().await,
         Commands::Build { attributes } => devenv.build(&attributes).await,
         Commands::Update { name } => devenv.update(&name).await,
         Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach).await,
@@ -170,7 +170,7 @@ async fn main() -> Result<()> {
         },
 
         // hidden
-        Commands::Assemble => devenv.assemble(false),
+        Commands::Assemble => devenv.assemble(false).await,
         Commands::PrintDevEnv { json } => devenv.print_dev_env(json).await,
         Commands::GenerateJSONSchema => {
             config::write_json_schema();

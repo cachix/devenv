@@ -16,7 +16,8 @@ use tracing::{debug, error, info, warn};
 
 pub struct Nix {
     pub options: Options,
-    pool: SqlitePool,
+    pool: Option<SqlitePool>,
+    database_url: String,
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
@@ -91,13 +92,11 @@ impl Nix {
             "sqlite:{}/nix-eval-cache.db",
             devenv_dotfile.to_string_lossy()
         );
-        let pool = devenv_eval_cache::db::setup_db(database_url)
-            .await
-            .into_diagnostic()?;
 
         Ok(Self {
             options,
-            pool,
+            pool: None,
+            database_url,
             config,
             global_options,
             cachix_caches,
@@ -107,6 +106,19 @@ impl Nix {
             devenv_dotfile,
             devenv_root,
         })
+    }
+
+    // Defer creating local project state
+    pub async fn assemble(&mut self) -> Result<()> {
+        if self.pool.is_none() {
+            self.pool = Some(
+                devenv_eval_cache::db::setup_db(&self.database_url)
+                    .await
+                    .into_diagnostic()?,
+            );
+        }
+
+        Ok(())
     }
 
     pub async fn develop(
@@ -365,8 +377,10 @@ impl Nix {
         let result = if self.global_options.eval_cache
             && options.cache_output
             && supports_eval_caching(&cmd)
+            && self.pool.is_some()
         {
-            let mut cached_cmd = CachedCommand::new(&self.pool);
+            let pool = self.pool.as_ref().unwrap();
+            let mut cached_cmd = CachedCommand::new(pool);
 
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
             cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
