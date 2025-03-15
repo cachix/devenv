@@ -841,6 +841,7 @@ impl Devenv {
         let vars = indoc::formatdoc!(
             "version = \"{}\";
             system = \"{}\";
+            devenv_experimental_sandbox = {};
             devenv_root = \"{}\";
             devenv_dotfile = ./{};
             devenv_dotfile_string = \"{}\";
@@ -852,6 +853,7 @@ impl Devenv {
             ",
             crate_version!(),
             self.global_options.system,
+            self.config.experimental_sandbox,
             self.devenv_root.display(),
             self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
             self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),

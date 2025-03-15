@@ -121,6 +121,8 @@ pub struct Config {
     pub clean: Option<Clean>,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub impure: bool,
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    pub experimental_sandbox: bool,
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105

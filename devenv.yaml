@@ -9,3 +9,5 @@ inputs:
     url: github:domenkozar/nix/devenv-2.24
   devenv:
     url: path:.?dir=src/modules
+
+experimentalSandbox: false
