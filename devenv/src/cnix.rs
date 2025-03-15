@@ -246,6 +246,15 @@ impl Nix {
         Ok(())
     }
 
+    pub async fn init(&self, path: &Path, template: &str) -> Result<()> {
+        let mut cmd =
+            self.prepare_command("nix", &["flake", "init", "-t", template], &self.options)?;
+        cmd.current_dir(path);
+        self.run_nix_command(cmd, &self.options).await?;
+
+        Ok(())
+    }
+
     pub async fn metadata(&self) -> Result<String> {
         let options = Options {
             cache_output: true,
