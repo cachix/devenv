@@ -15,7 +15,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "devenv";
-  version = "1.4.2";
+  version = "1.5";
 
   # WARN: building this from src/modules/tasks.nix fails.
   # There is something being prepended to the path, hence the .*.
@@ -36,7 +36,7 @@ rustPlatform.buildRustPackage {
   cargoBuildFlags =
     if build_tasks
     then [ "-p devenv-tasks" ]
-    else [ "-p devenv -p devenv-run-tests" ];
+    else [ "-p devenv -p devenv-run-tests -p devenv-generate" ];
 
   doCheck = !build_tasks;
 
