@@ -166,7 +166,7 @@ async fn main() -> Result<()> {
     };
 
     if body.is_some() {
-        info!("Uploading project source code using `git ls-files` to https://devenv.new to analyze the environment ...");
+        info!("Going to upload source code using `git ls-files` to https://devenv.new to analyze the environment using AI...");
         if !dialoguer::Confirm::new()
             .with_prompt("Do you want to continue?")
             .default(true)
