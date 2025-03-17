@@ -71,10 +71,10 @@
         ]
       },
       "locked": {
-        "lastModified": 1738453229,
+        "lastModified": 1741352980,
         "owner": "hercules-ci",
         "repo": "flake-parts",
-        "rev": "32ea77a06711b758da0ad9bd6a844c5740a87abd",
+        "rev": "f4330d22f1c5d2ba72d3d22df5597d123fdb60a9",
         "type": "github"
       },
       "original": {
@@ -127,10 +127,10 @@
     "libgit2": {
       "flake": false,
       "locked": {
-        "lastModified": 1738603295,
+        "lastModified": 1740952128,
         "owner": "libgit2",
         "repo": "libgit2",
-        "rev": "1cd6872e8f446aecc13ab80af5c925fbaecc41d3",
+        "rev": "21a351b0ed207d0871cb23e09c027d1ee42eae98",
         "type": "github"
       },
       "original": {
@@ -150,10 +150,10 @@
         "pre-commit-hooks": "pre-commit-hooks"
       },
       "locked": {
-        "lastModified": 1734114420,
+        "lastModified": 1741798497,
         "owner": "domenkozar",
         "repo": "nix",
-        "rev": "bde6a1a0d1f2af86caa4d20d23eca019f3d57eee",
+        "rev": "f3f44b2baaf6c4c6e179de8cbb1cc6db031083cd",
         "type": "github"
       },
       "original": {
@@ -237,10 +237,10 @@
         ]
       },
       "locked": {
-        "lastModified": 1737465171,
+        "lastModified": 1742058297,
         "owner": "cachix",
         "repo": "pre-commit-hooks.nix",
-        "rev": "9364dc02281ce2d37a1f55b6e51f7c0f65a75f17",
+        "rev": "59f17850021620cd348ad2e9c0c64f4e6325ce2a",
         "type": "github"
       },
       "original": {
