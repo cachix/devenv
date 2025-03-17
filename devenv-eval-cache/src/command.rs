@@ -160,6 +160,7 @@ impl<'a> CachedCommand<'a> {
                 | Op::EvaluatedFile { source }
                 | Op::ReadFile { source }
                 | Op::ReadDir { source }
+                | Op::PathExists { source }
                 | Op::TrackedPath { source }
                     if !self
                         .excluded_paths
@@ -182,11 +183,12 @@ impl<'a> CachedCommand<'a> {
         // Watch additional paths
         sources.extend_from_slice(&self.extra_paths);
 
+        let now = SystemTime::now();
         let file_input_futures = sources
             .into_iter()
             .map(|source| {
                 tokio::task::spawn_blocking(move || {
-                    FileInputDesc::new(source).map_err(CommandError::Io)
+                    FileInputDesc::new(source, now).map_err(CommandError::Io)
                 })
             })
             .collect::<Vec<_>>();
@@ -304,7 +306,10 @@ impl PartialOrd for FileInputDesc {
 }
 
 impl FileInputDesc {
-    pub fn new(path: PathBuf) -> Result<Self, io::Error> {
+    // A fallback system time is required for paths that don't exist.
+    // This avoids duplicate entries for paths that don't exist and would only differ in terms of
+    // the timestamp of when this function was called.
+    pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
             let paths = std::fs::read_dir(&path)?
@@ -313,9 +318,15 @@ impl FileInputDesc {
                 .collect::<String>();
             Some(hash::digest(&paths))
         } else {
-            hash::compute_file_hash(&path).ok()
+            // Dropping null constraints in sqlite is painful, hence the placeholder hash.
+            hash::compute_file_hash(&path).ok().or_else(|| {
+                Some("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string())
+            })
         };
-        let modified_at = path.metadata()?.modified()?;
+        let modified_at = path
+            .metadata()
+            .and_then(|p| p.modified())
+            .unwrap_or(fallback_system_time);
         Ok(Self {
             path,
             is_directory,
@@ -348,25 +359,6 @@ impl EnvInputDesc {
         let value = std::env::var(&name).ok();
         let content_hash = value.map(hash::digest);
         Ok(Self { name, content_hash })
-    }
-}
-
-impl Input {
-    pub fn from_path(path: PathBuf) -> Result<Self, io::Error> {
-        let file = FileInputDesc::new(path)?;
-        Ok(Self::File(file))
-    }
-
-    pub fn from_env_var(name: String) -> Result<Self, io::Error> {
-        let env = EnvInputDesc::new(name)?;
-        Ok(Self::Env(env))
-    }
-
-    pub fn to_identifier(&self) -> String {
-        match self {
-            Self::File(file) => file.path.to_string_lossy().to_string(),
-            Self::Env(env) => format!("${}", env.name),
-        }
     }
 }
 
@@ -527,6 +519,7 @@ fn extract_op_from_log_line(log: &InternalLog) -> Option<Op> {
             | Op::ReadFile { ref source }
             | Op::ReadDir { ref source }
             | Op::CopiedSource { ref source, .. }
+            | Op::PathExists { ref source, .. }
             | Op::TrackedPath { ref source }
                 if source.starts_with("/") && !source.starts_with("/nix/store") =>
             {
