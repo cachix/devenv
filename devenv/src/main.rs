@@ -143,9 +143,10 @@ async fn main() -> Result<()> {
             }
             Err(_) => {
                 miette::bail!(indoc::formatdoc! {"
-                    devenv-generate was not found in PATH
+                    devenv-generate was not found in your $PATH, please install it.
 
-                    It was moved to a separate binary due to https://github.com/cachix/devenv/issues/1733
+                    Since we're collecting telemetry in order to improve the AI results,
+                    the AI generation now ships as a separate command.
                 "})
             }
         },
