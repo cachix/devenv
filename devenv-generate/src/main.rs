@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
 
     // Show one-time telemetry warning if not disabled and not shown before
     if !cli.disable_telemetry && !has_shown_telemetry_warning() {
-        println!("\ndevenv collects anonymous usage data to improve generation output.");
+        println!("\nGenerating collects anonymous usage data sent to https://devenv.new (see privacy policy) to improve generation output.");
         println!("  To disable telemetry, use --disable-telemetry or set DO_NOT_TRACK=1");
         if !dialoguer::Confirm::new()
             .with_prompt("Do you want to continue?")
@@ -166,7 +166,7 @@ async fn main() -> Result<()> {
     };
 
     if body.is_some() {
-        info!("Going to upload source code using `git ls-files` to https://devenv.new to analyze the environment using AI...");
+        info!("Going to upload source code using `git ls-files` to https://devenv.new to analyze the environment using AI and generate devenv.nix...");
         if !dialoguer::Confirm::new()
             .with_prompt("Do you want to continue?")
             .default(true)
