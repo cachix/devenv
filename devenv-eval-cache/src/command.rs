@@ -306,6 +306,9 @@ impl PartialOrd for FileInputDesc {
 }
 
 impl FileInputDesc {
+    // A fallback system time is required for paths that don't exist.
+    // This avoids duplicate entries for paths that don't exist and would only differ in terms of
+    // the timestamp of when this function was called.
     pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
@@ -315,6 +318,7 @@ impl FileInputDesc {
                 .collect::<String>();
             Some(hash::digest(&paths))
         } else {
+            // Dropping null constraints in sqlite is painful, hence the placeholder hash.
             hash::compute_file_hash(&path).ok().or_else(|| {
                 Some("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string())
             })
