@@ -183,11 +183,12 @@ impl<'a> CachedCommand<'a> {
         // Watch additional paths
         sources.extend_from_slice(&self.extra_paths);
 
+        let now = SystemTime::now();
         let file_input_futures = sources
             .into_iter()
             .map(|source| {
                 tokio::task::spawn_blocking(move || {
-                    FileInputDesc::new(source).map_err(CommandError::Io)
+                    FileInputDesc::new(source, now).map_err(CommandError::Io)
                 })
             })
             .collect::<Vec<_>>();
@@ -305,7 +306,7 @@ impl PartialOrd for FileInputDesc {
 }
 
 impl FileInputDesc {
-    pub fn new(path: PathBuf) -> Result<Self, io::Error> {
+    pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
             let paths = std::fs::read_dir(&path)?
@@ -314,9 +315,14 @@ impl FileInputDesc {
                 .collect::<String>();
             Some(hash::digest(&paths))
         } else {
-            hash::compute_file_hash(&path).ok()
+            hash::compute_file_hash(&path).ok().or_else(|| {
+                Some("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string())
+            })
         };
-        let modified_at = path.metadata()?.modified()?;
+        let modified_at = path
+            .metadata()
+            .and_then(|p| p.modified())
+            .unwrap_or(fallback_system_time);
         Ok(Self {
             path,
             is_directory,
