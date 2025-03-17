@@ -5,6 +5,7 @@ use devenv::{
 };
 use miette::{bail, IntoDiagnostic, Result};
 use similar::{ChangeTag, TextDiff};
+use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
@@ -90,6 +91,26 @@ async fn main() -> Result<()> {
 
     log::init_tracing(level, cli.log_format);
 
+    // Show one-time telemetry warning if not disabled and not shown before
+    if !cli.disable_telemetry && !has_shown_telemetry_warning() {
+        println!("\ndevenv-generate collects anonymous usage data to improve recommendations.");
+        println!("  To disable telemetry, use --disable-telemetry or set DO_NOT_TRACK=1");
+        if !dialoguer::Confirm::new()
+            .with_prompt("Do you want to continue?")
+            .default(true)
+            .interact()
+            .into_diagnostic()?
+        {
+            println!("Aborted.");
+            std::process::exit(0);
+        }
+
+        // Mark warning as shown
+        if let Err(e) = mark_telemetry_warning_shown() {
+            warn!("Failed to save telemetry warning state: {}", e);
+        }
+    }
+
     let description = if !cli.description.is_empty() {
         Some(cli.description.join(" "))
     } else {
@@ -144,7 +165,21 @@ async fn main() -> Result<()> {
         }
     };
 
-    info!("Generating devenv.nix and devenv.yaml, this should take about a minute ...");
+    if body.is_some() {
+        info!("Uploading project source code using `git ls-files` to https://devenv.new to analyze the environment ...");
+        if !dialoguer::Confirm::new()
+            .with_prompt("Do you want to continue?")
+            .default(true)
+            .interact()
+            .into_diagnostic()?
+        {
+            println!("Aborted.");
+            std::process::exit(0);
+        }
+        info!("Generating devenv.nix and devenv.yaml, this should take a while ...");
+    } else {
+        info!("Generating devenv.nix and devenv.yaml, this should take a few seconds...");
+    }
 
     let response_future = request.send();
 
@@ -198,6 +233,19 @@ async fn main() -> Result<()> {
 
             $ devenv shell
         "));
+    Ok(())
+}
+
+/// Checks if the telemetry warning has been shown for this project
+fn has_shown_telemetry_warning() -> bool {
+    let dotfile = Path::new(".devenv/telemetry-warning-shown");
+    dotfile.exists()
+}
+
+/// Marks that the telemetry warning has been shown for this project
+fn mark_telemetry_warning_shown() -> Result<()> {
+    fs::create_dir_all(".devenv").into_diagnostic()?;
+    fs::write(".devenv/telemetry-warning-shown", "").into_diagnostic()?;
     Ok(())
 }
 
