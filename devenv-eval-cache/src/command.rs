@@ -358,25 +358,6 @@ impl EnvInputDesc {
     }
 }
 
-impl Input {
-    pub fn from_path(path: PathBuf) -> Result<Self, io::Error> {
-        let file = FileInputDesc::new(path)?;
-        Ok(Self::File(file))
-    }
-
-    pub fn from_env_var(name: String) -> Result<Self, io::Error> {
-        let env = EnvInputDesc::new(name)?;
-        Ok(Self::Env(env))
-    }
-
-    pub fn to_identifier(&self) -> String {
-        match self {
-            Self::File(file) => file.path.to_string_lossy().to_string(),
-            Self::Env(env) => format!("${}", env.name),
-        }
-    }
-}
-
 impl From<db::FileInputRow> for Input {
     fn from(row: db::FileInputRow) -> Self {
         Self::File(row.into())
