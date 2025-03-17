@@ -16,6 +16,8 @@ pub enum Op {
     ReadDir { source: PathBuf },
     /// Read an environment variable with `builtins.getEnv`.
     GetEnv { name: String },
+    /// Check that a file exists with 'builtins.pathExists'.
+    PathExists { source: PathBuf },
     /// Used a tracked devenv string path.
     TrackedPath { source: PathBuf },
 }
@@ -34,6 +36,8 @@ impl Op {
                 Regex::new("^devenv readDir: '(?P<source>.*)'$").expect("invalid regex");
             static ref GET_ENV: Regex =
                 Regex::new("^devenv getEnv: '(?P<name>.*)'$").expect("invalid regex");
+            static ref PATH_EXISTS: Regex =
+                Regex::new("^devenv pathExists: '(?P<source>.*)'$").expect("invalid regex");
             static ref TRACKED_PATH: Regex =
                 Regex::new("^trace: devenv path: '(?P<source>.*)'$").expect("invalid regex");
         }
@@ -60,6 +64,9 @@ impl Op {
                 } else if let Some(matches) = GET_ENV.captures(msg) {
                     let name = matches["name"].to_string();
                     Some(Op::GetEnv { name })
+                } else if let Some(matches) = PATH_EXISTS.captures(msg) {
+                    let source = PathBuf::from(&matches["source"]);
+                    Some(Op::PathExists { source })
                 } else if let Some(matches) = TRACKED_PATH.captures(msg) {
                     let source = PathBuf::from(&matches["source"]);
                     Some(Op::TrackedPath { source })
@@ -142,6 +149,18 @@ mod tests {
             op,
             Some(Op::GetEnv {
                 name: "SOME_ENV".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_path_exists() {
+        let log = create_log("devenv pathExists: '/path/to/file'");
+        let op = Op::from_internal_log(&log);
+        assert_eq!(
+            op,
+            Some(Op::PathExists {
+                source: PathBuf::from("/path/to/file"),
             })
         );
     }

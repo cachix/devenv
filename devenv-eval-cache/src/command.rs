@@ -160,6 +160,7 @@ impl<'a> CachedCommand<'a> {
                 | Op::EvaluatedFile { source }
                 | Op::ReadFile { source }
                 | Op::ReadDir { source }
+                | Op::PathExists { source }
                 | Op::TrackedPath { source }
                     if !self
                         .excluded_paths
@@ -527,6 +528,7 @@ fn extract_op_from_log_line(log: &InternalLog) -> Option<Op> {
             | Op::ReadFile { ref source }
             | Op::ReadDir { ref source }
             | Op::CopiedSource { ref source, .. }
+            | Op::PathExists { ref source, .. }
             | Op::TrackedPath { ref source }
                 if source.starts_with("/") && !source.starts_with("/nix/store") =>
             {
