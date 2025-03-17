@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
 
     // Show one-time telemetry warning if not disabled and not shown before
     if !cli.disable_telemetry && !has_shown_telemetry_warning() {
-        println!("\ndevenv-generate collects anonymous usage data to improve recommendations.");
+        println!("\ndevenv collects anonymous usage data to improve generation output.");
         println!("  To disable telemetry, use --disable-telemetry or set DO_NOT_TRACK=1");
         if !dialoguer::Confirm::new()
             .with_prompt("Do you want to continue?")
