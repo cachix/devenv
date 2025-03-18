@@ -1,10 +1,10 @@
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 {
   apple.sdk = pkgs.apple-sdk;
 
   # Test that the above SDK is picked up by xcode-select.
-  enterTest = ''
+  enterTest = lib.optionalString pkgs.stdenv.isDarwin ''
     if [ -v "$DEVELOPER_DIR" ]; then
       echo "DEVELOPER_DIR is not set."
       exit 1
