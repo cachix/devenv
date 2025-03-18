@@ -3,6 +3,10 @@
 {
   apple.sdk = pkgs.apple-sdk;
 
+  packages = [
+    pkgs.xcbuild
+  ];
+
   # Test that the above SDK is picked up by xcode-select.
   enterTest = lib.optionalString pkgs.stdenv.isDarwin ''
     if [ -v "$DEVELOPER_DIR" ]; then
