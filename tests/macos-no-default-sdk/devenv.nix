@@ -1,8 +1,10 @@
-{ pkgs, lib, ... }: {
+{ pkgs, lib, ... }:
+
+lib.mkIf pkgs.stdenv.isDarwin {
   apple.sdk = null;
 
   # Test that there is no default SDK set on macOS.
-  enterTest = lib.optionalString pkgs.stdenv.isDarwin ''
+  enterTest = ''
     variables_to_check=(
       "DEVELOPER_DIR"
       "DEVELOPER_DIR_FOR_BUILD"
