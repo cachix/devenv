@@ -226,8 +226,8 @@ pub enum Commands {
 
     #[command(about = "Start processes in the foreground. https://devenv.sh/processes/")]
     Up {
-        #[arg(help = "Start a specific process.")]
-        process: Option<String>,
+        #[arg(help = "Start a specific process(es).")]
+        processes: Vec<String>,
 
         #[arg(short, long, help = "Start processes in the background.")]
         detach: bool,
@@ -317,7 +317,7 @@ pub enum Commands {
 pub enum ProcessesCommand {
     #[command(alias = "start", about = "Start processes in the foreground.")]
     Up {
-        process: Option<String>,
+        processes: Vec<String>,
 
         #[arg(short, long, help = "Start processes in the background.")]
         detach: bool,
