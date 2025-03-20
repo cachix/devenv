@@ -46,6 +46,8 @@ pub enum LogFormat {
     Cli,
     /// A verbose structured log format used for debugging.
     TracingFull,
+    /// A pretty human-readable log format used for debugging.
+    TracingPretty,
 }
 
 pub fn init_tracing_default() {
@@ -62,17 +64,21 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
 
-    let stderr_layer = if log_format == LogFormat::TracingFull {
-        tracing_subscriber::fmt::layer()
+    let stderr_layer = match log_format {
+        LogFormat::TracingFull => tracing_subscriber::fmt::layer()
             .with_writer(stderr)
             .with_ansi(ansi)
-            .boxed()
-    } else {
-        tracing_subscriber::fmt::layer()
+            .boxed(),
+        LogFormat::TracingPretty => tracing_subscriber::fmt::layer()
+            .with_writer(stderr)
+            .with_ansi(ansi)
+            .pretty()
+            .boxed(),
+        LogFormat::Cli => tracing_subscriber::fmt::layer()
             .event_format(DevenvFormat::default())
             .with_writer(stderr)
             .with_ansi(ansi)
-            .boxed()
+            .boxed(),
     };
 
     tracing_subscriber::registry()
