@@ -37,6 +37,7 @@ pub struct Options {
     pub bail_on_error: bool,
     /// Cache the output of the command. This is opt-in per command.
     pub cache_output: bool,
+    /// Force a refresh of the cached output.
     pub refresh_cached_output: bool,
     /// Enable logging.
     pub logging: bool,
