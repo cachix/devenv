@@ -386,34 +386,33 @@ where
                     }
                 }
             }
-        } else {
-            if let Some(msg) = visitor.message {
-                if visitor.is_user_message {
-                    let meta = event.metadata();
-                    let ansi = writer.has_ansi_escapes();
+        }
+        if let Some(msg) = visitor.message {
+            if visitor.is_user_message {
+                let meta = event.metadata();
+                let ansi = writer.has_ansi_escapes();
 
-                    if ansi && !self.verbose {
-                        let level = meta.level();
-                        match *level {
-                            tracing::Level::ERROR => {
-                                write!(writer, "{} ", style("✖").red())?;
-                            }
-                            tracing::Level::WARN => {
-                                write!(writer, "{} ", style("•").yellow())?;
-                            }
-                            tracing::Level::INFO => {
-                                write!(writer, "{} ", style("•").blue())?;
-                            }
-                            tracing::Level::DEBUG => {
-                                write!(writer, "{} ", style("•").italic())?;
-                            }
-                            _ => {}
+                if ansi && !self.verbose {
+                    let level = meta.level();
+                    match *level {
+                        tracing::Level::ERROR => {
+                            write!(writer, "{} ", style("✖").red())?;
                         }
+                        tracing::Level::WARN => {
+                            write!(writer, "{} ", style("•").yellow())?;
+                        }
+                        tracing::Level::INFO => {
+                            write!(writer, "{} ", style("•").blue())?;
+                        }
+                        tracing::Level::DEBUG => {
+                            write!(writer, "{} ", style("•").italic())?;
+                        }
+                        _ => {}
                     }
                 }
-
-                writeln!(writer, "{}", msg)?;
             }
+
+            writeln!(writer, "{}", msg)?;
         };
 
         Ok(())

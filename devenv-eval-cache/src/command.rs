@@ -23,12 +23,14 @@ pub enum CommandError {
     Sqlx(#[from] sqlx::Error),
 }
 
+type OnStderr = Box<dyn Fn(&InternalLog) + Send>;
+
 pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
     force_refresh: bool,
     extra_paths: Vec<PathBuf>,
     excluded_paths: Vec<PathBuf>,
-    on_stderr: Option<Box<dyn Fn(&InternalLog) + Send>>,
+    on_stderr: Option<OnStderr>,
 }
 
 impl<'a> CachedCommand<'a> {
