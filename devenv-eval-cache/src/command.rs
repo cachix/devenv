@@ -230,6 +230,7 @@ impl<'a> CachedCommand<'a> {
             stdout,
             stderr,
             inputs,
+            ..Default::default()
         })
     }
 }
@@ -239,7 +240,7 @@ pub fn supports_eval_caching(cmd: &Command) -> bool {
     cmd.get_program().to_string_lossy().ends_with("nix")
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Output {
     /// The status code of the command.
     pub status: process::ExitStatus,
@@ -249,6 +250,8 @@ pub struct Output {
     pub stderr: Vec<u8>,
     /// A list of inputs that the command depends on and their hashes.
     pub inputs: Vec<Input>,
+    /// Whether the output was returned from the cache or not.
+    pub cache_hit: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -505,6 +508,7 @@ async fn query_cached_output(
                 stdout: cmd.output,
                 stderr: Vec::new(),
                 inputs: Arc::try_unwrap(inputs).unwrap_or_else(|arc| (*arc).clone()),
+                cache_hit: true,
             }))
         }
     } else {

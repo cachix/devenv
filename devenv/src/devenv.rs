@@ -226,7 +226,11 @@ impl Devenv {
             .map(|s| s.as_str())
             .collect::<Vec<&str>>();
 
-        self.nix.develop(&develop_args, replace_shell).await?;
+        let span = info_span!("Entering shell", devenv.user_message = "Entering shell");
+        self.nix
+            .develop(&develop_args, replace_shell)
+            .instrument(span)
+            .await?;
         Ok(())
     }
 
@@ -267,17 +271,12 @@ impl Devenv {
             develop_args.push("--noprofile")
         }
 
-        match cmd {
-            Some(cmd) => {
-                develop_args.push("-c");
-                develop_args.push(cmd);
-                let args = args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-                develop_args.extend_from_slice(&args);
-            }
-            None => {
-                info!("Entering shell");
-            }
-        };
+        if let Some(cmd) = cmd {
+            develop_args.push("-c");
+            develop_args.push(cmd);
+            let args = args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+            develop_args.extend_from_slice(&args);
+        }
 
         Ok(develop_args.into_iter().map(|s| s.to_string()).collect())
     }
@@ -718,6 +717,7 @@ impl Devenv {
                 .prepare_develop_args(&Some(processes_script.to_str().unwrap().to_string()), &[])
                 .await?;
 
+            let span = info_span!("Entering shell");
             let mut cmd = self
                 .nix
                 .prepare_command_with_substituters(
@@ -728,6 +728,7 @@ impl Devenv {
                         .collect::<Vec<&str>>(),
                     &self.nix.options,
                 )
+                .instrument(span)
                 .await?;
 
             if *detach {

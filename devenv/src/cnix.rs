@@ -12,7 +12,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 pub struct Nix {
     pub options: Options,
@@ -29,7 +29,7 @@ pub struct Nix {
     devenv_root: PathBuf,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Options {
     /// Run `exec` to replace the shell with the command.
     pub replace_shell: bool,
@@ -357,6 +357,7 @@ impl Nix {
         self.run_nix_command(cmd, options).await
     }
 
+    #[instrument(skip(self), fields(output, cache_status))]
     async fn run_nix_command(
         &self,
         mut cmd: std::process::Command,
@@ -371,6 +372,11 @@ impl Nix {
             {
                 cmd.arg("--debugger");
             }
+
+            if self.global_options.verbose {
+                debug!("Running command: {}", display_command(&cmd));
+            }
+
             let error = cmd.exec();
             error!(
                 "Failed to replace shell with `{}`: {error}",
@@ -385,6 +391,10 @@ impl Nix {
             if options.logging_stdout {
                 cmd.stdout(std::process::Stdio::inherit());
             }
+        }
+
+        if self.global_options.verbose {
+            debug!("Running command: {}", display_command(&cmd));
         }
 
         let result = if self.global_options.eval_cache
@@ -431,11 +441,20 @@ impl Nix {
                 });
             }
 
-            cached_cmd
+            let output = cached_cmd
                 .output(&mut cmd)
                 .await
                 .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?
+                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+
+            if output.cache_hit {
+                tracing::Span::current().record(
+                    "cache_status",
+                    if output.cache_hit { "hit" } else { "miss" },
+                );
+            }
+
+            output
         } else {
             let output = cmd
                 .output()
@@ -447,8 +466,11 @@ impl Nix {
                 stdout: output.stdout,
                 stderr: output.stderr,
                 inputs: vec![],
+                cache_hit: false,
             }
         };
+
+        tracing::Span::current().record("output", format!("{:?}", result));
 
         if !result.status.success() {
             let code = match result.status.code() {
@@ -627,9 +649,6 @@ impl Nix {
         cmd.args(flags);
         cmd.current_dir(&self.devenv_root);
 
-        if self.global_options.verbose {
-            debug!("Running command: {}", display_command(&cmd));
-        }
         Ok(cmd)
     }
 
