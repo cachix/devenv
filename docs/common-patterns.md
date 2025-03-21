@@ -141,3 +141,36 @@ in {
   ];
 }
 ```
+
+### Compile x86 dependencies on ARM Macs via Rosetta
+
+If you want to also compile dependencies for x86, you can add dependencies to `packages`:
+
+```nix
+packages = with rosettaPkgs; [
+    # these are the packages required for pymssql
+    freetds
+    krb5
+    openssl
+];
+```
+
+And switch the compiler to x86:
+
+```nix
+stdenv = rosettaPkgs.stdenv;
+```
+
+Then, in the generated shell, you can compile software for x86, like `pymssql` or `ibm_db`. However some creative DYLD_FALLBACK_LIBRARY_PATH may be required to make some dependency libraries available to the x86 binaries:
+
+```sh
+export DYLD_FALLBACK_LIBRARY_PATH="${rosettaPkgs.lib.makeLibraryPath [ rosettaPkgs.gcc14.cc] }:$DYLD_FALLBACK_LIBRARY_PATH"
+git clone git@github.com:pymssql/pymssql.git
+${rosettaPkgs.python312Full}/bin/python3 -m venv venv
+source venv/bin/activate
+(
+    cd pymssql
+    pip install -e .
+)
+pip install ibm_db
+```
