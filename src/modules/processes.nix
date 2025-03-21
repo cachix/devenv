@@ -1,4 +1,4 @@
-{ config, options, lib, pkgs, ... }:
+{ config, options, lib, pkgs, devenv-sandbox, ... }:
 let
   types = lib.types;
 
@@ -145,9 +145,9 @@ in
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
     procfileScript = pkgs.writeShellScript "devenv-up" ''
-      ${config.process.manager.before}
+      ${devenv-sandbox}/bin/devenv-sandbox ${config.process.manager.before}
 
-      ${config.process.manager.command}
+      ${devenv-sandbox}/bin/devenv-sandbox ${config.process.manager.command}
 
       backgroundPID=$!
 
@@ -155,7 +155,7 @@ in
         echo "Stopping processes..."
         kill -TERM $backgroundPID
         wait $backgroundPID
-        ${config.process.manager.after}
+        ${devenv-sandbox}/bin/devenv-sandbox ${config.process.manager.after}
         echo "Processes stopped."
       }
 
