@@ -220,7 +220,7 @@ impl Devenv {
         args: &[String],
         replace_shell: bool,
     ) -> Result<()> {
-        let DevEnv { output, .. } = self.get_dev_environment(false).await?;
+        let DevEnv { mut output, .. } = self.get_dev_environment(false).await?;
 
         // TODO: fetch bash from nixpkgs
         // Needs a gcroot though. So maybe it needs to be in the module eval.
@@ -242,14 +242,25 @@ impl Devenv {
                 .await?
                 .stdout,
         )
+        .map(|mut s| {
+            s.truncate(s.trim_end_matches('\n').len());
+            s.push_str("/bin/bash");
+            s
+        })
         .unwrap_or("bash".to_string());
 
         let path = self.devenv_runtime.join("shell");
-        tokio::fs::write(&path, output).await.unwrap();
-        let mut shell_cmd = std::process::Command::new(bash);
-        shell_cmd.args(["--rcfile", &path.to_string_lossy()]);
         if let Some(cmd) = cmd {
-            shell_cmd.arg("-c").arg(cmd).args(args);
+            let exec = format!("\nexec {} {}", cmd, args.join(" "));
+            output.extend_from_slice(exec.as_bytes());
+        }
+        tokio::fs::write(&path, output).await.unwrap();
+
+        let mut shell_cmd = std::process::Command::new(&bash);
+        if cmd.is_none() {
+            shell_cmd.args(["--rcfile", &path.to_string_lossy()]);
+        } else {
+            shell_cmd.arg(path);
         }
 
         let default_clean = config::Clean {
@@ -274,8 +285,12 @@ impl Devenv {
 
         shell_cmd.env("SHELL", "bash").env("DEVENV_SHELL", "1");
 
-        info!(devenv.user_message = "Entering shell", "Entering shell",);
-        let _ = shell_cmd.exec();
+        let span = info_span!(
+            "entering_shell",
+            devenv.user_message = "Entering shell",
+            shell = bash
+        );
+        let _ = shell_cmd.exec().instrument(span);
 
         Ok(())
 

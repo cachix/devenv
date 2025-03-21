@@ -12,7 +12,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
 pub struct Nix {
     pub options: Options,
@@ -374,9 +374,7 @@ impl Nix {
                 cmd.arg("--debugger");
             }
 
-            if self.global_options.verbose {
-                debug!("Running command: {}", display_command(&cmd));
-            }
+            debug!("Running command: {}", display_command(&cmd));
 
             let error = cmd.exec();
             error!(
@@ -392,10 +390,6 @@ impl Nix {
             if options.logging_stdout {
                 cmd.stdout(std::process::Stdio::inherit());
             }
-        }
-
-        if self.global_options.verbose {
-            debug!("Running command: {}", display_command(&cmd));
         }
 
         let result = if self.global_options.eval_cache
@@ -442,8 +436,15 @@ impl Nix {
                 });
             }
 
+            let pretty_cmd = display_command(&cmd);
+            let span = debug_span!(
+                "Running command",
+                command = pretty_cmd.as_str(),
+                devenv.user_message = format!("Running command: {}", pretty_cmd)
+            );
             let output = cached_cmd
                 .output(&mut cmd)
+                .instrument(span)
                 .await
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
@@ -457,10 +458,17 @@ impl Nix {
 
             output
         } else {
-            let output = cmd
-                .output()
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+            let pretty_cmd = display_command(&cmd);
+            let span = debug_span!(
+                "Running command",
+                command = pretty_cmd.as_str(),
+                devenv.user_message = format!("Running command: {}", pretty_cmd)
+            );
+            let output = span.in_scope(|| {
+                cmd.output()
+                    .into_diagnostic()
+                    .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))
+            })?;
 
             devenv_eval_cache::Output {
                 status: output.status,
