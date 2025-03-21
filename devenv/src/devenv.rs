@@ -17,7 +17,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::{debug, error, info, info_span, warn, Instrument};
+use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -213,6 +213,7 @@ impl Devenv {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn shell(
         &mut self,
         cmd: &Option<String>,
@@ -221,17 +222,53 @@ impl Devenv {
     ) -> Result<()> {
         let develop_args = self.prepare_develop_args(cmd, args).await?;
 
-        let develop_args = develop_args
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<&str>>();
+        let DevEnv { output, .. } = self.get_dev_environment(false).await?;
 
-        let span = info_span!("Entering shell", devenv.user_message = "Entering shell");
-        self.nix
-            .develop(&develop_args, replace_shell)
-            .instrument(span)
-            .await?;
+        // TODO: fetch bash from nixpkgs
+        // Needs a gcroot though. So maybe it needs to be in the module eval.
+        // nix eval --inputs-from . --raw nixpkgs#legacyPackages.aarch64-darwin.bashInteractive
+        let bash = "/run/current-system/sw/bin/bash";
+
+        let path = self.devenv_runtime.join("shell");
+        std::fs::write(&path, output).unwrap();
+        let mut shell_cmd = std::process::Command::new(bash);
+        shell_cmd.args(["--rcfile", &path.to_string_lossy()]);
+        if let Some(cmd) = cmd {
+            shell_cmd.arg("-c").arg(cmd).args(args);
+        }
+
+        let default_clean = config::Clean {
+            enabled: false,
+            keep: vec![],
+        };
+        let config_clean = self.config.clean.as_ref().unwrap_or(&default_clean);
+        if self.global_options.clean.is_some() || config_clean.enabled {
+            shell_cmd.env_clear();
+
+            let keep = match &self.global_options.clean {
+                Some(clean) => clean,
+                None => &config_clean.keep,
+            };
+
+            let filtered_env: HashMap<String, String> = std::env::vars()
+                .filter(|(ref k, _)| keep.contains(k))
+                .collect();
+
+            shell_cmd.envs(filtered_env);
+        }
+
+        shell_cmd.env("SHELL", "bash").env("DEVENV_SHELL", "1");
+
+        let _ = shell_cmd.exec();
+
         Ok(())
+
+        // let span = info_span!("Entering shell", devenv.user_message = "Entering shell");
+        // self.nix
+        //     .develop(&develop_args, replace_shell)
+        //     .instrument(span)
+        //     .await?;
+        // Ok(())
     }
 
     pub async fn prepare_develop_args(
@@ -879,11 +916,12 @@ impl Devenv {
         Ok(())
     }
 
+    #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]
     pub async fn get_dev_environment(&mut self, json: bool) -> Result<DevEnv> {
         self.assemble(false).await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");
-        let span = tracing::info_span!("building_shell", devenv.user_message = "Building shell",);
+        let span = tracing::debug_span!("evaluating_dev_env");
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
         use devenv_eval_cache::command::{FileInputDesc, Input};
