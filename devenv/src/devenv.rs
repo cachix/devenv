@@ -578,7 +578,7 @@ impl Devenv {
         let test_script = test_script[0].to_string_lossy().to_string();
 
         if self.has_processes().await? {
-            self.up(None, &true, &false).await?;
+            self.up(vec![], &true, &false).await?;
         }
 
         let span = info_span!("test", devenv.user_message = "Running tests");
@@ -663,7 +663,7 @@ impl Devenv {
 
     pub async fn up(
         &mut self,
-        process: Option<&str>,
+        processes: Vec<String>,
         detach: &bool,
         log_to_file: &bool,
     ) -> Result<()> {
@@ -691,7 +691,11 @@ impl Devenv {
 
         let span = info_span!("up", devenv.user_message = "Starting processes");
         async {
-            let process = process.unwrap_or("");
+            let processes = if processes.is_empty() {
+                "".to_string()
+            } else {
+                processes.join(" ")
+            };
 
             let processes_script = self.devenv_dotfile.join("processes");
             // we force disable process compose tui if detach is enabled
@@ -705,7 +709,7 @@ impl Devenv {
                 indoc::formatdoc! {"
                 #!/usr/bin/env bash
                 {tui}
-                exec {proc_script_string} {process}
+                exec {proc_script_string} {processes}
             "},
             )
             .expect("Failed to write PROCESSES_SCRIPT");
