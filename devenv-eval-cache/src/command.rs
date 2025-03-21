@@ -323,10 +323,7 @@ impl FileInputDesc {
                 .collect::<String>();
             Some(hash::digest(&paths))
         } else {
-            // Dropping null constraints in sqlite is painful, hence the placeholder hash.
-            hash::compute_file_hash(&path).ok().or_else(|| {
-                Some("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string())
-            })
+            hash::compute_file_hash(&path).ok()
         };
         let modified_at = path
             .metadata()
@@ -420,6 +417,10 @@ async fn query_cached_output(
         .map_err(CommandError::Sqlx)?;
 
     if let Some(cmd) = cached_cmd {
+        trace!(
+            command_hash = cmd_hash,
+            "Found cached command, checking input states"
+        );
         let files = db::get_files_by_command_id(pool, cmd.id)
             .await
             .map_err(CommandError::Sqlx)?;
@@ -472,9 +473,14 @@ async fn query_cached_output(
 
             while let Some(res) = set.join_next().await {
                 if let Ok((index, Ok(file_state))) = res {
+                    let input = &inputs[index];
                     match file_state {
                         FileState::MetadataModified { modified_at, .. } => {
                             if let Input::File(file) = &inputs[index] {
+                                trace!(
+                                    input = ?input,
+                                    "File metadata has been modified, updating modified_at"
+                                );
                                 // TODO: batch with query builder?
                                 db::update_file_modified_at(pool, &file.path, modified_at)
                                     .await
@@ -482,9 +488,17 @@ async fn query_cached_output(
                             }
                         }
                         FileState::Modified { .. } => {
+                            trace!(
+                                input = ?input,
+                                "Input has been modified, refreshing command"
+                            );
                             should_refresh = true;
                         }
                         FileState::Removed { .. } => {
+                            trace!(
+                                input = ?input,
+                                "Input has been removed, refreshing command"
+                            );
                             should_refresh = true;
                         }
                         _ => (),
@@ -512,6 +526,7 @@ async fn query_cached_output(
             }))
         }
     } else {
+        trace!(command_hash = cmd_hash, "Command not found in cache");
         Ok(None)
     }
 }
