@@ -25,13 +25,13 @@ let
       filename = builtins.baseNameOf (toString file);
     in
     lib.optionalString (!lib.pathExists file) ''
-      echo "💡 The dotenv file '${filename}' was not found."
+      echo "💡 The dotenv file '${filename}' was not found." >&2
       ${lib.optionalString exampleExists ''
-        echo
-        echo "   To create this file, you can copy the example file:"
-        echo
-        echo "   $ cp ${filename}.example ${filename}"
-        echo
+        echo >&2
+        echo "   To create this file, you can copy the example file:" >&2
+        echo >&2
+        echo "   $ cp ${filename}.example ${filename}" >&2
+        echo >&2
       ''}
     '';
 in
@@ -73,12 +73,12 @@ in
           dotenvFound = lib.any lib.pathExists dotenvPaths;
         in
         lib.optionalString dotenvFound ''
-          echo "💡 A dotenv file was found, while dotenv integration is currently not enabled."
-          echo
-          echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file.";
-          echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file.";
-          echo
-          echo "See https://devenv.sh/integrations/dotenv/ for more information.";
+          echo "💡 A dotenv file was found, while dotenv integration is currently not enabled." >&2
+          echo >&2
+          echo "   To enable it, add \`dotenv.enable = true;\` to your devenv.nix file." >&2;
+          echo "   To disable this hint, add \`dotenv.disableHint = true;\` to your devenv.nix file." >&2;
+          echo >&2
+          echo "See https://devenv.sh/integrations/dotenv/ for more information." >&2;
         '';
     })
   ];
