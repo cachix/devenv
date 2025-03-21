@@ -220,17 +220,32 @@ impl Devenv {
         args: &[String],
         replace_shell: bool,
     ) -> Result<()> {
-        let develop_args = self.prepare_develop_args(cmd, args).await?;
-
         let DevEnv { output, .. } = self.get_dev_environment(false).await?;
 
         // TODO: fetch bash from nixpkgs
         // Needs a gcroot though. So maybe it needs to be in the module eval.
-        // nix eval --inputs-from . --raw nixpkgs#legacyPackages.aarch64-darwin.bashInteractive
-        let bash = "/run/current-system/sw/bin/bash";
+        let options = cnix::Options {
+            cache_output: true,
+            ..self.nix.options
+        };
+        let bash_attr = format!(
+            "nixpkgs#legacyPackages.{}.bashInteractive",
+            self.global_options.system
+        );
+        let bash = String::from_utf8(
+            self.nix
+                .run_nix(
+                    "nix",
+                    &["eval", "--inputs-from", ".", "--raw", &bash_attr],
+                    &options,
+                )
+                .await?
+                .stdout,
+        )
+        .unwrap_or("bash".to_string());
 
         let path = self.devenv_runtime.join("shell");
-        std::fs::write(&path, output).unwrap();
+        tokio::fs::write(&path, output).await.unwrap();
         let mut shell_cmd = std::process::Command::new(bash);
         shell_cmd.args(["--rcfile", &path.to_string_lossy()]);
         if let Some(cmd) = cmd {
@@ -259,6 +274,7 @@ impl Devenv {
 
         shell_cmd.env("SHELL", "bash").env("DEVENV_SHELL", "1");
 
+        info!(devenv.user_message = "Entering shell", "Entering shell",);
         let _ = shell_cmd.exec();
 
         Ok(())
