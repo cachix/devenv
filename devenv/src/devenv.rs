@@ -289,9 +289,10 @@ impl Devenv {
                 .collect();
 
             shell_cmd.envs(filtered_env);
+            shell_cmd.arg("--norc").arg("--noprofile");
         }
 
-        shell_cmd.env("SHELL", "bash").env("DEVENV_SHELL", "1");
+        shell_cmd.env("SHELL", bash);
 
         Ok(shell_cmd)
     }
@@ -311,53 +312,6 @@ impl Devenv {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
         let span = info_span!("running_shell", devenv.user_message = "Running in shell");
         span.in_scope(|| shell_cmd.output().into_diagnostic())
-    }
-
-    pub async fn prepare_develop_args(
-        &mut self,
-        cmd: &Option<String>,
-        args: &[String],
-    ) -> Result<Vec<String>> {
-        self.assemble(false).await?;
-        let env = self.get_dev_environment(false).await?;
-
-        let mut develop_args = vec![
-            "develop",
-            env.gc_root.to_str().expect("gc root should be utf-8"),
-        ];
-
-        let default_clean = config::Clean {
-            enabled: false,
-            keep: vec![],
-        };
-        let config_clean = self.config.clean.as_ref().unwrap_or(&default_clean);
-        if self.global_options.clean.is_some() || config_clean.enabled {
-            develop_args.push("--ignore-environment");
-
-            let keep = match &self.global_options.clean {
-                Some(clean) => clean,
-                None => &config_clean.keep,
-            };
-
-            for env in keep {
-                develop_args.push("--keep");
-                develop_args.push(env);
-            }
-
-            develop_args.push("-c");
-            develop_args.push("bash");
-            develop_args.push("--norc");
-            develop_args.push("--noprofile")
-        }
-
-        if let Some(cmd) = cmd {
-            develop_args.push("-c");
-            develop_args.push(cmd);
-            let args = args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
-            develop_args.extend_from_slice(&args);
-        }
-
-        Ok(develop_args.into_iter().map(|s| s.to_string()).collect())
     }
 
     pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
@@ -782,21 +736,9 @@ impl Devenv {
             std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
                 .expect("Failed to set permissions");
 
-            let develop_args = self
-                .prepare_develop_args(&Some(processes_script.to_str().unwrap().to_string()), &[])
-                .await?;
-
             let span = info_span!("Entering shell");
             let mut cmd = self
-                .nix
-                .prepare_command_with_substituters(
-                    "nix",
-                    &develop_args
-                        .iter()
-                        .map(AsRef::as_ref)
-                        .collect::<Vec<&str>>(),
-                    &self.nix.options,
-                )
+                .prepare_shell(&Some(processes_script.to_string_lossy().to_string()), &[])
                 .instrument(span)
                 .await?;
 
