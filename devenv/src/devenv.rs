@@ -267,9 +267,12 @@ impl Devenv {
             }
         }
 
-        tokio::fs::write(&path, output)
+        tokio::fs::write(&path, &output)
             .await
             .expect("Failed to write the shell script");
+        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .await
+            .expect("Failed to set permissions");
 
         let default_clean = config::Clean {
             enabled: false,
@@ -311,7 +314,14 @@ impl Devenv {
     ) -> Result<std::process::Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
         let span = info_span!("running_shell", devenv.user_message = "Running in shell");
-        span.in_scope(|| shell_cmd.output().into_diagnostic())
+        span.in_scope(|| {
+            shell_cmd
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
+                .output()
+                .into_diagnostic()
+        })
     }
 
     pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
