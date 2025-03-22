@@ -219,6 +219,7 @@ impl Devenv {
         cmd: &Option<String>,
         args: &[String],
     ) -> Result<std::process::Command> {
+        self.assemble(false).await?;
         let DevEnv { mut output, .. } = self.get_dev_environment(false).await?;
 
         // TODO: fetch bash from nixpkgs or from the module config
