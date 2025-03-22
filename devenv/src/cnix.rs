@@ -124,23 +124,6 @@ impl Nix {
         Ok(())
     }
 
-    pub async fn develop(
-        &self,
-        args: &[&str],
-        replace_shell: bool,
-    ) -> Result<devenv_eval_cache::Output> {
-        let options = Options {
-            logging_stdout: true,
-            // Cannot cache this because we don't get the derivation back.
-            // We'd need to switch to print-dev-env and our own `nix develop`.
-            cache_output: false,
-            bail_on_error: false,
-            replace_shell,
-            ..self.options
-        };
-        self.run_nix_with_substituters("nix", args, &options).await
-    }
-
     pub async fn dev_env(
         &self,
         json: bool,
