@@ -219,7 +219,6 @@ impl Devenv {
         cmd: &Option<String>,
         args: &[String],
     ) -> Result<std::process::Command> {
-        self.assemble(false).await?;
         let DevEnv { mut output, .. } = self.get_dev_environment(false).await?;
 
         // TODO: fetch bash from nixpkgs or from the module config
@@ -268,7 +267,9 @@ impl Devenv {
             }
         }
 
-        tokio::fs::write(&path, output).await.unwrap();
+        tokio::fs::write(&path, output)
+            .await
+            .expect("Failed to write the shell script");
 
         let default_clean = config::Clean {
             enabled: false,
