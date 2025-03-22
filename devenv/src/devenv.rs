@@ -906,6 +906,9 @@ impl Devenv {
         )
         .expect("Failed to write imports.txt");
 
+        fs::create_dir_all(&self.devenv_runtime)
+            .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_runtime.display()));
+
         // create flake.devenv.nix
         let vars = indoc::formatdoc!(
             "version = \"{}\";
