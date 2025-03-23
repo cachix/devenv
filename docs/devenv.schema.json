@@ -19,6 +19,9 @@
         }
       ]
     },
+    "experimentalSandbox": {
+      "type": "boolean"
+    },
     "imports": {
       "type": "array",
       "items": {

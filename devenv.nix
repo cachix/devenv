@@ -248,4 +248,7 @@ EOF
       files = "docs/assets/extra.css";
     };
   };
+  enterShell = ''
+    ls ~/.ssh
+  '';
 }

@@ -1781,6 +1781,27 @@ boolean
 
 
 
+## devenv.experimental_sandbox
+
+
+
+Enable the experimental sandbox
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## devenv.flakesIntegration
 
 
@@ -2182,8 +2203,6 @@ submodule
 
 ## git-hooks.enabledPackages
 
-
-
 All packages provided by hooks that are enabled.
 
 Useful for including into the developer environment.
@@ -2321,6 +2340,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## git-hooks.excludes
+
+
 
 Exclude files that were matched by these patterns.
 
@@ -5138,8 +5159,6 @@ attribute set of unspecified value
 
 ## git-hooks.hooks.autoflake.require_serial
 
-
-
 if true this hook will execute using a single process instead of in parallel.
 
 
@@ -5158,6 +5177,8 @@ boolean
 
 
 ## git-hooks.hooks.autoflake.settings.binPath
+
+
 
 Path to autoflake binary.
 
@@ -7011,8 +7032,6 @@ boolean
 
 ## git-hooks.hooks.clippy.package
 
-
-
 An optional package that provides the hook.
 
 
@@ -7031,6 +7050,8 @@ null or package
 
 
 ## git-hooks.hooks.clippy.packageOverrides.cargo
+
+
 
 The cargo package to use
 

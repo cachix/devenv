@@ -1,11 +1,17 @@
-{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  bootstrapPkgs ? null,
+  ...
+}:
 let
   types = lib.types;
   # Returns a list of all the entries in a folder
-  listEntries = path:
-    map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
+  listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
-  drvOrPackageToPaths = drvOrPackage:
+  drvOrPackageToPaths =
+    drvOrPackage:
     if drvOrPackage ? outputs then
       builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
     else
@@ -16,23 +22,74 @@ let
     ignoreCollisions = true;
   };
 
-  failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+  failedAssertions = builtins.map (x: x.message) (
+    builtins.filter (x: !x.assertion) config.assertions
+  );
 
   performAssertions =
     let
-      formatAssertionMessage = message:
+      formatAssertionMessage =
+        message:
         let
           lines = lib.splitString "\n" message;
         in
         "- ${lib.concatStringsSep "\n  " lines}";
     in
-    if failedAssertions != [ ]
-    then
+    if failedAssertions != [ ] then
       throw ''
         Failed assertions:
         ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
-    else lib.trivial.showWarnings config.warnings;
+    else
+      lib.trivial.showWarnings config.warnings;
+
+  sandboxer = pkgs.rustPlatform.buildRustPackage {
+    pname = "sandboxer";
+    version = "0.0.1";
+    src = pkgs.fetchFromGitHub {
+      #owner = "landlock-lsm";
+      owner = "lorenzbischof"; # repository does not contain a lockfile yet
+      repo = "landlockconfig";
+      rev = "main";
+      hash = "sha256-odG+YsK3+YJdWS6ATJ2YcAWn5rwTNInH0EleI3/5jG8=";
+    };
+    installPhase = ''
+      mkdir -p $out/bin
+      cp target/*/release/examples/sandboxer $out/bin/
+    '';
+    cargoBuildFlags = [
+      "--example"
+      "sandboxer"
+    ];
+    cargoHash = "sha256-YVty2x8jz/TNfCMks9LFN70mkSrYIFng3enLYt2REBo=";
+  };
+  sandboxer-settings = pkgs.writers.writeTOML "sandboxer.toml" {
+    ruleset = [
+      { handled_access_fs = [ "v5.all" ]; }
+    ];
+    path_beneath = [
+      {
+        allowed_access = [ "v5.read_write" ];
+        parent_fd = [
+          config.devenv.root
+          config.devenv.runtime
+          config.devenv.tmpdir
+          "/proc"
+          "/tmp"
+          "/dev/tty"
+          "/dev/null"
+        ];
+      }
+      {
+        allowed_access = [ "v5.read_execute" ];
+        parent_fd = [
+          "/nix"
+          "/proc/stat"
+        ];
+      }
+    ];
+  };
+  sandbox = lib.optionalString config.devenv.experimental_sandbox "${sandboxer}/bin/sandboxer --toml ${sandboxer-settings}";
 in
 {
   options = {
@@ -89,15 +146,14 @@ in
 
       # Remove the default apple-sdk on macOS.
       # Allow users to specify an optional SDK in `apple.sdk`.
-      apply = stdenv:
-        if stdenv.isDarwin
-        then
-          stdenv.override
-            (prev: {
-              extraBuildInputs =
-                builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
-            })
-        else stdenv;
+      apply =
+        stdenv:
+        if stdenv.isDarwin then
+          stdenv.override (prev: {
+            extraBuildInputs = builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
+          })
+        else
+          stdenv;
 
     };
 
@@ -170,7 +226,12 @@ in
       type = types.listOf types.unspecified;
       internal = true;
       default = [ ];
-      example = [{ assertion = false; message = "you can't enable this for that reason"; }];
+      example = [
+        {
+          assertion = false;
+          message = "you can't enable this for that reason";
+        }
+      ];
       description = ''
         This option allows modules to express conditions that must
         hold for the evaluation of the configuration to succeed,
@@ -218,6 +279,12 @@ in
         internal = true;
       };
 
+      experimental_sandbox = lib.mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable the experimental sandbox";
+      };
+
       runtime = lib.mkOption {
         type = types.str;
         internal = true;
@@ -243,7 +310,12 @@ in
             xdg = builtins.getEnv "XDG_RUNTIME_DIR";
             tmp = builtins.getEnv "TMPDIR";
           in
-          if xdg != "" then xdg else if tmp != "" then tmp else "/tmp";
+          if xdg != "" then
+            xdg
+          else if tmp != "" then
+            tmp
+          else
+            "/tmp";
       };
 
       profile = lib.mkOption {
@@ -253,26 +325,26 @@ in
     };
   };
 
-  imports = [
-    ./info.nix
-    ./outputs.nix
-    ./files.nix
-    ./processes.nix
-    ./outputs.nix
-    ./scripts.nix
-    ./update-check.nix
-    ./containers.nix
-    ./debug.nix
-    ./lib.nix
-    ./tests.nix
-    ./cachix.nix
-    ./tasks.nix
-  ]
-  ++ (listEntries ./languages)
-  ++ (listEntries ./services)
-  ++ (listEntries ./integrations)
-  ++ (listEntries ./process-managers)
-  ;
+  imports =
+    [
+      ./info.nix
+      ./outputs.nix
+      ./files.nix
+      ./processes.nix
+      ./outputs.nix
+      ./scripts.nix
+      ./update-check.nix
+      ./containers.nix
+      ./debug.nix
+      ./lib.nix
+      ./tests.nix
+      ./cachix.nix
+      ./tasks.nix
+    ]
+    ++ (listEntries ./languages)
+    ++ (listEntries ./services)
+    ++ (listEntries ./integrations)
+    ++ (listEntries ./process-managers);
 
   config = {
     assertions = [
@@ -285,7 +357,10 @@ in
         '';
       }
       {
-        assertion = config.devenv.flakesIntegration || config.overlays == [ ] || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
+        assertion =
+          config.devenv.flakesIntegration
+          || config.overlays == [ ]
+          || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
         message = ''
           Using overlays requires devenv 1.4.2 or higher, while your current version is ${config.devenv.cliVersion}.
         '';
@@ -305,8 +380,7 @@ in
     packages = [
       # needed to make sure we can load libs
       pkgs.pkg-config
-    ]
-    ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
+    ] ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
 
     enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
@@ -352,26 +426,53 @@ in
         # On macOS, the default apple-sdk is added to stdenv via `extraBuildInputs`.
         # If we don't remove it from stdenv, then its setup hooks will clobber any SDK added to `packages`.
         isAppleSDK = pkg: builtins.match ".*apple-sdk.*" (pkg.pname or "") != null;
-        partitionedPkgs = builtins.partition isAppleSDK config.packages;
+        partitionedPkgs = builtins.partition isAppleSDK wrappedPackages;
         buildInputs = partitionedPkgs.right;
         nativeBuildInputs = partitionedPkgs.wrong;
+        wrappedPackages = map wrapBinaries config.packages;
+        wrapBinaries =
+          pkg:
+          pkgs.stdenv.mkDerivation {
+            name = "wrapped-${pkg.name}";
+            src = [ pkg ];
+            buildInputs = [ pkgs.makeWrapper ];
+
+            postBuild = ''
+              mkdir -p $out/bin
+              for bin in $src/bin/*; do
+                if [ -x "$bin" ] && [ -f "$bin" ]; then
+                  echo "exec ${sandbox} $bin \"\$@\"" > $out/bin/$(basename $bin)
+                  chmod +x $out/bin/$(basename $bin)
+                fi
+              done
+            '';
+          };
+        shellHook = pkgs.writeShellScriptBin "shellHook" config.enterShell;
       in
       performAssertions (
-        (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          name = "devenv-shell";
-          hardeningDisable = config.hardeningDisable;
-          inherit buildInputs nativeBuildInputs;
-          shellHook = ''
-            ${lib.optionalString config.devenv.debug "set -x"}
-            ${config.enterShell}
-          '';
-        } // config.env)
+        (pkgs.mkShell.override { stdenv = config.stdenv; }) (
+          {
+            name = "devenv-shell";
+            hardeningDisable = config.hardeningDisable;
+            inherit buildInputs nativeBuildInputs;
+            shellHook = ''
+              ${lib.optionalString config.devenv.debug "set -x"}
+              ${sandbox} ${shellHook}/bin/shellHook
+            '';
+          }
+          // config.env
+        )
       );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
-    infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
+    infoSections."packages" = builtins.map (package: package.name) (
+      builtins.filter (
+        package: !(builtins.elem package.name (builtins.attrNames config.scripts))
+      ) config.packages
+    );
 
     _module.args.pkgs = bootstrapPkgs.appendOverlays config.overlays;
+    _module.args.sandbox = sandbox;
 
     ci = [ config.shell ];
     ciDerivation = pkgs.runCommand "ci" { } "echo ${toString config.ci} > $out";

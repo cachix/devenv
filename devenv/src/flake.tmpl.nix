@@ -67,6 +67,7 @@
                 devenv.cliVersion = version;
                 devenv.root = devenv_root;
                 devenv.dotfile = devenv_root + "/" + devenv_dotfile_string;
+                devenv.experimental_sandbox = devenv_experimental_sandbox;
               }
               (pkgs.lib.optionalAttrs (inputs.devenv.isTmpDir or false) {
                 devenv.tmpdir = devenv_tmpdir;
