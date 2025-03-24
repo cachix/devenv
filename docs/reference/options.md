@@ -42221,6 +42221,37 @@ package
 
 
 
+## languages.typst.fontPaths
+
+
+
+Directories to be searched for fonts.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [] `
+
+
+
+*Example:*
+
+```
+[
+  "\${pkgs.roboto}/share/fonts/truetype"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
+
+
+
 ## languages.unison.enable
 
 
