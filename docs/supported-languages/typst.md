@@ -39,3 +39,31 @@ package
 
 *Default:*
 ` pkgs.typst `
+
+
+
+## languages\.typst\.fontPaths
+
+
+
+Directories to be searched for fonts\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [] `
+
+
+
+*Example:*
+
+```
+[
+  "\${pkgs.roboto}/share/fonts/truetype"
+]
+```
