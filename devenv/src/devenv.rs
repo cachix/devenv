@@ -17,7 +17,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -213,6 +213,44 @@ impl Devenv {
         Ok(())
     }
 
+    // TODO: fetch bash from the module system
+    async fn get_bash(&mut self, refresh_cached_output: bool) -> Result<String> {
+        let options = cnix::Options {
+            cache_output: true,
+            refresh_cached_output,
+            ..self.nix.options
+        };
+        let bash_attr = format!(
+            "nixpkgs#legacyPackages.{}.bashInteractive.out",
+            self.global_options.system
+        );
+        String::from_utf8(
+            self.nix
+                .run_nix(
+                    "nix",
+                    &[
+                        "build",
+                        "--inputs-from",
+                        ".",
+                        "--print-out-paths",
+                        "--out-link",
+                        &self.devenv_dotfile.join("bash").to_string_lossy(),
+                        &bash_attr,
+                    ],
+                    &options,
+                )
+                .await?
+                .stdout,
+        )
+        .map(|mut s| {
+            let trimmed_len = s.trim_end_matches('\n').len();
+            s.truncate(trimmed_len);
+            s.push_str("/bin/bash");
+            s
+        })
+        .into_diagnostic()
+    }
+
     #[instrument(skip(self))]
     pub async fn prepare_shell(
         &mut self,
@@ -221,33 +259,12 @@ impl Devenv {
     ) -> Result<std::process::Command> {
         let DevEnv { mut output, .. } = self.get_dev_environment(false).await?;
 
-        // TODO: fetch bash from nixpkgs or from the module config
-        // Needs a gcroot though. So maybe it needs to be in the module eval.
-        let options = cnix::Options {
-            cache_output: true,
-            ..self.nix.options
-        };
-        let bash_attr = format!(
-            "nixpkgs#legacyPackages.{}.bashInteractive",
-            self.global_options.system
-        );
-        let bash = match String::from_utf8(
-            self.nix
-                .run_nix(
-                    "nix",
-                    &["eval", "--inputs-from", ".", "--raw", &bash_attr],
-                    &options,
-                )
-                .await?
-                .stdout,
-        ) {
-            Ok(mut s) => {
-                let trimmed_len = s.trim_end_matches('\n').len();
-                s.truncate(trimmed_len);
-                s.push_str("/bin/bash");
-                s
+        let bash = match self.get_bash(false).await {
+            Err(e) => {
+                trace!("Failed to get bash: {}. Rebuilding.", e);
+                self.get_bash(true).await?
             }
-            Err(_) => "bash".to_string(),
+            Ok(bash) => bash,
         };
 
         let mut shell_cmd = std::process::Command::new(&bash);
@@ -270,7 +287,7 @@ impl Devenv {
         tokio::fs::write(&path, &output)
             .await
             .expect("Failed to write the shell script");
-        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+        tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
             .await
             .expect("Failed to set permissions");
 
@@ -295,7 +312,7 @@ impl Devenv {
             shell_cmd.arg("--norc").arg("--noprofile");
         }
 
-        shell_cmd.env("SHELL", bash);
+        shell_cmd.env("SHELL", &bash);
 
         Ok(shell_cmd)
     }
