@@ -371,8 +371,6 @@ in
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
 
-    _module.args.pkgs = bootstrapPkgs.appendOverlays config.overlays;
-
     ci = [ config.shell ];
     ciDerivation = pkgs.runCommand "ci" { } "echo ${toString config.ci} > $out";
   };
