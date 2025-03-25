@@ -60,8 +60,11 @@
               then devenvdefaultpath
               else throw (devenvdefaultpath + " file does not exist for input ${name}.");
           project = pkgs.lib.evalModules {
-            specialArgs = inputs // { inherit inputs; bootstrapPkgs = pkgs; };
+            specialArgs = inputs // { inherit inputs; };
             modules = [
+              ({ config, ... }: {
+                _module.args.pkgs = pkgs.appendOverlays (config.overlays or [ ]);
+              })
               (inputs.devenv.modules + /top-level.nix)
               {
                 devenv.cliVersion = version;
