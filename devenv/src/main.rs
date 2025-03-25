@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
     match command {
         Commands::Shell { cmd, ref args } => match cmd {
             Some(cmd) => {
-                devenv.run_in_shell(cmd, args).await?;
+                devenv.exec_in_shell(cmd, args).await?;
                 Ok(())
             }
             None => devenv.shell().await,

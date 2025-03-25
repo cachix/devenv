@@ -324,13 +324,16 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn run_in_shell(
+    pub async fn exec_in_shell(
         &mut self,
         cmd: String,
         args: &[String],
     ) -> Result<std::process::Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let span = info_span!("running_shell", devenv.user_message = "Running in shell");
+        let span = info_span!(
+            "executing_in_shell",
+            devenv.user_message = "Executing in shell"
+        );
         span.in_scope(|| {
             shell_cmd
                 .stdin(std::process::Stdio::inherit())
@@ -644,7 +647,7 @@ impl Devenv {
         let span = info_span!("test", devenv.user_message = "Running tests");
         let result = async {
             debug!("Running command: {test_script}");
-            self.run_in_shell(test_script, &[]).await
+            self.exec_in_shell(test_script, &[]).await
         }
         .instrument(span)
         .await?;
