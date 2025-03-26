@@ -61,4 +61,4 @@ list of string
 
 
 *Example:*
-` [ "${pkgs.roboto}/share/fonts/truetype "] ] `
+` [ "${pkgs.roboto}/share/fonts/truetype" ] `
