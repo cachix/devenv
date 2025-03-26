@@ -19,7 +19,7 @@ in
       description = "Directories to be searched for fonts.";
       default = [ ];
       defaultText = lib.literalExpression "[]";
-      example = lib.literalExpression ''[ "\${pkgs.roboto}/share/fonts/truetype "] ]'';
+      example = lib.literalExpression ''[ "''${pkgs.roboto}/share/fonts/truetype "] ]'';
     };
   };
 
