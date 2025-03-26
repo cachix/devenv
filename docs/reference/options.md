@@ -42240,7 +42240,7 @@ list of string
 
 
 *Example:*
-` [ "${pkgs.roboto}/share/fonts/truetype "] ] `
+` [ "${pkgs.roboto}/share/fonts/truetype" ] `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/typst.nix)
