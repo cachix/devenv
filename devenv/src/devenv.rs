@@ -291,11 +291,7 @@ impl Devenv {
             .await
             .expect("Failed to set permissions");
 
-        let default_clean = config::Clean {
-            enabled: false,
-            keep: vec![],
-        };
-        let config_clean = self.config.clean.as_ref().unwrap_or(&default_clean);
+        let config_clean = self.config.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
             shell_cmd.env_clear();
 
