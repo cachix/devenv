@@ -74,7 +74,13 @@ async fn main() -> Result<()> {
     let mut devenv = Devenv::new(options).await;
 
     match command {
-        Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true).await,
+        Commands::Shell { cmd, ref args } => match cmd {
+            Some(cmd) => {
+                devenv.exec_in_shell(cmd, args).await?;
+                Ok(())
+            }
+            None => devenv.shell().await,
+        },
         Commands::Test { .. } => devenv.test().await,
         Commands::Container {
             registry,

@@ -137,7 +137,7 @@ async fn run_tests_in_directory(
             if PathBuf::from(setup_script).exists() {
                 eprintln!("    Running {setup_script}");
                 devenv
-                    .shell(&Some(format!("./{setup_script}")), &[], false)
+                    .exec_in_shell(format!("./{setup_script}"), &[])
                     .await?;
             }
 
