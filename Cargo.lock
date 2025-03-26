@@ -550,7 +550,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.4.2"
+version = "1.5.0"
 dependencies = [
  "binaryornot",
  "clap",
@@ -613,7 +613,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "binaryornot",
  "clap",
