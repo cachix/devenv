@@ -61,4 +61,4 @@ list of string
 
 
 *Example:*
-` [ "\/nix/store/pbcb7j89fggfmjafzplcpylvksay4v9q-roboto-2.138/share/fonts/truetype "] ] `
+` [ "${pkgs.roboto}/share/fonts/truetype "] ] `
