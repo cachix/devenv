@@ -14,7 +14,7 @@
 }:
 
 rustPlatform.buildRustPackage {
-  pname = "devenv";
+  pname = "devenv${lib.optionalString build_tasks "-tasks"}";
   version = "1.4.2";
 
   # WARN: building this from src/modules/tasks.nix fails.
