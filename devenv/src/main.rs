@@ -161,10 +161,10 @@ async fn main() -> Result<()> {
         Commands::Repl {} => devenv.repl().await,
         Commands::Build { attributes } => devenv.build(&attributes).await,
         Commands::Update { name } => devenv.update(&name).await,
-        Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach).await,
+        Commands::Up { processes, detach } => devenv.up(processes, &detach, &detach).await,
         Commands::Processes { command } => match command {
-            ProcessesCommand::Up { process, detach } => {
-                devenv.up(process.as_deref(), &detach, &detach).await
+            ProcessesCommand::Up { processes, detach } => {
+                devenv.up(processes, &detach, &detach).await
             }
             ProcessesCommand::Down {} => devenv.down(),
         },
