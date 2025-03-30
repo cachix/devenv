@@ -9,7 +9,13 @@ COPY nix.conf /tmp/nix.conf
 
 # Update and install dependencies
 RUN apt-get update && \
-    apt-get install -y bash curl git sudo xz-utils
+    apt-get install -y acl bash curl git sudo xz-utils
+
+# Remove the default permissions from /tmp.
+# This fixes the "suspicious ownership or permission" error from Nix.
+# Requires that the acl package be installed.
+# Upstream issue: https://github.com/NixOS/nix/issues/6680
+RUN sudo setfacl -k /tmp
 
 # Install Nix
 # NOTE: The extra conf file does not apply to the install script itself.
