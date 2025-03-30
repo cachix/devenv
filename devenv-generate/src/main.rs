@@ -4,8 +4,11 @@ use devenv::{
     log::{self, LogFormat},
 };
 use miette::{bail, IntoDiagnostic, Result};
+use rustls::crypto::aws_lc_rs;
+use rustls_platform_verifier::BuilderVerifierExt;
 use similar::{ChangeTag, TextDiff};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -96,7 +99,16 @@ async fn main() -> Result<()> {
         None
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .use_preconfigured_tls(
+            rustls::ClientConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_platform_verifier()
+                .with_no_client_auth(),
+        )
+        .build()
+        .expect("Failed to create reqwest client");
     let mut request = client
         .post(&cli.host)
         .query(&[("disable_telemetry", cli.disable_telemetry)])
