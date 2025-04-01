@@ -3,7 +3,7 @@
 let
   cfg = config.android;
 
-  androidEnvModule = pkgs.callPackage "${pkgs.path}/pkgs/development/mobile/androidenv";
+  androidEnvModule = pkgs.callPackage "${toString pkgs.path}/pkgs/development/mobile/androidenv";
   androidEnvArgs = {
     inherit pkgs;
     licenseAccepted = true;
