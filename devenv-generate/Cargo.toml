@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 devenv.workspace = true
+http-client-tls.workspace = true
 
 clap = { workspace = true, features = ["derive"] }
 console.workspace = true

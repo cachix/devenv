@@ -681,8 +681,11 @@ impl Nix {
                 known_keys,
             };
 
+            let client = reqwest::Client::builder()
+                .use_preconfigured_tls(http_client_tls::tls_config())
+                .build()
+                .expect("Failed to create reqwest client");
             let mut new_known_keys: HashMap<String, String> = HashMap::new();
-            let client = reqwest::Client::new();
             for name in caches.caches.pull.iter() {
                 if !caches.known_keys.contains_key(name) {
                     let mut request =

@@ -96,7 +96,10 @@ async fn main() -> Result<()> {
         None
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .use_preconfigured_tls(http_client_tls::tls_config())
+        .build()
+        .expect("Failed to create reqwest client");
     let mut request = client
         .post(&cli.host)
         .query(&[("disable_telemetry", cli.disable_telemetry)])

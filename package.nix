@@ -5,9 +5,9 @@
 , rustPlatform
 , nix
 , cachix
-, darwin
 , sqlx-cli
 , openssl
+, apple-sdk_11
 , pkg-config
 , glibcLocalesUtf8
 , build_tasks ? false
@@ -29,6 +29,7 @@ rustPlatform.buildRustPackage {
     ".*devenv-run-tests(/.*)?"
     ".*devenv-tasks(/.*)?"
     "direnvrc"
+    ".*http-client-tls(/.*)?"
     ".*nix-conf-parser(/.*)?"
     ".*xtask(/.*)?"
   ];
@@ -51,7 +52,7 @@ rustPlatform.buildRustPackage {
   ] ++ lib.optional (!build_tasks) sqlx-cli;
 
   buildInputs = [ openssl ]
-    ++ lib.optional stdenv.isDarwin darwin.apple_sdk.frameworks.SystemConfiguration;
+    ++ lib.optional stdenv.isDarwin apple-sdk_11;
 
   # Force sqlx to use the prepared queries
   SQLX_OFFLINE = true;
