@@ -6,6 +6,8 @@
   env.RUST_LOG_SPAN_EVENTS = "full";
   env.DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
 
+  apple.sdk = pkgs.apple-sdk_11;
+
   packages = [
     pkgs.cairo
     pkgs.git
