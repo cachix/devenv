@@ -1,10 +1,19 @@
-- git commit
-- git tag
-- git push --tags
-- create a release on github
-- bump version in devenv/Cargo.toml and package.nix
+### Release on GitHub
 
-# Once nixpkgs has been updated
+- Bump version in devenv/Cargo.toml and package.nix
+- `git commit`
+- `git tag`
+- `git push --tags`
+- Create a release on GitHub
 
-- write a blog post
-- src/modules/latest-version
+### Release on nixpkgs
+
+- Sync the `package.nix` in nixpkgs with [./package.nix](./package.nix)
+- Update `devenv_nix` if necessary
+
+### After nixpkgs release
+
+Wait for the release to reach `nixpkgs-unstable`.
+
+- Write a blog post
+- Update [`src/modules/latest-version`](./src/modules/latest-version)
