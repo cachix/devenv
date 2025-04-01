@@ -80,7 +80,9 @@ impl<'a> CachedCommand<'a> {
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
         if !self.force_refresh {
-            if let Ok(Some(output)) = query_cached_output(self.pool, &cmd_hash).await {
+            if let Ok(Some(output)) =
+                query_cached_output(self.pool, &cmd_hash, &self.extra_paths).await
+            {
                 return Ok(output);
             }
         }
@@ -185,23 +187,7 @@ impl<'a> CachedCommand<'a> {
         // Watch additional paths
         sources.extend_from_slice(&self.extra_paths);
 
-        let now = SystemTime::now();
-        let file_input_futures = sources
-            .into_iter()
-            .map(|source| {
-                tokio::task::spawn_blocking(move || {
-                    FileInputDesc::new(source, now).map_err(CommandError::Io)
-                })
-            })
-            .collect::<Vec<_>>();
-
-        let file_inputs = join_all(file_input_futures)
-            .await
-            .into_iter()
-            .flatten()
-            // TODO: add tracing here
-            .filter_map(Result::ok)
-            .collect::<Vec<_>>();
+        let file_inputs = query_file_inputs(&sources).await;
 
         let mut inputs = file_inputs
             .into_iter()
@@ -411,6 +397,7 @@ impl From<db::EnvInputRow> for EnvInputDesc {
 async fn query_cached_output(
     pool: &SqlitePool,
     cmd_hash: &str,
+    extra_paths: &[PathBuf],
 ) -> Result<Option<Output>, CommandError> {
     let cached_cmd = db::get_command_by_hash(pool, cmd_hash)
         .await
@@ -434,6 +421,14 @@ async fn query_cached_output(
             .map(Input::from)
             .chain(envs.into_iter().map(Input::from))
             .collect::<Vec<_>>();
+
+        let extra_file_inputs = query_file_inputs(extra_paths)
+            .await
+            .into_iter()
+            .map(Input::File)
+            .collect::<Vec<_>>();
+
+        inputs.extend(extra_file_inputs);
 
         inputs.sort();
         inputs.dedup();
@@ -529,6 +524,26 @@ async fn query_cached_output(
         trace!(command_hash = cmd_hash, "Command not found in cache");
         Ok(None)
     }
+}
+
+async fn query_file_inputs(sources: &[PathBuf]) -> Vec<FileInputDesc> {
+    let now = SystemTime::now();
+    let file_input_futures = sources
+        .iter()
+        .cloned()
+        .map(|source| {
+            tokio::task::spawn_blocking(move || {
+                FileInputDesc::new(source, now).map_err(CommandError::Io)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    join_all(file_input_futures)
+        .await
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>()
 }
 
 /// Convert a parse log line into into an `Op`.
