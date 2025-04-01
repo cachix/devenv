@@ -6,7 +6,7 @@
   env.RUST_LOG_SPAN_EVENTS = "full";
   env.DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
 
-  apple.sdk = pkgs.apple-sdk_11;
+  apple.sdk = if pkgs.stdenv.isDarwin then pkgs.apple-sdk_11 else null;
 
   packages = [
     pkgs.cairo
