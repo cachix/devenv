@@ -69,7 +69,7 @@ async fn run_tests_in_directory(
 
             let mut config = devenv::config::Config::load_from(path)?;
             for input in args.override_input.chunks_exact(2) {
-                config.add_input(&input[0].clone(), &input[1].clone(), &[]);
+                config.override_input_url(&input[0], &input[1]);
             }
 
             // Override the input for the devenv module
