@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 devenv.workspace = true
+http-client-tls.workspace = true
 
 clap = { workspace = true, features = ["derive"] }
 console.workspace = true
@@ -13,8 +14,6 @@ dialoguer.workspace = true
 indoc.workspace = true
 miette.workspace = true
 reqwest.workspace = true
-rustls.workspace = true
-rustls-platform-verifier.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["full"] }

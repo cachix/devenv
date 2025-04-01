@@ -6,6 +6,7 @@ members = [
     "devenv-eval-cache",
     "devenv-run-tests",
     "devenv-tasks",
+    "http-client-tls",
     "nix-conf-parser",
     "xtask",
 ]
@@ -21,6 +22,7 @@ devenv = { path = "devenv" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-tasks = { path = "devenv-tasks" }
+http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }
 
@@ -44,9 +46,6 @@ once_cell = "1.20.2"
 petgraph = "0.6.5"
 pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 regex = "1.10.3"
-reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls-manual-roots-no-provider"] }
-rustls = { version = "0.23.25", default-features = false, features = ["custom-provider", "aws_lc_rs", "tls12"] }
-rustls-platform-verifier = "0.5.1"
 schemars = "0.8.16"
 schematic = { version = "0.14.3", features = [
     "schema",
@@ -81,6 +80,12 @@ which = "6.0.0"
 whoami = "1.5.1"
 xdg = "2.5.2"
 tokio-tar = "0.3.1"
+
+# The version of rustls must match the version used by reqwest.
+# If you encounter an error, lock these versions down.
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls-manual-roots-no-provider"] }
+rustls = { version = "0.23.4", default-features = false, features = ["custom-provider", "aws_lc_rs", "tls12"] }
+rustls-platform-verifier = "0.5.1"
 
 # Always build optimized sqlx-macro to speed up query checks
 [profile.dev.package.sqlx-macros]

@@ -29,6 +29,7 @@ rustPlatform.buildRustPackage {
     ".*devenv-run-tests(/.*)?"
     ".*devenv-tasks(/.*)?"
     "direnvrc"
+    ".*http-client-tls(/.*)?"
     ".*nix-conf-parser(/.*)?"
     ".*xtask(/.*)?"
   ];

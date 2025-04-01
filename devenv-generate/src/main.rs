@@ -4,11 +4,8 @@ use devenv::{
     log::{self, LogFormat},
 };
 use miette::{bail, IntoDiagnostic, Result};
-use rustls::crypto::aws_lc_rs;
-use rustls_platform_verifier::BuilderVerifierExt;
 use similar::{ChangeTag, TextDiff};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -100,13 +97,7 @@ async fn main() -> Result<()> {
     };
 
     let client = reqwest::Client::builder()
-        .use_preconfigured_tls(
-            rustls::ClientConfig::builder_with_provider(Arc::new(aws_lc_rs::default_provider()))
-                .with_safe_default_protocol_versions()
-                .unwrap()
-                .with_platform_verifier()
-                .with_no_client_auth(),
-        )
+        .use_preconfigured_tls(http_client_tls::tls_config())
         .build()
         .expect("Failed to create reqwest client");
     let mut request = client

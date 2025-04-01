@@ -670,6 +670,7 @@ dependencies = [
  "dialoguer",
  "dotlock",
  "hex",
+ "http-client-tls",
  "include_dir",
  "indoc",
  "miette",
@@ -679,8 +680,6 @@ dependencies = [
  "petgraph",
  "regex",
  "reqwest 0.12.15",
- "rustls",
- "rustls-platform-verifier",
  "schemars",
  "schematic",
  "serde",
@@ -731,12 +730,11 @@ dependencies = [
  "console",
  "devenv",
  "dialoguer",
+ "http-client-tls",
  "indoc",
  "miette",
  "once_cell",
  "reqwest 0.12.15",
- "rustls",
- "rustls-platform-verifier",
  "serde",
  "serde_json",
  "similar",
@@ -1389,6 +1387,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-client-tls"
+version = "0.1.0"
+dependencies = [
+ "rustls",
+ "rustls-platform-verifier",
+]
+
+[[package]]
 name = "httparse"
 version = "1.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1779,7 +1785,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]

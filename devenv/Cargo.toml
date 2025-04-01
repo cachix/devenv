@@ -12,6 +12,7 @@ default-run = "devenv"
 [dependencies]
 devenv-eval-cache.workspace = true
 devenv-tasks.workspace = true
+http-client-tls.workspace = true
 nix-conf-parser.workspace = true
 
 clap.workspace = true
@@ -27,8 +28,6 @@ nix.workspace = true
 petgraph.workspace = true
 regex.workspace = true
 reqwest.workspace = true
-rustls.workspace = true
-rustls-platform-verifier.workspace = true
 schemars.workspace = true
 schematic.workspace = true
 serde.workspace = true

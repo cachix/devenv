@@ -1,8 +1,6 @@
 use crate::{cli, config};
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
-use rustls::crypto::aws_lc_rs;
-use rustls_platform_verifier::BuilderVerifierExt;
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::cell::{Ref, RefCell};
@@ -13,7 +11,6 @@ use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
@@ -685,15 +682,7 @@ impl Nix {
             };
 
             let client = reqwest::Client::builder()
-                .use_preconfigured_tls(
-                    rustls::ClientConfig::builder_with_provider(Arc::new(
-                        aws_lc_rs::default_provider(),
-                    ))
-                    .with_safe_default_protocol_versions()
-                    .unwrap()
-                    .with_platform_verifier()
-                    .with_no_client_auth(),
-                )
+                .use_preconfigured_tls(http_client_tls::tls_config())
                 .build()
                 .expect("Failed to create reqwest client");
             let mut new_known_keys: HashMap<String, String> = HashMap::new();
