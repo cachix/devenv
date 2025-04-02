@@ -106,8 +106,8 @@ in
 
     processes.keycloak =
       let
-        startScript =
-          pkgs.writeShellScriptBin "start-keycloak" ''
+        startScript = pkgs.writeShellScriptBin "start-keycloak" (
+          ''
             set -euo pipefail
             mkdir -p "$KC_HOME_DIR"
             mkdir -p "$KC_HOME_DIR/providers"
@@ -121,7 +121,8 @@ in
           + ''
             ${cfg.package}/bin/kc.sh show-config
             ${cfg.package}/bin/kc.sh start-dev
-          '';
+          ''
+        );
 
         healthScript = pkgs.writeShellScriptBin "health-keycloak" ''
           ${cfg.package}/bin/kcadm.sh config credentials \
