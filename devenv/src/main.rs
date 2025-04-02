@@ -42,7 +42,7 @@ async fn main() -> Result<()> {
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
-        config.add_input(&input[0].clone(), &input[1].clone(), &[]);
+        config.override_input_url(&input[0].clone(), &input[1].clone())
     }
 
     let mut options = devenv::DevenvOptions {
