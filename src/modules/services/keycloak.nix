@@ -130,7 +130,7 @@ in
           '')
           + ''
             "$exeDir/bin/kc.sh" show-config
-            "$exeDir/bin/kc.sh" --verbose start
+            "$exeDir/bin/kc.sh" --verbose start-dev
           ''
         );
 
