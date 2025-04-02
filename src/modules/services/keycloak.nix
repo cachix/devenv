@@ -97,6 +97,7 @@ in
     env.KC_BOOTSTRAP_ADMIN_USERNAME = "${escapeShellArg cfg.initialAdminPassword}";
 
     env.KC_HEALTH_ENABLE = "true";
+
     env.KC_HOSTNAME = cfg.hostname;
     env.KC_HTTP_PORT = cfg.port;
 
@@ -113,14 +114,23 @@ in
             mkdir -p "$KC_HOME_DIR/providers"
             mkdir -p "$KC_HOME_DIR/conf"
             mkdir -p "$KC_HOME_DIR/tmp"
+
+            exeDir="${cfg.package}"
+
+            # Try to copy to local folder, (probably wrong, needs nix copy??)
+            # exeDir="$KC_HOME_DIR/build-temp"
+            # mkdir -p "$KC_HOME_DIR/build-temp"
+            # cp -rf --no-preserve=ownership "${cfg.package}/." "$KC_HOME_DIR/build-temp/"
+            # chmod -R u+w "$exeDir"
+
           ''
           + (lib.optionalString (cfg.initialImportFile != null) ''
-            ${cfg.package}/bin/kc.sh import \
+            "$exeDir/bin/kc.sh" import \
               --file "${cfg.initialImportFile}" \
           '')
           + ''
-            ${cfg.package}/bin/kc.sh show-config
-            ${cfg.package}/bin/kc.sh start-dev
+            "$exeDir/bin/kc.sh" show-config
+            "$exeDir/bin/kc.sh" --verbose start
           ''
         );
 

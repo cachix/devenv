@@ -1,7 +1,10 @@
 { pkgs, ... }:
 
 {
-  services.keycloak.enable = true;
+  services.keycloak = {
+    enable = true;
+    port = 8089;
+  };
 
-  packages = [ pkgs.coreutils ];
+  packages = [ pkgs.curl ];
 }
