@@ -68,8 +68,8 @@ in
     };
 
     initialImportFile = lib.mkOption {
-      type = types.str;
-      default = "";
+      type = types.nullOr types.path;
+      default = null;
       description = ''
         The initial import JSON file for keycloak. You can use:
         `kc.sh export --realm <your-realm> --file export.json`
@@ -93,33 +93,34 @@ in
     env.KC_CONF_DIR = config.env.DEVENV_STATE + "/keycloak/conf";
     env.KC_TMP_DIR = config.env.DEVENV_STATE + "/keycloak/tmp";
 
-    env.KC_BOOTSTRAP_ADMIN_PASSWORD = "${cfg.initialAdminUsername}";
+    env.KC_BOOTSTRAP_ADMIN_PASSWORD = cfg.initialAdminUsername;
     env.KC_BOOTSTRAP_ADMIN_USERNAME = "${escapeShellArg cfg.initialAdminPassword}";
 
     env.KC_HEALTH_ENABLE = "true";
-    env.KC_HOSTNAME = "${cfg.hostname}";
-    env.KC_HTTP_PORT = "${cfg.port}";
+    env.KC_HOSTNAME = cfg.hostname;
+    env.KC_HTTP_PORT = cfg.port;
 
     env.KC_LOG_LEVEL = "DEBUG";
     env.KC_LOG = "console";
 
     processes.keycloak =
       let
-        startScript = pkgs.writeShellScriptBin "start-keycloak" ''
-          set -euo pipefail
-          mkdir -p "$KC_HOME_DIR"
-          mkdir -p "$KC_HOME_DIR/providers"
-          mkdir -p "$KC_HOME_DIR/conf"
-          mkdir -p "$KC_HOME_DIR/tmp"
-
-          if [ -n "${cfg.initialImportFile}" ]; then
+        startScript =
+          pkgs.writeShellScriptBin "start-keycloak" ''
+            set -euo pipefail
+            mkdir -p "$KC_HOME_DIR"
+            mkdir -p "$KC_HOME_DIR/providers"
+            mkdir -p "$KC_HOME_DIR/conf"
+            mkdir -p "$KC_HOME_DIR/tmp"
+          ''
+          + (lib.optionalString (cfg.initialImportFile != null) ''
             "${cfg.package}/bin/kc.sh" import \
-              --file ${cfg.initialImportRealm} \
-          fi
-
-          ${cfg.package}/bin/kc.sh show-config
-          ${cfg.package}/bin/kc.sh start-dev
-        '';
+              --file "${cfg.initialImportFile}" \
+          '')
+          + ''
+            ${cfg.package}/bin/kc.sh show-config
+            ${cfg.package}/bin/kc.sh start-dev
+          '';
 
         healthScript = pkgs.writeShellScriptBin "health-keycloak" ''
           ${cfg.package}/bin/kcadm.sh config credentials \
