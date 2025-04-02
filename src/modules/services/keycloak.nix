@@ -100,7 +100,8 @@ in
     env.KC_HOSTNAME = cfg.hostname;
     env.KC_HTTP_PORT = cfg.port;
 
-    env.KC_LOG_LEVEL = "DEBUG";
+    env.KC_LOG_CONSOLE_COLOR = "true";
+    env.KC_LOG_LEVEL = "debug";
     env.KC_LOG = "console";
 
     processes.keycloak =
@@ -114,7 +115,7 @@ in
             mkdir -p "$KC_HOME_DIR/tmp"
           ''
           + (lib.optionalString (cfg.initialImportFile != null) ''
-            "${cfg.package}/bin/kc.sh" import \
+            ${cfg.package}/bin/kc.sh import \
               --file "${cfg.initialImportFile}" \
           '')
           + ''
