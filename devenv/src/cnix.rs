@@ -385,6 +385,7 @@ impl Nix {
 
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
             cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
+            cached_cmd.watch_path(self.devenv_dotfile.join("flake.json"));
 
             // Ignore anything in .devenv.
             cached_cmd.unwatch_path(&self.devenv_dotfile);
