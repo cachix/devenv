@@ -432,7 +432,7 @@ in
             ${lib.concatStringsSep "\n" realmExports}
           '';
         in
-        {
+        mkIf (cfg.realmExport != { }) {
           exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
           process-compose = {
             description = ''
