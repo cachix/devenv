@@ -133,6 +133,7 @@ in
     };
 
     realmExport = mkOption {
+      default = { };
       type = types.attrsOf (
         types.submodule {
           options = {
@@ -379,9 +380,14 @@ in
 
           # We could use `kcadm.sh get "http://localhost:9000"` but that needs
           # credentials, so we just check the master realm.
-          keycloak-health = pkgs.writeShellScriptBin "keycloak-health" ''
-            ${pkgs.curl} -v "http://${cfg.settings.hostname}:${cfg.settings.http-port}/auth/realms/master/.well-known/openid-configuration"
-          '';
+          keycloak-health =
+            let
+              host = cfg.settings.hostname + ":" + builtins.toString cfg.settings.http-port;
+            in
+            pkgs.writeShellScriptBin "keycloak-health" ''
+              ${pkgs.curl} -v \
+                "http://${host}/auth/realms/master/.well-known/openid-configuration"
+            '';
         in
         {
           exec = "exec ${keycloak-start}/bin/keycloak-start";
@@ -402,7 +408,7 @@ in
       processes.keycloak-export-realms =
         let
           # Generate the command to export the realms.
-          exportRealms = lib.optional (cfg.exportRealms != { }) (
+          realmExports = lib.optional (cfg.realmExport != { }) (
             lib.mapAttrsToList
               (
                 realm: e:
@@ -422,12 +428,12 @@ in
               cfg.exportRealms
           );
 
-          keycloak-export-realms = pkgs.writeShellScriptBin "keycloak-export-realms" ''
-            ${lib.concatStringsSep "\n" exportRealms}
+          keycloak-realm-export = pkgs.writeShellScriptBin "keycloak-realm-export" ''
+            ${lib.concatStringsSep "\n" realmExports}
           '';
         in
         {
-          exec = "${keycloak-export-realms}/bin/keycloak-export-realms";
+          exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
           process-compose = {
             description = ''
               Save the realms from keycloak, to back them up. You can run it manually.
