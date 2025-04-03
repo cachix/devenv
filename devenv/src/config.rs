@@ -90,7 +90,7 @@ pub struct Clean {
 }
 
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
-#[config(rename_all = "camelCase")]
+#[config(rename_all = "camelCase", allow_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     #[serde(skip_serializing_if = "HashMap::is_empty", default)]
