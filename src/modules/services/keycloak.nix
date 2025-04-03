@@ -59,7 +59,6 @@ in
       description = ''
         The path to a PEM formatted certificate to use for TLS/SSL
         connections.
-        This file stays on your local disk and is not copied to the Nix store.
       '';
     };
 
@@ -71,7 +70,6 @@ in
       description = ''
         The path to a PEM formatted private key to use for TLS/SSL
         connections.
-        This file stays on your local disk and is not copied to the Nix store.
       '';
     };
 
@@ -116,6 +114,7 @@ in
 
     realmFiles = mkOption {
       type = listOf types.path;
+      apply = x: lib.map (assertStringPath "realmFiles") x;
       example = lib.literalExpression ''
         [
           ./some/realm.json
@@ -133,6 +132,36 @@ in
       '';
     };
 
+    realmExport = mkOption {
+      type = types.attrsOf (
+        types.submodule {
+          options = {
+            path = mkOption {
+              type = nullOr types.path;
+              default = null;
+              example = "./realms/a.json";
+              description = ''
+                The path where you want to export this realm «name» to.
+                If not set its exported to `$DEVENV_STATE/keycloak/realm-export/«name»`.
+              '';
+            };
+          };
+        }
+      );
+
+      example = lib.literalExpression ''
+        {
+          myrealm.path = "./myfolder/export.json";
+        }
+      '';
+
+      description = ''
+        Specify the realms you want to export on a process 'keycloak-export-realms'
+        which you can launch manually. If the path is not specified they are exported
+        to directory `$DEVENV_STATE/keycloak/realm-export`.
+      '';
+    };
+
     settings = mkOption {
       type = lib.types.submodule {
         freeformType = attrsOf (
@@ -145,16 +174,6 @@ in
         );
 
         options = {
-          http-enable = mkOption {
-            type = types.bool;
-            default = true;
-            example = false;
-            description = ''
-              If the 'http' listener is enabled.
-              In a dev. environment you normally dont care about HTTPS.
-            '';
-          };
-
           http-host = mkOption {
             type = types.str;
             default = "::";
@@ -308,7 +327,10 @@ in
 
       services.keycloak.settings = mkMerge [
         {
+          # We always enable http since we also use it to check the health.
+          http-enable = true;
           db = cfg.database.type;
+
           health-enable = true;
 
           log-console-level = "debug";
@@ -333,49 +355,85 @@ in
 
       processes.keycloak =
         let
-
-          importRealms = lib.optionalString (cfg.realmFiles != [ ]) (
-            builtins.concatStringsSep "\n" (
-              lib.map (f: ''${cfg.package}/bin/kc.sh import --file "${f}"'') cfg.importRealms
-            )
+          importRealms = lib.optional (cfg.realmFiles != [ ]) (
+            lib.map
+              (f: ''
+                echo "Importing realm file '${f}'."
+                ${cfg.package}/bin/kc.sh import --file "${f}"
+              '')
+              cfg.importRealms
           );
 
-          startScript = pkgs.writeShellScriptBin "start-keycloak" ''
+          keycloak-start = pkgs.writeShellScriptBin "keycloak-start" ''
             set -euo pipefail
             mkdir -p "$KC_HOME_DIR"
             mkdir -p "$KC_HOME_DIR/providers"
             mkdir -p "$KC_HOME_DIR/conf"
             mkdir -p "$KC_HOME_DIR/tmp"
 
-            ${importRealms}
+            ${builtins.concatStringsSep "\n" importRealms}
 
             ${cfg.package}/bin/kc.sh show-config
             ${cfg.package}/bin/kc.sh --verbose start --optimized
           '';
 
+          # We could use `kcadm.sh get "http://localhost:9000"` but that needs
+          # credentials, so we just check the master realm.
+          keycloak-health = pkgs.writeShellScriptBin "keycloak-health" ''
+            ${pkgs.curl} -v "http://${cfg.settings.hostname}:${cfg.settings.http-port}/auth/realms/master/.well-known/openid-configuration"
+          '';
         in
-        # healthScript = pkgs.writeShellScriptBin "health-keycloak" ''
-          #   ${cfg.package}/bin/kcadm.sh config credentials \
-          #       --server "http://${cfg.settings.hostname}:${cfg.settings.port}" \
-          #       --realm master \
-          #       --user "${cfg.initialAdminUsername}" \
-          #       --password "${cfg.initialAdminPassword}"
-          #
-          #   ${cfg.package}/bin/kcadm.sh get "http://${cfg.hostname}:9000"
-          # '';
         {
-          exec = "exec ${startScript}/bin/start-keycloak";
+          exec = "exec ${keycloak-start}/bin/keycloak-start";
 
-          # process-compose = {
-          #   readiness_probe = {
-          #     exec.command = "${postgresPkg}/bin/pg_isready -d template1";
-          #     initial_delay_seconds = 10;
-          #     period_seconds = 10;
-          #     timeout_seconds = 4;
-          #     success_threshold = 1;
-          #     failure_threshold = 5;
-          #   };
-          # };
+          process-compose = {
+            description = "The keycloak identity and access management server.";
+            readiness_probe = {
+              exec.command = "${keycloak-health}/bin/keycloak-health";
+              initial_delay_seconds = 20;
+              period_seconds = 10;
+              timeout_seconds = 4;
+              success_threshold = 1;
+              failure_threshold = 5;
+            };
+          };
+        };
+
+      processes.keycloak-export-realms =
+        let
+          # Generate the command to export the realms.
+          exportRealms = lib.optional (cfg.exportRealms != { }) (
+            lib.mapAttrsToList
+              (
+                realm: e:
+                  let
+                    file =
+                      if e.path == null then
+                        (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
+                      else
+                        e.path;
+                  in
+                  ''
+                    echo "Exporting realm '${realm}' to '${file}'."
+                    mkdir -p "$(dirname "${file}")"
+                    ${cfg.package}/bin/kc.sh export --realm "${realm}" --file "${file}"
+                  ''
+              )
+              cfg.exportRealms
+          );
+
+          keycloak-export-realms = pkgs.writeShellScriptBin "keycloak-export-realms" ''
+            ${lib.concatStringsSep "\n" exportRealms}
+          '';
+        in
+        {
+          exec = "${keycloak-export-realms}/bin/keycloak-export-realms";
+          process-compose = {
+            description = ''
+              Save the realms from keycloak, to back them up. You can run it manually.
+            '';
+            disabled = true;
+          };
         };
     };
 }
