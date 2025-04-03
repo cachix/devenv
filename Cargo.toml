@@ -81,10 +81,11 @@ whoami = "1.5.1"
 xdg = "2.5.2"
 tokio-tar = "0.3.1"
 
-# The version of rustls must match the version used by reqwest.
+# The version of rustls must match the version used by reqwest to set up rustls-platform-verifier.
 # If you encounter an error, lock these versions down.
-reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls-manual-roots-no-provider"] }
-rustls = { version = "0.23.4", default-features = false, features = ["custom-provider", "aws_lc_rs", "tls12"] }
+# Keep webpki certificates by default, to avoid issues with downstream dependencies.
+reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
+rustls = { version = "0.23.4" }
 rustls-platform-verifier = "0.5.1"
 
 [profile.release]
