@@ -206,7 +206,8 @@ in
           };
 
           hostname = mkOption {
-            type = nullOr types.str;
+            type = types.str;
+            default = "localhost";
             example = "localhost";
             description = ''
               The hostname part of the public URL used as base for
@@ -230,37 +231,38 @@ in
             '';
           };
         };
-
-        example = lib.literalExpression ''
-          {
-            hostname = "localhost";
-            https-key-store-file = "/path/to/file";
-            https-key-store-password = { _secret = "/run/keys/store_password"; };
-          }
-        '';
-
-        description = ''
-          Configuration options corresponding to parameters set in
-          {file}`conf/keycloak.conf`.
-
-          Most available options are documented at <https://www.keycloak.org/server/all-config>.
-
-          Options containing secret data should be set to an attribute
-          set containing the attribute `_secret` - a
-          string pointing to a file containing the value the option
-          should be set to. See the example to get a better picture of
-          this: in the resulting
-          {file}`conf/keycloak.conf` file, the
-          `https-key-store-password` key will be set
-          to the contents of the
-          {file}`/run/keys/store_password` file.
-        '';
       };
+
+      example = lib.literalExpression ''
+        {
+          hostname = "localhost";
+          https-key-store-file = "/path/to/file";
+          https-key-store-password = { _secret = "/run/keys/store_password"; };
+        }
+      '';
+
+      description = ''
+        Configuration options corresponding to parameters set in
+        {file}`conf/keycloak.conf`.
+
+        Most available options are documented at <https://www.keycloak.org/server/all-config>.
+
+        Options containing secret data should be set to an attribute
+        set containing the attribute `_secret` - a
+        string pointing to a file containing the value the option
+        should be set to. See the example to get a better picture of
+        this: in the resulting
+        {file}`conf/keycloak.conf` file, the
+        `https-key-store-password` key will be set
+        to the contents of the
+        {file}`/run/keys/store_password` file.
+      '';
     };
   };
 
   config =
     let
+      isSecret = v: lib.isAttrs v && v ? _secret && lib.isString v._secret;
 
       # Generate the keycloak config file to build it.
       keycloakConfig = lib.generators.toKeyValue {
@@ -281,8 +283,6 @@ in
               throw "unsupported type ${builtins.typeOf v}: ${(lib.generators.toPretty { }) v}";
         };
       };
-
-      isSecret = v: lib.isAttrs v && v ? _secret && lib.isString v._secret;
 
       # Filters empty values out.
       filteredConfig = lib.converge
@@ -340,20 +340,18 @@ in
             )
           );
 
-          startScript = pkgs.writeShellScriptBin "start-keycloak" (
-            ''
-              set -euo pipefail
-              mkdir -p "$KC_HOME_DIR"
-              mkdir -p "$KC_HOME_DIR/providers"
-              mkdir -p "$KC_HOME_DIR/conf"
-              mkdir -p "$KC_HOME_DIR/tmp"
+          startScript = pkgs.writeShellScriptBin "start-keycloak" ''
+            set -euo pipefail
+            mkdir -p "$KC_HOME_DIR"
+            mkdir -p "$KC_HOME_DIR/providers"
+            mkdir -p "$KC_HOME_DIR/conf"
+            mkdir -p "$KC_HOME_DIR/tmp"
 
-              ${importRealms}
+            ${importRealms}
 
-              ${cfg.package}/bin/kc.sh show-config
-              ${cfg.package}/bin/kc.sh --verbose start --optimized
-            ''
-          );
+            ${cfg.package}/bin/kc.sh show-config
+            ${cfg.package}/bin/kc.sh --verbose start --optimized
+          '';
 
         in
         # healthScript = pkgs.writeShellScriptBin "health-keycloak" ''

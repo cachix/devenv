@@ -3,7 +3,7 @@
 {
   services.keycloak = {
     enable = true;
-    port = 8089;
+    settings.http-port = 8089;
   };
 
   packages = [ pkgs.curl ];
