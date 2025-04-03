@@ -87,10 +87,6 @@ reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls-manual-r
 rustls = { version = "0.23.4", default-features = false, features = ["custom-provider", "aws_lc_rs", "tls12"] }
 rustls-platform-verifier = "0.5.1"
 
-# Always build optimized sqlx-macro to speed up query checks
-[profile.dev.package.sqlx-macros]
-opt-level = 3
-
 [profile.release]
 strip = true
 lto = "fat"

@@ -131,21 +131,22 @@ where
 {
     let mut conn = conn.acquire().await?;
 
-    let record = sqlx::query!(
+    let record = sqlx::query(
         r#"
         INSERT INTO cached_cmd (raw, cmd_hash, input_hash, output)
         VALUES (?, ?, ?, ?)
         RETURNING id
         "#,
-        raw_cmd,
-        cmd_hash,
-        input_hash,
-        output
     )
+    .bind(raw_cmd)
+    .bind(cmd_hash)
+    .bind(input_hash)
+    .bind(output)
     .fetch_one(&mut *conn)
     .await?;
 
-    Ok(record.id)
+    let id: i64 = record.get(0);
+    Ok(id)
 }
 
 async fn delete_command<'a, A>(conn: A, cmd_hash: &str) -> Result<(), sqlx::Error>
@@ -154,13 +155,13 @@ where
 {
     let mut conn = conn.acquire().await?;
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         DELETE FROM cached_cmd
         WHERE cmd_hash = ?
         "#,
-        cmd_hash
     )
+    .bind(cmd_hash)
     .execute(&mut *conn)
     .await?;
 
@@ -173,14 +174,14 @@ where
 {
     let mut conn = conn.acquire().await?;
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         UPDATE cached_cmd
         SET updated_at = strftime('%s', 'now')
         WHERE id = ?
         "#,
-        id
     )
+    .bind(id)
     .execute(&mut *conn)
     .await?;
 

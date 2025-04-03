@@ -5,7 +5,6 @@
 , rustPlatform
 , nix
 , cachix
-, sqlx-cli
 , openssl
 , apple-sdk_11
 , pkg-config
@@ -49,20 +48,10 @@ rustPlatform.buildRustPackage {
     installShellFiles
     makeBinaryWrapper
     pkg-config
-  ] ++ lib.optional (!build_tasks) sqlx-cli;
+  ];
 
   buildInputs = [ openssl ]
     ++ lib.optional stdenv.isDarwin apple-sdk_11;
-
-  # Force sqlx to use the prepared queries
-  SQLX_OFFLINE = true;
-  # A local database to use for preparing queries
-  DATABASE_URL = "sqlite:nix-eval-cache.db";
-
-  preBuild = lib.optionalString (!build_tasks) ''
-    cargo sqlx database setup --source devenv-eval-cache/migrations
-    cargo sqlx prepare --workspace
-  '';
 
   postInstall =
     let
