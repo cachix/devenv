@@ -659,6 +659,11 @@ impl Devenv {
             self.up(vec![], &true, &false).await?;
         }
 
+        let processes_pid = self.processes_pid();
+        while !processes_pid.exists() {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+
         let span = info_span!("test", devenv.user_message = "Running tests");
         let result = async {
             debug!("Running command: {test_script}");
