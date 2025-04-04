@@ -25,7 +25,7 @@ let
       (builtins.filter (x: x != ""))
     ];
 
-  # Fetch the first element of a list or return null if the list is empty.
+  # Fetch the first element of a list or return a default value if empty.
   headWithDefault = default: input:
     if input == [ ]
     then default
