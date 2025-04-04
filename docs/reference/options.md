@@ -1094,7 +1094,7 @@ Add a path to the container. Defaults to the whole git repo.
 
 
 *Type:*
-path or list of path
+absolute path or list of absolute path
 
 
 
@@ -2275,7 +2275,11 @@ package *(read only)*
 
 
 
-The path to the generated pre-commit configuration file.
+The path where to generate the pre-commit configuration file.
+
+This path is relative to the root of the project. By default,
+this is set to “.pre-commit-config.yaml”, which is the standard
+location expected by pre-commit.
 
 
 
@@ -2913,6 +2917,10 @@ An extremely fast Python code formatter, written in Rust.
 **` rustfmt `**
 
 Format Rust code.
+
+**` selene `**
+
+A blazing-fast modern Lua linter written in Rust.
 
 **` shellcheck `**
 
@@ -5731,7 +5739,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -12104,7 +12112,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -13565,6 +13573,546 @@ list of string
 
 
 ## git-hooks.hooks.flynt.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu
+
+
+
+fourmolu hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.fourmolu.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.settings.defaultExtensions
+
+
+
+Haskell language extensions to enable.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.fourmolu.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.fourmolu.verbose
 
 
 
@@ -15109,7 +15657,7 @@ Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project ro
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -20242,7 +20790,7 @@ mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck bin
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -25862,7 +26410,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -26129,7 +26677,7 @@ Multiple values are accepted.
 
 
 *Type:*
-list of (string or path)
+list of (string or absolute path)
 
 
 
@@ -37689,7 +38237,7 @@ sources.
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -37783,7 +38331,7 @@ sources.
 
 
 *Type:*
-path
+absolute path
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -40442,7 +40990,7 @@ This is useful when you want to use Python wheels that depend on native librarie
 
 
 *Type:*
-list of path
+list of absolute path
 
 
 
@@ -40959,7 +41507,7 @@ This is passed to ` pip install -r ` during ` devenv shell ` initialisation.
 
 
 *Type:*
-null or strings concatenated with “\\n” or path
+null or strings concatenated with “\\n” or absolute path
 
 
 
@@ -41348,7 +41896,7 @@ languages.ruby.versionFile = ./.ruby-version;
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -42638,7 +43186,11 @@ package *(read only)*
 
 
 
-The path to the generated pre-commit configuration file.
+The path where to generate the pre-commit configuration file.
+
+This path is relative to the root of the project. By default,
+this is set to “.pre-commit-config.yaml”, which is the standard
+location expected by pre-commit.
 
 
 
@@ -43278,6 +43830,10 @@ An extremely fast Python code formatter, written in Rust.
 **` rustfmt `**
 
 Format Rust code.
+
+**` selene `**
+
+A blazing-fast modern Lua linter written in Rust.
 
 **` shellcheck `**
 
@@ -46098,7 +46654,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -52473,7 +53029,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -53934,6 +54490,546 @@ list of string
 
 
 ## pre-commit.hooks.flynt.verbose
+
+
+
+forces the output of the hook to be printed even when the hook passes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu
+
+
+
+fourmolu hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.fourmolu.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.package
+
+
+
+An optional package that provides the hook.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.after
+
+
+
+List of hooks that should run before this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.always_run
+
+
+
+if true this hook will run even if there are no matching files.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.args
+
+
+
+List of additional parameters to pass to the hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.before
+
+
+
+List of hooks that should run after this hook.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.entry
+
+
+
+The entry point - the executable to run. ` entry ` can also contain arguments that will not be overridden, such as ` entry = "autopep8 -i"; `.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.exclude_types
+
+
+
+List of file types to exclude. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.excludes
+
+
+
+Exclude files that were matched by these patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.extraPackages
+
+
+
+Additional packages required to run the hook.
+
+These are propagated to ` enabledPackages ` for constructing developer
+environments.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.fail_fast
+
+
+
+if true pre-commit will stop running hooks if this hook fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.files
+
+
+
+The pattern of files to run on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.id
+
+
+
+The unique identifier for the hook.
+
+You do not need to set or modify this value.
+
+The ` id ` is used to reference a hook when using ` pre-commit run <id> `.
+It can also be used to reference the hook in other hooks’ ` before ` and ` after ` fields to define the order in which hooks run.
+
+The ` id ` is set to the attribute name the hook submodule is bound to in the parent module.
+For example, the ` id ` of following hook would be ` my-hook `.
+
+```nix
+{
+  hooks = {
+    my-hook = {
+      enable = true;
+      entry = "my-hook";
+    };
+  }
+}
+```
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "the attribute name the hook submodule is bound to" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.language
+
+
+
+The language of the hook - tells pre-commit how to install the hook.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "system" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.name
+
+
+
+The name of the hook. Shown during hook execution.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+the attribute name the hook submodule is bound to, same as ` id `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.pass_filenames
+
+
+
+Whether to pass filenames as arguments to the entry point.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.raw
+
+
+
+Raw fields of a pre-commit hook. This is mostly for internal use but
+exposed in case you need to work around something.
+
+Default: taken from the other hook options.
+
+
+
+*Type:*
+attribute set of unspecified value
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.require_serial
+
+
+
+if true this hook will execute using a single process instead of in parallel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.settings.defaultExtensions
+
+
+
+Haskell language extensions to enable.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## pre-commit.hooks.fourmolu.stages
+
+
+
+Confines the hook to run at a particular stage.
+
+
+
+*Type:*
+list of (one of “commit-msg”, “post-checkout”, “post-commit”, “post-merge”, “post-rewrite”, “pre-commit”, “pre-merge-commit”, “pre-push”, “pre-rebase”, “prepare-commit-msg”, “manual”, “commit”, “push”, “merge-commit”)
+
+
+
+*Default:*
+` default_stages `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.types
+
+
+
+List of file types to run on. See [Filtering files with types](https://pre-commit.com/\#filtering-files-with-types).
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "file"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.types_or
+
+
+
+List of file types to run on, where only a single type needs to match.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## pre-commit.hooks.fourmolu.verbose
 
 
 
@@ -55478,7 +56574,7 @@ Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project ro
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -60611,7 +61707,7 @@ mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck bin
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -66231,7 +67327,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -66498,7 +67594,7 @@ Multiple values are accepted.
 
 
 *Type:*
-list of (string or path)
+list of (string or absolute path)
 
 
 
@@ -78058,7 +79154,7 @@ sources.
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -78152,7 +79248,7 @@ sources.
 
 
 *Type:*
-path
+absolute path
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -79130,7 +80226,7 @@ See [https://caddyserver.com/docs/conventions\#file-locations](https://caddyserv
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -79838,7 +80934,7 @@ service runs as (couchdb by default).
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -79886,7 +80982,7 @@ runs the CouchDB service (couchdb by default).
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -79909,7 +81005,7 @@ be writable and readable for the user that runs the CouchDB service
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -80545,7 +81641,7 @@ Kafka log4j property configuration file path
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -80567,7 +81663,7 @@ Defaults to the rendered ` settings `.
 
 
 *Type:*
-path
+absolute path
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -80834,7 +81930,7 @@ Note: symlinks will be followed to discover dependencies or plugins.
 
 
 *Type:*
-null or (list of (string or path))
+null or (list of (string or absolute path))
 
 
 
@@ -81125,7 +82221,7 @@ Log file directories.
 
 
 *Type:*
-list of path
+list of absolute path
 
 
 
@@ -82366,7 +83462,7 @@ an empty database is created.
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -82501,7 +83597,7 @@ Linux distributions.
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -82878,7 +83974,7 @@ Otherwise, disable the readiness probe by setting ` processes.opentelemetry-coll
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -83036,6 +84132,7 @@ The available extensions are:
  - pg-semver
  - pg_auto_failover
  - pg_bigm
+ - pg_byteamagic
  - pg_cron
  - pg_ed25519
  - pg_embedding
@@ -83052,9 +84149,11 @@ The available extensions are:
  - pg_safeupdate
  - pg_similarity
  - pg_squeeze
+ - pg_tle
  - pg_topn
  - pg_uuidv7
  - pgaudit
+ - pgddl
  - pgjwt
  - pgmq
  - pgroonga
@@ -83064,6 +84163,8 @@ The available extensions are:
  - pgtap
  - pgvecto-rs
  - pgvector
+ - pgvectorscale
+ - pgx_ulid
  - plpgsql_check
  - plr
  - plv8
@@ -83078,7 +84179,6 @@ The available extensions are:
  - timescaledb
  - timescaledb-apache
  - timescaledb_toolkit
- - tsearch_extras
  - tsja
  - wal2json
 
@@ -83264,7 +84364,7 @@ an empty database is created.
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -84011,7 +85111,7 @@ The list of directories containing external plugins
 
 
 *Type:*
-list of path
+list of absolute path
 
 
 
@@ -86002,7 +87102,7 @@ The Starship configuration file to use.
 
 
 *Type:*
-path
+absolute path
 
 
 
