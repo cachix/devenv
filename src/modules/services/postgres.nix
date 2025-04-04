@@ -11,6 +11,26 @@ let
 
   runtimeDir = "${config.env.DEVENV_RUNTIME}/postgres";
 
+  parseListenAddresses = input:
+    let
+      convertSpecialValue = value:
+        if value == "*" || value == "0.0.0.0" then "127.0.0.1"
+        else if value == "::" then "::1"
+        else value;
+    in
+    lib.pipe input [
+      (lib.splitString ",")
+      (map lib.trim)
+      (map convertSpecialValue)
+      (builtins.filter (x: x != ""))
+    ];
+
+  # Fetch the first element of a list or return null if the list is empty.
+  headWithDefault = default: input:
+    if input == [ ]
+    then default
+    else builtins.head input;
+
   postgresPkg =
     if cfg.extensions != null
     then
@@ -212,7 +232,20 @@ in
 
     listen_addresses = lib.mkOption {
       type = types.str;
-      description = "Listen address";
+      description = ''
+        A comma-separated list of TCP/IP address(es) on which the server should listen for connections.
+
+        By default, the server only accepts connections over unix sockets.
+
+        This option is parsed to set the `PGHOST` environment variable.
+
+        Special values:
+          - \'*\' to listen on all available network interfaces.
+          - \'0.0.0.0\' to listen on all available IPv4 network interfaces.
+          - \'::\' to listen on all available IPv6 network interfaces.
+          - \'localhost\' to listen only on the loopback interface.
+          - \'\' (empty string) disables TCP/IP connections and listens only on the unix socket.
+      '';
       default = "";
       example = "127.0.0.1";
     };
@@ -344,8 +377,19 @@ in
     packages = [ postgresPkg startScript ];
 
     env.PGDATA = config.env.DEVENV_STATE + "/postgres";
-    env.PGHOST = lib.mkDefault runtimeDir;
-    env.PGPORT = cfg.port;
+    env.PGHOST =
+      let
+        parsedAddress = headWithDefault null (parseListenAddresses cfg.listen_addresses);
+        host =
+          if cfg.listen_addresses != ""
+          then parsedAddress
+          else runtimeDir;
+      in
+      lib.mkDefault host;
+    env.PGPORT =
+      if cfg.listen_addresses != ""
+      then cfg.port
+      else null;
 
     services.postgres.settings = {
       listen_addresses = cfg.listen_addresses;
