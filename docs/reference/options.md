@@ -1094,7 +1094,7 @@ Add a path to the container. Defaults to the whole git repo.
 
 
 *Type:*
-absolute path or list of absolute path
+path or list of path
 
 
 
@@ -5739,7 +5739,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -12112,7 +12112,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -15657,7 +15657,7 @@ Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project ro
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -20790,7 +20790,7 @@ mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck bin
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -26410,7 +26410,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -26677,7 +26677,7 @@ Multiple values are accepted.
 
 
 *Type:*
-list of (string or absolute path)
+list of (string or path)
 
 
 
@@ -38237,7 +38237,7 @@ sources.
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -38331,7 +38331,7 @@ sources.
 
 
 *Type:*
-absolute path
+path
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -40990,7 +40990,7 @@ This is useful when you want to use Python wheels that depend on native librarie
 
 
 *Type:*
-list of absolute path
+list of path
 
 
 
@@ -41507,7 +41507,7 @@ This is passed to ` pip install -r ` during ` devenv shell ` initialisation.
 
 
 *Type:*
-null or strings concatenated with “\\n” or absolute path
+null or strings concatenated with “\\n” or path
 
 
 
@@ -41896,7 +41896,7 @@ languages.ruby.versionFile = ./.ruby-version;
 
 
 *Type:*
-null or absolute path
+null or path
 
 
 
@@ -46654,7 +46654,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -53029,7 +53029,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -56574,7 +56574,7 @@ Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project ro
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -61707,7 +61707,7 @@ mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck bin
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -67327,7 +67327,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or absolute path
+null or string or path
 
 
 
@@ -67594,7 +67594,7 @@ Multiple values are accepted.
 
 
 *Type:*
-list of (string or absolute path)
+list of (string or path)
 
 
 
@@ -79154,7 +79154,7 @@ sources.
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -79248,7 +79248,7 @@ sources.
 
 
 *Type:*
-absolute path
+path
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -80226,7 +80226,7 @@ See [https://caddyserver.com/docs/conventions\#file-locations](https://caddyserv
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -80934,7 +80934,7 @@ service runs as (couchdb by default).
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -80982,7 +80982,7 @@ runs the CouchDB service (couchdb by default).
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -81005,7 +81005,7 @@ be writable and readable for the user that runs the CouchDB service
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -81641,7 +81641,7 @@ Kafka log4j property configuration file path
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -81663,7 +81663,7 @@ Defaults to the rendered ` settings `.
 
 
 *Type:*
-absolute path
+path
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -81930,7 +81930,7 @@ Note: symlinks will be followed to discover dependencies or plugins.
 
 
 *Type:*
-null or (list of (string or absolute path))
+null or (list of (string or path))
 
 
 
@@ -82221,7 +82221,7 @@ Log file directories.
 
 
 *Type:*
-list of absolute path
+list of path
 
 
 
@@ -83462,7 +83462,7 @@ an empty database is created.
 
 
 *Type:*
-null or absolute path
+null or path
 
 
 
@@ -83597,7 +83597,7 @@ Linux distributions.
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -83974,7 +83974,7 @@ Otherwise, disable the readiness probe by setting ` processes.opentelemetry-coll
 
 
 *Type:*
-null or absolute path
+null or path
 
 
 
@@ -84132,7 +84132,6 @@ The available extensions are:
  - pg-semver
  - pg_auto_failover
  - pg_bigm
- - pg_byteamagic
  - pg_cron
  - pg_ed25519
  - pg_embedding
@@ -84149,11 +84148,9 @@ The available extensions are:
  - pg_safeupdate
  - pg_similarity
  - pg_squeeze
- - pg_tle
  - pg_topn
  - pg_uuidv7
  - pgaudit
- - pgddl
  - pgjwt
  - pgmq
  - pgroonga
@@ -84163,8 +84160,6 @@ The available extensions are:
  - pgtap
  - pgvecto-rs
  - pgvector
- - pgvectorscale
- - pgx_ulid
  - plpgsql_check
  - plr
  - plv8
@@ -84179,6 +84174,7 @@ The available extensions are:
  - timescaledb
  - timescaledb-apache
  - timescaledb_toolkit
+ - tsearch_extras
  - tsja
  - wal2json
 
@@ -84364,7 +84360,7 @@ an empty database is created.
 
 
 *Type:*
-null or absolute path
+null or path
 
 
 
@@ -85111,7 +85107,7 @@ The list of directories containing external plugins
 
 
 *Type:*
-list of absolute path
+list of path
 
 
 
@@ -87102,7 +87098,7 @@ The Starship configuration file to use.
 
 
 *Type:*
-absolute path
+path
 
 
 
