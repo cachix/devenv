@@ -38,7 +38,7 @@ of source code directory by calling `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/dev
 - Examples are automatically tested on CI and are the best way to work on developing new modules, see `examples/` and `tests/`
 - Documentation is in `docs/`.
 - To run a development server, run `devenv up`.
-- To run a test from `examples/` or `tests/`, run `devenv-run-tests --only <name>`.
+- To run a test from `examples/` or `tests/`, run `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv-run-tests --only <name>`.
 
 ## Contributing language improvements
 
