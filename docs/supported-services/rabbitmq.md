@@ -202,7 +202,7 @@ The list of directories containing external plugins
 
 
 *Type:*
-list of absolute path
+list of path
 
 
 

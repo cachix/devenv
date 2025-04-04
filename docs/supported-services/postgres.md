@@ -92,7 +92,6 @@ The available extensions are:
  - pg-semver
  - pg_auto_failover
  - pg_bigm
- - pg_byteamagic
  - pg_cron
  - pg_ed25519
  - pg_embedding
@@ -109,11 +108,9 @@ The available extensions are:
  - pg_safeupdate
  - pg_similarity
  - pg_squeeze
- - pg_tle
  - pg_topn
  - pg_uuidv7
  - pgaudit
- - pgddl
  - pgjwt
  - pgmq
  - pgroonga
@@ -123,8 +120,6 @@ The available extensions are:
  - pgtap
  - pgvecto-rs
  - pgvector
- - pgvectorscale
- - pgx_ulid
  - plpgsql_check
  - plr
  - plv8
@@ -139,6 +134,7 @@ The available extensions are:
  - timescaledb
  - timescaledb-apache
  - timescaledb_toolkit
+ - tsearch_extras
  - tsja
  - wal2json
 
@@ -306,7 +302,7 @@ an empty database is created\.
 
 
 *Type:*
-null or absolute path
+null or path
 
 
 

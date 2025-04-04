@@ -77,7 +77,7 @@ This is useful when you want to use Python wheels that depend on native librarie
 
 
 *Type:*
-list of absolute path
+list of path
 
 
 
@@ -525,7 +525,7 @@ This is passed to ` pip install -r ` during ` devenv shell ` initialisation\.
 
 
 *Type:*
-null or strings concatenated with “\\n” or absolute path
+null or strings concatenated with “\\n” or path
 
 
 

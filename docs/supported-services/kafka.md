@@ -51,7 +51,7 @@ Kafka log4j property configuration file path
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -70,7 +70,7 @@ Defaults to the rendered ` settings `\.
 
 
 *Type:*
-absolute path
+path
 
 
 
@@ -284,7 +284,7 @@ Log file directories\.
 
 
 *Type:*
-list of absolute path
+list of path
 
 
 

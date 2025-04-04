@@ -222,7 +222,7 @@ an empty database is created\.
 
 
 *Type:*
-null or absolute path
+null or path
 
 
 
