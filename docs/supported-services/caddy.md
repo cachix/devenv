@@ -148,7 +148,7 @@ See [https://caddyserver\.com/docs/conventions\#file-locations](https://caddyser
 
 
 *Type:*
-path
+absolute path
 
 
 

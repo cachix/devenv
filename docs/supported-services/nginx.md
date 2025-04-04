@@ -53,7 +53,7 @@ Linux distributions\.
 
 
 *Type:*
-path
+absolute path
 
 
 
