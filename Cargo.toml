@@ -30,7 +30,7 @@ ansiterm = "0.12.2"
 binaryornot = "1.0.0"
 blake3 = "1.5.4"
 clap = { version = "4.5.1", features = ["derive", "cargo", "env"] }
-cli-table = "0.5.0"
+cli-table = "0.4.9"
 console = "0.15.8"
 dotlock = "0.5.0"
 dialoguer = "0.11.0"
@@ -47,7 +47,7 @@ petgraph = "0.7.1"
 pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 regex = "1.10.3"
 schemars = "0.8.16"
-schematic = { version = "0.18.2", features = ["schema", "yaml", "renderer_template", "renderer_json_schema"] }
+schematic = { version = "0.17.11", features = ["schema", "yaml", "renderer_template", "renderer_json_schema"] }
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 serde_repr = "0.1.19"
