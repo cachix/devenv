@@ -362,7 +362,19 @@ CREATE ROLE bar;
 
 
 
-Listen address
+A comma-separated list of TCP/IP address(es) on which the server should listen for connections\.
+
+By default, the server only accepts connections over unix sockets\.
+
+This option is parsed to set the ` PGHOST ` environment variable\.
+
+Special values:
+
+ - '\*' to listen on all available network interfaces\.
+ - '0\.0\.0\.0' to listen on all available IPv4 network interfaces\.
+ - '::' to listen on all available IPv6 network interfaces\.
+ - 'localhost' to listen only on the loopback interface\.
+ - '' (empty string) disables TCP/IP connections and listens only on the unix socket\.
 
 
 
