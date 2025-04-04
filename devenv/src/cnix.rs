@@ -1,5 +1,5 @@
 use crate::{cli, config};
-use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_conf_parser::NixConf;
 use serde::Deserialize;
 use sqlx::SqlitePool;
@@ -12,7 +12,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
+use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
 
 pub struct Nix {
     pub options: Options,
@@ -348,7 +348,7 @@ impl Nix {
         options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::Verbosity;
-        use devenv_eval_cache::{supports_eval_caching, CachedCommand};
+        use devenv_eval_cache::{CachedCommand, supports_eval_caching};
 
         if options.replace_shell {
             if self.global_options.nix_debugger
@@ -615,8 +615,8 @@ impl Nix {
             Ok(devenv_nix) => std::process::Command::new(format!("{devenv_nix}/bin/{command}")),
             Err(_) => {
                 error!(
-            "$DEVENV_NIX is not set, but required as devenv doesn't work without a few Nix patches."
-            );
+                    "$DEVENV_NIX is not set, but required as devenv doesn't work without a few Nix patches."
+                );
                 error!("Please follow https://devenv.sh/getting-started/ to install devenv.");
                 bail!("$DEVENV_NIX is not set")
             }
@@ -697,11 +697,13 @@ impl Nix {
                     let resp = request.send().await.expect("Failed to get cache");
                     if resp.status().is_client_error() {
                         error!(
-                        "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
-                        name
-                    );
+                            "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
+                            name
+                        );
                         error!("To create a cache, go to https://app.cachix.org/.");
-                        bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
+                        bail!(
+                            "Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured."
+                        )
                     } else {
                         let resp_json =
                             serde_json::from_slice::<CachixResponse>(&resp.bytes().await.unwrap())
@@ -721,8 +723,8 @@ impl Nix {
                     .trusted;
                 if trusted.is_none() {
                     warn!(
-                    "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
-                );
+                        "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
+                    );
                 }
                 let restart_command = if cfg!(target_os = "linux") {
                     "sudo systemctl restart nix-daemon"

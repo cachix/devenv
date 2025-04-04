@@ -2,8 +2,9 @@ use std::{os::unix::process::CommandExt, process::Command};
 
 use clap::crate_version;
 use devenv::{
+    Devenv,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
-    config, log, Devenv,
+    config, log,
 };
 use miette::Result;
 use tracing::{info, warn};
@@ -131,7 +132,9 @@ async fn main() -> Result<()> {
                                 .await?;
                         }
                         _ => {
-                            warn!("Calling without a subcommand is deprecated, use `devenv container build` instead");
+                            warn!(
+                                "Calling without a subcommand is deprecated, use `devenv container build` instead"
+                            );
                             let _ = devenv.container_build(&name).await?;
                         }
                     };

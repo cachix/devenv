@@ -22,7 +22,7 @@
   languages.nix.enable = true;
   # for cli
   languages.rust.enable = true;
-  languages.rust.channel = "stable";
+  languages.rust.channel = "nightly";
   # for docs
   languages.python.enable = true;
   # it breaks glibc

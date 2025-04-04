@@ -1,5 +1,5 @@
 use crate::log::LogFormat;
-use clap::{crate_version, Parser, Subcommand};
+use clap::{Parser, Subcommand, crate_version};
 use std::path::PathBuf;
 use tracing::error;
 
@@ -275,9 +275,7 @@ pub enum Commands {
         command: InputsCommand,
     },
 
-    #[command(
-        about = "Launch an interactive environment for inspecting the devenv configuration."
-    )]
+    #[command(about = "Launch an interactive environment for inspecting the devenv configuration.")]
     Repl {},
 
     #[command(

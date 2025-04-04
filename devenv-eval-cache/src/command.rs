@@ -120,7 +120,7 @@ impl<'a> CachedCommand<'a> {
             let mut lines = stderr_reader.lines();
             while let Some(Ok(line)) = lines.next() {
                 if let Some(log) = InternalLog::parse(&line).and_then(Result::ok) {
-                    if let Some(ref f) = &on_stderr {
+                    if let Some(f) = &on_stderr {
                         f(&log);
                     }
 

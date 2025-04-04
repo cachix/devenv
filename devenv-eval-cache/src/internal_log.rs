@@ -98,7 +98,7 @@ impl InternalLog {
         use std::fmt::Write;
 
         match self {
-            InternalLog::Msg { ref msg, .. } => Some(Cow::Borrowed(msg)),
+            InternalLog::Msg { msg, .. } => Some(Cow::Borrowed(msg)),
             InternalLog::Start {
                 typ: ActivityType::Substitute,
                 fields,

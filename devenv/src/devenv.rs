@@ -1,9 +1,9 @@
 use super::{cli, cnix, config, tasks};
 use clap::crate_version;
 use cli_table::Table;
-use cli_table::{print_stderr, WithTitle};
-use include_dir::{include_dir, Dir};
-use miette::{bail, IntoDiagnostic, Result};
+use cli_table::{WithTitle, print_stderr};
+use include_dir::{Dir, include_dir};
+use miette::{IntoDiagnostic, Result, bail};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
@@ -17,7 +17,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -300,9 +300,8 @@ impl Devenv {
                 None => &config_clean.keep,
             };
 
-            let filtered_env: HashMap<String, String> = std::env::vars()
-                .filter(|(ref k, _)| keep.contains(k))
-                .collect();
+            let filtered_env: HashMap<String, String> =
+                std::env::vars().filter(|(k, _)| keep.contains(k)).collect();
 
             shell_cmd.envs(filtered_env);
             shell_cmd.arg("--norc").arg("--noprofile");
@@ -356,7 +355,9 @@ impl Devenv {
 
     pub async fn container_build(&mut self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
-            bail!("Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430");
+            bail!(
+                "Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430"
+            );
         }
 
         let span = info_span!(
@@ -498,7 +499,9 @@ impl Devenv {
                 devenv.user_message =
                     "Running garbage collection (this process will take some time)"
             );
-            info!("If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239");
+            info!(
+                "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
+            );
             span.in_scope(|| self.nix.gc(to_gc))?;
         }
 
@@ -573,7 +576,9 @@ impl Devenv {
             print_stderr(options_results.with_title()).expect("Failed to print options results");
         }
 
-        info!("Found {search_results_count} packages and {results_options_count} options for '{name}'.");
+        info!(
+            "Found {search_results_count} packages and {results_options_count} options for '{name}'."
+        );
         Ok(())
     }
 

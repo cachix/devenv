@@ -277,7 +277,7 @@ impl TaskState {
                             stderr: Vec::new(),
                             error: "Failed to capture stdout".to_string(),
                         },
-                    )
+                    );
                 }
             };
             let stderr = match child.stderr.take() {
@@ -290,7 +290,7 @@ impl TaskState {
                             stderr: Vec::new(),
                             error: "Failed to capture stderr".to_string(),
                         },
-                    )
+                    );
                 }
             };
 

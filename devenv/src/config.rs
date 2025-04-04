@@ -1,5 +1,5 @@
 use miette::{IntoDiagnostic, Result};
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, path::Path};

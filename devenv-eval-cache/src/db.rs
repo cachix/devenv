@@ -1,6 +1,6 @@
 use super::command::{EnvInputDesc, FileInputDesc, Input};
 use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqliteRow, SqliteSynchronous};
-use sqlx::{migrate::MigrateDatabase, Acquire, Row, SqlitePool};
+use sqlx::{Acquire, Row, SqlitePool, migrate::MigrateDatabase};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -675,7 +675,12 @@ mod tests {
         }
 
         // Check if files are being accumulated instead of replaced
-        assert_eq!(files.len(), 2, "Expected 2 files, but found {}. Files might be accumulating instead of being replaced.", files.len());
+        assert_eq!(
+            files.len(),
+            2,
+            "Expected 2 files, but found {}. Files might be accumulating instead of being replaced.",
+            files.len()
+        );
 
         // Verify the correct files are associated
         let file_paths: Vec<_> = files.iter().map(|f| f.path.to_str().unwrap()).collect();

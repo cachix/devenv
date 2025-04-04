@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=./docs/devenv.schema.json
 inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
   fenix:
     url: github:nix-community/fenix
     inputs:

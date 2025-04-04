@@ -6,7 +6,7 @@
     extra-substituters = "https://devenv.cachix.org";
   };
 
-  inputs.nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   inputs.git-hooks = {
     url = "github:cachix/git-hooks.nix";
     inputs = {

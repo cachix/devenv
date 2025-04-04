@@ -1,5 +1,5 @@
 use clap::Parser;
-use devenv::{log, Devenv, DevenvOptions};
+use devenv::{Devenv, DevenvOptions, log};
 use std::{
     env, fs,
     path::PathBuf,
