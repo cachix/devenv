@@ -4,27 +4,27 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
 
 1. Add `nixpkgs-unstable` input to `devenv.yaml`:
 
-```yaml
-inputs:
-  nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
-  nixpkgs-unstable:
-    url: github:nixos/nixpkgs/nixpkgs-unstable
-```
+   ```yaml
+   inputs:
+     nixpkgs:
+       url: github:cachix/devenv-nixpkgs/rolling
+     nixpkgs-unstable:
+       url: github:nixos/nixpkgs/nixpkgs-unstable
+   ```
 
-2. Use the package in your `devenv.nix`:
+1. Use the package in your `devenv.nix`:
 
-```nix
-{ pkgs, inputs, ... }:
-let
-  pkgs-unstable = import inputs.nixpkgs-unstable { system = pkgs.stdenv.system; };
-in
-{
-  packages = [
-    pkgs-unstable.elmPackages.elm-test-rs
-  ];
-}
-```
+   ```nix
+   { pkgs, inputs, ... }:
+   let
+     pkgs-unstable = import inputs.nixpkgs-unstable { system = pkgs.stdenv.system; };
+   in
+   {
+     packages = [
+       pkgs-unstable.elmPackages.elm-test-rs
+     ];
+   }
+   ```
 
 ## Nix patterns
 
