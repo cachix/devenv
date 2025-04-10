@@ -12,7 +12,7 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
        url: github:nixos/nixpkgs/nixpkgs-unstable
    ```
 
-1. Use the package in your `devenv.nix`:
+2. Use the package in your `devenv.nix`:
 
    ```nix
    { pkgs, inputs, ... }:
