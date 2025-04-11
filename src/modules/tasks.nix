@@ -139,7 +139,7 @@ in
       "devenv:enterShell" = {
         description = "Runs when entering the shell";
         exec = ''
-          mkdir -p "$DEVENV_DOTFILE"
+          mkdir -p "$DEVENV_DOTFILE" || { echo "Failed to create $DEVENV_DOTFILE"; exit 1; }
           echo "$DEVENV_TASK_ENV" > "$DEVENV_DOTFILE/load-exports"
           chmod +x "$DEVENV_DOTFILE/load-exports"
         '';
