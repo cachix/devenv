@@ -35,12 +35,6 @@
         packages.default = pkgs.hello;
 
         devenv.shells.default = {
-          devenv.root =
-            let
-              devenvRootFileContent = builtins.readFile devenv-root.outPath;
-            in
-            pkgs.lib.mkIf (devenvRootFileContent != "") devenvRootFileContent;
-
           name = "my-project";
 
           imports = [

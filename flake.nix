@@ -220,7 +220,22 @@
           default = simple;
         };
 
-      flakeModule = import ./flake-module.nix self;
+      flakeModule = self.flakeModules.default; # Backwards compatibility
+      flakeModules = {
+        default = import ./flake-module.nix self;
+        readDevenvRoot = {inputs, lib, ...}: {
+          config =
+            let
+              devenvRootFileContent =
+                if inputs ? devenv-root
+                then builtins.readFile inputs.devenv-root.outPath
+                else "";
+            in
+            lib.mkIf (devenvRootFileContent != "") {
+              devenv.root = devenvRootFileContent;
+            };
+        };
+      };
 
       lib = {
         mkConfig = args@{ pkgs, inputs, modules }:
