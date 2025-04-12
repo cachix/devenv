@@ -1,10 +1,10 @@
 ### Release on GitHub
 
-- Bump version in devenv/Cargo.toml and package.nix
 - `git commit`
 - `git tag`
 - `git push --tags`
 - Create a release on GitHub
+- Bump dev version in devenv/Cargo.toml and package.nix
 
 ### Release on nixpkgs
 
