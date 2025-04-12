@@ -5,6 +5,6 @@ pub mod internal_log;
 pub mod op;
 
 pub use command::{
-    CachedCommand, EnvInputDesc, FileInputDesc, Input, Output, supports_eval_caching,
+    supports_eval_caching, CachedCommand, EnvInputDesc, FileInputDesc, Input, Output,
 };
 pub use db::setup_db;

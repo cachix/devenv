@@ -4,16 +4,16 @@ use std::io::{self, IsTerminal};
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
-    Event,
     field::{Field, Visit},
+    Event,
 };
-use tracing_core::{Subscriber, span};
+use tracing_core::{span, Subscriber};
 use tracing_subscriber::{
-    EnvFilter, Layer,
-    fmt::{FmtContext, FormatEvent, FormatFields, format::Writer},
+    fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
     layer,
     prelude::*,
     registry::LookupSpan,
+    EnvFilter, Layer,
 };
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]

@@ -1,9 +1,9 @@
 use super::{cli, cnix, config, tasks};
 use clap::crate_version;
 use cli_table::Table;
-use cli_table::{WithTitle, print_stderr};
-use include_dir::{Dir, include_dir};
-use miette::{IntoDiagnostic, Result, bail};
+use cli_table::{print_stderr, WithTitle};
+use include_dir::{include_dir, Dir};
+use miette::{bail, IntoDiagnostic, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
@@ -17,7 +17,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
+use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -34,7 +34,8 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
     DIRENVRC
         .lines()
         .find(|line| line.contains("export DEVENV_DIRENVRC_VERSION"))
-        .map(|line| line.split('=').last().unwrap().trim())
+        .and_then(|line| line.split('=').last())
+        .map(|version| version.trim())
         .and_then(|version| version.parse().ok())
         .unwrap_or(0)
 });
@@ -199,8 +200,8 @@ impl Devenv {
     }
 
     pub fn inputs_add(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
-        self.config.add_input(name, url, follows);
-        self.config.write();
+        self.config.add_input(name, url, follows)?;
+        self.config.write()?;
         Ok(())
     }
 
@@ -953,10 +954,7 @@ impl Devenv {
         )
         .expect("Failed to write input-paths.txt");
 
-        Ok(DevEnv {
-            output: env.stdout,
-            gc_root,
-        })
+        Ok(DevEnv { output: env.stdout })
     }
 }
 
@@ -996,7 +994,6 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
 
 pub struct DevEnv {
     output: Vec<u8>,
-    gc_root: PathBuf,
 }
 
 #[derive(Deserialize)]

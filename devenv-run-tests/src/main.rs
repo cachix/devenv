@@ -1,10 +1,12 @@
 use clap::Parser;
-use devenv::{Devenv, DevenvOptions, log};
+use devenv::{log, Devenv, DevenvOptions};
+use miette::{IntoDiagnostic, Result, WrapErr};
 use std::{
     env, fs,
     path::PathBuf,
     process::{Command, ExitCode, Stdio},
 };
+use tempfile::TempDir;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -33,21 +35,19 @@ struct TestResult {
     passed: bool,
 }
 
-async fn run_tests_in_directory(
-    args: &Args,
-) -> Result<Vec<TestResult>, Box<dyn std::error::Error>> {
+async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
     eprintln!("Running Tests");
 
-    let cwd = env::current_dir()?;
+    let cwd = env::current_dir().into_diagnostic()?;
 
     let mut test_results = vec![];
 
     for directory in &args.directories {
         eprintln!("Running in directory {}", directory.display());
-        let paths = fs::read_dir(directory)?;
+        let paths = fs::read_dir(directory).into_diagnostic()?;
 
         for path in paths {
-            let path = path?.path();
+            let path = path.into_diagnostic()?.path();
             let path = path.as_path();
 
             // Skip files
@@ -69,17 +69,26 @@ async fn run_tests_in_directory(
 
             let mut config = devenv::config::Config::load_from(path)?;
             for input in args.override_input.chunks_exact(2) {
-                config.override_input_url(&input[0], &input[1]);
+                config
+                    .override_input_url(&input[0], &input[1])
+                    .wrap_err(format!(
+                        "Failed to override input {} with {}",
+                        &input[0], &input[1]
+                    ))?;
             }
 
             // Override the input for the devenv module
-            config.add_input(
-                "devenv",
-                &format!("path:{:}?dir=src/modules", cwd.to_str().unwrap()),
-                &[],
-            );
+            config
+                .add_input(
+                    "devenv",
+                    &format!("path:{:}?dir=src/modules", cwd.to_str().unwrap()),
+                    &[],
+                )
+                .wrap_err("Failed to add devenv input")?;
 
-            let tmpdir = tempdir::TempDir::new(&format!("devenv-run-tests-{}", dir_name))?;
+            // Create temp directory in system temp dir, not the current directory
+            let tmpdir = TempDir::with_prefix(&format!("devenv-run-tests-{}", dir_name))
+                .map_err(|e| miette::miette!("Failed to create temp directory: {}", e))?;
             let devenv_root = tmpdir.path().to_path_buf();
             let devenv_dotfile = tmpdir.path().join(".devenv");
 
@@ -88,21 +97,23 @@ async fn run_tests_in_directory(
                 .arg("-r")
                 .arg(format!("{}/.", path.display()))
                 .arg(&devenv_root)
-                .status()?;
+                .status()
+                .into_diagnostic()?;
             if !copy_content_status.success() {
-                return Err("Failed to copy test directory".into());
+                return Err(miette::miette!("Failed to copy test directory"));
             }
 
-            env::set_current_dir(&devenv_root)?;
+            env::set_current_dir(&devenv_root).into_diagnostic()?;
 
             // Initialize a git repository in the temporary directory.
             // This helps Nix Flakes and git-hooks find the root of the project.
             let git_init_status = Command::new("git")
                 .arg("init")
                 .arg("--initial-branch=main")
-                .status()?;
+                .status()
+                .into_diagnostic()?;
             if !git_init_status.success() {
-                return Err("Failed to initialize the git repository".into());
+                return Err(miette::miette!("Failed to initialize the git repository"));
             }
 
             let options = DevenvOptions {
@@ -127,7 +138,10 @@ async fn run_tests_in_directory(
             // Run .patch.sh if it exists
             if PathBuf::from(patch_script).exists() {
                 eprintln!("    Running {patch_script}");
-                let _ = Command::new("bash").arg(patch_script).status()?;
+                let _ = Command::new("bash")
+                    .arg(patch_script)
+                    .status()
+                    .into_diagnostic()?;
             }
 
             // A script to run inside the shell before the test.
@@ -150,7 +164,7 @@ async fn run_tests_in_directory(
             test_results.push(result);
 
             // Restore the current directory
-            env::set_current_dir(&cwd)?;
+            env::set_current_dir(&cwd).into_diagnostic()?;
         }
     }
 
@@ -158,7 +172,7 @@ async fn run_tests_in_directory(
 }
 
 #[tokio::main]
-async fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
+async fn main() -> Result<ExitCode> {
     log::init_tracing_default();
 
     // If DEVENV_RUN_TESTS is set, run the tests.
@@ -174,7 +188,7 @@ async fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 
     // Otherwise, run the tests in a subprocess with a fresh environment.
-    let executable_path = env::current_exe()?;
+    let executable_path = env::current_exe().into_diagnostic()?;
     let executable_dir = executable_path.parent().unwrap();
     let path = format!(
         "{}:{}",
@@ -193,7 +207,7 @@ async fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
         .env("PATH", path)
         .env("HOME", env::var("HOME").unwrap_or_default());
 
-    let output = cmd.output()?;
+    let output = cmd.output().into_diagnostic()?;
     if output.status.success() {
         Ok(ExitCode::SUCCESS)
     } else {
@@ -201,7 +215,7 @@ async fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
     }
 }
 
-async fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
+async fn run(args: &Args) -> Result<()> {
     let test_results = run_tests_in_directory(args).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
@@ -218,7 +232,7 @@ async fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Ran {} tests, {} failed.", num_tests, num_failed_tests);
 
     if num_failed_tests > 0 {
-        Err("Some tests failed".into())
+        Err(miette::miette!("Some tests failed"))
     } else {
         Ok(())
     }

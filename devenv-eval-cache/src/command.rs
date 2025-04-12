@@ -667,7 +667,7 @@ mod test {
     use super::*;
     use std::fs::File;
     use std::io::Write;
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     fn create_file_row(dir: &TempDir, content: &[u8]) -> db::FileInputRow {
         let file_path = dir.path().join("test_file.txt");
@@ -690,7 +690,7 @@ mod test {
 
     #[test]
     fn test_unchanged_file() {
-        let temp_dir = TempDir::new("test_unchanged_file").unwrap();
+        let temp_dir = TempDir::with_prefix("test_unchanged_file").unwrap();
         let file_row = create_file_row(&temp_dir, b"Hello, World!");
 
         assert!(matches!(
@@ -701,7 +701,7 @@ mod test {
 
     #[test]
     fn test_metadata_modified_file() {
-        let temp_dir = TempDir::new("test_metadata_modified_file").unwrap();
+        let temp_dir = TempDir::with_prefix("test_metadata_modified_file").unwrap();
         let file_row = create_file_row(&temp_dir, b"Hello, World!");
 
         // Sleep to ensure the new modification time is different
@@ -721,7 +721,7 @@ mod test {
 
     #[test]
     fn test_content_modified_file() {
-        let temp_dir = TempDir::new("test_content_modified_file").unwrap();
+        let temp_dir = TempDir::with_prefix("test_content_modified_file").unwrap();
         let file_row = create_file_row(&temp_dir, b"Hello, World!");
 
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -738,7 +738,7 @@ mod test {
 
     #[test]
     fn test_removed_file() {
-        let temp_dir = TempDir::new("test_removed_file").unwrap();
+        let temp_dir = TempDir::with_prefix("test_removed_file").unwrap();
         let file_row = create_file_row(&temp_dir, b"Hello, World!");
 
         // Remove the file

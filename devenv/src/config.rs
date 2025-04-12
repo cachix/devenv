@@ -1,5 +1,5 @@
-use miette::{IntoDiagnostic, Result};
-use schemars::{JsonSchema, schema_for};
+use miette::{IntoDiagnostic, Result, WrapErr};
+use schemars::{schema_for, JsonSchema};
 use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, path::Path};
@@ -112,12 +112,16 @@ pub struct Config {
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105
-pub fn write_json_schema() {
+pub fn write_json_schema() -> Result<()> {
     let schema = schema_for!(Config);
-    let schema = serde_json::to_string_pretty(&schema).unwrap();
+    let schema = serde_json::to_string_pretty(&schema)
+        .into_diagnostic()
+        .wrap_err("Failed to serialize JSON schema")?;
     let path = Path::new("docs/devenv.schema.json");
-    std::fs::write(path, schema)
-        .unwrap_or_else(|_| panic!("Failed to write json schema to {}", path.display()));
+    std::fs::write(path, &schema)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to write json schema to {}", path.display()))?;
+    Ok(())
 }
 
 impl Config {
@@ -136,13 +140,18 @@ impl Config {
         Ok(result?.config)
     }
 
-    pub fn write(&self) {
-        let yaml = serde_yaml::to_string(&self).unwrap();
-        std::fs::write(YAML_CONFIG, yaml).expect("Failed to write devenv.yaml");
+    pub fn write(&self) -> Result<()> {
+        let yaml = serde_yaml::to_string(&self)
+            .into_diagnostic()
+            .wrap_err("Failed to serialize config to YAML")?;
+        std::fs::write(YAML_CONFIG, yaml)
+            .into_diagnostic()
+            .wrap_err("Failed to write devenv.yaml")?;
+        Ok(())
     }
 
     /// Add a new input, overwriting any existing input with the same name.
-    pub fn add_input(&mut self, name: &str, url: &str, follows: &[String]) {
+    pub fn add_input(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
         // A set of inputs built from the follows list.
         let mut inputs = HashMap::new();
 
@@ -156,7 +165,9 @@ impl Config {
                 };
                 inputs.insert(follow.to_string(), input);
             } else {
-                panic!("Input {follow} does not exist so it can't be followed.");
+                return Err(miette::miette!(
+                    "Input {follow} does not exist so it can't be followed."
+                ));
             }
         }
 
@@ -166,16 +177,20 @@ impl Config {
             ..Default::default()
         };
         self.inputs.insert(name.to_string(), input);
+        Ok(())
     }
 
     /// Override the URL of an existing input.
-    pub fn override_input_url(&mut self, name: &str, url: &str) {
+    pub fn override_input_url(&mut self, name: &str, url: &str) -> Result<()> {
         if let Some(input) = self.inputs.get_mut(name) {
             input.url = Some(url.to_string());
+            Ok(())
         } else if name == "nixpkgs" || name == "devenv" {
-            self.add_input(name, url, &[]);
+            self.add_input(name, url, &[])
         } else {
-            panic!("Input {name} does not exist so it can't be overridden.");
+            Err(miette::miette!(
+                "Input {name} does not exist so it can't be overridden."
+            ))
         }
     }
 }
@@ -199,7 +214,9 @@ mod tests {
     #[test]
     fn add_input() {
         let mut config = Config::default();
-        config.add_input("nixpkgs", "github:NixOS/nixpkgs/nixpkgs-unstable", &[]);
+        config
+            .add_input("nixpkgs", "github:NixOS/nixpkgs/nixpkgs-unstable", &[])
+            .expect("Failed to add input");
         assert_eq!(config.inputs.len(), 1);
         assert_eq!(
             config.inputs["nixpkgs"].url,
@@ -211,37 +228,46 @@ mod tests {
     #[test]
     fn add_input_with_follows() {
         let mut config = Config::default();
-        config.add_input("other", "github:org/repo", &[]);
-        config.add_input(
-            "input-with-follows",
-            "github:org/repo",
-            &["nixpkgs".to_string(), "other".to_string()],
-        );
+        config
+            .add_input("other", "github:org/repo", &[])
+            .expect("Failed to add input");
+        config
+            .add_input(
+                "input-with-follows",
+                "github:org/repo",
+                &["nixpkgs".to_string(), "other".to_string()],
+            )
+            .expect("Failed to add input with follows");
         assert_eq!(config.inputs.len(), 2);
         let input = &config.inputs["input-with-follows"];
         assert_eq!(input.inputs.len(), 2);
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "Input other does not exist so it can't be followed.")]
     fn add_input_with_missing_follows() {
         let mut config = Config::default();
-        config.add_input(
+        let result = config.add_input(
             "input-with-follows",
             "github:org/repo",
             &["other".to_string()],
         );
+        result.unwrap(); // This will panic with the Err from add_input
     }
 
     #[test]
     fn override_input_url() {
         let mut config = Config::default();
-        config.add_input("nixpkgs", "github:NixOS/nixpkgs/nixpkgs-unstable", &[]);
+        config
+            .add_input("nixpkgs", "github:NixOS/nixpkgs/nixpkgs-unstable", &[])
+            .expect("Failed to add input");
         assert_eq!(
             config.inputs["nixpkgs"].url,
             Some("github:NixOS/nixpkgs/nixpkgs-unstable".to_string())
         );
-        config.override_input_url("nixpkgs", "github:NixOS/nixpkgs/nixos-24.11");
+        config
+            .override_input_url("nixpkgs", "github:NixOS/nixpkgs/nixos-24.11")
+            .expect("Failed to override input URL");
         assert_eq!(
             config.inputs["nixpkgs"].url,
             Some("github:NixOS/nixpkgs/nixos-24.11".to_string())
@@ -261,7 +287,9 @@ mod tests {
             )]),
             ..Default::default()
         };
-        config.override_input_url("non-flake", "path:some-other-path");
+        config
+            .override_input_url("non-flake", "path:some-other-path")
+            .expect("Failed to override input URL");
         assert_eq!(config.inputs["non-flake"].flake, false);
         assert_eq!(
             config.inputs["non-flake"].url,

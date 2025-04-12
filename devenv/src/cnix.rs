@@ -1,5 +1,5 @@
 use crate::{cli, config};
-use miette::{IntoDiagnostic, Result, WrapErr, bail};
+use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
 use serde::Deserialize;
 use sqlx::SqlitePool;
@@ -12,7 +12,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
+use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
 pub struct Nix {
     pub options: Options,
@@ -348,7 +348,7 @@ impl Nix {
         options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::Verbosity;
-        use devenv_eval_cache::{CachedCommand, supports_eval_caching};
+        use devenv_eval_cache::{supports_eval_caching, CachedCommand};
 
         if options.replace_shell {
             if self.global_options.nix_debugger

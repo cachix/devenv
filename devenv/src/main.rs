@@ -2,11 +2,11 @@ use std::{os::unix::process::CommandExt, process::Command};
 
 use clap::crate_version;
 use devenv::{
-    Devenv,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
-    config, log,
+    config, log, Devenv,
 };
-use miette::Result;
+use miette::{IntoDiagnostic, Result, WrapErr};
+use tempfile::TempDir;
 use tracing::{info, warn};
 
 #[tokio::main]
@@ -43,7 +43,14 @@ async fn main() -> Result<()> {
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
-        config.override_input_url(&input[0].clone(), &input[1].clone())
+        config
+            .override_input_url(&input[0].clone(), &input[1].clone())
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to override input {} with URL {}",
+                    &input[0], &input[1]
+                )
+            })?;
     }
 
     let mut options = devenv::DevenvOptions {
@@ -57,14 +64,22 @@ async fn main() -> Result<()> {
         dont_override_dotfile,
     } = command
     {
-        let pwd = std::env::current_dir().expect("Failed to get current directory");
-        let tmpdir =
-            tempdir::TempDir::new_in(pwd, ".devenv").expect("Failed to create temporary directory");
+        let pwd = std::env::current_dir()
+            .into_diagnostic()
+            .wrap_err("Failed to get current directory")?;
+        let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary directory")?;
         if !dont_override_dotfile {
-            info!(
-                "Overriding .devenv to {}",
-                tmpdir.path().file_name().unwrap().to_str().unwrap()
-            );
+            let file_name = tmpdir
+                .path()
+                .file_name()
+                .ok_or_else(|| miette::miette!("Temporary directory path is invalid"))?
+                .to_str()
+                .ok_or_else(|| {
+                    miette::miette!("Temporary directory name contains invalid Unicode")
+                })?;
+            info!("Overriding .devenv to {}", file_name);
             options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
         }
         Some(tmpdir)
@@ -182,7 +197,7 @@ async fn main() -> Result<()> {
         Commands::Assemble => devenv.assemble(false).await,
         Commands::PrintDevEnv { json } => devenv.print_dev_env(json).await,
         Commands::GenerateJSONSchema => {
-            config::write_json_schema();
+            config::write_json_schema().wrap_err("Failed to generate JSON schema")?;
             Ok(())
         }
         Commands::Direnvrc => unreachable!(),
