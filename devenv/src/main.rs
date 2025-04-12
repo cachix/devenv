@@ -6,6 +6,7 @@ use devenv::{
     config, log, Devenv,
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
+use tempfile::TempDir;
 use tracing::{info, warn};
 
 #[tokio::main]
@@ -66,7 +67,7 @@ async fn main() -> Result<()> {
         let pwd = std::env::current_dir()
             .into_diagnostic()
             .wrap_err("Failed to get current directory")?;
-        let tmpdir = tempdir::TempDir::new_in(pwd, ".devenv")
+        let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
             .into_diagnostic()
             .wrap_err("Failed to create temporary directory")?;
         if !dont_override_dotfile {

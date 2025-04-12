@@ -6,6 +6,7 @@ use std::{
     path::PathBuf,
     process::{Command, ExitCode, Stdio},
 };
+use tempfile::TempDir;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -85,7 +86,8 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                 )
                 .wrap_err("Failed to add devenv input")?;
 
-            let tmpdir = tempdir::TempDir::new(&format!("devenv-run-tests-{}", dir_name))
+            // Create temp directory in system temp dir, not the current directory
+            let tmpdir = TempDir::with_prefix(&format!("devenv-run-tests-{}", dir_name))
                 .map_err(|e| miette::miette!("Failed to create temp directory: {}", e))?;
             let devenv_root = tmpdir.path().to_path_buf();
             let devenv_dotfile = tmpdir.path().join(".devenv");
