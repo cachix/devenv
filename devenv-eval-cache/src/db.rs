@@ -1,6 +1,6 @@
 use super::command::{EnvInputDesc, FileInputDesc, Input};
 use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqliteRow, SqliteSynchronous};
-use sqlx::{Acquire, Row, SqlitePool, migrate::MigrateDatabase};
+use sqlx::{migrate::MigrateDatabase, Acquire, Row, SqlitePool};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};

@@ -1,9 +1,9 @@
-use clap::{Parser, crate_version};
+use clap::{crate_version, Parser};
 use devenv::{
     default_system,
     log::{self, LogFormat},
 };
-use miette::{IntoDiagnostic, Result, bail};
+use miette::{bail, IntoDiagnostic, Result};
 use similar::{ChangeTag, TextDiff};
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};

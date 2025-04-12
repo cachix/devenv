@@ -17,9 +17,11 @@ nix-conf-parser.workspace = true
 
 clap.workspace = true
 cli-table.workspace = true
+color-eyre.workspace = true
 console.workspace = true
 dialoguer.workspace = true
 dotlock.workspace = true
+eyre.workspace = true
 hex.workspace = true
 include_dir.workspace = true
 indoc.workspace = true

@@ -1,4 +1,5 @@
 use console::Term;
+use eyre::WrapErr;
 use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -163,17 +164,20 @@ impl TaskState {
         &self,
         cmd: &str,
         outputs: &BTreeMap<String, serde_json::Value>,
-    ) -> (Command, tempfile::NamedTempFile) {
+    ) -> eyre::Result<(Command, tempfile::NamedTempFile)> {
         let mut command = Command::new(cmd);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         // Set DEVENV_TASK_INPUTS
         if let Some(inputs) = &self.task.inputs {
-            command.env("DEVENV_TASK_INPUT", serde_json::to_string(inputs).unwrap());
+            let inputs_json = serde_json::to_string(inputs)
+                .wrap_err("Failed to serialize task inputs to JSON")?;
+            command.env("DEVENV_TASK_INPUT", inputs_json);
         }
 
         // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
-        let outputs_file = tempfile::NamedTempFile::new().unwrap();
+        let outputs_file = tempfile::NamedTempFile::new()
+            .wrap_err("Failed to create temporary file for task output")?;
         command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
 
         // Set environment variables from task outputs
@@ -198,10 +202,11 @@ impl TaskState {
         command.env("DEVENV_TASK_ENV", devenv_env);
 
         // Set DEVENV_TASKS_OUTPUTS
-        let outputs_json = serde_json::to_string(outputs).unwrap();
+        let outputs_json =
+            serde_json::to_string(outputs).wrap_err("Failed to serialize task outputs to JSON")?;
         command.env("DEVENV_TASKS_OUTPUTS", outputs_json);
 
-        (command, outputs_file)
+        Ok((command, outputs_file))
     }
 
     async fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
@@ -222,75 +227,79 @@ impl TaskState {
         &self,
         now: Instant,
         outputs: &BTreeMap<String, serde_json::Value>,
-    ) -> TaskCompleted {
+    ) -> eyre::Result<TaskCompleted> {
         if let Some(cmd) = &self.task.status {
-            let (mut command, outputs_file) = self.prepare_command(cmd, outputs);
+            let (mut command, outputs_file) = self
+                .prepare_command(cmd, outputs)
+                .wrap_err("Failed to prepare status command")?;
 
             let result = command.status().await;
             match result {
                 Ok(status) => {
                     if status.success() {
-                        return TaskCompleted::Skipped(Skipped::Cached(
+                        return Ok(TaskCompleted::Skipped(Skipped::Cached(
                             Self::get_outputs(&outputs_file).await,
-                        ));
+                        )));
                     }
                 }
                 Err(e) => {
                     // TODO: stdout, stderr
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: e.to_string(),
                         },
-                    );
+                    ));
                 }
             }
         }
         if let Some(cmd) = &self.task.command {
-            let (mut command, outputs_file) = self.prepare_command(cmd, outputs);
+            let (mut command, outputs_file) = self
+                .prepare_command(cmd, outputs)
+                .wrap_err("Failed to prepare task command")?;
 
             let result = command.spawn();
 
             let mut child = match result {
                 Ok(c) => c,
                 Err(e) => {
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: e.to_string(),
                         },
-                    );
+                    ));
                 }
             };
 
             let stdout = match child.stdout.take() {
                 Some(stdout) => stdout,
                 None => {
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: "Failed to capture stdout".to_string(),
                         },
-                    );
+                    ));
                 }
             };
             let stderr = match child.stderr.take() {
                 Some(stderr) => stderr,
                 None => {
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: "Failed to capture stderr".to_string(),
                         },
-                    );
+                    ));
                 }
             };
 
@@ -330,35 +339,35 @@ impl TaskState {
                         match result {
                             Ok(status) => {
                                 if status.success() {
-                                    return TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await);
+                                    return Ok(TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await));
                                 } else {
-                                    return TaskCompleted::Failed(
+                                    return Ok(TaskCompleted::Failed(
                                         now.elapsed(),
                                         TaskFailure {
                                             stdout: stdout_lines,
                                             stderr: stderr_lines,
                                             error: format!("Task exited with status: {}", status),
                                         },
-                                    );
+                                    ));
                                 }
                             },
                             Err(e) => {
                                 error!("Error waiting for command: {}", e);
-                                return TaskCompleted::Failed(
+                                return Ok(TaskCompleted::Failed(
                                     now.elapsed(),
                                     TaskFailure {
                                         stdout: stdout_lines,
                                         stderr: stderr_lines,
                                         error: format!("Error waiting for command: {}", e),
                                     },
-                                );
+                                ));
                             }
                         }
                     }
                 }
             }
         } else {
-            return TaskCompleted::Skipped(Skipped::NotImplemented);
+            return Ok(TaskCompleted::Skipped(Skipped::NotImplemented));
         }
     }
 }
@@ -569,7 +578,20 @@ impl Tasks {
                 running_tasks.spawn(async move {
                     let completed = {
                         let outputs = outputs_clone.lock().await.clone();
-                        task_state_clone.read().await.run(now, &outputs).await
+                        match task_state_clone.read().await.run(now, &outputs).await {
+                            Ok(result) => result,
+                            Err(e) => {
+                                error!("Task failed with error: {}", e);
+                                TaskCompleted::Failed(
+                                    now.elapsed(),
+                                    TaskFailure {
+                                        stdout: Vec::new(),
+                                        stderr: Vec::new(),
+                                        error: format!("Task failed: {}", e),
+                                    },
+                                )
+                            }
+                        }
                     };
                     {
                         let mut task_state = task_state_clone.write().await;

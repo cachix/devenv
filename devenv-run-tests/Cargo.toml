@@ -9,3 +9,4 @@ clap.workspace = true
 devenv.workspace = true
 tempdir.workspace = true
 tokio.workspace = true
+miette.workspace = true

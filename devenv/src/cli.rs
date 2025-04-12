@@ -1,5 +1,5 @@
 use crate::log::LogFormat;
-use clap::{Parser, Subcommand, crate_version};
+use clap::{crate_version, Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::error;
 
@@ -275,7 +275,9 @@ pub enum Commands {
         command: InputsCommand,
     },
 
-    #[command(about = "Launch an interactive environment for inspecting the devenv configuration.")]
+    #[command(
+        about = "Launch an interactive environment for inspecting the devenv configuration."
+    )]
     Repl {},
 
     #[command(
@@ -391,7 +393,7 @@ pub fn default_system() -> String {
 fn max_jobs() -> u8 {
     let num_cpus = std::thread::available_parallelism().unwrap_or_else(|e| {
         error!("Failed to get number of logical CPUs: {}", e);
-        std::num::NonZeroUsize::new(4).unwrap()
+        std::num::NonZeroUsize::new(4).expect("4 is non-zero")
     });
     std::cmp::max(num_cpus.get().div_ceil(2), 2) as u8
 }
