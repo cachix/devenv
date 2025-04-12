@@ -1,7 +1,6 @@
 ### Release on GitHub
 
-- `git commit`
-- `git tag`
+- `git tag vX.X`
 - `git push --tags`
 - Create a release on GitHub
 - Bump dev version in devenv/Cargo.toml and package.nix
