@@ -223,7 +223,7 @@
       flakeModule = self.flakeModules.default; # Backwards compatibility
       flakeModules = {
         default = import ./flake-module.nix self;
-        readDevenvRoot = {inputs, lib, ...}: {
+        readDevenvRoot = { inputs, lib, ... }: {
           config =
             let
               devenvRootFileContent =
