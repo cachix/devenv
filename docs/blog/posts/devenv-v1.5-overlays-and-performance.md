@@ -7,7 +7,7 @@ authors:
 
 # devenv 1.5: Overlays Support and Performance Improvements
 
-In this release, we're introducing powerful Nix concept: overlays for modifying and extending the nixpkgs package set, along with significant performance and TLS certificate improvements.
+In this release, we're introducing a powerful Nix concept: overlays for modifying and extending the nixpkgs package set, along with significant performance and TLS certificate improvements.
 
 ## Overlays: Customizing Your Package Set
 
@@ -18,7 +18,7 @@ Overlays allow you to modify or extend the default package set (`pkgs`) that dev
 - Add custom packages not available in nixpkgs
 - Use packages from older nixpkgs versions
 
-Here's an  example of using overlays in your `devenv.nix` file to apply a patch to `hello` package:
+Here's an example of using overlays in your `devenv.nix` file to apply a patch to the `hello` package:
 
 ```nix
 { pkgs, ... }:
@@ -75,7 +75,7 @@ For more details and examples, check out the [overlays documentation](/overlays/
 ## TLS Improvements: Native System Certificates
 
 We've heard from ZScaler how [they are using devenv](https://bsky.app/profile/jm2dev.bsky.social/post/3lle7mdguhs2j) and we've fixed their major annoyance
-by not respecting system certificates that many enterprises rely on.
+by ensuring devenv now respects system certificates that many enterprises rely on.
 
 ## macOS Development Enhancements: Custom Apple SDK Support
 
@@ -96,7 +96,7 @@ This allows you to:
 
 ## Performance Improvements
 
-Sander further tweaked [peformance of activation of developer environment at OceanSprint](https://oceansprint.org/reports/2025/) when it can be cached:
+Sander further tweaked the [performance of developer environment activation at OceanSprint](https://oceansprint.org/reports/2025/) when it can be cached:
 
 * Linux: ~500ms -> ~150ms
 * macOS: ~1300ms -> ~300ms
