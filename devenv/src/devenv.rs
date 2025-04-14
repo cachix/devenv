@@ -655,19 +655,47 @@ impl Devenv {
         };
         let test_script = test_script[0].to_string_lossy().to_string();
 
-        if self.has_processes().await? {
-            self.up(vec![], &true, &false).await?;
+        // Run script and capture its environment exports
+        let output = self
+            .prepare_shell(&Some("env".to_string()), &[])
+            .await?
+            .env("CLICOLOR_FORCE", "1")
+            .stderr(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("Failed to execute script")
+            .wait_with_output()
+            .expect("Failed to wait for script");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Parse the environment variables
+        let env_vars = stdout.lines().filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                Some((parts[0], parts[1]))
+            } else {
+                None
+            }
+        });
+
+        // TODO: clean && keep
+        // Set environment variables for current process
+        for (key, value) in env_vars {
+            std::env::set_var(key, value);
         }
 
-        let processes_pid = self.processes_pid();
-        while !processes_pid.exists() {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        if self.has_processes().await? {
+            self.launch_processes(vec![], &true, &false).await?;
         }
 
         let span = info_span!("test", devenv.user_message = "Running tests");
         let result = async {
             debug!("Running command: {test_script}");
-            self.exec_in_shell(test_script, &[]).await
+            std::process::Command::new(test_script)
+                .spawn()
+                .unwrap()
+                .wait_with_output()
+                .into_diagnostic()
         }
         .instrument(span)
         .await?;
@@ -683,6 +711,94 @@ impl Devenv {
             info!("Tests passed :)");
             Ok(())
         }
+    }
+
+    pub async fn launch_processes(
+        &mut self,
+        processes: Vec<String>,
+        detach: &bool,
+        log_to_file: &bool,
+    ) -> Result<()> {
+        self.assemble(false).await?;
+        if !self.has_processes().await? {
+            error!("No 'processes' option defined: https://devenv.sh/processes/");
+            bail!("No processes defined");
+        }
+
+        let span = info_span!(
+            "build_processes",
+            devenv.user_message = "Building processes"
+        );
+        let proc_script_string = async {
+            let proc_script = self.nix.build(&["procfileScript"], None).await?;
+            let proc_script_string = proc_script[0]
+                .to_str()
+                .expect("Failed to get proc script path")
+                .to_string();
+            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
+            Ok::<String, miette::Report>(proc_script_string)
+        }
+        .instrument(span)
+        .await?;
+
+        let span = info_span!("up", devenv.user_message = "Starting processes");
+        async {
+            let processes = processes.join("");
+
+            let processes_script = self.devenv_dotfile.join("processes");
+            // we force disable process compose tui if detach is enabled
+            let tui = if *detach {
+                "export PC_TUI_ENABLED=0"
+            } else {
+                ""
+            };
+            fs::write(
+                &processes_script,
+                indoc::formatdoc! {"
+                #!/usr/bin/env bash
+                {tui}
+                exec {proc_script_string} {processes}
+            "},
+            )
+            .expect("Failed to write PROCESSES_SCRIPT");
+
+            std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
+                .expect("Failed to set permissions");
+
+            // let span = info_span!("Entering shell");
+            let mut cmd = std::process::Command::new("bash");
+            cmd.arg(processes_script.to_string_lossy().to_string());
+
+            if *detach {
+                let log_file = std::fs::File::create(self.processes_log())
+                    .expect("Failed to create PROCESSES_LOG");
+                let process = if !*log_to_file {
+                    cmd.stdout(std::process::Stdio::inherit())
+                        .stderr(std::process::Stdio::inherit())
+                        .spawn()
+                        .expect("Failed to spawn process")
+                } else {
+                    cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
+                        .stderr(log_file)
+                        .spawn()
+                        .expect("Failed to spawn process")
+                };
+
+                std::fs::write(self.processes_pid(), process.id().to_string())
+                    .expect("Failed to write PROCESSES_PID");
+                info!("PID is {}", process.id());
+                if *log_to_file {
+                    info!("See logs:  $ tail -f {}", self.processes_log().display());
+                }
+                info!("Stop:      $ devenv processes stop");
+            } else {
+                let err = cmd.exec();
+                bail!(err);
+            }
+            Ok(())
+        }
+        .instrument(span)
+        .await
     }
 
     pub async fn info(&mut self) -> Result<()> {
@@ -771,11 +887,7 @@ impl Devenv {
 
         let span = info_span!("up", devenv.user_message = "Starting processes");
         async {
-            let processes = if processes.is_empty() {
-                "".to_string()
-            } else {
-                processes.join(" ")
-            };
+            let processes = processes.join("");
 
             let processes_script = self.devenv_dotfile.join("processes");
             // we force disable process compose tui if detach is enabled
