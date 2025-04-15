@@ -19,3 +19,34 @@ body {
 .md-header__topic {
     visibility: hidden;
 }
+
+/* Footer customization */
+.md-footer {
+    background-color: transparent !important;
+}
+
+.md-footer-meta {
+    background-color: transparent !important;
+}
+
+/* Don't hide these containers, just remove default styling */
+.md-footer-meta__inner {
+    padding: 0 !important;
+    background-color: transparent !important;
+}
+
+/* Hide specific default elements */
+.md-footer-copyright,
+.md-footer-social {
+    display: none !important;
+}
+
+/* For all default footer nav sections */
+.md-footer-nav {
+    display: none !important;
+}
+
+/* Ensure the footer is visible */
+.md-footer {
+    display: block !important;
+}
