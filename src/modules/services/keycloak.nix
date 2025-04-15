@@ -89,8 +89,8 @@ in
           "dev-mem"
           "dev-file"
         ];
-        default = "dev-file";
-        example = "dev-mem";
+        default = "dev-mem";
+        example = "dev-file";
         description = ''
           The type of database Keycloak should connect to.
           In a development setup is fine to just use 'dev-mem' which
@@ -194,37 +194,38 @@ in
             '';
           };
 
-          # https-port = mkOption {
-          #   type = types.port;
-          #   default = 443;
-          #   example = 8443;
-          #   description = ''
-          #     On which port Keycloak should listen for new HTTPS connections.
-          #   '';
-          # };
+          https-port = mkOption {
+            type = types.port;
+            default = 34429;
+            example = 34429;
+            description = ''
+              On which port Keycloak should listen for new HTTPS connections.
+              If its not set, its disabled.
+            '';
+          };
 
-          # http-relative-path = mkOption {
-          #   type = types.str;
-          #   default = "/";
-          #   example = "/auth";
-          #   apply = x: if !(lib.hasPrefix "/") x then "/" + x else x;
-          #   description = ''
-          #     The path relative to `/` for serving
-          #     resources.
-          #
-          #     ::: {.note}
-          #     In versions of Keycloak using Wildfly (&lt;17),
-          #     this defaulted to `/auth`. If
-          #     upgrading from the Wildfly version of Keycloak,
-          #     i.e. a NixOS version before 22.05, you'll likely
-          #     want to set this to `/auth` to
-          #     keep compatibility with your clients.
-          #
-          #     See <https://www.keycloak.org/migration/migrating-to-quarkus>
-          #     for more information on migrating from Wildfly to Quarkus.
-          #     :::
-          #   '';
-          # };
+          http-relative-path = mkOption {
+            type = types.str;
+            default = "/";
+            example = "/auth";
+            apply = x: if !(lib.hasPrefix "/") x then "/" + x else x;
+            description = ''
+              The path relative to `/` for serving
+              resources.
+
+              ::: {.note}
+              In versions of Keycloak using Wildfly (&lt;17),
+              this defaulted to `/auth`. If
+              upgrading from the Wildfly version of Keycloak,
+              i.e. a NixOS version before 22.05, you'll likely
+              want to set this to `/auth` to
+              keep compatibility with your clients.
+
+              See <https://www.keycloak.org/migration/migrating-to-quarkus>
+              for more information on migrating from Wildfly to Quarkus.
+              :::
+            '';
+          };
 
           hostname = mkOption {
             type = types.str;
@@ -233,19 +234,6 @@ in
             description = ''
               The hostname part of the public URL used as base for
               all frontend requests.
-
-              See <https://www.keycloak.org/server/hostname>
-              for more information about hostname configuration.
-            '';
-          };
-
-          hostname-backchannel-dynamic = mkOption {
-            type = types.bool;
-            default = false;
-            example = true;
-            description = ''
-              Enables dynamic resolving of backchannel URLs,
-              including hostname, scheme, port and context path.
 
               See <https://www.keycloak.org/server/hostname>
               for more information about hostname configuration.
@@ -319,10 +307,13 @@ in
       # Write the keycloak config file.
       confFile = pkgs.writeText "keycloak.conf" (keycloakConfig filteredConfig);
 
-      keycloakBuild = cfg.package.override {
-        inherit confFile;
-        plugins = cfg.package.enabledPlugins ++ cfg.plugins;
-      };
+      keycloakBuild = (
+        cfg.package.override {
+          inherit confFile;
+
+          plugins = cfg.package.enabledPlugins ++ cfg.plugins;
+        }
+      );
 
       dummyCertificates = pkgs.stdenv.mkDerivation {
         pname = "dev-ssl-cert";
@@ -342,6 +333,31 @@ in
       };
 
       providedSSLCerts = cfg.sslCertificate != null && cfg.sslCertificateKey != null;
+
+      # Generate the command to export the realms.
+      realmExports = lib.optional (cfg.realmExport != { }) (
+        lib.mapAttrsToList
+          (
+            realm: e:
+              let
+                file =
+                  if e.path == null then
+                    (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
+                  else
+                    e.path;
+              in
+              ''
+                echo "Exporting realm '${realm}' to '${file}'."
+                mkdir -p "$(dirname "${file}")"
+                ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
+              ''
+          )
+          cfg.exportRealms
+      );
+
+      keycloak-realm-export = pkgs.writeShellScriptBin "keycloak-realm-export" ''
+        ${lib.concatStringsSep "\n" realmExports}
+      '';
     in
     mkIf cfg.enable {
 
@@ -351,10 +367,10 @@ in
           http-enabled = true;
           db = cfg.database.type;
 
-          health-enable = true;
+          health-enabled = true;
 
-          log-console-level = "debug";
-          log-level = "debug";
+          log-console-level = "info";
+          log-level = "info";
         }
         (mkIf providedSSLCerts {
           https-certificate-file = cfg.sslCertificate;
@@ -391,17 +407,21 @@ in
           keycloak-start = pkgs.writeShellScriptBin "keycloak-start" ''
             set -euo pipefail
             mkdir -p "$KC_HOME_DIR"
-            mkdir -p "$KC_HOME_DIR/providers"
             mkdir -p "$KC_HOME_DIR/conf"
             mkdir -p "$KC_HOME_DIR/tmp"
 
-            # Install config file.
-            # install -D -m 0600 ${confFile} "$KC_HOME_DIR/conf/keycloak.conf"
+            ln -fs ${keycloakBuild}/providers "$KC_HOME_DIR/"
+            ln -fs ${keycloakBuild}/lib "$KC_HOME_DIR/"
+            install -D -m 0600 ${confFile} "$KC_HOME_DIR/conf/keycloak.conf"
 
+            echo "Keycloak config:"
+            ${keycloakBuild}/bin/kc.sh show-config || true
+
+            echo "Import realms (if any)..."
             ${builtins.concatStringsSep "\n" importRealms}
 
-            ${keycloakBuild}/bin/kc.sh show-config || true # >/persist/repos/devenv/test.log 2>&1
-            ${keycloakBuild}/bin/kc.sh --verbose start-dev # >>/persist/repos/devenv/test.log 2>&1
+            echo "Start keycloak:"
+            ${keycloakBuild}/bin/kc.sh start --optimized
           '';
 
           # We could use `kcadm.sh get "http://localhost:9000"` but that needs
@@ -411,8 +431,7 @@ in
               host = cfg.settings.hostname + ":" + builtins.toString cfg.settings.http-port;
             in
             pkgs.writeShellScriptBin "keycloak-health" ''
-              ${pkgs.curl} -v \
-                "http://${host}/auth/realms/master/.well-known/openid-configuration"
+              ${pkgs.curl} -k --head -fsS "https://${host}/health/ready"
             '';
         in
         {
@@ -426,46 +445,26 @@ in
               period_seconds = 10;
               timeout_seconds = 4;
               success_threshold = 1;
-              failure_threshold = 5;
+              failure_threshold = 20;
             };
           };
         };
 
-      processes.keycloak-export-realms =
-        let
-          # Generate the command to export the realms.
-          realmExports = lib.optional (cfg.realmExport != { }) (
-            lib.mapAttrsToList
-              (
-                realm: e:
-                  let
-                    file =
-                      if e.path == null then
-                        (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
-                      else
-                        e.path;
-                  in
-                  ''
-                    echo "Exporting realm '${realm}' to '${file}'."
-                    mkdir -p "$(dirname "${file}")"
-                    ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
-                  ''
-              )
-              cfg.exportRealms
-          );
-
-          keycloak-realm-export = pkgs.writeShellScriptBin "keycloak-realm-export" ''
-            ${lib.concatStringsSep "\n" realmExports}
+      # Process to export the realm.
+      scripts.keycloak-realm-export = {
+        exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
+        description = ''
+          Save the realms from keycloak, to back them up. You can run it manually.
+        '';
+      };
+      processes.keycloak-export-realms = mkIf (cfg.realmExport != { }) {
+        exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
+        process-compose = {
+          description = ''
+            Save the realms from keycloak, to back them up. You can run it manually.
           '';
-        in
-        mkIf (cfg.realmExport != { }) {
-          exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
-          process-compose = {
-            description = ''
-              Save the realms from keycloak, to back them up. You can run it manually.
-            '';
-            disabled = true;
-          };
+          disabled = true;
         };
+      };
     };
 }
