@@ -1,10 +1,10 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
-  devenv = pkgs.callPackage ./../../package.nix {
+  devenv-tasks = pkgs.callPackage ./../../package.nix {
     build_tasks = true;
+    cachix = null;
     inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
-    inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
   };
   taskType = types.submodule
     ({ name, config, ... }:
@@ -23,7 +23,7 @@ let
               #!${binary}
               ${lib.optionalString (!isStatus) "set -e"}
               ${command}
-              ${lib.optionalString (config.exports != [] && !isStatus) "${devenv}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
+              ${lib.optionalString (config.exports != [] && !isStatus) "${devenv-tasks}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in
       {
@@ -116,6 +116,11 @@ in
       internal = true;
       description = "The generated tasks.json file.";
     };
+    task.package = lib.mkOption {
+      type = config.lib.types.output;
+      internal = true;
+      default = lib.getBin devenv-tasks;
+    };
   };
 
   config = {
@@ -149,13 +154,13 @@ in
       };
     };
     enterShell = ''
-      ${devenv}/bin/devenv-tasks run devenv:enterShell
+      ${config.task.package}/bin/devenv-tasks run devenv:enterShell
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi
     '';
     enterTest = ''
-      ${devenv}/bin/devenv-tasks run devenv:enterTest
+      ${config.task.package}/bin/devenv-tasks run devenv:enterTest
     '';
   };
 }
