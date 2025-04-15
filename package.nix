@@ -4,7 +4,7 @@
 , installShellFiles
 , rustPlatform
 , nix
-, cachix
+, cachix ? null
 , openssl
 , apple-sdk_11
 , pkg-config
@@ -62,13 +62,13 @@ rustPlatform.buildRustPackage {
     in
     lib.optionalString (!build_tasks) ''
       wrapProgram $out/bin/devenv \
-        --prefix PATH ":" "$out/bin:${cachix}/bin" \
+        --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
         --set DEVENV_NIX ${nix} \
         ${setDefaultLocaleArchive} \
 
       # TODO: problematic for our library...
       wrapProgram $out/bin/devenv-run-tests \
-        --prefix PATH ":" "$out/bin:${cachix}/bin" \
+        --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
         --set DEVENV_NIX ${nix} \
         ${setDefaultLocaleArchive} \
 
