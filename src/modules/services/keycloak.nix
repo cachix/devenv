@@ -159,7 +159,8 @@ in
 
       description = ''
         Specify the realms you want to export on a process 'keycloak-export-realms'
-        which you can launch manually. If the path is not specified they are exported
+        which you can launch manually by `keycloak-export-realms`.
+        If the path is not specified they are exported
         to directory `$DEVENV_STATE/keycloak/realm-export`.
       '';
     };
@@ -352,10 +353,10 @@ in
                 ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
               ''
           )
-          cfg.exportRealms
+          cfg.realmExport
       );
 
-      keycloak-realm-export = pkgs.writeShellScriptBin "keycloak-realm-export" ''
+      keycloak-export-realms = pkgs.writeShellScriptBin "keycloak-export-realms" ''
         ${lib.concatStringsSep "\n" realmExports}
       '';
     in
@@ -450,15 +451,20 @@ in
           };
         };
 
-      # Process to export the realm.
-      scripts.keycloak-realm-export = {
-        exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
+      # Export a single realm.
+      scripts.keycloak-export-realm = {
+        exec = ''${keycloakBuild}/bin/kc.sh export --realm "$1" --file "$2"'';
+      };
+      # Export all configured realms.
+      scripts.keycloak-export-realms = {
+        exec = "${keycloak-export-realms}/bin/keycloak-export-realms";
         description = ''
           Save the realms from keycloak, to back them up. You can run it manually.
         '';
       };
+      # Process to start for exporting the above.
       processes.keycloak-export-realms = mkIf (cfg.realmExport != { }) {
-        exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
+        exec = "${keycloak-export-realms}/bin/keycloak-export-realms";
         process-compose = {
           description = ''
             Save the realms from keycloak, to back them up. You can run it manually.

@@ -14,7 +14,7 @@ for i in $(seq 1 10); do
 
   if curl -k --head -fsS "https://localhost:9000/health/ready" ||
     [ "$status" -eq 200 ]; then
-    echo "Keycloak master realm up and running."
+    echo "Keycloak is up and running."
     exit 0
   fi
 
