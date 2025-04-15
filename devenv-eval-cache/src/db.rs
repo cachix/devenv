@@ -9,27 +9,34 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::error;
 
 pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx::Error> {
-    let conn_options = SqliteConnectOptions::from_str(database_url.as_ref())?
+    let mut pool = SqlitePool::connect_with(connection_options(&database_url)).await?;
+
+    // Attempt to run the migrations
+    if let Err(err) = sqlx::migrate!().run(&pool).await {
+        error!(error = %err, "Failed to migrate the Nix evaluation cache database. Attempting to recreate the database.");
+
+        // Close the existing connection
+        pool.close().await;
+        // Delete the database
+        Sqlite::drop_database(database_url.as_ref()).await?;
+        // Recreate the database and connection pool
+        pool = SqlitePool::connect_with(connection_options(&database_url)).await?;
+        sqlx::migrate!().run(&pool).await?;
+    }
+
+    Ok(pool)
+}
+
+fn connection_options<P: AsRef<str>>(database_url: P) -> SqliteConnectOptions {
+    SqliteConnectOptions::from_str(database_url.as_ref())
+        .unwrap()
         .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
         .pragma("mmap_size", "134217728")
         .pragma("journal_size_limit", "27103364")
         .pragma("cache_size", "2000")
-        .create_if_missing(true);
-
-    let pool = SqlitePool::connect_with(conn_options).await?;
-
-    if let Err(err) = sqlx::migrate!().run(&pool).await {
-        error!(error = %err, "Failed to migrate the Nix evaluation cache database. Attempting to recreate the database.");
-
-        // Delete the database and rerun the migrations
-        Sqlite::drop_database(database_url.as_ref()).await?;
-        Sqlite::create_database(database_url.as_ref()).await?;
-        sqlx::migrate!().run(&pool).await?;
-    }
-
-    Ok(pool)
+        .create_if_missing(true)
 }
 
 /// The row type for the `cached_cmd` table.
@@ -56,14 +63,14 @@ impl sqlx::FromRow<'_, SqliteRow> for CommandRow {
         let cmd_hash: String = row.get("cmd_hash");
         let input_hash: String = row.get("input_hash");
         let output: Vec<u8> = row.get("output");
-        let updated_at: u64 = row.get("updated_at");
+        let updated_at: i64 = row.get("updated_at");
         Ok(Self {
             id,
             raw,
             cmd_hash,
             input_hash,
             output,
-            updated_at: UNIX_EPOCH + std::time::Duration::from_secs(updated_at),
+            updated_at: system_time_from_unix_seconds(updated_at),
         })
     }
 }
@@ -173,14 +180,16 @@ where
     A: Acquire<'a, Database = Sqlite>,
 {
     let mut conn = conn.acquire().await?;
+    let now = system_time_to_unix_seconds(SystemTime::now());
 
     sqlx::query(
         r#"
         UPDATE cached_cmd
-        SET updated_at = strftime('%s', 'now')
+        SET updated_at = ?
         WHERE id = ?
         "#,
     )
+    .bind(now)
     .bind(id)
     .execute(&mut *conn)
     .await?;
@@ -205,10 +214,11 @@ where
         SET content_hash = excluded.content_hash,
             is_directory = excluded.is_directory,
             modified_at = excluded.modified_at,
-            updated_at = strftime('%s', 'now')
+            updated_at = ?
         RETURNING id
     "#;
 
+    let now = system_time_to_unix_seconds(SystemTime::now());
     let mut file_ids = Vec::with_capacity(file_inputs.len());
     for FileInputDesc {
         path,
@@ -217,12 +227,13 @@ where
         modified_at,
     } in file_inputs
     {
-        let modified_at = modified_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let modified_at = system_time_to_unix_seconds(*modified_at);
         let id: i64 = sqlx::query(insert_file_input)
             .bind(path.to_path_buf().into_os_string().as_bytes())
             .bind(is_directory)
             .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
             .bind(modified_at)
+            .bind(now)
             .fetch_one(&mut *conn)
             .await?
             .get(0);
@@ -260,16 +271,18 @@ where
         VALUES (?, ?, ?)
         ON CONFLICT (cached_cmd_id, name) DO UPDATE
         SET content_hash = excluded.content_hash,
-            updated_at = strftime('%s', 'now')
+            updated_at = ?
         RETURNING id
     "#;
 
+    let now = system_time_to_unix_seconds(SystemTime::now());
     let mut env_input_ids = Vec::with_capacity(env_inputs.len());
     for EnvInputDesc { name, content_hash } in env_inputs {
         let id: i64 = sqlx::query(insert_env_input)
             .bind(command_id)
             .bind(name)
             .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
+            .bind(now)
             .fetch_one(&mut *conn)
             .await?
             .get(0);
@@ -299,14 +312,14 @@ impl sqlx::FromRow<'_, SqliteRow> for FileInputRow {
         let path: &[u8] = row.get("path");
         let is_directory: bool = row.get("is_directory");
         let content_hash: String = row.get("content_hash");
-        let modified_at: u64 = row.get("modified_at");
-        let updated_at: u64 = row.get("updated_at");
+        let modified_at: i64 = row.get("modified_at");
+        let updated_at: i64 = row.get("updated_at");
         Ok(Self {
             path: PathBuf::from(OsStr::from_bytes(path)),
             is_directory,
             content_hash,
-            modified_at: UNIX_EPOCH + std::time::Duration::from_secs(modified_at),
-            updated_at: UNIX_EPOCH + std::time::Duration::from_secs(updated_at),
+            modified_at: system_time_from_unix_seconds(modified_at),
+            updated_at: system_time_from_unix_seconds(updated_at),
         })
     }
 }
@@ -406,16 +419,18 @@ pub async fn update_file_modified_at<P: AsRef<Path>>(
     path: P,
     modified_at: SystemTime,
 ) -> Result<(), sqlx::Error> {
-    let modified_at = modified_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+    let modified_at = system_time_to_unix_seconds(modified_at);
+    let now = system_time_to_unix_seconds(SystemTime::now());
 
     sqlx::query(
         r#"
         UPDATE file_input
-        SET modified_at = ?, updated_at = strftime('%s', 'now')
+        SET modified_at = ?, updated_at = ?
         WHERE path = ?
         "#,
     )
     .bind(modified_at)
+    .bind(now)
     .bind(path.as_ref().to_path_buf().into_os_string().as_bytes())
     .execute(pool)
     .await?;
@@ -438,6 +453,23 @@ pub async fn delete_unreferenced_files(pool: &SqlitePool) -> Result<u64, sqlx::E
     .await?;
 
     Ok(result.rows_affected())
+}
+
+/// Truncate a unix timestamp to seconds.
+///
+/// Returns an i64 because SQLite doesn't support u64.
+fn system_time_to_unix_seconds(time: SystemTime) -> i64 {
+    time.duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_micros()
+        .min(i64::MAX as u128) as i64
+}
+
+/// Convert an integer unix timestamp in seconds to a SystemTime.
+///
+/// Takes an i64 because SQLite doesn't support u64.
+fn system_time_from_unix_seconds(seconds: i64) -> SystemTime {
+    UNIX_EPOCH + std::time::Duration::from_secs(seconds as u64)
 }
 
 #[cfg(test)]
