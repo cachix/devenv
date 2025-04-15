@@ -356,9 +356,9 @@ in
           cfg.realmExport
       );
 
-      keycloak-export-realms = pkgs.writeShellScriptBin "keycloak-export-realms" ''
-        ${lib.concatStringsSep "\n" realmExports}
-      '';
+      keycloak-export-realms = pkgs.writeShellScriptBin "keycloak-export-realms" (
+        lib.concatStringsSep "\n" realmExports
+      );
     in
     mkIf cfg.enable {
 
