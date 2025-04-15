@@ -87,8 +87,9 @@ in
       type = mkOption {
         type = types.enum [
           "dev-mem"
+          "dev-file"
         ];
-        default = "dev-mem";
+        default = "dev-file";
         example = "dev-mem";
         description = ''
           The type of database Keycloak should connect to.
@@ -193,37 +194,37 @@ in
             '';
           };
 
-          https-port = mkOption {
-            type = types.port;
-            default = 443;
-            example = 8443;
-            description = ''
-              On which port Keycloak should listen for new HTTPS connections.
-            '';
-          };
+          # https-port = mkOption {
+          #   type = types.port;
+          #   default = 443;
+          #   example = 8443;
+          #   description = ''
+          #     On which port Keycloak should listen for new HTTPS connections.
+          #   '';
+          # };
 
-          http-relative-path = mkOption {
-            type = types.str;
-            default = "/";
-            example = "/auth";
-            apply = x: if !(lib.hasPrefix "/") x then "/" + x else x;
-            description = ''
-              The path relative to `/` for serving
-              resources.
-
-              ::: {.note}
-              In versions of Keycloak using Wildfly (&lt;17),
-              this defaulted to `/auth`. If
-              upgrading from the Wildfly version of Keycloak,
-              i.e. a NixOS version before 22.05, you'll likely
-              want to set this to `/auth` to
-              keep compatibility with your clients.
-
-              See <https://www.keycloak.org/migration/migrating-to-quarkus>
-              for more information on migrating from Wildfly to Quarkus.
-              :::
-            '';
-          };
+          # http-relative-path = mkOption {
+          #   type = types.str;
+          #   default = "/";
+          #   example = "/auth";
+          #   apply = x: if !(lib.hasPrefix "/") x then "/" + x else x;
+          #   description = ''
+          #     The path relative to `/` for serving
+          #     resources.
+          #
+          #     ::: {.note}
+          #     In versions of Keycloak using Wildfly (&lt;17),
+          #     this defaulted to `/auth`. If
+          #     upgrading from the Wildfly version of Keycloak,
+          #     i.e. a NixOS version before 22.05, you'll likely
+          #     want to set this to `/auth` to
+          #     keep compatibility with your clients.
+          #
+          #     See <https://www.keycloak.org/migration/migrating-to-quarkus>
+          #     for more information on migrating from Wildfly to Quarkus.
+          #     :::
+          #   '';
+          # };
 
           hostname = mkOption {
             type = types.str;
@@ -323,13 +324,31 @@ in
         plugins = cfg.package.enabledPlugins ++ cfg.plugins;
       };
 
+      dummyCertificates = pkgs.stdenv.mkDerivation {
+        pname = "dev-ssl-cert";
+        version = "1.0";
+        buildInputs = [ pkgs.openssl ];
+        src = null;
+        dontUnpack = true;
+        buildPhase = ''
+          mkdir -p $out
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout $out/ssl-cert.key -out $out/ssl-cert.crt \
+            -days 365 \
+            -subj "/CN=localhost"
+        '';
+
+        installPhase = "true";
+      };
+
+      providedSSLCerts = cfg.sslCertificate != null && cfg.sslCertificateKey != null;
     in
     mkIf cfg.enable {
 
       services.keycloak.settings = mkMerge [
         {
           # We always enable http since we also use it to check the health.
-          http-enable = true;
+          http-enabled = true;
           db = cfg.database.type;
 
           health-enable = true;
@@ -337,9 +356,13 @@ in
           log-console-level = "debug";
           log-level = "debug";
         }
-        (mkIf (cfg.sslCertificate != null && cfg.sslCertificateKey != null) {
+        (mkIf providedSSLCerts {
           https-certificate-file = cfg.sslCertificate;
           https-certificate-key-file = cfg.sslCertificateKey;
+        })
+        (mkIf (!providedSSLCerts) {
+          https-certificate-file = "${dummyCertificates}/ssl-cert.crt";
+          https-certificate-key-file = "${dummyCertificates}/ssl-cert.key";
         })
       ];
 
@@ -360,7 +383,7 @@ in
             lib.map
               (f: ''
                 echo "Importing realm file '${f}'."
-                ${cfg.package}/bin/kc.sh import --file "${f}"
+                ${keycloakBuild}/bin/kc.sh import --file "${f}"
               '')
               cfg.importRealms
           );
@@ -372,10 +395,13 @@ in
             mkdir -p "$KC_HOME_DIR/conf"
             mkdir -p "$KC_HOME_DIR/tmp"
 
+            # Install config file.
+            # install -D -m 0600 ${confFile} "$KC_HOME_DIR/conf/keycloak.conf"
+
             ${builtins.concatStringsSep "\n" importRealms}
 
-            ${cfg.package}/bin/kc.sh show-config
-            ${cfg.package}/bin/kc.sh --verbose start --optimized
+            ${keycloakBuild}/bin/kc.sh show-config || true # >/persist/repos/devenv/test.log 2>&1
+            ${keycloakBuild}/bin/kc.sh --verbose start-dev # >>/persist/repos/devenv/test.log 2>&1
           '';
 
           # We could use `kcadm.sh get "http://localhost:9000"` but that needs
@@ -422,7 +448,7 @@ in
                   ''
                     echo "Exporting realm '${realm}' to '${file}'."
                     mkdir -p "$(dirname "${file}")"
-                    ${cfg.package}/bin/kc.sh export --realm "${realm}" --file "${file}"
+                    ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
                   ''
               )
               cfg.exportRealms
