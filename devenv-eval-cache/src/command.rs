@@ -489,7 +489,7 @@ async fn query_cached_output(
                             );
                             should_refresh = true;
                         }
-                        FileState::Removed { .. } => {
+                        FileState::Removed => {
                             trace!(
                                 input = ?input,
                                 "Input has been removed, refreshing command"
@@ -746,7 +746,7 @@ mod test {
 
         assert!(matches!(
             check_file_state(&file_row.into()),
-            Ok(FileState::Removed { .. })
+            Ok(FileState::Removed)
         ));
     }
 }

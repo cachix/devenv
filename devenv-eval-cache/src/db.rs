@@ -468,7 +468,7 @@ mod tests {
             }),
         ];
         let input_hash = hash::digest(
-            &inputs
+            inputs
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -519,7 +519,7 @@ mod tests {
             }),
         ];
         let input_hash1 = hash::digest(
-            &inputs1
+            inputs1
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -556,7 +556,7 @@ mod tests {
             }),
         ];
         let input_hash2 = hash::digest(
-            &inputs2
+            inputs2
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -626,7 +626,7 @@ mod tests {
             }),
         ];
         let input_hash = hash::digest(
-            &inputs1
+            inputs1
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -653,7 +653,7 @@ mod tests {
             }),
         ];
         let input_hash2 = hash::digest(
-            &inputs2
+            inputs2
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
