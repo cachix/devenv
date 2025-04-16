@@ -6,7 +6,7 @@
       ]
     }
   },
-  "image": "ghcr.io/cachix/devenv:latest",
+  "image": "ghcr.io/cachix/devenv/devcontainer:latest",
   "overrideCommand": false,
   "updateContentCommand": "devenv test"
 }
