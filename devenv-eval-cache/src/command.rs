@@ -196,7 +196,7 @@ impl<'a> CachedCommand<'a> {
             .collect::<Vec<_>>();
 
         inputs.sort();
-        inputs.dedup();
+        inputs.dedup_by(Input::dedup);
 
         let input_hash = Input::compute_input_hash(&inputs);
 
@@ -274,6 +274,19 @@ impl Input {
 
         (file_inputs, env_inputs)
     }
+
+    pub fn dedup(a: &mut Self, b: &mut Self) -> bool {
+        match (a, b) {
+            (Input::File(f), Input::File(g)) => {
+                f == g
+                    || f.path == g.path
+                        && f.content_hash == g.content_hash
+                        && f.is_directory == g.is_directory
+            }
+            (Self::Env(f), Self::Env(g)) => f == g,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -285,8 +298,12 @@ pub struct FileInputDesc {
 }
 
 impl Ord for FileInputDesc {
+    /// Sort by path first, then by modified_at in reverse order.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.path.cmp(&other.path)
+        match self.path.cmp(&other.path) {
+            std::cmp::Ordering::Equal => other.modified_at.cmp(&self.modified_at),
+            otherwise => otherwise,
+        }
     }
 }
 
@@ -300,6 +317,8 @@ impl FileInputDesc {
     // A fallback system time is required for paths that don't exist.
     // This avoids duplicate entries for paths that don't exist and would only differ in terms of
     // the timestamp of when this function was called.
+    //
+    // All timestamps are truncated to second precision.
     pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
@@ -311,10 +330,11 @@ impl FileInputDesc {
         } else {
             hash::compute_file_hash(&path).ok()
         };
-        let modified_at = path
-            .metadata()
-            .and_then(|p| p.modified())
-            .unwrap_or(fallback_system_time);
+        let modified_at = truncate_to_seconds(
+            path.metadata()
+                .and_then(|p| p.modified())
+                .unwrap_or(fallback_system_time),
+        )?;
         Ok(Self {
             path,
             is_directory,
@@ -431,7 +451,7 @@ async fn query_cached_output(
         inputs.extend(extra_file_inputs);
 
         inputs.sort();
-        inputs.dedup();
+        inputs.dedup_by(Input::dedup);
 
         let mut should_refresh = false;
 
@@ -474,6 +494,7 @@ async fn query_cached_output(
                             if let Input::File(file) = &inputs[index] {
                                 trace!(
                                     input = ?input,
+                                    modified_at = ?modified_at,
                                     "File metadata has been modified, updating modified_at"
                                 );
                                 // TODO: batch with query builder?
@@ -482,14 +503,19 @@ async fn query_cached_output(
                                     .map_err(CommandError::Sqlx)?;
                             }
                         }
-                        FileState::Modified { .. } => {
+                        FileState::Modified {
+                            new_hash,
+                            modified_at,
+                        } => {
                             trace!(
                                 input = ?input,
+                                new_hash,
+                                modified_at = ?modified_at,
                                 "Input has been modified, refreshing command"
                             );
                             should_refresh = true;
                         }
-                        FileState::Removed { .. } => {
+                        FileState::Removed => {
                             trace!(
                                 input = ?input,
                                 "Input has been removed, refreshing command"
@@ -646,7 +672,7 @@ fn check_env_state(env: &EnvInputDesc) -> io::Result<FileState> {
     if Some(&new_hash) != env.content_hash.as_ref() {
         Ok(FileState::Modified {
             new_hash,
-            modified_at: SystemTime::now(),
+            modified_at: truncate_to_seconds(SystemTime::now())?,
         })
     } else {
         Ok(FileState::Unchanged)
@@ -656,8 +682,7 @@ fn check_env_state(env: &EnvInputDesc) -> io::Result<FileState> {
 fn truncate_to_seconds(time: SystemTime) -> io::Result<SystemTime> {
     let duration_since_epoch = time
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "SystemTime before UNIX EPOCH"))?;
-
+        .map_err(|_| io::Error::other("SystemTime before UNIX EPOCH"))?;
     let seconds = duration_since_epoch.as_secs();
     Ok(UNIX_EPOCH + std::time::Duration::from_secs(seconds))
 }
@@ -746,7 +771,43 @@ mod test {
 
         assert!(matches!(
             check_file_state(&file_row.into()),
-            Ok(FileState::Removed { .. })
+            Ok(FileState::Removed)
         ));
+    }
+
+    #[test]
+    fn test_input_dedup_by() {
+        let path = PathBuf::from("test.txt");
+        let content_hash = Some("abc123".to_string());
+        let file1 = Input::File(FileInputDesc {
+            path: path.clone(),
+            is_directory: false,
+            content_hash: content_hash.clone(),
+            modified_at: UNIX_EPOCH,
+        });
+        let file2 = Input::File(FileInputDesc {
+            path: path.clone(),
+            is_directory: false,
+            content_hash: content_hash.clone(),
+            modified_at: UNIX_EPOCH + std::time::Duration::from_secs(1),
+        });
+
+        let mut inputs = vec![file1, file2.clone()];
+        inputs.sort();
+        inputs.dedup_by(Input::dedup);
+        assert!(inputs.len() == 1);
+        assert_eq!(inputs[0], file2);
+    }
+
+    #[test]
+    fn test_truncate_system_time_to_seconds() {
+        let time = SystemTime::now();
+        let truncated_time = truncate_to_seconds(time).unwrap();
+        let duration_since_epoch = truncated_time
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_millis();
+        // Test that the last 3 digits are zeros
+        assert_eq!(duration_since_epoch % 1_000, 0);
     }
 }
