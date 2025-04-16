@@ -1670,7 +1670,7 @@ JSON value
 
 
 
-List of preinstalled VSCode extensions.
+A list of pre-installed VS Code extensions.
 
 
 
@@ -1706,7 +1706,7 @@ string
 
 
 *Default:*
-` "ghcr.io/cachix/devenv:latest" `
+` "ghcr.io/cachix/devenv/devcontainer:latest" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/devcontainer.nix)
@@ -1738,7 +1738,7 @@ anything
 
 
 
-Command to run after container creation.
+A command to run after the container is created.
 
 
 
