@@ -460,8 +460,8 @@ pub async fn delete_unreferenced_files(pool: &SqlitePool) -> Result<u64, sqlx::E
 fn system_time_to_unix_seconds(time: SystemTime) -> i64 {
     time.duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_micros()
-        .min(i64::MAX as u128) as i64
+        .as_secs()
+        .min(i64::MAX as u64) as i64
 }
 
 /// Convert an integer unix timestamp in seconds to a SystemTime.
