@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::error;
 
 pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx::Error> {
-    let mut pool = SqlitePool::connect_with(connection_options(&database_url)).await?;
+    let mut pool = SqlitePool::connect_with(connection_options(&database_url)?).await?;
 
     // Attempt to run the migrations
     if let Err(err) = sqlx::migrate!().run(&pool).await {
@@ -20,23 +20,22 @@ pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx
         // Delete the database
         Sqlite::drop_database(database_url.as_ref()).await?;
         // Recreate the database and connection pool
-        pool = SqlitePool::connect_with(connection_options(&database_url)).await?;
+        pool = SqlitePool::connect_with(connection_options(&database_url)?).await?;
         sqlx::migrate!().run(&pool).await?;
     }
 
     Ok(pool)
 }
 
-fn connection_options<P: AsRef<str>>(database_url: P) -> SqliteConnectOptions {
-    SqliteConnectOptions::from_str(database_url.as_ref())
-        .unwrap()
+fn connection_options<P: AsRef<str>>(database_url: P) -> Result<SqliteConnectOptions, sqlx::Error> {
+    Ok(SqliteConnectOptions::from_str(database_url.as_ref())?
         .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
         .pragma("mmap_size", "134217728")
         .pragma("journal_size_limit", "27103364")
         .pragma("cache_size", "2000")
-        .create_if_missing(true)
+        .create_if_missing(true))
 }
 
 /// The row type for the `cached_cmd` table.
