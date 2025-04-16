@@ -4,23 +4,59 @@ set -e
 echo "Startup complete..."
 echo "Checking for keycloak readiness..."
 echo "Process compose socket: $PC_SOCKET_PATH"
-bash
+# bash
 
-for i in $(seq 1 10); do
-  status=$(
-    curl --silent --output /dev/null --write-out "%{http_code}" \
-      "http://localhost:8089/realms/master/.well-known/openid-configuration" || true
-  )
+test_connection() {
+  for i in $(seq 1 10); do
+    if curl -k --head -fsS "https://localhost:9000/health/ready"; then
+      echo "Keycloak is up and running."
+      return 0
+    fi
 
-  if curl -k --head -fsS "https://localhost:9000/health/ready" ||
-    [ "$status" -eq 200 ]; then
-    echo "Keycloak is up and running."
-    exit 0
+    echo "Could not check health endpoint on keycloak or not ready yet, Try: '$i/10'."
+    sleep 3
+  done
+
+  echo "!! Keycloak test failed."
+  return 1
+}
+
+test_export() {
+  echo "Stop keycloak..."
+  process-compose process stop keycloak -u "$PC_SOCKET_PATH"
+
+  old_timestamp=$(stat -c %Y "./realms/test.json")
+
+  echo "Export realms..."
+  process-compose process start keycloak-realm-export-all -u "$PC_SOCKET_PATH"
+
+  completed="false"
+  for i in $(seq 1 10); do
+    if
+      [ "$(
+        process-compose process get keycloak-realm-export-all \
+          -o json -u "$PC_SOCKET_PATH" |
+          jq -r ".[0].status"
+      )" = "Completed" ]
+    then
+      completed="true"
+      break
+    fi
+
+    sleep 2
+  done
+
+  if [ "$completed" != "true" ]; then
+    echo "!! Realm export did not complete in time."
+    return 1
   fi
 
-  echo "Could not get openid-configuration for master realm. Status: $status, Try: '$i/10'."
-  sleep 3
-done
+  new_timestamp=$(stat -c %Y "./realms/test.json")
+  if ! [ "$new_timestamp" -gt "$old_timestamp" ]; then
+    echo "!! Realm 'test' did not get exported (was not modified)."
+    return 1
+  fi
+}
 
-echo "Keycloak test failed."
-exit 1
+test_connection
+test_export
