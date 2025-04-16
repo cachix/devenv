@@ -318,7 +318,7 @@ impl FileInputDesc {
     // This avoids duplicate entries for paths that don't exist and would only differ in terms of
     // the timestamp of when this function was called.
     //
-    // All timestamps are truncated to microsecond precision.
+    // All timestamps are truncated to second precision.
     pub fn new(path: PathBuf, fallback_system_time: SystemTime) -> Result<Self, io::Error> {
         let is_directory = path.is_dir();
         let content_hash = if is_directory {
