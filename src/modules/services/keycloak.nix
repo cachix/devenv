@@ -89,8 +89,8 @@ in
           "dev-mem"
           "dev-file"
         ];
-        default = "dev-mem";
-        example = "dev-file";
+        default = "dev-file";
+        example = "dev-mem";
         description = ''
           The type of database Keycloak should connect to.
           In a development setup is fine to just use 'dev-mem' which
@@ -113,38 +113,38 @@ in
       '';
     };
 
-    realmFiles = mkOption {
-      type = listOf types.path;
-      apply = x: lib.map (assertStringPath "realmFiles") x;
-      example = lib.literalExpression ''
-        [
-          ./some/realm.json
-          ./another/realm.json
-        ]
-      '';
-      default = [ ];
-      description = ''
-        Realm files that the server is going to import during startup.
-        If a realm already exists in the server, the import operation is
-        skipped. Importing the master realm is not supported. All files are
-        expected to be in `json` format. See the
-        [documentation](https://www.keycloak.org/server/importExport) for
-        further information.
-      '';
-    };
-
-    realmExport = mkOption {
+    realms = mkOption {
       default = { };
       type = types.attrsOf (
         types.submodule {
           options = {
             path = mkOption {
-              type = nullOr types.path;
+              type = nullOr types.str;
+              apply = assertStringPath "realms.«name».path";
               default = null;
               example = "./realms/a.json";
               description = ''
-                The path where you want to export this realm «name» to.
-                If not set its exported to `$DEVENV_STATE/keycloak/realm-export/«name»`.
+                The path (string, relative to `DEVENV_ROOT`) where you want to import (or export) this realm «name» to.
+                If not set and `import` is `true` this realm is not imported.
+                If not set and `export` is `true` its exported to `$DEVENV_STATE/keycloak/realm-export/«name».json`.
+              '';
+            };
+
+            import = mkOption {
+              type = types.bool;
+              default = true;
+              example = true;
+              description = ''
+                If you want to import that realm on start up, if the realm does not yet exist.
+              '';
+            };
+
+            export = mkOption {
+              type = types.bool;
+              default = false;
+              example = true;
+              description = ''
+                If you want to export that realm on process/script launch `keycloak-export-realms`.
               '';
             };
           };
@@ -153,15 +153,17 @@ in
 
       example = lib.literalExpression ''
         {
-          myrealm.path = "./myfolder/export.json";
+          myrealm = {
+            path = "./myfolder/export.json";
+            import = true; # default
+            export = true;
+          };
         }
       '';
 
       description = ''
-        Specify the realms you want to export on a process 'keycloak-export-realms'
-        which you can launch manually by `keycloak-export-realms`.
-        If the path is not specified they are exported
-        to directory `$DEVENV_STATE/keycloak/realm-export`.
+        Specify the realms you want to import on start up and
+        export on a manual start of process/script 'keycloak-realm-export-all'.
       '';
     };
 
@@ -335,32 +337,47 @@ in
 
       providedSSLCerts = cfg.sslCertificate != null && cfg.sslCertificateKey != null;
 
-      # Generate the command to export the realms.
-      realmExports = lib.optional (cfg.realmExport != { }) (
-        lib.mapAttrsToList
-          (
-            realm: e:
-              let
-                file =
-                  if e.path == null then
-                    (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
-                  else
-                    e.path;
-              in
-              ''
-                echo "Exporting realm '${realm}' to '${file}'."
-                mkdir -p "$(dirname "${file}")"
-                ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
-              ''
-          )
-          cfg.realmExport
-      );
+      # Generate the command to import realms.
+      realmImport = lib.mapAttrsToList
+        (realm: e: ''
+          echo "Symlinking realm file '${e.path}' to import path '$KC_HOME_DIR/data/import'."
+          ln -fs "${config.env.DEVENV_ROOT + "/" + e.path}" "$KC_HOME_DIR/data/import/"
+        '')
+        (lib.filterAttrs (_: v: v.import && v.path != null) cfg.realms);
 
-      keycloak-export-realms = pkgs.writeShellScriptBin "keycloak-export-realms" (
-        lib.concatStringsSep "\n" realmExports
+      # Generate the command to export realms.
+      realmExport = lib.mapAttrsToList
+        (
+          realm: e:
+            let
+              file =
+                if e.path == null then
+                  (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
+                else
+                  e.path;
+            in
+            ''
+              echo "Exporting realm '${realm}' to '${file}'."
+              mkdir -p "$(dirname "${file}")"
+              ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
+            ''
+        )
+        (lib.filterAttrs (_: v: v.export) cfg.realms);
+
+      keycloak-realm-exports = pkgs.writeShellScriptBin "keycloak-realm-exports" (
+        lib.concatStringsSep "\n" realmExport
       );
     in
     mkIf cfg.enable {
+      assertions = [
+        {
+          assertion = cfg.database.type == "dev-mem" -> realmExport == [ ];
+          message = ''
+            You cannot export realms with `realms.«name».export == true` when
+            using `database.type == 'dev-mem'`, import however works.
+          '';
+        }
+      ];
 
       services.keycloak.settings = mkMerge [
         {
@@ -372,15 +389,12 @@ in
 
           log-console-level = "info";
           log-level = "info";
+
+          https-certificate-file =
+            if providedSSLCerts then cfg.sslCertificate else "${dummyCertificates}/ssl-cert.crt";
+          https-certificate-key-file =
+            if providedSSLCerts then cfg.sslCertificate else "${dummyCertificates}/ssl-cert.key";
         }
-        (mkIf providedSSLCerts {
-          https-certificate-file = cfg.sslCertificate;
-          https-certificate-key-file = cfg.sslCertificateKey;
-        })
-        (mkIf (!providedSSLCerts) {
-          https-certificate-file = "${dummyCertificates}/ssl-cert.crt";
-          https-certificate-key-file = "${dummyCertificates}/ssl-cert.key";
-        })
       ];
 
       packages = [ keycloakBuild ];
@@ -396,20 +410,16 @@ in
 
       processes.keycloak =
         let
-          importRealms = lib.optional (cfg.realmFiles != [ ]) (
-            lib.map
-              (f: ''
-                echo "Importing realm file '${f}'."
-                ${keycloakBuild}/bin/kc.sh import --file "${f}"
-              '')
-              cfg.importRealms
-          );
 
           keycloak-start = pkgs.writeShellScriptBin "keycloak-start" ''
             set -euo pipefail
             mkdir -p "$KC_HOME_DIR"
             mkdir -p "$KC_HOME_DIR/conf"
             mkdir -p "$KC_HOME_DIR/tmp"
+
+            # Always remove the symlinks for the realm imports.
+            rm -rf "$KC_HOME_DIR/data/import" || true
+            mkdir -p "$KC_HOME_DIR/data/import"
 
             ln -fs ${keycloakBuild}/providers "$KC_HOME_DIR/"
             ln -fs ${keycloakBuild}/lib "$KC_HOME_DIR/"
@@ -419,17 +429,19 @@ in
             ${keycloakBuild}/bin/kc.sh show-config || true
 
             echo "Import realms (if any)..."
-            ${builtins.concatStringsSep "\n" importRealms}
+            ${builtins.concatStringsSep "\n" realmImport}
+            ls -aln  "$KC_HOME_DIR/data/import/"
+            echo "========================"
 
             echo "Start keycloak:"
-            ${keycloakBuild}/bin/kc.sh start --optimized
+            ${keycloakBuild}/bin/kc.sh start --optimized --import-realm
           '';
 
           # We could use `kcadm.sh get "http://localhost:9000"` but that needs
           # credentials, so we just check the master realm.
           keycloak-health =
             let
-              host = cfg.settings.hostname + ":" + builtins.toString cfg.settings.http-port;
+              host = "${cfg.settings.hostname}:${builtins.toString cfg.settings.http-port}";
             in
             pkgs.writeShellScriptBin "keycloak-health" ''
               ${pkgs.curl} -k --head -fsS "https://${host}/health/ready"
@@ -451,23 +463,28 @@ in
           };
         };
 
-      # Export a single realm.
-      scripts.keycloak-export-realm = {
+      # Export a single realm
+      scripts.keycloak-realm-export = {
         exec = ''${keycloakBuild}/bin/kc.sh export --realm "$1" --file "$2"'';
-      };
-      # Export all configured realms.
-      scripts.keycloak-export-realms = {
-        exec = "${keycloak-export-realms}/bin/keycloak-export-realms";
         description = ''
-          Save the realms from keycloak, to back them up. You can run it manually.
+          Export a realm '$1' (first argument) from keycloak to location '$2' (second argument).
         '';
       };
+
+      # Export all configured realms.
+      scripts.keycloak-realm-export-all = mkIf (realmExport != [ ]) {
+        exec = "${keycloak-realm-exports}/bin/keycloak-realm-exports";
+        description = ''
+          Save the configured realms from keycloak, to back them up. You can run it manually.
+        '';
+      };
+
       # Process to start for exporting the above.
-      processes.keycloak-export-realms = mkIf (cfg.realmExport != { }) {
-        exec = "${keycloak-export-realms}/bin/keycloak-export-realms";
+      processes.keycloak-realm-export-all = mkIf (realmExport != [ ]) {
+        exec = "${keycloak-realm-exports}/bin/keycloak-realm-exports";
         process-compose = {
           description = ''
-            Save the realms from keycloak, to back them up. You can run it manually.
+            Save the configured realms from keycloak, to back them up. You can run it manually.
           '';
           disabled = true;
         };
