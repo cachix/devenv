@@ -4,7 +4,7 @@ use nix_conf_parser::NixConf;
 use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::cell::{Ref, RefCell};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::os::unix::fs::symlink;
@@ -686,7 +686,7 @@ impl Nix {
                 .use_preconfigured_tls(http_client_tls::tls_config())
                 .build()
                 .expect("Failed to create reqwest client");
-            let mut new_known_keys: HashMap<String, String> = HashMap::new();
+            let mut new_known_keys: BTreeMap<String, String> = BTreeMap::new();
             for name in caches.caches.pull.iter() {
                 if !caches.known_keys.contains_key(name) {
                     let mut request =
@@ -916,7 +916,7 @@ pub struct Cachix {
 #[derive(Deserialize, Default, Clone)]
 pub struct CachixCaches {
     caches: Cachix,
-    known_keys: HashMap<String, String>,
+    known_keys: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize, Clone)]

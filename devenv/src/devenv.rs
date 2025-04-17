@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
@@ -997,7 +997,7 @@ pub struct DevEnv {
 }
 
 #[derive(Deserialize)]
-struct PackageResults(HashMap<String, PackageResult>);
+struct PackageResults(BTreeMap<String, PackageResult>);
 
 #[derive(Deserialize)]
 struct PackageResult {
@@ -1006,7 +1006,7 @@ struct PackageResult {
 }
 
 #[derive(Deserialize)]
-struct OptionResults(HashMap<String, OptionResult>);
+struct OptionResults(BTreeMap<String, OptionResult>);
 
 #[derive(Deserialize)]
 struct OptionResult {
