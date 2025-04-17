@@ -2,7 +2,7 @@ use miette::{IntoDiagnostic, Result, WrapErr};
 use schemars::{schema_for, JsonSchema};
 use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, path::Path};
+use std::{collections::BTreeMap, fmt, path::Path};
 
 const YAML_CONFIG: &str = "devenv.yaml";
 
@@ -17,8 +17,8 @@ pub struct Input {
     pub flake: bool,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub follows: Option<String>,
-    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-    pub inputs: HashMap<String, Input>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub inputs: BTreeMap<String, Input>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub overlays: Vec<String>,
 }
@@ -29,8 +29,8 @@ pub struct FlakeInput {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub follows: Option<String>,
-    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-    pub inputs: HashMap<String, Input>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub inputs: BTreeMap<String, Input>,
     #[serde(skip_serializing_if = "is_true", default = "true_default")]
     pub flake: bool,
 }
@@ -93,9 +93,9 @@ pub struct Clean {
 #[config(rename_all = "camelCase", allow_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested)]
-    pub inputs: HashMap<String, Input>,
+    pub inputs: BTreeMap<String, Input>,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub allow_unfree: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
@@ -153,7 +153,7 @@ impl Config {
     /// Add a new input, overwriting any existing input with the same name.
     pub fn add_input(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
         // A set of inputs built from the follows list.
-        let mut inputs = HashMap::new();
+        let mut inputs = BTreeMap::new();
 
         // Resolve the follows to top-level inputs.
         // We assume that nixpkgs is always available.
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn preserve_options_on_override_input_url() {
         let mut config = Config {
-            inputs: HashMap::from_iter(vec![(
+            inputs: BTreeMap::from_iter(vec![(
                 "non-flake".to_string(),
                 Input {
                     url: Some("path:some-path".to_string()),
@@ -290,7 +290,7 @@ mod tests {
         config
             .override_input_url("non-flake", "path:some-other-path")
             .expect("Failed to override input URL");
-        assert_eq!(config.inputs["non-flake"].flake, false);
+        assert!(!config.inputs["non-flake"].flake);
         assert_eq!(
             config.inputs["non-flake"].url,
             Some("path:some-other-path".to_string())

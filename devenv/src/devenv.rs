@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
@@ -34,7 +34,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
     DIRENVRC
         .lines()
         .find(|line| line.contains("export DEVENV_DIRENVRC_VERSION"))
-        .and_then(|line| line.split('=').last())
+        .and_then(|line| line.split('=').next_back())
         .map(|version| version.trim())
         .and_then(|version| version.parse().ok())
         .unwrap_or(0)
@@ -301,8 +301,7 @@ impl Devenv {
                 None => &config_clean.keep,
             };
 
-            let filtered_env: HashMap<String, String> =
-                std::env::vars().filter(|(k, _)| keep.contains(k)).collect();
+            let filtered_env = std::env::vars().filter(|(k, _)| keep.contains(k));
 
             shell_cmd.envs(filtered_env);
             shell_cmd.arg("--norc").arg("--noprofile");
@@ -855,7 +854,7 @@ impl Devenv {
         // Initialise any Nix state
         self.nix.assemble().await?;
 
-        let mut flake_inputs = HashMap::new();
+        let mut flake_inputs = BTreeMap::new();
         for (input, attrs) in self.config.inputs.iter() {
             match config::FlakeInput::try_from(attrs) {
                 Ok(flake_input) => {
@@ -997,7 +996,7 @@ pub struct DevEnv {
 }
 
 #[derive(Deserialize)]
-struct PackageResults(HashMap<String, PackageResult>);
+struct PackageResults(BTreeMap<String, PackageResult>);
 
 #[derive(Deserialize)]
 struct PackageResult {
@@ -1006,7 +1005,7 @@ struct PackageResult {
 }
 
 #[derive(Deserialize)]
-struct OptionResults(HashMap<String, OptionResult>);
+struct OptionResults(BTreeMap<String, OptionResult>);
 
 #[derive(Deserialize)]
 struct OptionResult {
