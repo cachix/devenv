@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
@@ -855,7 +855,7 @@ impl Devenv {
         // Initialise any Nix state
         self.nix.assemble().await?;
 
-        let mut flake_inputs = HashMap::new();
+        let mut flake_inputs = BTreeMap::new();
         for (input, attrs) in self.config.inputs.iter() {
             match config::FlakeInput::try_from(attrs) {
                 Ok(flake_input) => {
