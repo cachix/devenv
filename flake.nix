@@ -245,10 +245,10 @@
             moduleInputs = { inherit git-hooks; } // inputs;
             project = inputs.nixpkgs.lib.evalModules {
               specialArgs = moduleInputs // {
-                inherit pkgs;
                 inputs = moduleInputs;
               };
               modules = [
+                { config._module.args.pkgs = inputs.nixpkgs.lib.mkDefault pkgs; }
                 (self.modules + /top-level.nix)
                 ({ config, ... }: {
                   packages = pkgs.lib.mkBefore [
