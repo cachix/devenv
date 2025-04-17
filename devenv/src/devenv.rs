@@ -34,7 +34,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
     DIRENVRC
         .lines()
         .find(|line| line.contains("export DEVENV_DIRENVRC_VERSION"))
-        .and_then(|line| line.split('=').last())
+        .and_then(|line| line.split('=').next_back())
         .map(|version| version.trim())
         .and_then(|version| version.parse().ok())
         .unwrap_or(0)
@@ -301,8 +301,7 @@ impl Devenv {
                 None => &config_clean.keep,
             };
 
-            let filtered_env: HashMap<String, String> =
-                std::env::vars().filter(|(k, _)| keep.contains(k)).collect();
+            let filtered_env = std::env::vars().filter(|(k, _)| keep.contains(k));
 
             shell_cmd.envs(filtered_env);
             shell_cmd.arg("--norc").arg("--noprofile");

@@ -290,7 +290,7 @@ mod tests {
         config
             .override_input_url("non-flake", "path:some-other-path")
             .expect("Failed to override input URL");
-        assert_eq!(config.inputs["non-flake"].flake, false);
+        assert!(!config.inputs["non-flake"].flake);
         assert_eq!(
             config.inputs["non-flake"].url,
             Some("path:some-other-path".to_string())
