@@ -255,10 +255,12 @@ impl Input {
     }
 
     pub fn compute_input_hash(inputs: &[Self]) -> String {
-        inputs
-            .iter()
-            .filter_map(Input::content_hash)
-            .collect::<String>()
+        hash::digest(
+            inputs
+                .iter()
+                .filter_map(Input::content_hash)
+                .collect::<String>(),
+        )
     }
 
     pub fn partition_refs(inputs: &[Self]) -> (Vec<&FileInputDesc>, Vec<&EnvInputDesc>) {
