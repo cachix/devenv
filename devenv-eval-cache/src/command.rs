@@ -464,8 +464,10 @@ async fn query_cached_output(
             debug!(
                 old_hash = cmd.input_hash,
                 new_hash = new_input_hash,
-                "Input hashes do not match, refreshing command",
+                "Input hashes don't match. The inputs have been modified since the command was cached. Refreshing command."
             );
+            trace!(inputs = ?inputs, "Inputs");
+
             should_refresh = true;
         }
 
