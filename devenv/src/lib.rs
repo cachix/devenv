@@ -3,6 +3,7 @@ pub(crate) mod cnix;
 pub mod config;
 mod devenv;
 pub mod log;
+mod util;
 
 pub use cli::{default_system, GlobalOptions};
 pub use devenv::{Devenv, DevenvOptions, DIRENVRC, DIRENVRC_VERSION};

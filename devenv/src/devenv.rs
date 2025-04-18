@@ -1,4 +1,4 @@
-use super::{cli, cnix, config, tasks};
+use super::{cli, cnix, config, tasks, util};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
@@ -866,11 +866,10 @@ impl Devenv {
                 }
             }
         }
-        fs::write(
+        util::write_file_with_lock(
             self.devenv_dotfile.join("flake.json"),
-            serde_json::to_string(&flake_inputs).unwrap(),
-        )
-        .expect("Failed to write flake.json");
+            &serde_json::to_string(&flake_inputs).unwrap(),
+        )?;
         fs::write(
             self.devenv_dotfile.join("devenv.json"),
             serde_json::to_string(&self.config).unwrap(),
@@ -916,13 +915,7 @@ impl Devenv {
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
-
-        // Avoid writing the flake if it hasn't changed.
-        // direnv's watch_file triggers a reload based solely on mtime, which becomes annoying if we constantly touch this file.
-        let existing_flake = fs::read_to_string(&flake_path).unwrap_or_default();
-        if flake != existing_flake {
-            fs::write(flake_path, flake).expect("Failed to write flake.nix");
-        }
+        util::write_file_with_lock(&flake_path, &flake)?;
 
         self.assembled = true;
         Ok(())
