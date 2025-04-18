@@ -964,14 +964,14 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
 
         let diff = TextDiff::from_lines(&before, &contents);
 
-        println!("\nChanges that will be made to {}:", file.to_string_lossy());
+        eprintln!("\nChanges that will be made to {}:", file.to_string_lossy());
         for change in diff.iter_all_changes() {
             let sign = match change.tag() {
                 ChangeTag::Delete => "\x1b[31m-\x1b[0m",
                 ChangeTag::Insert => "\x1b[32m+\x1b[0m",
                 ChangeTag::Equal => " ",
             };
-            print!("{}{}", sign, change);
+            eprint!("{}{}", sign, change);
         }
 
         let confirm = dialoguer::Confirm::new()
