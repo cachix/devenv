@@ -1,7 +1,6 @@
 [package]
 name = "devenv-eval-cache"
-# TODO: switch to workspace version
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 

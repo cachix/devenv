@@ -3,7 +3,7 @@
 - `git tag vX.X`
 - `git push --tags`
 - Create a release on GitHub
-- Bump minor version in devenv/Cargo.toml and package.nix
+- Bump minor version in Cargo.toml and package.nix
 - Run `cargo update --workspace` to sync Cargo.lock with the new version
 - `git commit`
 

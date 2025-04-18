@@ -1,6 +1,6 @@
 [package]
 name = "devenv"
-version = "1.5.2"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 

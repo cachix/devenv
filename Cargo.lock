@@ -682,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "0.1.0"
+version = "1.5.2"
 dependencies = [
  "blake3",
  "futures",
@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "0.1.0"
+version = "1.5.2"
 dependencies = [
  "clap",
  "devenv",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "0.1.0"
+version = "1.5.2"
 dependencies = [
  "clap",
  "console",
