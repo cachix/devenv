@@ -150,9 +150,15 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
             // Run .setup.sh if it exists
             if PathBuf::from(setup_script).exists() {
                 eprintln!("    Running {setup_script}");
-                devenv
+                let output = devenv
                     .exec_in_shell(format!("./{setup_script}"), &[])
                     .await?;
+                if !output.status.success() {
+                    return Err(miette::miette!(
+                        "Setup script failed. Status code: {}",
+                        output.status.code().unwrap_or(1)
+                    ));
+                }
             }
 
             // TODO: wait for processes to shut down before exiting
