@@ -386,10 +386,8 @@ in
           else runtimeDir;
       in
       lib.mkDefault host;
-    env.PGPORT =
-      if cfg.listen_addresses != ""
-      then cfg.port
-      else null;
+    # Required for init scripts.
+    env.PGPORT = cfg.port;
 
     services.postgres.settings = {
       listen_addresses = cfg.listen_addresses;
