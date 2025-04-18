@@ -20,6 +20,7 @@ cli-table.workspace = true
 console.workspace = true
 dialoguer.workspace = true
 dotlock.workspace = true
+fd-lock.workspace = true
 hex.workspace = true
 include_dir.workspace = true
 indoc.workspace = true

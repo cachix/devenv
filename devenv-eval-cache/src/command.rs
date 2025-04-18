@@ -45,6 +45,10 @@ impl<'a> CachedCommand<'a> {
     }
 
     /// Watch additional paths for changes.
+    ///
+    /// WARN: Be careful watching generated files.
+    /// External tools like direnv are triggered solely by the modification date and don't compare file contents.
+    /// Use [util::write_file_with_lock] to safely write such files.
     pub fn watch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.extra_paths.push(path.as_ref().to_path_buf());
         self
