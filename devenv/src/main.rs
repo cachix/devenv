@@ -1,11 +1,13 @@
-use std::{os::unix::process::CommandExt, process::Command};
-
 use clap::crate_version;
 use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     config, log, Devenv,
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
+use std::{
+    os::unix::process::CommandExt,
+    process::{self, Command},
+};
 use tempfile::TempDir;
 use tracing::{info, warn};
 
@@ -92,7 +94,10 @@ async fn main() -> Result<()> {
     match command {
         Commands::Shell { cmd, ref args } => match cmd {
             Some(cmd) => {
-                devenv.exec_in_shell(cmd, args).await?;
+                let output = devenv.exec_in_shell(cmd, args).await?;
+                if !output.status.success() {
+                    process::exit(output.status.code().unwrap_or(1));
+                }
                 Ok(())
             }
             None => devenv.shell().await,
