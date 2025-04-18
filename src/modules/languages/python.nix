@@ -443,6 +443,8 @@ in
     env = (lib.optionalAttrs cfg.uv.enable {
       # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
       UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
+      # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
+      UV_PYTHON_DOWNLOADS = "never";
     }) // (lib.optionalAttrs cfg.poetry.enable {
       # Make poetry use DEVENV_ROOT/.venv
       POETRY_VIRTUALENVS_IN_PROJECT = "true";
