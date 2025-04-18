@@ -92,3 +92,8 @@ rustls-platform-verifier = "0.5.1"
 [profile.release]
 strip = true
 lto = "fat"
+
+# Enable release optimizations, but retain debug symbols.
+[profile.release-with-debug]
+inherits = "release"
+debug = true
