@@ -275,8 +275,15 @@ impl Devenv {
             // Non-interactive mode.
             // exec the command at the end of the rcscript.
             Some(cmd) => {
-                let exec = format!("\nexec {} {}", cmd, args.join(" "));
-                output.extend_from_slice(exec.as_bytes());
+                let command = format!(
+                    "\nexec {} {}",
+                    cmd,
+                    args.iter()
+                        .map(|arg| shell_escape(arg))
+                        .collect::<Vec<String>>()
+                        .join(" ")
+                );
+                output.extend_from_slice(command.as_bytes());
                 shell_cmd.arg(&path);
             }
             // Interactive mode. Use an rcfile.
@@ -1052,4 +1059,21 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     }
 
     (to_gc, removed_symlinks)
+}
+
+/// Escapes a string for use in shell commands by surrounding it with single quotes and properly escaping any existing single quotes.
+pub fn shell_escape(s: &str) -> String {
+    let mut r = String::with_capacity(s.len() + 2);
+    r.push('\'');
+
+    for c in s.chars() {
+        if c == '\'' {
+            r.push_str("'\\''")
+        } else {
+            r.push(c);
+        }
+    }
+
+    r.push('\'');
+    r
 }
