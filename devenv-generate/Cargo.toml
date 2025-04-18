@@ -8,8 +8,8 @@ license.workspace = true
 devenv.workspace = true
 http-client-tls.workspace = true
 
+binaryornot.workspace = true
 clap = { workspace = true, features = ["derive"] }
-console.workspace = true
 dialoguer.workspace = true
 indoc.workspace = true
 miette.workspace = true
@@ -21,5 +21,3 @@ tokio-tar.workspace = true
 tracing.workspace = true
 tokio-util.workspace = true
 similar.workspace = true
-binaryornot.workspace = true
-once_cell.workspace = true

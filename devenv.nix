@@ -17,6 +17,8 @@
     pkgs.watchexec
     pkgs.openssl
     pkgs.sqlx-cli
+    pkgs.cargo-outdated # Find outdated crates
+    pkgs.cargo-machete # Find unused crates
   ];
 
   languages.nix.enable = true;

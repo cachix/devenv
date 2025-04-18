@@ -8,7 +8,6 @@ license.workspace = true
 path = "src/http_client_tls.rs"
 
 [dependencies]
-color-eyre.workspace = true
 eyre.workspace = true
 rustls.workspace = true
 rustls-platform-verifier.workspace = true
