@@ -12,6 +12,11 @@ on:
     paths-ignore:
       - "docs/**"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel in-progress runs unless they're on main or version tags
+  cancel-in-progress: ${{ !contains(github.ref, 'main') && !startsWith(github.ref, 'v') }}
+
 jobs:
   build:
     strategy:
