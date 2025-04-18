@@ -886,6 +886,52 @@ impl Devenv {
         fs::create_dir_all(&self.devenv_runtime)
             .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_runtime.display()));
 
+        // Create cli-options.nix if there are CLI options
+        if !self.global_options.option.is_empty() {
+            let mut cli_options = String::from("{\n");
+
+            const SUPPORTED_TYPES: &[&str] = &["string", "int", "float", "bool", "path"];
+
+            for chunk in self.global_options.option.chunks_exact(2) {
+                // Parse the path and type from the first value
+                let key_parts: Vec<&str> = chunk[0].split(':').collect();
+                if key_parts.len() < 2 {
+                    panic!("Invalid option format: '{}'. Must include type, e.g. 'languages.rust.version:string'. Supported types: {}", 
+                           chunk[0], SUPPORTED_TYPES.join(", "));
+                }
+
+                let path = key_parts[0];
+                let type_name = key_parts[1];
+
+                // Format value based on type
+                let value = match type_name {
+                    "string" => format!("\"{}\"", &chunk[1]),
+                    "int" => chunk[1].clone(),
+                    "float" => chunk[1].clone(),
+                    "bool" => chunk[1].clone(), // true/false will work directly in Nix
+                    "path" => format!("./{}", &chunk[1]), // relative path
+                    _ => panic!(
+                        "Unsupported type: '{}'. Supported types: {}",
+                        type_name,
+                        SUPPORTED_TYPES.join(", ")
+                    ),
+                };
+
+                cli_options.push_str(&format!("  {} = {};\n", path, value));
+            }
+
+            cli_options.push_str("}\n");
+
+            fs::write(self.devenv_dotfile.join("cli-options.nix"), cli_options)
+                .expect("Failed to write cli-options.nix");
+        } else {
+            // Remove the file if it exists but there are no CLI options
+            let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
+            if cli_options_path.exists() {
+                fs::remove_file(&cli_options_path).expect("Failed to remove cli-options.nix");
+            }
+        }
+
         // create flake.devenv.nix
         let vars = indoc::formatdoc!(
             "version = \"{}\";

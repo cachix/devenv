@@ -386,8 +386,9 @@ impl Nix {
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
             cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
             cached_cmd.watch_path(self.devenv_dotfile.join("flake.json"));
+            cached_cmd.watch_path(self.devenv_dotfile.join("cli-options.nix"));
 
-            // Ignore anything in .devenv.
+            // Ignore anything in .devenv except for the specifically watched files above.
             cached_cmd.unwatch_path(&self.devenv_dotfile);
 
             if self.global_options.refresh_eval_cache || options.refresh_cached_output {
