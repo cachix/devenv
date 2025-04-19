@@ -886,6 +886,47 @@ impl Devenv {
         fs::create_dir_all(&self.devenv_runtime)
             .unwrap_or_else(|_| panic!("Failed to create {}", self.devenv_runtime.display()));
 
+        // Create cli-options.nix if there are CLI options
+        if !self.global_options.option.is_empty() {
+            let mut cli_options = String::from("{\n");
+
+            for chunk in self.global_options.option.chunks_exact(2) {
+                let path = &chunk[0];
+                let value = &chunk[1];
+
+                // Split the path by dots to create nested structure
+                let parts: Vec<&str> = path.split('.').collect();
+                if parts.is_empty() {
+                    continue;
+                }
+
+                // Build the nested attribute path
+                let mut nix_path = String::new();
+                for (i, part) in parts.iter().enumerate() {
+                    if i == 0 {
+                        nix_path.push_str(part);
+                    } else {
+                        nix_path.push_str(&format!(".{}", part));
+                    }
+                }
+
+                // Insert the value as-is - users are responsible for proper Nix syntax
+                // This allows both Nix expressions (pkgs.foo) and quoted strings ("foo")
+                cli_options.push_str(&format!("  {} = {};\n", nix_path, value));
+            }
+
+            cli_options.push_str("}\n");
+
+            fs::write(self.devenv_dotfile.join("cli-options.nix"), cli_options)
+                .expect("Failed to write cli-options.nix");
+        } else {
+            // Remove the file if it exists but there are no CLI options
+            let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
+            if cli_options_path.exists() {
+                fs::remove_file(&cli_options_path).expect("Failed to remove cli-options.nix");
+            }
+        }
+
         // create flake.devenv.nix
         let vars = indoc::formatdoc!(
             "version = \"{}\";
