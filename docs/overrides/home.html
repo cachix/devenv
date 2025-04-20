@@ -41,7 +41,7 @@
                 <a href="/tests" class="text-[#425C82] font-medium">Run tests</a> •
                 <a href="/git-hooks" class="text-[#425C82] font-medium">Enforce git hooks</a>
             </p>
-            <div class="flex mt-10 gap-2" id="generate">
+            <form class="flex mt-10 gap-2" id="generate" onsubmit="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value); return false;">
                 <input
                     type="text"
                     name="q"
@@ -50,12 +50,11 @@
                 />
                 <button
                     type="submit"
-                    onclick="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value)"
                     class="px-6 py-2 bg-[#425C82] text-white font-medium rounded-lg hover:bg-[#344968] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#425C82] focus:ring-offset-2 shadow-sm"
                 >
                     Generate
                 </button>
-            </div>
+            </form>
 
             <script>
                 window.onload = function () {
