@@ -207,6 +207,7 @@ pub enum Commands {
     #[command(about = "Activate the developer environment. https://devenv.sh/basics/")]
     Shell {
         cmd: Option<String>,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
