@@ -25,7 +25,7 @@ const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".giti
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
 pub static DIRENVRC: Lazy<String> = Lazy::new(|| {
-    include_str!("../../direnvrc").replace(
+    include_str!("../direnvrc").replace(
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=0",
         "DEVENV_DIRENVRC_ROLLING_UPGRADE=1",
     )
