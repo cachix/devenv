@@ -214,6 +214,7 @@ impl Nix {
             "build".to_string(),
             "--no-link".to_string(),
             "--print-out-paths".to_string(),
+            "-L".to_string(),
         ];
         args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
