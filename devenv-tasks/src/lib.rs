@@ -1045,7 +1045,10 @@ mod test {
         if let Err(Error::CycleDetected(task)) = result {
             assert_eq!(task, "myapp:task_2".to_string());
         } else {
-            panic!("Expected Error::CycleDetected, got {:?}", result);
+            return Err(Error::TaskNotFound(format!(
+                "Expected Error::CycleDetected, got {:?}",
+                result
+            )));
         }
         Ok(())
     }

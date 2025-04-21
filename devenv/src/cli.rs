@@ -144,6 +144,15 @@ pub struct GlobalOptions {
         help = "Override inputs in devenv.yaml."
     )]
     pub override_input: Vec<String>,
+
+    #[arg(
+        long,
+        global = true,
+        num_args = 2,
+        value_delimiter = ' ',
+        help = "Override configuration options with typed values, e.g. --option languages.rust.version:string beta"
+    )]
+    pub option: Vec<String>,
 }
 
 impl Default for GlobalOptions {
@@ -165,6 +174,7 @@ impl Default for GlobalOptions {
             nix_debugger: false,
             nix_option: vec![],
             override_input: vec![],
+            option: vec![],
         }
     }
 }

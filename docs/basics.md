@@ -36,22 +36,16 @@ jq-1.6
 hello
 ```
 
-
-
-
-See [Nix language tutorial](https://nix.dev/tutorials/first-steps/nix-language) for a 1-2 hour deep dive 
+See [Nix language tutorial](https://nix.dev/tutorials/first-steps/nix-language) for a 1-2 hour deep dive
 that will allow you to read any Nix file.
 
-!!! note
-
-    We're running [a fundraiser to improve the developer experience around error messages](https://opencollective.com/nix-errors-enhancement), with the goal of lowering the barrier to learning Nix.
 
 ## Environment Summary
 
 If you'd like to print the summary of the current environment:
 
 ```shell-session
-$ devenv info 
+$ devenv info
 ...
 
 # env
@@ -68,3 +62,23 @@ $ devenv info
 # processes
 
 ```
+
+## CLI Options Overrides
+
+!!! info "New in 1.6"
+
+You can override configuration options temporarily using the `--option` flag:
+
+```shell-session
+$ devenv shell --option env.GREET:string Hello --option languages.rust.enable:bool true
+```
+
+The option requires you to specify the inferred Nix type:
+
+- `:string` for string values
+- `:int` for integer values
+- `:float` for floating-point values
+- `:bool` for boolean values (true/false)
+- `:path` for file paths (interpreted as relative paths)
+
+This is useful for temporarily changing the configuration without modifying your `devenv.nix` file, such as when testing different configurations or creating option matrices.

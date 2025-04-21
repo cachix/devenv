@@ -159,7 +159,7 @@ impl Nix {
         let now_ns = get_now_with_nanoseconds();
         let target = format!("{}-shell", now_ns);
         if let Ok(resolved_gc_root) = fs::canonicalize(gc_root) {
-            symlink_force(&resolved_gc_root, &self.devenv_home_gc.join(target));
+            symlink_force(&resolved_gc_root, &self.devenv_home_gc.join(target))?;
         } else {
             warn!(
                 "Failed to resolve the GC root path to the Nix store: {}. Try running devenv again with --refresh-eval-cache.",
@@ -185,7 +185,7 @@ impl Nix {
         let link_path = self
             .devenv_dot_gc
             .join(format!("{}-{}", name, get_now_with_nanoseconds()));
-        symlink_force(path, &link_path);
+        symlink_force(path, &link_path)?;
         Ok(())
     }
 
@@ -387,8 +387,9 @@ impl Nix {
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
             cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
             cached_cmd.watch_path(self.devenv_dotfile.join("flake.json"));
+            cached_cmd.watch_path(self.devenv_dotfile.join("cli-options.nix"));
 
-            // Ignore anything in .devenv.
+            // Ignore anything in .devenv except for the specifically watched files above.
             cached_cmd.unwatch_path(&self.devenv_dotfile);
 
             if self.global_options.refresh_eval_cache || options.refresh_cached_output {
@@ -859,7 +860,7 @@ impl Nix {
     }
 }
 
-fn symlink_force(link_path: &Path, target: &Path) {
+fn symlink_force(link_path: &Path, target: &Path) -> Result<()> {
     let _lock = dotlock::Dotlock::create(target.with_extension("lock")).unwrap();
 
     debug!(
@@ -869,16 +870,20 @@ fn symlink_force(link_path: &Path, target: &Path) {
     );
 
     if target.exists() {
-        fs::remove_file(target).unwrap_or_else(|_| panic!("Failed to remove {}", target.display()));
+        fs::remove_file(target)
+            .map_err(|e| miette::miette!("Failed to remove {}: {}", target.display(), e))?;
     }
 
-    symlink(link_path, target).unwrap_or_else(|_| {
-        panic!(
-            "Failed to create symlink: {} -> {}",
+    symlink(link_path, target).map_err(|e| {
+        miette::miette!(
+            "Failed to create symlink: {} -> {}: {}",
             link_path.display(),
-            target.display()
+            target.display(),
+            e
         )
-    });
+    })?;
+
+    Ok(())
 }
 
 fn get_now_with_nanoseconds() -> String {
