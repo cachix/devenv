@@ -63,12 +63,14 @@ $ devenv info
 
 ```
 
-## Options overrides
+## CLI Options Overrides
+
+!!! info "New in 1.6"
 
 You can override configuration options temporarily using the `--option` flag:
 
 ```shell-session
-$ devenv shell --option languages.redis.enable:bool true
+$ devenv shell --option env.GREET:string Hello --option languages.rust.enable:bool true
 ```
 
 The option requires you to specify the inferred Nix type:
