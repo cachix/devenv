@@ -681,7 +681,7 @@ impl Devenv {
     }
 
     pub async fn build(&mut self, attributes: &[String]) -> Result<()> {
-        let span = info_span!("build", devenv.user_message = "Building...");
+        let span = info_span!("build", devenv.user_message = "Building");
         async move {
             self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
@@ -912,7 +912,7 @@ impl Devenv {
                 // Parse the path and type from the first value
                 let key_parts: Vec<&str> = chunk[0].split(':').collect();
                 if key_parts.len() < 2 {
-                    miette::bail!("Invalid option format: '{}'. Must include type, e.g. 'languages.rust.version:string'. Supported types: {}", 
+                    miette::bail!("Invalid option format: '{}'. Must include type, e.g. 'languages.rust.version:string'. Supported types: {}",
                            chunk[0], SUPPORTED_TYPES.join(", "));
                 }
 
