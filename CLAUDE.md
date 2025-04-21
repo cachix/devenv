@@ -12,7 +12,7 @@
 ## Code Style Guidelines
 - **Imports**: Group by category (std lib first, then external crates, then internal)
 - **Naming**: Use `snake_case` for functions/variables, `CamelCase` for types/traits
-- **Error Handling**: Use `thiserror` crate with custom error types and `?` operator
+- **Error Handling**: Use `thiserror` crate with custom error types, `bail!` (instead of `panic~`) and `?` operator
 - **Types**: Prefer strong typing with descriptive names and appropriate generics
 - **Formatting**: Follow standard rustfmt rules, use pre-commit hooks
 - **Documentation**: Document public APIs with rustdoc comments
