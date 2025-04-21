@@ -130,8 +130,10 @@ pub struct GlobalOptions {
         long,
         global = true,
         num_args = 2,
+        value_names = ["NAME", "VALUE"],
         value_delimiter = ' ',
-        help = "Pass additional options to nix commands, see `man nix.conf` for full list."
+        help = "Pass additional options to nix commands",
+        long_help = "Pass additional options to nix commands. Format: --nix-option NAME VALUE\n\nThese options are passed directly to Nix using the --option flag.\nSee `man nix.conf` for the full list of available options.\n\nExamples:\n  --nix-option sandbox false\n  --nix-option keep-outputs true\n  --nix-option accept-flake-config true\n  --nix-option system x86_64-darwin"
     )]
     pub nix_option: Vec<String>,
 
@@ -140,8 +142,10 @@ pub struct GlobalOptions {
         long,
         global = true,
         num_args = 2,
+        value_names = ["NAME", "URI"],
         value_delimiter = ' ',
-        help = "Override inputs in devenv.yaml."
+        help = "Override inputs in devenv.yaml",
+        long_help = "Override inputs in devenv.yaml. Format: --override-input NAME URI\n\nExamples:\n  --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable\n  --override-input nixpkgs path:/path/to/local/nixpkgs\n  --override-input nixpkgs /path/to/local/nixpkgs"
     )]
     pub override_input: Vec<String>,
 
@@ -149,8 +153,10 @@ pub struct GlobalOptions {
         long,
         global = true,
         num_args = 2,
+        value_names = ["OPTION", "VALUE"],
         value_delimiter = ' ',
-        help = "Override configuration options with typed values, e.g. --option languages.rust.version:string beta"
+        help = "Override configuration options with typed values",
+        long_help = "Override configuration options with typed values. Format: --option OPTION VALUE\n\nOPTION must include a type: <path>:<type>\nSupported types: string, int, float, bool, path\n\nExamples:\n  --option languages.rust.version:string beta\n  --option services.postgres.enable:bool true\n  --option languages.python.version:string 3.10\n  --option languages.go.package:path ./my-app"
     )]
     pub option: Vec<String>,
 }
