@@ -85,15 +85,24 @@ pub struct GlobalOptions {
     )]
     pub impure: bool,
 
-    #[arg(long, global = true, help = "Cache the results of Nix evaluation.")]
     #[arg(
-        long_help = "Cache the results of Nix evaluation. Use --no-eval-cache to disable caching."
+        long,
+        global = true,
+        help = "Cache the results of Nix evaluation.",
+        hide = true
+    )]
+    #[arg(
+        long_help = "Cache the results of Nix evaluation (deprecated, on by default). Use --no-eval-cache to disable caching."
     )]
     #[arg(default_value_t = true, overrides_with = "no_eval_cache")]
     pub eval_cache: bool,
 
     /// Disable the evaluation cache. Sets `eval_cache` to false.
-    #[arg(long, global = true, hide = true)]
+    #[arg(
+        long,
+        global = true,
+        help = "Disable caching of Nix evaluation results."
+    )]
     #[arg(overrides_with = "eval_cache")]
     pub no_eval_cache: bool,
 
