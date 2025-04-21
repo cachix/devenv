@@ -5,7 +5,7 @@
 - Create a release on GitHub
 - Bump minor version in Cargo.toml and package.nix
 - Run `cargo update --workspace` to sync Cargo.lock with the new version
-- `git commit`
+- `git commit -m "dev is X.X.X`
 
 ### Release on nixpkgs
 
