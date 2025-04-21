@@ -1,6 +1,6 @@
 [package]
 name = "devenv-generate"
-version = "1.5.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 
