@@ -160,6 +160,7 @@ pub struct GlobalOptions {
 
     #[arg(
         long,
+        short = 'O',
         global = true,
         num_args = 2,
         value_names = ["OPTION", "VALUE"],
