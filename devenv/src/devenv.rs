@@ -3,18 +3,18 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, IntoDiagnostic, Result};
+use miette::{bail, Context, IntoDiagnostic, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
-use std::collections::BTreeMap;
-use std::io::Write;
+use std::collections::{BTreeMap, HashMap};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
-    fs,
+    fs::{self, File},
     path::{Path, PathBuf},
 };
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
@@ -301,8 +301,6 @@ impl Devenv {
 
         let config_clean = self.config.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
-            shell_cmd.env_clear();
-
             let keep = match &self.global_options.clean {
                 Some(clean) => clean,
                 None => &config_clean.keep,
@@ -310,8 +308,11 @@ impl Devenv {
 
             let filtered_env = std::env::vars().filter(|(k, _)| keep.contains(k));
 
-            shell_cmd.envs(filtered_env);
-            shell_cmd.arg("--norc").arg("--noprofile");
+            shell_cmd
+                .env_clear()
+                .envs(filtered_env)
+                .arg("--norc")
+                .arg("--noprofile");
         }
 
         shell_cmd.env("SHELL", &bash);
@@ -655,43 +656,75 @@ impl Devenv {
         };
         let test_script = test_script[0].to_string_lossy().to_string();
 
+        let temp_dir = tempfile::TempDir::with_prefix("devenv-test").into_diagnostic()?;
+
+        let script_path = temp_dir.path().join("script");
+        let env_path = temp_dir.path().join("env");
+
+        let script = format!("env > {}", env_path.to_string_lossy());
+        fs::write(&script_path, script)
+            .into_diagnostic()
+            .wrap_err(format!(
+                "Failed to write script to {}",
+                script_path.display()
+            ))?;
+        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+            .into_diagnostic()
+            .wrap_err("Change permissions")?;
+
         // Run script and capture its environment exports
-        let output = self
-            .prepare_shell(&Some("env".to_string()), &[])
+        self.prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
-            .env("CLICOLOR_FORCE", "1")
             .stderr(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::inherit())
             .spawn()
             .expect("Failed to execute script")
-            .wait_with_output()
+            .wait()
             .expect("Failed to wait for script");
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
         // Parse the environment variables
-        let env_vars = stdout.lines().filter_map(|line| {
-            let parts: Vec<&str> = line.splitn(2, '=').collect();
-            if parts.len() == 2 {
-                Some((parts[0], parts[1]))
-            } else {
-                None
-            }
-        });
+        let file = File::open(&script_path).into_diagnostic()?;
+        let reader = BufReader::new(file);
+        let shell_envs = reader
+            .lines()
+            .map_while(Result::ok)
+            .filter_map(|line| {
+                let mut parts = line.splitn(2, '=');
+                match (parts.next(), parts.next()) {
+                    (Some(key), Some(value)) => Some((key.to_string(), value.to_string())),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
 
-        // TODO: clean && keep
-        // Set environment variables for current process
-        for (key, value) in env_vars {
-            std::env::set_var(key, value);
+        let config_clean = self.config.clean.clone().unwrap_or_default();
+        let mut envs: HashMap<String, String> = {
+            let vars = std::env::vars();
+            if self.global_options.clean.is_some() || config_clean.enabled {
+                let keep = match &self.global_options.clean {
+                    Some(clean) => clean,
+                    None => &config_clean.keep,
+                };
+                vars.filter(|(key, _)| !keep.contains(key)).collect()
+            } else {
+                vars.collect()
+            }
+        };
+
+        for (key, value) in shell_envs {
+            envs.insert(key, value);
         }
 
         if self.has_processes().await? {
-            self.launch_processes(vec![], &true, &false).await?;
+            self.launch_processes(vec![], &envs, &true, &false).await?;
         }
 
         let span = info_span!("test", devenv.user_message = "Running tests");
         let result = async {
             debug!("Running command: {test_script}");
             std::process::Command::new(test_script)
+                .env_clear()
+                .envs(envs)
                 .spawn()
                 .unwrap()
                 .wait_with_output()
@@ -716,6 +749,7 @@ impl Devenv {
     pub async fn launch_processes(
         &mut self,
         processes: Vec<String>,
+        envs: &std::collections::HashMap<String, String>,
         detach: &bool,
         log_to_file: &bool,
     ) -> Result<()> {
@@ -765,9 +799,10 @@ impl Devenv {
             std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
                 .expect("Failed to set permissions");
 
-            // let span = info_span!("Entering shell");
             let mut cmd = std::process::Command::new("bash");
-            cmd.arg(processes_script.to_string_lossy().to_string());
+            cmd.arg(processes_script.to_string_lossy().to_string())
+                .env_clear()
+                .envs(envs);
 
             if *detach {
                 let log_file = std::fs::File::create(self.processes_log())
