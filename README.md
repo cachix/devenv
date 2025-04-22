@@ -62,7 +62,7 @@ And ``devenv shell`` activates the environment.
 
 ```
 $ devenv
-https://devenv.sh 1.4.0: Fast, Declarative, Reproducible, and Composable Developer Environments
+https://devenv.sh 1.6.0: Fast, Declarative, Reproducible, and Composable Developer Environments
 
 Usage: devenv [OPTIONS] [COMMAND]
 
@@ -88,37 +88,86 @@ Commands:
 
 Options:
   -V, --version
-          Print version information
+          Print version information and exit
+
   -v, --verbose
           Enable additional debug logs.
+
   -q, --quiet
           Silence all logs
+
       --log-format <LOG_FORMAT>
-          Configure the output format of the logs. [default: cli] [possible values: cli, tracing-full]
+          Configure the output format of the logs.
+
+          [default: cli]
+
+          Possible values:
+          - cli:            The default human-readable log format used in the CLI
+          - tracing-full:   A verbose structured log format used for debugging
+          - tracing-pretty: A pretty human-readable log format used for debugging
+
   -j, --max-jobs <MAX_JOBS>
-          Maximum number of Nix builds at any time. [default: 5]
+          Maximum number of Nix builds at any time.
+
+          [default: 8]
+
   -u, --cores <CORES>
-          Maximum number CPU cores being used by a single build. [default: 2]
+          Maximum number CPU cores being used by a single build.
+
+          [default: 2]
+
   -s, --system <SYSTEM>
-          [default: aarch64-darwin]
+          [default: x86_64-linux]
+
   -i, --impure
           Relax the hermeticity of the environment.
-      --eval-cache
-          Cache the results of Nix evaluation.
+
+      --no-eval-cache
+          Disable caching of Nix evaluation results.
+
       --refresh-eval-cache
           Force a refresh of the Nix evaluation cache.
+
       --offline
           Disable substituters and consider all previously downloaded files up-to-date.
+
   -c, --clean [<CLEAN>...]
           Ignore existing environment variables when entering the shell. Pass a list of comma-separated environment variables to let through.
+
       --nix-debugger
           Enter the Nix debugger on failure.
-  -n, --nix-option <NIX_OPTION> <NIX_OPTION>
-          Pass additional options to nix commands, see `man nix.conf` for full list.
-  -o, --override-input <OVERRIDE_INPUT> <OVERRIDE_INPUT>
+
+  -n, --nix-option <NAME> <VALUE>
+          Pass additional options to nix commands.
+
+          These options are passed directly to Nix using the --option flag.
+          See `man nix.conf` for the full list of available options.
+
+          Examples:
+            --nix-option sandbox false
+            --nix-option keep-outputs true
+            --nix-option system x86_64-darwin
+
+  -o, --override-input <NAME> <URI>
           Override inputs in devenv.yaml.
+
+          Examples:
+            --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable
+            --override-input nixpkgs path:/path/to/local/nixpkgs
+
+      --option <OPTION> <VALUE>
+          Override configuration options with typed values.
+
+          OPTION must include a type: <attribute>:<type>
+          Supported types: string, int, float, bool, path
+
+          Examples:
+            --option languages.rust.channel:string beta
+            --option services.postgres.enable:bool true
+            --option languages.python.version:string 3.10
+
   -h, --help
-          Print help (see more with '--help')
+          Print help (see a summary with '-h')
 ```
 
 ## Documentation
