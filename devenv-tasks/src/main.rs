@@ -5,6 +5,9 @@ use std::env;
 #[derive(Parser)]
 #[clap(author, version, about)]
 struct Args {
+    #[clap(short, long, env = "DEVENV_TASKS_QUIET")]
+    quiet: bool,
+
     #[clap(subcommand)]
     command: Command,
 }
@@ -32,7 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let config = Config { tasks, roots };
 
-            let mut tasks_ui = TasksUi::new(config).await?;
+            // Pass quiet flag to TasksUi (which will set the env var internally)
+            let mut tasks_ui = TasksUi::new(config, args.quiet).await?;
             let (status, _outputs) = tasks_ui.run().await?;
 
             if status.failed + status.dependency_failed > 0 {
