@@ -155,7 +155,7 @@ Options:
             --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable
             --override-input nixpkgs path:/path/to/local/nixpkgs
 
-      --option <OPTION> <VALUE>
+  -O, --option <OPTION> <VALUE>
           Override configuration options with typed values.
 
           OPTION must include a type: <attribute>:<type>
