@@ -30,9 +30,10 @@ pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
     /// Whether to force a refresh of the cache.
     force_refresh: bool,
-    /// Additional paths to watch for changes.
+    /// Additional paths to include in the command cache.
+    /// Use for paths that affect the output of the command, but are not necessarily picked up during evaluation.
     included_paths: Vec<PathBuf>,
-    /// Paths to exclude from watching.
+    /// Paths to exclude from affecting the command cache.
     excluded_paths: Vec<PathBuf>,
     /// Callback to handle stderr output.
     on_stderr: Option<OnStderr>,
@@ -49,18 +50,18 @@ impl<'a> CachedCommand<'a> {
         }
     }
 
-    /// Watch additional paths for changes.
+    /// Include additional paths in the cache state.
     ///
     /// WARN: Be careful watching generated files.
     /// External tools like direnv are triggered solely by the modification date and don't compare file contents.
-    /// Use [util::write_file_with_lock] to safely write such files.
-    pub fn watch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
+    /// Use [util::write_file_with_lock] to safely write such files or filter out these paths when configuring direnv.
+    pub fn include_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.included_paths.push(path.as_ref().to_path_buf());
         self
     }
 
-    /// Remove a path from being watched for changes.
-    pub fn unwatch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
+    /// Exclude a path from affecting caching.
+    pub fn exclude_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.excluded_paths.push(path.as_ref().to_path_buf());
         self
     }

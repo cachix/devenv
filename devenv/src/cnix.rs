@@ -384,13 +384,13 @@ impl Nix {
             let pool = self.pool.as_ref().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
 
-            cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
-            cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
-            cached_cmd.watch_path(self.devenv_dotfile.join("flake.json"));
-            cached_cmd.watch_path(self.devenv_dotfile.join("cli-options.nix"));
+            cached_cmd.include_path(self.devenv_root.join("devenv.yaml"));
+            cached_cmd.include_path(self.devenv_root.join("devenv.lock"));
+            cached_cmd.include_path(self.devenv_dotfile.join("flake.json"));
+            cached_cmd.include_path(self.devenv_dotfile.join("cli-options.nix"));
 
             // Ignore anything in .devenv except for the specifically watched files above.
-            cached_cmd.unwatch_path(&self.devenv_dotfile);
+            cached_cmd.exclude_path(&self.devenv_dotfile);
 
             if self.global_options.refresh_eval_cache || options.refresh_cached_output {
                 cached_cmd.force_refresh();
