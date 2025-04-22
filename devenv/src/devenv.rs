@@ -1008,9 +1008,10 @@ impl Devenv {
                 .iter()
                 .filter_map(|input| match input {
                     Input::File(FileInputDesc { path, .. }) => {
-                        // We include--option in the eval cache, but we don't want it
+                        // We include --option in the eval cache, but we don't want it
                         // to trigger direnv reload on each invocation
-                        if path.ends_with("cli-options.nix") {
+                        let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
+                        if path == &cli_options_path {
                             return None;
                         }
                         Some(path.to_string_lossy().to_string())
