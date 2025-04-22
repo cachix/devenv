@@ -90,6 +90,16 @@ This feature is particularly useful for:
 
 When used with an existing `devenv.nix` file, `--option` values will override the configuration in the file, making it easy to temporarily modify your environment.
 
+## Switching Between Environment Profiles
+
+Ad-hoc options are perfect for switching between predefined profiles in your development environment:
+
+```shell-session
+$ devenv --option profile:string backend up
+```
+
+This allows you to easily switch between frontend, backend, or other custom profiles without changing your configuration files. See our [Profiles guide](https://devenv.sh/guides/profiles/) for more details on setting up and using profiles.
+
 For full documentation on this feature, visit our [Ad-hoc Developer Environments guide](https://devenv.sh/ad-hoc-developer-environments/).
 
 We're excited to see how you'll use ad-hoc environments to streamline your development workflow. Let us know what you think on [GitHub](https://github.com/cachix/devenv) or [join our Discord community](https://discord.gg/MycroftAI)!
