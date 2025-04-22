@@ -3,6 +3,7 @@ nav:
   - Guide:
     - Getting started: getting-started.md
     - Files and variables: files-and-variables.md
+    - Ad-hoc environments: ad-hoc-developer-environments.md
     - Writing devenv.nix:
       - Basics: basics.md
       - Packages: packages.md

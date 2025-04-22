@@ -45,6 +45,20 @@ echo "$OUTPUT" | grep -E "TEST_PATH:.*/somepath" || {
   exit 1
 }
 
+# Test pkgs type
+CMD_OUTPUT=$(devenv --option packages:pkgs "hello cowsay" shell which hello)
+if [ $? -ne 0 ]; then
+  echo "ERROR: Expected 'hello' package to be available in shell via pkgs type"
+  exit 1
+fi
+
+# Test if cowsay is also available
+CMD_OUTPUT=$(devenv --option packages:pkgs "hello cowsay" shell which cowsay)
+if [ $? -ne 0 ]; then
+  echo "ERROR: Expected 'cowsay' package to be available in shell via pkgs type"
+  exit 1
+fi
+
 # Test invalid type (should fail)
 if devenv --option languages.rust.version:invalid value info &> /dev/null; then
   echo "ERROR: Expected CLI option with invalid type to fail"
