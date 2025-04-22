@@ -854,7 +854,8 @@ impl Devenv {
             return Ok(());
         }
 
-        if !self.devenv_root.join("devenv.nix").exists() {
+        // Skip devenv.nix existence check if --option is provided
+        if self.global_options.option.is_empty() && !self.devenv_root.join("devenv.nix").exists() {
             bail!(indoc::indoc! {"
             File devenv.nix does not exist. To get started, run:
 
@@ -904,9 +905,9 @@ impl Devenv {
 
         // Create cli-options.nix if there are CLI options
         if !self.global_options.option.is_empty() {
-            let mut cli_options = String::from("{\n");
+            let mut cli_options = String::from("{ pkgs, lib, config, ... }: {\n");
 
-            const SUPPORTED_TYPES: &[&str] = &["string", "int", "float", "bool", "path"];
+            const SUPPORTED_TYPES: &[&str] = &["string", "int", "float", "bool", "path", "pkgs"];
 
             for chunk in self.global_options.option.chunks_exact(2) {
                 // Parse the path and type from the first value
@@ -926,6 +927,15 @@ impl Devenv {
                     "float" => chunk[1].clone(),
                     "bool" => chunk[1].clone(), // true/false will work directly in Nix
                     "path" => format!("./{}", &chunk[1]), // relative path
+                    "pkgs" => {
+                        // Split by whitespace and format as a Nix list of package references
+                        let items = chunk[1]
+                            .split_whitespace()
+                            .map(|item| format!("pkgs.{}", item))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        format!("[ {} ]", items)
+                    }
                     _ => miette::bail!(
                         "Unsupported type: '{}'. Supported types: {}",
                         type_name,

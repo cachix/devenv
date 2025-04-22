@@ -63,22 +63,3 @@ $ devenv info
 
 ```
 
-## CLI Options Overrides
-
-!!! info "New in 1.6"
-
-You can override configuration options temporarily using the `--option` flag:
-
-```shell-session
-$ devenv shell --option env.GREET:string Hello --option languages.rust.enable:bool true
-```
-
-The option requires you to specify the inferred Nix type:
-
-- `:string` for string values
-- `:int` for integer values
-- `:float` for floating-point values
-- `:bool` for boolean values (true/false)
-- `:path` for file paths (interpreted as relative paths)
-
-This is useful for temporarily changing the configuration without modifying your `devenv.nix` file, such as when testing different configurations or creating option matrices.
