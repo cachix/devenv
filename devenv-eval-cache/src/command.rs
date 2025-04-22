@@ -26,10 +26,15 @@ pub enum CommandError {
 type OnStderr = Box<dyn Fn(&InternalLog) + Send>;
 
 pub struct CachedCommand<'a> {
+    /// The SQLite database pool.
     pool: &'a sqlx::SqlitePool,
+    /// Whether to force a refresh of the cache.
     force_refresh: bool,
-    extra_paths: Vec<PathBuf>,
+    /// Additional paths to watch for changes.
+    included_paths: Vec<PathBuf>,
+    /// Paths to exclude from watching.
     excluded_paths: Vec<PathBuf>,
+    /// Callback to handle stderr output.
     on_stderr: Option<OnStderr>,
 }
 
@@ -38,7 +43,7 @@ impl<'a> CachedCommand<'a> {
         Self {
             pool,
             force_refresh: false,
-            extra_paths: Vec::new(),
+            included_paths: Vec::new(),
             excluded_paths: Vec::new(),
             on_stderr: None,
         }
@@ -50,7 +55,7 @@ impl<'a> CachedCommand<'a> {
     /// External tools like direnv are triggered solely by the modification date and don't compare file contents.
     /// Use [util::write_file_with_lock] to safely write such files.
     pub fn watch_path<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
-        self.extra_paths.push(path.as_ref().to_path_buf());
+        self.included_paths.push(path.as_ref().to_path_buf());
         self
     }
 
@@ -85,7 +90,7 @@ impl<'a> CachedCommand<'a> {
         // Check whether the command has been previously run and the files it depends on have not been changed.
         if !self.force_refresh {
             if let Ok(Some(output)) =
-                query_cached_output(self.pool, &cmd_hash, &self.extra_paths).await
+                query_cached_output(self.pool, &cmd_hash, &self.included_paths).await
             {
                 return Ok(output);
             }
@@ -189,7 +194,7 @@ impl<'a> CachedCommand<'a> {
         }
 
         // Watch additional paths
-        sources.extend_from_slice(&self.extra_paths);
+        sources.extend_from_slice(&self.included_paths);
 
         let file_inputs = query_file_inputs(&sources).await;
 
