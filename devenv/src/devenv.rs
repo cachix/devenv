@@ -687,8 +687,8 @@ impl Devenv {
         // Run script and capture its environment exports
         self.prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
-            .stderr(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
+            .stderr(process::Stdio::inherit())
+            .stdout(process::Stdio::inherit())
             .spawn()
             .expect("Failed to execute script")
             .wait()
@@ -739,7 +739,7 @@ impl Devenv {
         let span = info_span!("test", devenv.user_message = "Running tests");
         let result = async {
             debug!("Running command: {test_script}");
-            std::process::Command::new(test_script)
+            process::Command::new(test_script)
                 .env_clear()
                 .envs(envs)
                 .spawn()
@@ -867,7 +867,7 @@ impl Devenv {
             )
             .expect("Failed to write PROCESSES_SCRIPT");
 
-            fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
+            fs::set_permissions(&processes_script, fs::Permissions::from_mode(0o755))
                 .expect("Failed to set permissions");
 
             let mut cmd = if let Some(envs) = options.envs {
@@ -919,7 +919,7 @@ impl Devenv {
             bail!("No processes running");
         }
 
-        let pid = std::fs::read_to_string(self.processes_pid())
+        let pid = fs::read_to_string(self.processes_pid())
             .expect("Failed to read PROCESSES_PID")
             .parse::<i32>()
             .expect("Failed to parse PROCESSES_PID");
@@ -935,7 +935,7 @@ impl Devenv {
             }
         }
 
-        std::fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
+        fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
         Ok(())
     }
 
