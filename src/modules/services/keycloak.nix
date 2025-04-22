@@ -93,8 +93,8 @@ in
         example = "dev-mem";
         description = ''
           The type of database Keycloak should connect to.
-          In a development setup is fine to just use 'dev-mem' which
-          creates everything in memory.
+          If you use `dev-mem`, the realm export over script
+          `keycloak-realm-export-*` does not work.
         '';
       };
     };
@@ -357,6 +357,11 @@ in
                   e.path;
             in
             ''
+              if ${keycloak-health}/bin/keycloak-health; then
+                echo "You must first stop keycloak and then run this command again." >&2
+                exit 1
+              fi
+
               echo "Exporting realm '${realm}' to '${file}'."
               mkdir -p "$(dirname "${file}")"
               ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
@@ -367,6 +372,16 @@ in
       keycloak-realm-exports = pkgs.writeShellScriptBin "keycloak-realm-exports" (
         lib.concatStringsSep "\n" realmExport
       );
+
+      # We could use `kcadm.sh get "http://localhost:9000"` but that needs
+      # credentials, so we just check the master realm.
+      keycloak-health =
+        let
+          host = "${cfg.settings.hostname}:9000";
+        in
+        pkgs.writeShellScriptBin "keycloak-health" ''
+          ${pkgs.curl}/bin/curl -k --head -fsS "https://${host}/health/ready"
+        '';
     in
     mkIf cfg.enable {
       assertions = [
@@ -393,7 +408,7 @@ in
           https-certificate-file =
             if providedSSLCerts then cfg.sslCertificate else "${dummyCertificates}/ssl-cert.crt";
           https-certificate-key-file =
-            if providedSSLCerts then cfg.sslCertificate else "${dummyCertificates}/ssl-cert.key";
+            if providedSSLCerts then cfg.sslCertificateKey else "${dummyCertificates}/ssl-cert.key";
         }
       ];
 
@@ -430,22 +445,12 @@ in
 
             echo "Import realms (if any)..."
             ${builtins.concatStringsSep "\n" realmImport}
-            ls -aln  "$KC_HOME_DIR/data/import/"
             echo "========================"
 
             echo "Start keycloak:"
             ${keycloakBuild}/bin/kc.sh start --optimized --import-realm
           '';
 
-          # We could use `kcadm.sh get "http://localhost:9000"` but that needs
-          # credentials, so we just check the master realm.
-          keycloak-health =
-            let
-              host = "${cfg.settings.hostname}:${builtins.toString cfg.settings.http-port}";
-            in
-            pkgs.writeShellScriptBin "keycloak-health" ''
-              ${pkgs.curl} -k --head -fsS "https://${host}/health/ready"
-            '';
         in
         {
           exec = "exec ${keycloak-start}/bin/keycloak-start";
