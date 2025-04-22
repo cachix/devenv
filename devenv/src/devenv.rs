@@ -891,8 +891,8 @@ impl Devenv {
             serde_json::to_string(&self.config).unwrap(),
         )
         .expect("Failed to write devenv.json");
-        // TODO: superceded by eval caching.
-        // Remove once direnvrc migration is implemented.
+        // DEPRECATED: superceded by eval caching.
+        // Remove in v2.0.
         fs::write(
             self.devenv_dotfile.join("imports.txt"),
             self.config.imports.join("\n"),
@@ -1002,24 +1002,28 @@ impl Devenv {
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
         use devenv_eval_cache::command::{FileInputDesc, Input};
-        fs::write(
-            self.devenv_dotfile.join("input-paths.txt"),
-            env.inputs
-                .iter()
-                .filter_map(|input| match input {
-                    Input::File(FileInputDesc { path, .. }) => {
-                        // We include--option in the eval cache, but we don't want it
-                        // to trigger direnv reload on each invocation
-                        if path.ends_with("cli-options.nix") {
+        let watched_inputs = env
+            .inputs
+            .iter()
+            .filter_map(|input| match input {
+                Input::File(FileInputDesc { path, .. }) => {
+                    // TODO: canonicalize paths to avoid unwatching user files
+                    let ignored_paths = [".devenv.flake.nix", "cli-options.nix"];
+                    for ignored_path in ignored_paths {
+                        if path.ends_with(ignored_path) {
                             return None;
                         }
-                        Some(path.to_string_lossy().to_string())
                     }
-                    // TODO(sander): update direnvrc to handle env vars if possible
-                    _ => None,
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
+
+                    Some(path.to_string_lossy().to_string())
+                }
+                // TODO(sander): update direnvrc to handle env vars if possible
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        fs::write(
+            self.devenv_dotfile.join("input-paths.txt"),
+            watched_inputs.join("\n"),
         )
         .expect("Failed to write input-paths.txt");
 
