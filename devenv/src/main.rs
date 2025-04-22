@@ -184,13 +184,20 @@ async fn main() -> Result<()> {
         Commands::Repl {} => devenv.repl().await,
         Commands::Build { attributes } => devenv.build(&attributes).await,
         Commands::Update { name } => devenv.update(&name).await,
-        Commands::Up { processes, detach } => devenv.up(processes, &detach, &detach).await,
-        Commands::Processes { command } => match command {
-            ProcessesCommand::Up { processes, detach } => {
-                devenv.up(processes, &detach, &detach).await
-            }
-            ProcessesCommand::Down {} => devenv.down(),
-        },
+        Commands::Up { processes, detach }
+        | Commands::Processes {
+            command: ProcessesCommand::Up { processes, detach },
+        } => {
+            let options = devenv::ProcessOptions {
+                detach,
+                log_to_file: detach,
+                ..Default::default()
+            };
+            devenv.up(processes, &options).await
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Down {},
+        } => devenv.down(),
         Commands::Tasks { command } => match command {
             TasksCommand::Run { tasks } => devenv.tasks_run(tasks).await,
         },

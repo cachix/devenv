@@ -16,6 +16,7 @@ use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
     fs::{self, File},
     path::{Path, PathBuf},
+    process,
 };
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
@@ -42,12 +43,23 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 // project vars
 const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
+}
+
+#[derive(Default, Debug)]
+pub struct ProcessOptions<'a> {
+    /// An optional environment map to pass to the process.
+    /// If not provided, the process will be executed inside a freshly evaluated shell.
+    pub envs: Option<&'a HashMap<String, String>>,
+    /// Whether the process should be detached from the current process.
+    pub detach: bool,
+    /// Whether the process should be logged to a file.
+    pub log_to_file: bool,
 }
 
 pub struct Devenv {
@@ -683,7 +695,7 @@ impl Devenv {
             .expect("Failed to wait for script");
 
         // Parse the environment variables
-        let file = File::open(&script_path).into_diagnostic()?;
+        let file = File::open(&env_path).into_diagnostic()?;
         let reader = BufReader::new(file);
         let shell_envs = reader
             .lines()
@@ -716,7 +728,12 @@ impl Devenv {
         }
 
         if self.has_processes().await? {
-            self.launch_processes(vec![], &envs, &true, &false).await?;
+            let options = ProcessOptions {
+                envs: Some(&envs),
+                detach: true,
+                log_to_file: false,
+            };
+            self.up(vec![], &options).await?;
         }
 
         let span = info_span!("test", devenv.user_message = "Running tests");
@@ -744,96 +761,6 @@ impl Devenv {
             info!("Tests passed :)");
             Ok(())
         }
-    }
-
-    pub async fn launch_processes(
-        &mut self,
-        processes: Vec<String>,
-        envs: &std::collections::HashMap<String, String>,
-        detach: &bool,
-        log_to_file: &bool,
-    ) -> Result<()> {
-        self.assemble(false).await?;
-        if !self.has_processes().await? {
-            error!("No 'processes' option defined: https://devenv.sh/processes/");
-            bail!("No processes defined");
-        }
-
-        let span = info_span!(
-            "build_processes",
-            devenv.user_message = "Building processes"
-        );
-        let proc_script_string = async {
-            let proc_script = self.nix.build(&["procfileScript"], None).await?;
-            let proc_script_string = proc_script[0]
-                .to_str()
-                .expect("Failed to get proc script path")
-                .to_string();
-            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
-            Ok::<String, miette::Report>(proc_script_string)
-        }
-        .instrument(span)
-        .await?;
-
-        let span = info_span!("up", devenv.user_message = "Starting processes");
-        async {
-            let processes = processes.join("");
-
-            let processes_script = self.devenv_dotfile.join("processes");
-            // we force disable process compose tui if detach is enabled
-            let tui = if *detach {
-                "export PC_TUI_ENABLED=0"
-            } else {
-                ""
-            };
-            fs::write(
-                &processes_script,
-                indoc::formatdoc! {"
-                #!/usr/bin/env bash
-                {tui}
-                exec {proc_script_string} {processes}
-            "},
-            )
-            .expect("Failed to write PROCESSES_SCRIPT");
-
-            std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
-                .expect("Failed to set permissions");
-
-            let mut cmd = std::process::Command::new("bash");
-            cmd.arg(processes_script.to_string_lossy().to_string())
-                .env_clear()
-                .envs(envs);
-
-            if *detach {
-                let log_file = std::fs::File::create(self.processes_log())
-                    .expect("Failed to create PROCESSES_LOG");
-                let process = if !*log_to_file {
-                    cmd.stdout(std::process::Stdio::inherit())
-                        .stderr(std::process::Stdio::inherit())
-                        .spawn()
-                        .expect("Failed to spawn process")
-                } else {
-                    cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
-                        .stderr(log_file)
-                        .spawn()
-                        .expect("Failed to spawn process")
-                };
-
-                std::fs::write(self.processes_pid(), process.id().to_string())
-                    .expect("Failed to write PROCESSES_PID");
-                info!("PID is {}", process.id());
-                if *log_to_file {
-                    info!("See logs:  $ tail -f {}", self.processes_log().display());
-                }
-                info!("Stop:      $ devenv processes stop");
-            } else {
-                let err = cmd.exec();
-                bail!(err);
-            }
-            Ok(())
-        }
-        .instrument(span)
-        .await
     }
 
     pub async fn info(&mut self) -> Result<()> {
@@ -892,11 +819,10 @@ impl Devenv {
         .await
     }
 
-    pub async fn up(
+    pub async fn up<'a>(
         &mut self,
         processes: Vec<String>,
-        detach: &bool,
-        log_to_file: &bool,
+        options: &'a ProcessOptions<'a>,
     ) -> Result<()> {
         self.assemble(false).await?;
         if !self.has_processes().await? {
@@ -926,7 +852,7 @@ impl Devenv {
 
             let processes_script = self.devenv_dotfile.join("processes");
             // we force disable process compose tui if detach is enabled
-            let tui = if *detach {
+            let tui = if options.detach {
                 "export PC_TUI_ENABLED=0"
             } else {
                 ""
@@ -941,21 +867,26 @@ impl Devenv {
             )
             .expect("Failed to write PROCESSES_SCRIPT");
 
-            std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
+            fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
                 .expect("Failed to set permissions");
 
-            let span = info_span!("Entering shell");
-            let mut cmd = self
-                .prepare_shell(&Some(processes_script.to_string_lossy().to_string()), &[])
-                .instrument(span)
-                .await?;
+            let mut cmd = if let Some(envs) = options.envs {
+                let mut cmd = process::Command::new("bash");
+                cmd.arg(processes_script.to_string_lossy().to_string())
+                    .env_clear()
+                    .envs(envs);
+                cmd
+            } else {
+                self.prepare_shell(&Some(processes_script.to_string_lossy().to_string()), &[])
+                    .await?
+            };
 
-            if *detach {
-                let log_file = std::fs::File::create(self.processes_log())
-                    .expect("Failed to create PROCESSES_LOG");
-                let process = if !*log_to_file {
-                    cmd.stdout(std::process::Stdio::inherit())
-                        .stderr(std::process::Stdio::inherit())
+            if options.detach {
+                let log_file =
+                    fs::File::create(self.processes_log()).expect("Failed to create PROCESSES_LOG");
+                let process = if !options.log_to_file {
+                    cmd.stdout(process::Stdio::inherit())
+                        .stderr(process::Stdio::inherit())
                         .spawn()
                         .expect("Failed to spawn process")
                 } else {
@@ -965,10 +896,10 @@ impl Devenv {
                         .expect("Failed to spawn process")
                 };
 
-                std::fs::write(self.processes_pid(), process.id().to_string())
+                fs::write(self.processes_pid(), process.id().to_string())
                     .expect("Failed to write PROCESSES_PID");
                 info!("PID is {}", process.id());
-                if *log_to_file {
+                if options.log_to_file {
                     info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
                 info!("Stop:      $ devenv processes stop");
