@@ -316,6 +316,11 @@ impl Devenv {
 
         shell_cmd.env("SHELL", &bash);
 
+        // Set DEVENV_TASKS_QUIET if quiet mode is enabled in global options
+        if self.global_options.quiet {
+            shell_cmd.env("DEVENV_TASKS_QUIET", "1");
+        }
+
         Ok(shell_cmd)
     }
 
@@ -621,7 +626,9 @@ impl Devenv {
             "Tasks config: {}",
             serde_json::to_string_pretty(&config).unwrap()
         );
-        let mut tui = tasks::TasksUi::new(config).await?;
+
+        // Pass quiet flag from global options to TasksUi (which will set the env var internally)
+        let mut tui = tasks::TasksUi::new(config, self.global_options.quiet).await?;
         let (tasks_status, outputs) = tui.run().await?;
 
         if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {

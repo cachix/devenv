@@ -314,7 +314,11 @@ impl TaskState {
                     result = stdout_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => {
-                                info!(stdout = %line);
+                                // Only log to tracing if not quiet
+                                let is_quiet = std::env::var("DEVENV_TASKS_QUIET").is_ok();
+                                if !is_quiet {
+                                    info!(stdout = %line);
+                                }
                                 stdout_lines.push((std::time::Instant::now(), line));
                             },
                             Ok(None) => {},
@@ -659,13 +663,23 @@ impl TasksStatus {
 
 pub struct TasksUi {
     tasks: Arc<Tasks>,
+    quiet: bool,
+    term: Term,
 }
 
 impl TasksUi {
-    pub async fn new(config: Config) -> Result<Self, Error> {
+    pub async fn new(config: Config, quiet: bool) -> Result<Self, Error> {
         let tasks = Tasks::new(config).await?;
+
+        // Set environment variable for tracing logs
+        if quiet {
+            std::env::set_var("DEVENV_TASKS_QUIET", "1");
+        }
+
         Ok(Self {
             tasks: Arc::new(tasks),
+            quiet,
+            term: Term::stderr(),
         })
     }
 
@@ -744,20 +758,20 @@ impl TasksUi {
 
     pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
         let names = console::style(self.tasks.root_names.join(", ")).bold();
-        let term = Term::stderr();
-        term.write_line(&format!("{:17} {}\n", "Running tasks", names))?;
+        let is_tty = self.term.is_term();
+        self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
 
         // start processing tasks
         let started = std::time::Instant::now();
         let tasks_clone = Arc::clone(&self.tasks);
         let handle = tokio::spawn(async move { tasks_clone.run().await });
 
-        // start TUI
+        // start TUI if we're connected to a TTY, otherwise use non-interactive output
         let mut last_list_height: u16 = 0;
+        let mut last_statuses = std::collections::HashMap::new();
 
         loop {
             let tasks_status = self.get_tasks_status().await;
-
             let status_summary = [
                 if tasks_status.pending > 0 {
                     format!(
@@ -819,33 +833,115 @@ impl TasksUi {
             .collect::<Vec<_>>()
             .join(", ");
 
-            let elapsed_time = format!("{:.2?}", started.elapsed());
+            if is_tty {
+                let elapsed_time = format!("{:.2?}", started.elapsed());
 
-            let output = format!(
-                "{}\n{status_summary}{}{elapsed_time}",
-                tasks_status.lines.join("\n"),
-                " ".repeat(
-                    (19 + self.tasks.longest_task_name)
-                        .saturating_sub(console::measure_text_width(&status_summary))
-                        .max(1)
-                )
-            );
-            if !tasks_status.lines.is_empty() {
-                let output = console::Style::new().apply_to(output);
-                if last_list_height > 0 {
-                    term.move_cursor_up(last_list_height as usize)?;
-                    term.clear_to_end_of_screen()?;
+                let output = format!(
+                    "{}\n{status_summary}{}{elapsed_time}",
+                    tasks_status.lines.join("\n"),
+                    " ".repeat(
+                        (19 + self.tasks.longest_task_name)
+                            .saturating_sub(console::measure_text_width(&status_summary))
+                            .max(1)
+                    )
+                );
+                if !tasks_status.lines.is_empty() {
+                    let output = console::Style::new().apply_to(output);
+                    if last_list_height > 0 {
+                        self.term.move_cursor_up(last_list_height as usize)?;
+                        self.term.clear_to_end_of_screen()?;
+                    }
+                    self.console_write_line(&output.to_string())?;
                 }
-                term.write_line(&output.to_string())?;
-            }
 
-            if tasks_status.pending == 0 && tasks_status.running == 0 {
-                break;
-            }
+                last_list_height = tasks_status.lines.len() as u16 + 1;
+            } else {
+                // Non-interactive mode - print only status changes
+                for (_index, task_state) in self.tasks.graph.node_weights().enumerate() {
+                    let task_state = task_state.read().await;
+                    let task_name = &task_state.task.name;
+                    let current_status = match &task_state.status {
+                        TaskStatus::Pending => "Pending".to_string(),
+                        TaskStatus::Running(_) => {
+                            if let Some(previous) = last_statuses.get(task_name) {
+                                if previous != "Running" {
+                                    self.console_write_line(&format!(
+                                        "{:17} {}",
+                                        console::style("Running").blue().bold(),
+                                        console::style(task_name).bold()
+                                    ))?;
+                                }
+                            } else {
+                                self.console_write_line(&format!(
+                                    "{:17} {}",
+                                    console::style("Running").blue().bold(),
+                                    console::style(task_name).bold()
+                                ))?;
+                            }
+                            "Running".to_string()
+                        }
+                        TaskStatus::Completed(completed) => {
+                            let (status, style, duration_str) = match completed {
+                                TaskCompleted::Success(duration, _) => (
+                                    format!("Succeeded ({:.2?})", duration),
+                                    console::style("Succeeded").green().bold(),
+                                    format!(" ({:.2?})", duration),
+                                ),
+                                TaskCompleted::Skipped(Skipped::Cached(_)) => (
+                                    "Cached".to_string(),
+                                    console::style("Cached").blue().bold(),
+                                    "".to_string(),
+                                ),
+                                TaskCompleted::Skipped(Skipped::NotImplemented) => (
+                                    "Not implemented".to_string(),
+                                    console::style("Not implemented").blue().bold(),
+                                    "".to_string(),
+                                ),
+                                TaskCompleted::Failed(duration, _) => (
+                                    format!("Failed ({:.2?})", duration),
+                                    console::style("Failed").red().bold(),
+                                    format!(" ({:.2?})", duration),
+                                ),
+                                TaskCompleted::DependencyFailed => (
+                                    "Dependency failed".to_string(),
+                                    console::style("Dependency failed").red().bold(),
+                                    "".to_string(),
+                                ),
+                            };
 
-            last_list_height = tasks_status.lines.len() as u16 + 1;
+                            if let Some(previous) = last_statuses.get(task_name) {
+                                if previous != &status {
+                                    self.console_write_line(&format!(
+                                        "{:17} {}{}",
+                                        style,
+                                        console::style(task_name).bold(),
+                                        duration_str
+                                    ))?;
+                                }
+                            } else {
+                                self.console_write_line(&format!(
+                                    "{:17} {}{}",
+                                    style,
+                                    console::style(task_name).bold(),
+                                    duration_str
+                                ))?;
+                            }
+                            status
+                        }
+                    };
+
+                    last_statuses.insert(task_name.clone(), current_status);
+                }
+            }
 
             self.tasks.notify_ui.notified().await;
+
+            if tasks_status.pending == 0 && tasks_status.running == 0 {
+                if !is_tty {
+                    self.console_write_line(&status_summary)?;
+                }
+                break;
+            }
         }
 
         let errors = {
@@ -879,10 +975,21 @@ impl TasksUi {
             }
             console::Style::new().apply_to(errors)
         };
-        term.write_line(&errors.to_string())?;
+
+        if !errors.to_string().is_empty() {
+            self.console_write_line(&errors.to_string())?;
+        }
 
         let tasks_status = self.get_tasks_status().await;
         Ok((tasks_status, handle.await.unwrap()))
+    }
+
+    /// Outputs a message to the terminal, respecting the quiet flag
+    fn console_write_line(&self, message: &str) -> std::io::Result<()> {
+        if !self.quiet {
+            self.term.write_line(message)?;
+        }
+        Ok(())
     }
 }
 
