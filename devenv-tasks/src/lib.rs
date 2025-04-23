@@ -855,6 +855,7 @@ impl TasksUi {
                 }
 
                 last_list_height = tasks_status.lines.len() as u16 + 1;
+                self.tasks.notify_ui.notified().await;
             } else {
                 // Non-interactive mode - print only status changes
                 for (_index, task_state) in self.tasks.graph.node_weights().enumerate() {
@@ -933,8 +934,6 @@ impl TasksUi {
                     last_statuses.insert(task_name.clone(), current_status);
                 }
             }
-
-            self.tasks.notify_ui.notified().await;
 
             if tasks_status.pending == 0 && tasks_status.running == 0 {
                 if !is_tty {
