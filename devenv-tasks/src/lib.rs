@@ -855,7 +855,6 @@ impl TasksUi {
                 }
 
                 last_list_height = tasks_status.lines.len() as u16 + 1;
-                self.tasks.notify_ui.notified().await;
             } else {
                 // Non-interactive mode - print only status changes
                 for (_index, task_state) in self.tasks.graph.node_weights().enumerate() {
@@ -935,12 +934,16 @@ impl TasksUi {
                 }
             }
 
+            // Break early if there are no more tasks left
             if tasks_status.pending == 0 && tasks_status.running == 0 {
                 if !is_tty {
                     self.console_write_line(&status_summary)?;
                 }
                 break;
             }
+
+            // Wait for task updates before looping
+            self.tasks.notify_ui.notified().await;
         }
 
         let errors = {
