@@ -2,7 +2,7 @@
 date: 2025-04-22
 title: "devenv v1.6: Ad-hoc Developer Environments"
 authors:
-  - domen
+  - domenkozar
 draft: true
 ---
 
@@ -67,10 +67,10 @@ jobs:
         python-version: ['3.9', '3.10', '3.11']
     steps:
       - uses: actions/checkout@v3
-      - name: Test with Python ${{ matrix.python-version }}
+      - name: Test with Python {{ '${{ matrix.python-version }}' }}
         run: |
           devenv --option languages.python.enable:bool true \
-                 --option languages.python.version:string ${{ matrix.python-version }} \
+                 --option languages.python.version:string {{ '${{ matrix.python-version }}' }} \
                  test
 ```
 
