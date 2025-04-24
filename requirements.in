@@ -2,5 +2,6 @@ mkdocs
 mkdocs-material
 mkdocs-material[imaging]
 mkdocs-include-markdown-plugin
+mkdocs-rss-plugin
 mkdocs-markdownextradata-plugin
 mkdocs-awesome-pages-plugin
