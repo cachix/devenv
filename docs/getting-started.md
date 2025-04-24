@@ -74,15 +74,28 @@
 === "NixOS/nix-darwin/home-manager"
 
     ```nix title="configuration.nix"
-    environment.systemPackages = [ 
+    environment.systemPackages = [
       pkgs.devenv
     ];
     ```
 
+### 3. Configure a GitHub access token (optional)
+
+The Nix ecosystem is heavily dependent on GitHub for hosting and distributing source code, like the source for nixpkgs.
+This means that Nix will make a lot of un-authenticated requests to the GitHub API and you may encounter rate-limiting.
+
+To avoid being rate-limited, **we recommend providing Nix with a GitHub access token**, which will greatly increase your API limits.
+
+Create a new token with no extra permissions at [https://github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
+Add the token to your `~/.config/nix/nix.conf`:
+
+```
+access-tokens = github.com=<GITHUB_TOKEN>
+```
 
 ## Initial set up
 
-Given a Git repository, create the initial structure:
+Initialize a new developer environment with `devenv init`.
 
 ```shell-session
 $ devenv init
