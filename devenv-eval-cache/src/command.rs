@@ -570,7 +570,7 @@ async fn query_file_inputs(sources: &[PathBuf]) -> Vec<FileInputDesc> {
                 FileInputDesc::new(source, now).map_err(CommandError::Io)
             })
         })
-        .collect::<Vec<_>>();
+        .collect::<futures::stream::FuturesUnordered<_>>();
 
     join_all(file_input_futures)
         .await
