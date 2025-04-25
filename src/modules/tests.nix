@@ -17,9 +17,6 @@
       type = lib.types.package;
       internal = true;
       default = pkgs.writeShellScript "devenv-test" ''
-        echo "• Setting up shell environment ..."
-        ${config.enterShell}
-
         set -euo pipefail
         echo "• Testing ..."
         ${config.enterTest}

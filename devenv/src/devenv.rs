@@ -3,19 +3,20 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, IntoDiagnostic, Result};
+use miette::{bail, Context, IntoDiagnostic, Result};
 use nix::sys::signal;
 use nix::unistd::Pid;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
-use std::collections::BTreeMap;
-use std::io::Write;
+use std::collections::{BTreeMap, HashMap};
+use std::io::{BufRead, BufReader, Write};
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::{
-    fs,
+    fs::{self, File},
     path::{Path, PathBuf},
+    process,
 };
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
@@ -42,12 +43,23 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 // project vars
 const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
+}
+
+#[derive(Default, Debug)]
+pub struct ProcessOptions<'a> {
+    /// An optional environment map to pass to the process.
+    /// If not provided, the process will be executed inside a freshly evaluated shell.
+    pub envs: Option<&'a HashMap<String, String>>,
+    /// Whether the process should be detached from the current process.
+    pub detach: bool,
+    /// Whether the process should be logged to a file.
+    pub log_to_file: bool,
 }
 
 pub struct Devenv {
@@ -301,8 +313,6 @@ impl Devenv {
 
         let config_clean = self.config.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
-            shell_cmd.env_clear();
-
             let keep = match &self.global_options.clean {
                 Some(clean) => clean,
                 None => &config_clean.keep,
@@ -310,8 +320,11 @@ impl Devenv {
 
             let filtered_env = std::env::vars().filter(|(k, _)| keep.contains(k));
 
-            shell_cmd.envs(filtered_env);
-            shell_cmd.arg("--norc").arg("--noprofile");
+            shell_cmd
+                .env_clear()
+                .envs(filtered_env)
+                .arg("--norc")
+                .arg("--noprofile");
         }
 
         shell_cmd.env("SHELL", &bash);
@@ -655,14 +668,99 @@ impl Devenv {
         };
         let test_script = test_script[0].to_string_lossy().to_string();
 
+        let temp_dir = tempfile::TempDir::with_prefix("devenv-test")
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary directory for test")?;
+
+        let script_path = temp_dir.path().join("script");
+        let env_path = temp_dir.path().join("env");
+
+        let script = format!("env > {}", env_path.to_string_lossy());
+        fs::write(&script_path, script)
+            .into_diagnostic()
+            .wrap_err(format!(
+                "Failed to write script to {}",
+                script_path.display()
+            ))?;
+        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+            .into_diagnostic()
+            .wrap_err(format!(
+                "Failed to set execute permissions on {}",
+                script_path.display()
+            ))?;
+
+        // Run script and capture its environment exports
+        self.prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
+            .await?
+            .stderr(process::Stdio::inherit())
+            .stdout(process::Stdio::inherit())
+            .spawn()
+            .into_diagnostic()
+            .wrap_err("Failed to execute environment capture script")?
+            .wait()
+            .into_diagnostic()
+            .wrap_err("Failed to wait for environment capture script to complete")?;
+
+        // Parse the environment variables
+        let file = File::open(&env_path).into_diagnostic().wrap_err(format!(
+            "Failed to open environment file at {}",
+            env_path.display()
+        ))?;
+        let reader = BufReader::new(file);
+        let shell_envs = reader
+            .lines()
+            .map_while(Result::ok)
+            .filter_map(|line| {
+                let mut parts = line.splitn(2, '=');
+                match (parts.next(), parts.next()) {
+                    (Some(key), Some(value)) => Some((key.to_string(), value.to_string())),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let config_clean = self.config.clean.clone().unwrap_or_default();
+        let mut envs: HashMap<String, String> = {
+            let vars = std::env::vars();
+            if self.global_options.clean.is_some() || config_clean.enabled {
+                let keep = match &self.global_options.clean {
+                    Some(clean) => clean,
+                    None => &config_clean.keep,
+                };
+                vars.filter(|(key, _)| !keep.contains(key)).collect()
+            } else {
+                vars.collect()
+            }
+        };
+
+        for (key, value) in shell_envs {
+            envs.insert(key, value);
+        }
+
         if self.has_processes().await? {
-            self.up(vec![], &true, &false).await?;
+            let options = ProcessOptions {
+                envs: Some(&envs),
+                detach: true,
+                log_to_file: false,
+            };
+            self.up(vec![], &options).await?;
         }
 
         let span = info_span!("test", devenv.user_message = "Running tests");
         let result = async {
             debug!("Running command: {test_script}");
-            self.exec_in_shell(test_script, &[]).await
+            process::Command::new(&test_script)
+                .env_clear()
+                .envs(envs)
+                .spawn()
+                .into_diagnostic()
+                .wrap_err(format!(
+                    "Failed to spawn test process using {}",
+                    test_script
+                ))?
+                .wait_with_output()
+                .into_diagnostic()
+                .wrap_err("Failed to get output from test process")
         }
         .instrument(span)
         .await?;
@@ -736,11 +834,10 @@ impl Devenv {
         .await
     }
 
-    pub async fn up(
+    pub async fn up<'a>(
         &mut self,
         processes: Vec<String>,
-        detach: &bool,
-        log_to_file: &bool,
+        options: &'a ProcessOptions<'a>,
     ) -> Result<()> {
         self.assemble(false).await?;
         if !self.has_processes().await? {
@@ -766,15 +863,11 @@ impl Devenv {
 
         let span = info_span!("up", devenv.user_message = "Starting processes");
         async {
-            let processes = if processes.is_empty() {
-                "".to_string()
-            } else {
-                processes.join(" ")
-            };
+            let processes = processes.join("");
 
             let processes_script = self.devenv_dotfile.join("processes");
             // we force disable process compose tui if detach is enabled
-            let tui = if *detach {
+            let tui = if options.detach {
                 "export PC_TUI_ENABLED=0"
             } else {
                 ""
@@ -789,21 +882,26 @@ impl Devenv {
             )
             .expect("Failed to write PROCESSES_SCRIPT");
 
-            std::fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
+            fs::set_permissions(&processes_script, fs::Permissions::from_mode(0o755))
                 .expect("Failed to set permissions");
 
-            let span = info_span!("Entering shell");
-            let mut cmd = self
-                .prepare_shell(&Some(processes_script.to_string_lossy().to_string()), &[])
-                .instrument(span)
-                .await?;
+            let mut cmd = if let Some(envs) = options.envs {
+                let mut cmd = process::Command::new("bash");
+                cmd.arg(processes_script.to_string_lossy().to_string())
+                    .env_clear()
+                    .envs(envs);
+                cmd
+            } else {
+                self.prepare_shell(&Some(processes_script.to_string_lossy().to_string()), &[])
+                    .await?
+            };
 
-            if *detach {
-                let log_file = std::fs::File::create(self.processes_log())
-                    .expect("Failed to create PROCESSES_LOG");
-                let process = if !*log_to_file {
-                    cmd.stdout(std::process::Stdio::inherit())
-                        .stderr(std::process::Stdio::inherit())
+            if options.detach {
+                let log_file =
+                    fs::File::create(self.processes_log()).expect("Failed to create PROCESSES_LOG");
+                let process = if !options.log_to_file {
+                    cmd.stdout(process::Stdio::inherit())
+                        .stderr(process::Stdio::inherit())
                         .spawn()
                         .expect("Failed to spawn process")
                 } else {
@@ -813,10 +911,10 @@ impl Devenv {
                         .expect("Failed to spawn process")
                 };
 
-                std::fs::write(self.processes_pid(), process.id().to_string())
+                fs::write(self.processes_pid(), process.id().to_string())
                     .expect("Failed to write PROCESSES_PID");
                 info!("PID is {}", process.id());
-                if *log_to_file {
+                if options.log_to_file {
                     info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
                 info!("Stop:      $ devenv processes stop");
@@ -836,7 +934,7 @@ impl Devenv {
             bail!("No processes running");
         }
 
-        let pid = std::fs::read_to_string(self.processes_pid())
+        let pid = fs::read_to_string(self.processes_pid())
             .expect("Failed to read PROCESSES_PID")
             .parse::<i32>()
             .expect("Failed to parse PROCESSES_PID");
@@ -852,7 +950,7 @@ impl Devenv {
             }
         }
 
-        std::fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
+        fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
         Ok(())
     }
 
