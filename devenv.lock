@@ -150,10 +150,10 @@
         "pre-commit-hooks": "pre-commit-hooks"
       },
       "locked": {
-        "lastModified": 1741798497,
+        "lastModified": 1745500508,
         "owner": "domenkozar",
         "repo": "nix",
-        "rev": "f3f44b2baaf6c4c6e179de8cbb1cc6db031083cd",
+        "rev": "090394819020afda8eae69e395b1accba9c0fab2",
         "type": "github"
       },
       "original": {
