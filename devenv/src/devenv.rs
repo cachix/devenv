@@ -668,7 +668,9 @@ impl Devenv {
         };
         let test_script = test_script[0].to_string_lossy().to_string();
 
-        let temp_dir = tempfile::TempDir::with_prefix("devenv-test").into_diagnostic()?;
+        let temp_dir = tempfile::TempDir::with_prefix("devenv-test")
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary directory for test")?;
 
         let script_path = temp_dir.path().join("script");
         let env_path = temp_dir.path().join("env");
@@ -682,7 +684,10 @@ impl Devenv {
             ))?;
         fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
             .into_diagnostic()
-            .wrap_err("Change permissions")?;
+            .wrap_err(format!(
+                "Failed to set execute permissions on {}",
+                script_path.display()
+            ))?;
 
         // Run script and capture its environment exports
         self.prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
@@ -690,12 +695,17 @@ impl Devenv {
             .stderr(process::Stdio::inherit())
             .stdout(process::Stdio::inherit())
             .spawn()
-            .expect("Failed to execute script")
+            .into_diagnostic()
+            .wrap_err("Failed to execute environment capture script")?
             .wait()
-            .expect("Failed to wait for script");
+            .into_diagnostic()
+            .wrap_err("Failed to wait for environment capture script to complete")?;
 
         // Parse the environment variables
-        let file = File::open(&env_path).into_diagnostic()?;
+        let file = File::open(&env_path).into_diagnostic().wrap_err(format!(
+            "Failed to open environment file at {}",
+            env_path.display()
+        ))?;
         let reader = BufReader::new(file);
         let shell_envs = reader
             .lines()
@@ -739,13 +749,18 @@ impl Devenv {
         let span = info_span!("test", devenv.user_message = "Running tests");
         let result = async {
             debug!("Running command: {test_script}");
-            process::Command::new(test_script)
+            process::Command::new(&test_script)
                 .env_clear()
                 .envs(envs)
                 .spawn()
-                .unwrap()
+                .into_diagnostic()
+                .wrap_err(format!(
+                    "Failed to spawn test process using {}",
+                    test_script
+                ))?
                 .wait_with_output()
                 .into_diagnostic()
+                .wrap_err("Failed to get output from test process")
         }
         .instrument(span)
         .await?;
