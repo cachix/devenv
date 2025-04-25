@@ -14,7 +14,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "devenv${lib.optionalString build_tasks "-tasks"}";
-  version = "1.6.1";
+  version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
 
   # WARN: building this from src/modules/tasks.nix fails.
   # There is something being prepended to the path, hence the .*.
