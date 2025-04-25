@@ -94,6 +94,15 @@ in
     };
 
     process.manager.command = lib.mkDefault ''
+      ${if cfg.unixSocket.enable then ''
+      # Check if process-compose server is already running on the socket
+      if [ -S "${cfg.unixSocket.path}" ]; then
+        echo "Attaching to existing process-compose server at ${cfg.unixSocket.path}"
+        exec ${cfg.package}/bin/process-compose --unix-socket "${cfg.unixSocket.path}" attach "$@"
+      fi
+      '' else ""}
+
+      # Start a new process-compose server if none exists
       ${cfg.package}/bin/process-compose \
         ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
         -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
