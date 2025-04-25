@@ -643,7 +643,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.6.0"
+version = "1.6.1"
 dependencies = [
  "clap",
  "cli-table",
@@ -683,7 +683,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "1.6.0"
+version = "1.6.1"
 dependencies = [
  "blake3",
  "futures",
@@ -702,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.6.0"
+version = "1.6.1"
 dependencies = [
  "binaryornot",
  "clap",
@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "1.6.0"
+version = "1.6.1"
 dependencies = [
  "clap",
  "devenv",
@@ -734,7 +734,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "1.6.0"
+version = "1.6.1"
 dependencies = [
  "clap",
  "console",
