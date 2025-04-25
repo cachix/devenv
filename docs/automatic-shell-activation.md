@@ -16,6 +16,8 @@ To enable automatic shell activation, create an `.envrc` file in your project di
     ``` bash title=".envrc"
     eval "$(devenv direnvrc)"
 
+    # You can pass flags to the devenv command
+    # For example: use devenv --impure --option services.postgres.enable:bool true
     use devenv
     ```
 
@@ -50,6 +52,15 @@ Building shell ...
 Entering shell ...
 
 (devenv) $
+```
+
+## Passing flags to devenv
+
+You can pass command-line options directly to devenv by adding them after the `use devenv` command in your `.envrc` file:
+
+```bash
+# Example: override configuration options
+use devenv --option services.postgres.enable:bool true
 ```
 
 ## Customizing PS1

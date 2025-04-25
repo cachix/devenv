@@ -102,19 +102,25 @@ _devenv_watches() {
 use_devenv() {
   _nix_direnv_preflight
 
-  flake_expr="${1:-.}"
-  flake_dir="${flake_expr%#*}"
-  env_deps_path="$flake_dir/.devenv/input-paths.txt"
+  # Remaining parameters are passed as flags to devenv
+  local devenv_cmd=("${DEVENV_BIN}")
+  # Add all arguments passed to use_devenv
+  if (( $# > 0 )); then
+    devenv_cmd+=("$@")
+  fi
+  
+  devenv_dir=.
+  env_deps_path="$devenv_dir/.devenv/input-paths.txt"
 
   local default_watches
   default_watches=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
 
-  if [[ -d "$flake_dir" ]]; then
-    default_watches+=("$flake_dir/devenv.nix" "$flake_dir/devenv.lock" "$flake_dir/devenv.yaml" "$flake_dir/devenv.local.nix")
+  if [[ -d "$devenv_dir" ]]; then
+    default_watches+=("$devenv_dir/devenv.nix" "$devenv_dir/devenv.lock" "$devenv_dir/devenv.yaml" "$devenv_dir/devenv.local.nix")
 
-    if [[ -f "$flake_dir/devenv.yaml" ]]; then
-      if ! devenv assemble; then
-        log_error "$(devenv version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
+    if [[ -f "$devenv_dir/devenv.yaml" ]]; then
+      if ! "${devenv_cmd[@]}" assemble; then
+        log_error "$("${DEVENV_BIN}" version) failed to parse devenv.yaml, make sure to use version 0.6 or newer and fix the errors above."
         exit 0
       fi
     fi
@@ -129,9 +135,10 @@ use_devenv() {
   _devenv_watches "$env_deps_path" env_watches
   watch_file "${env_watches[@]}"
 
-  # Build the environment
+  # Build the environment with all flags passed through
   local env
-  if ! env=$("${DEVENV_BIN}" print-dev-env); then
+  local print_cmd=("${devenv_cmd[@]}" "print-dev-env")
+  if ! env=$("${print_cmd[@]}"); then
     log_error "failed to build the devenv environment. devenv.nix may contain errors. see above."
     exit 0
   fi
