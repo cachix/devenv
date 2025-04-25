@@ -331,7 +331,7 @@ impl Devenv {
 
         // Set DEVENV_TASKS_QUIET if quiet mode is enabled in global options
         if self.global_options.quiet {
-            shell_cmd.env("DEVENV_TASKS_QUIET", "1");
+            shell_cmd.env("DEVENV_TASKS_QUIET", "true");
         }
 
         Ok(shell_cmd)

@@ -315,7 +315,7 @@ impl TaskState {
                         match result {
                             Ok(Some(line)) => {
                                 // Only log to tracing if not quiet
-                                let is_quiet = std::env::var("DEVENV_TASKS_QUIET").is_ok();
+                                let is_quiet = std::env::var("DEVENV_TASKS_QUIET").map(|v| v == "true").unwrap_or(false);
                                 if !is_quiet {
                                     info!(stdout = %line);
                                 }
@@ -673,7 +673,7 @@ impl TasksUi {
 
         // Set environment variable for tracing logs
         if quiet {
-            std::env::set_var("DEVENV_TASKS_QUIET", "1");
+            std::env::set_var("DEVENV_TASKS_QUIET", "true");
         }
 
         Ok(Self {
