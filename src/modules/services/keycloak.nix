@@ -11,7 +11,6 @@ let
     mkIf
     mkMerge
     mkOption
-    mkRenamedOptionModule
     mkPackageOption
     types
     ;
@@ -22,24 +21,8 @@ let
     listOf
     attrsOf
     ;
-
-  assertStringPath =
-    optionName: value:
-    if builtins.isPath value then
-      throw ''
-        services.keycloak.${optionName}:
-          ${builtins.toString value}
-          is a Nix path, but should be a string, since Nix
-          paths are copied into the world-readable Nix store.
-      ''
-    else
-      value;
 in
 {
-  imports = [
-    (mkRenamedOptionModule [ "keycloak" "enable" ] [ "services" "keycloak" "enable" ])
-  ];
-
   options.services.keycloak = {
     enable = mkOption {
       type = types.bool;
@@ -52,10 +35,14 @@ in
     };
 
     sslCertificate = mkOption {
-      type = nullOr types.path;
+      type = nullOr (
+        lib.types.pathWith {
+          inStore = false;
+          absolute = true;
+        }
+      );
       default = null;
       example = "/run/keys/ssl_cert";
-      apply = assertStringPath "sslCertificate";
       description = ''
         The path to a PEM formatted certificate to use for TLS/SSL
         connections.
@@ -63,10 +50,14 @@ in
     };
 
     sslCertificateKey = mkOption {
-      type = nullOr types.path;
+      type = nullOr (
+        lib.types.pathWith {
+          inStore = false;
+          absolute = true;
+        }
+      );
       default = null;
       example = "/run/keys/ssl_key";
-      apply = assertStringPath "sslCertificateKey";
       description = ''
         The path to a PEM formatted private key to use for TLS/SSL
         connections.
@@ -119,8 +110,12 @@ in
         types.submodule {
           options = {
             path = mkOption {
-              type = nullOr types.str;
-              apply = assertStringPath "realms.«name».path";
+              type = nullOr (
+                lib.types.pathWith {
+                  inStore = false;
+                  absolute = true;
+                }
+              );
               default = null;
               example = "./realms/a.json";
               description = ''
@@ -373,8 +368,6 @@ in
         lib.concatStringsSep "\n" realmExport
       );
 
-      # We could use `kcadm.sh get "http://localhost:9000"` but that needs
-      # credentials, so we just check the master realm.
       keycloak-health =
         let
           host = "${cfg.settings.hostname}:9000";
@@ -468,7 +461,7 @@ in
           };
         };
 
-      # Export a single realm
+      # Export a single realm.
       scripts.keycloak-realm-export = {
         exec = ''${keycloakBuild}/bin/kc.sh export --realm "$1" --file "$2"'';
         description = ''
