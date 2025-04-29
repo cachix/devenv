@@ -368,9 +368,13 @@ pub enum TasksCommand {
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
 pub enum RunMode {
+    /// Run only the specified task
     Single,
+    /// Run the specified task and all tasks after it
     WithAfter,
+    /// Run the specified task and all tasks before it
     WithBefore,
+    /// Run the specified task and all tasks before and after it (full dependency graph)
     WithBeforeAndAfter,
 }
 
