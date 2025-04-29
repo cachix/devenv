@@ -53,10 +53,18 @@ in
             echo "✨ devenv ${cfg.cliVersion} is out of date. Please update to ${cfg.latestVersion}: https://devenv.sh/getting-started/#installation" >&2
           '';
         };
+        # Normalize versions by stripping trailing .0 to make X.x.0 equivalent to X.X
+        normalizeVersion = v:
+          let
+            stripped = builtins.replaceStrings [ ".0" ] [ "" ] v;
+          in
+          if stripped != v then normalizeVersion stripped else v;
+        normalizedCliVersion = normalizeVersion cfg.cliVersion;
+        normalizedLatestVersion = normalizeVersion cfg.latestVersion;
+        versionComparison = builtins.compareVersions normalizedCliVersion normalizedLatestVersion;
       in
       ''
-        # Check whether a newer version of the devenv CLI is available.
-        ${action."${toString (builtins.compareVersions cfg.cliVersion cfg.latestVersion)}"}
+        ${action."${toString versionComparison}"}
 
         # Check whether the direnv integration is out of date.
         {
