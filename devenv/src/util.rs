@@ -24,6 +24,7 @@ pub fn write_file_with_lock<P: AsRef<Path>>(path: P, content: &str) -> Result<bo
         .read(true)
         .write(true)
         .create(true)
+        .truncate(true)
         .open(path)
         .into_diagnostic()
         .map_err(|e| miette!("Failed to open file {}: {}", path.display(), e))?;
