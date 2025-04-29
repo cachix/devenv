@@ -1354,6 +1354,50 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_single_task() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_2"],
+                "run_mode": "single",
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "command": script2.to_str().unwrap(),
+                        "before": ["myapp:task_3"],
+                        "after": ["myapp:task_1"],
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "command": script3.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+            ] if name2 == "myapp:task_2"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_before_tasks() -> Result<(), Error> {
         let script1 = create_basic_script("1")?;
         let script2 = create_basic_script("2")?;
