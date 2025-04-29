@@ -730,7 +730,7 @@ impl TasksUi {
 
         // Set environment variable for tracing logs
         if quiet {
-            std::env::set_var("DEVENV_TASKS_QUIET", "true");
+            unsafe { std::env::set_var("DEVENV_TASKS_QUIET", "true") };
         }
 
         Ok(Self {
@@ -927,7 +927,7 @@ impl TasksUi {
                 last_list_height = tasks_status.lines.len() as u16 + 1;
             } else {
                 // Non-interactive mode - print only status changes
-                for (_index, task_state) in self.tasks.graph.node_weights().enumerate() {
+                for task_state in self.tasks.graph.node_weights() {
                     let task_state = task_state.read().await;
                     let task_name = &task_state.task.name;
                     let current_status = match &task_state.status {
