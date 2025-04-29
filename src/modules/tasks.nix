@@ -61,6 +61,11 @@ let
             default = mkCommand config.status true;
             description = "Path to the script to run.";
           };
+          execIfModified = lib.mkOption {
+            type = types.listOf types.str;
+            default = [ ];
+            description = "Paths to files that should trigger a task execution if modified.";
+          };
           config = lib.mkOption {
             type = types.attrsOf types.anything;
             internal = true;
@@ -72,6 +77,7 @@ let
               before = config.before;
               command = config.command;
               input = config.input;
+              exec_if_modified = config.execIfModified;
             };
             description = "Internal configuration for the task.";
           };
@@ -130,6 +136,10 @@ in
       {
         assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
         message = "The 'exports' option for a task can only be set when 'package' is a bash package.";
+      }
+      {
+        assertion = lib.all (task: task.status == null || task.execIfModified == [ ]) (lib.attrValues config.tasks);
+        message = "The 'status' and 'execIfModified' options cannot be used together. Use only one of them to determine whether a task should run.";
       }
     ];
 

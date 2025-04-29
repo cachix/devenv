@@ -16,6 +16,10 @@ tempfile.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+sqlx.workspace = true
+blake3.workspace = true
+walkdir = "2.4.0"
+devenv-cache-core.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

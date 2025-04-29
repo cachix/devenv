@@ -1,42 +1,14 @@
 use super::command::{EnvInputDesc, FileInputDesc, Input};
-use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqliteRow, SqliteSynchronous};
-use sqlx::{migrate::MigrateDatabase, Acquire, Row, SqlitePool};
+use devenv_cache_core::{file::TrackedFile, time};
+use sqlx::sqlite::{Sqlite, SqliteRow};
+use sqlx::{Acquire, Row, SqlitePool};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::error;
+use std::time::SystemTime;
 
-pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx::Error> {
-    let mut pool = SqlitePool::connect_with(connection_options(&database_url)?).await?;
-
-    // Attempt to run the migrations
-    if let Err(err) = sqlx::migrate!().run(&pool).await {
-        error!(error = %err, "Failed to migrate the Nix evaluation cache database. Attempting to recreate the database.");
-
-        // Close the existing connection
-        pool.close().await;
-        // Delete the database
-        Sqlite::drop_database(database_url.as_ref()).await?;
-        // Recreate the database and connection pool
-        pool = SqlitePool::connect_with(connection_options(&database_url)?).await?;
-        sqlx::migrate!().run(&pool).await?;
-    }
-
-    Ok(pool)
-}
-
-fn connection_options<P: AsRef<str>>(database_url: P) -> Result<SqliteConnectOptions, sqlx::Error> {
-    Ok(SqliteConnectOptions::from_str(database_url.as_ref())?
-        .foreign_keys(true)
-        .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal)
-        .pragma("mmap_size", "134217728")
-        .pragma("journal_size_limit", "27103364")
-        .pragma("cache_size", "2000")
-        .create_if_missing(true))
-}
+// Create a constant for embedded migrations
+pub const MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!();
 
 /// The row type for the `cached_cmd` table.
 #[derive(Clone, Debug)]
@@ -69,7 +41,7 @@ impl sqlx::FromRow<'_, SqliteRow> for CommandRow {
             cmd_hash,
             input_hash,
             output,
-            updated_at: system_time_from_unix_seconds(updated_at),
+            updated_at: time::system_time_from_unix_seconds(updated_at),
         })
     }
 }
@@ -179,7 +151,7 @@ where
     A: Acquire<'a, Database = Sqlite>,
 {
     let mut conn = conn.acquire().await?;
-    let now = system_time_to_unix_seconds(SystemTime::now());
+    let now = time::system_time_to_unix_seconds(SystemTime::now());
 
     sqlx::query(
         r#"
@@ -217,7 +189,7 @@ where
         RETURNING id
     "#;
 
-    let now = system_time_to_unix_seconds(SystemTime::now());
+    let now = time::system_time_to_unix_seconds(SystemTime::now());
     let mut file_ids = Vec::with_capacity(file_inputs.len());
     for FileInputDesc {
         path,
@@ -226,7 +198,7 @@ where
         modified_at,
     } in file_inputs
     {
-        let modified_at = system_time_to_unix_seconds(*modified_at);
+        let modified_at = time::system_time_to_unix_seconds(*modified_at);
         let id: i64 = sqlx::query(insert_file_input)
             .bind(path.to_path_buf().into_os_string().as_bytes())
             .bind(is_directory)
@@ -274,7 +246,7 @@ where
         RETURNING id
     "#;
 
-    let now = system_time_to_unix_seconds(SystemTime::now());
+    let now = time::system_time_to_unix_seconds(SystemTime::now());
     let mut env_input_ids = Vec::with_capacity(env_inputs.len());
     for EnvInputDesc { name, content_hash } in env_inputs {
         let id: i64 = sqlx::query(insert_env_input)
@@ -317,9 +289,22 @@ impl sqlx::FromRow<'_, SqliteRow> for FileInputRow {
             path: PathBuf::from(OsStr::from_bytes(path)),
             is_directory,
             content_hash,
-            modified_at: system_time_from_unix_seconds(modified_at),
-            updated_at: system_time_from_unix_seconds(updated_at),
+            modified_at: time::system_time_from_unix_seconds(modified_at),
+            updated_at: time::system_time_from_unix_seconds(updated_at),
         })
+    }
+}
+
+// Helper method to convert a FileInputRow to a TrackedFile
+impl FileInputRow {
+    pub fn to_tracked_file(&self) -> TrackedFile {
+        TrackedFile {
+            path: self.path.clone(),
+            is_directory: self.is_directory,
+            content_hash: Some(self.content_hash.clone()),
+            modified_at: self.modified_at,
+            checked_at: self.updated_at,
+        }
     }
 }
 
@@ -418,8 +403,8 @@ pub async fn update_file_modified_at<P: AsRef<Path>>(
     path: P,
     modified_at: SystemTime,
 ) -> Result<(), sqlx::Error> {
-    let modified_at = system_time_to_unix_seconds(modified_at);
-    let now = system_time_to_unix_seconds(SystemTime::now());
+    let modified_at = time::system_time_to_unix_seconds(modified_at);
+    let now = time::system_time_to_unix_seconds(SystemTime::now());
 
     sqlx::query(
         r#"
@@ -454,26 +439,9 @@ pub async fn delete_unreferenced_files(pool: &SqlitePool) -> Result<u64, sqlx::E
     Ok(result.rows_affected())
 }
 
-/// Truncate a unix timestamp to seconds.
-///
-/// Returns an i64 because SQLite doesn't support u64.
-fn system_time_to_unix_seconds(time: SystemTime) -> i64 {
-    time.duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        .min(i64::MAX as u64) as i64
-}
-
-/// Convert an integer unix timestamp in seconds to a SystemTime.
-///
-/// Takes an i64 because SQLite doesn't support u64.
-fn system_time_from_unix_seconds(seconds: i64) -> SystemTime {
-    UNIX_EPOCH + std::time::Duration::from_secs(seconds as u64)
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::hash;
+    use devenv_cache_core::compute_string_hash;
 
     use super::*;
     use sqlx::SqlitePool;
@@ -481,7 +449,7 @@ mod tests {
     #[sqlx::test]
     async fn test_insert_and_retrieve_command(pool: SqlitePool) {
         let raw_cmd = "nix-build -A hello";
-        let cmd_hash = hash::digest(raw_cmd);
+        let cmd_hash = compute_string_hash(raw_cmd);
         let output = b"Hello, world!";
         let modified_at = SystemTime::now();
         let inputs = vec![
@@ -498,8 +466,8 @@ mod tests {
                 modified_at,
             }),
         ];
-        let input_hash = hash::digest(
-            inputs
+        let input_hash = compute_string_hash(
+            &inputs
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -532,7 +500,7 @@ mod tests {
     async fn test_insert_multiple_commands(pool: SqlitePool) {
         // First command
         let raw_cmd1 = "nix-build -A hello";
-        let cmd_hash1 = hash::digest(raw_cmd1);
+        let cmd_hash1 = compute_string_hash(raw_cmd1);
         let output1 = b"Hello, world!";
         let modified_at = SystemTime::now();
         let inputs1 = vec![
@@ -549,8 +517,8 @@ mod tests {
                 modified_at,
             }),
         ];
-        let input_hash1 = hash::digest(
-            inputs1
+        let input_hash1 = compute_string_hash(
+            &inputs1
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -569,7 +537,7 @@ mod tests {
 
         // Second command
         let raw_cmd2 = "nix-build -A goodbye";
-        let cmd_hash2 = hash::digest(raw_cmd2);
+        let cmd_hash2 = compute_string_hash(raw_cmd2);
         let output2 = b"Goodbye, world!";
         let modified_at = SystemTime::now();
         let inputs2 = vec![
@@ -586,8 +554,8 @@ mod tests {
                 modified_at,
             }),
         ];
-        let input_hash2 = hash::digest(
-            inputs2
+        let input_hash2 = compute_string_hash(
+            &inputs2
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -639,7 +607,7 @@ mod tests {
     async fn test_insert_command_with_modified_files(pool: SqlitePool) {
         // First command
         let raw_cmd = "nix-build -A hello";
-        let cmd_hash = hash::digest(raw_cmd);
+        let cmd_hash = compute_string_hash(raw_cmd);
         let output = b"Hello, world!";
         let modified_at = SystemTime::now();
         let inputs1 = vec![
@@ -656,8 +624,8 @@ mod tests {
                 modified_at,
             }),
         ];
-        let input_hash = hash::digest(
-            inputs1
+        let input_hash = compute_string_hash(
+            &inputs1
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -683,8 +651,8 @@ mod tests {
                 modified_at,
             }),
         ];
-        let input_hash2 = hash::digest(
-            inputs2
+        let input_hash2 = compute_string_hash(
+            &inputs2
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
