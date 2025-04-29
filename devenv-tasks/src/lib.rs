@@ -81,10 +81,24 @@ pub struct TaskConfig {
     inputs: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub enum TaskRunMode {
+    #[default]
+    /// Run only the specified task
+    Single,
+    /// Run the specified task and all tasks after it
+    WithAfter,
+    /// Run the specified task and all tasks before it
+    WithBefore,
+    /// Run the specified task and all tasks before and after it (full dependency graph)
+    WithBeforeAndAfter,
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,
+    pub run_mode: TaskRunMode,
 }
 
 #[derive(Serialize)]
@@ -386,6 +400,7 @@ struct Tasks {
     tasks_order: Vec<NodeIndex>,
     notify_finished: Arc<Notify>,
     notify_ui: Arc<Notify>,
+    run_mode: TaskRunMode,
 }
 
 impl Tasks {
@@ -429,6 +444,7 @@ impl Tasks {
             notify_finished: Arc::new(Notify::new()),
             notify_ui: Arc::new(Notify::new()),
             tasks_order: vec![],
+            run_mode: config.run_mode,
         };
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
@@ -485,17 +501,57 @@ impl Tasks {
             to_visit.push(root_index);
         }
 
-        // Depth-first search including dependencies
-        while let Some(node) = to_visit.pop() {
-            if visited.insert(node) {
-                let new_node = subgraph.add_node(self.graph[node].clone());
-                node_map.insert(node, new_node);
-
-                // Add dependencies to visit
-                for neighbor in self.graph.neighbors_undirected(node) {
-                    to_visit.push(neighbor);
+        // Find nodes to include based on run_mode
+        match self.run_mode {
+            TaskRunMode::Single => {
+                // Only include the root nodes themselves
+                visited = self.roots.iter().cloned().collect();
+            }
+            TaskRunMode::WithAfter => {
+                // Include root nodes and all tasks that come after (successor nodes)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add outgoing neighbors (tasks that come after this one)
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Outgoing)
+                        {
+                            to_visit.push(neighbor);
+                        }
+                    }
                 }
             }
+            TaskRunMode::WithBefore => {
+                // Include root nodes and all tasks that come before (predecessor nodes)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add incoming neighbors (tasks that come before this one)
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Incoming)
+                        {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
+            }
+            TaskRunMode::WithBeforeAndAfter => {
+                // Include the complete connected subgraph (all dependencies in both directions)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add all connected neighbors in both directions
+                        for neighbor in self.graph.neighbors_undirected(node) {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Create nodes in the subgraph
+        for &node in &visited {
+            let new_node = subgraph.add_node(self.graph[node].clone());
+            node_map.insert(node, new_node);
         }
 
         // Add edges to subgraph

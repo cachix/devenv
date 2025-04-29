@@ -358,7 +358,31 @@ pub enum ProcessesCommand {
 #[clap(about = "Run tasks. https://devenv.sh/tasks/")]
 pub enum TasksCommand {
     #[command(about = "Run tasks.")]
-    Run { tasks: Vec<String> },
+    Run {
+        tasks: Vec<String>,
+
+        #[arg(short, long, help = "The mode to use when running tasks (FIX)")]
+        mode: RunMode,
+    },
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy)]
+pub enum RunMode {
+    Single,
+    WithAfter,
+    WithBefore,
+    WithBeforeAndAfter,
+}
+
+impl From<RunMode> for devenv_tasks::TaskRunMode {
+    fn from(mode: RunMode) -> Self {
+        match mode {
+            RunMode::Single => devenv_tasks::TaskRunMode::Single,
+            RunMode::WithAfter => devenv_tasks::TaskRunMode::WithAfter,
+            RunMode::WithBefore => devenv_tasks::TaskRunMode::WithBefore,
+            RunMode::WithBeforeAndAfter => devenv_tasks::TaskRunMode::WithBeforeAndAfter,
+        }
+    }
 }
 
 #[derive(Subcommand, Clone)]

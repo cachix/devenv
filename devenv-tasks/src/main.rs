@@ -12,11 +12,33 @@ struct Args {
     command: Command,
 }
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy)]
+enum RunMode {
+    Single,
+    WithAfter,
+    WithBefore,
+    WithBeforeAndAfter,
+}
+
+impl From<RunMode> for devenv_tasks::TaskRunMode {
+    fn from(mode: RunMode) -> Self {
+        match mode {
+            RunMode::Single => devenv_tasks::TaskRunMode::Single,
+            RunMode::WithAfter => devenv_tasks::TaskRunMode::WithAfter,
+            RunMode::WithBefore => devenv_tasks::TaskRunMode::WithBefore,
+            RunMode::WithBeforeAndAfter => devenv_tasks::TaskRunMode::WithBeforeAndAfter,
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Command {
     Run {
         #[clap()]
         roots: Vec<String>,
+
+        #[clap(long, value_enum, default_value_t = RunMode::Single)]
+        mode: RunMode,
     },
     Export {
         #[clap()]
@@ -29,11 +51,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     match args.command {
-        Command::Run { roots } => {
+        Command::Run { roots, mode } => {
             let tasks_json = env::var("DEVENV_TASKS")?;
             let tasks: Vec<TaskConfig> = serde_json::from_str(&tasks_json)?;
 
-            let config = Config { tasks, roots };
+            let config = Config {
+                tasks,
+                roots,
+                run_mode: mode.into(),
+            };
 
             // Pass quiet flag to TasksUi (which will set the env var internally)
             let mut tasks_ui = TasksUi::new(config, args.quiet).await?;

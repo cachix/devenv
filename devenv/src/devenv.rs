@@ -615,7 +615,7 @@ impl Devenv {
         Ok(self.has_processes.unwrap())
     }
 
-    pub async fn tasks_run(&mut self, roots: Vec<String>) -> Result<()> {
+    pub async fn tasks_run(&mut self, roots: Vec<String>, mode: cli::RunMode) -> Result<()> {
         self.assemble(false).await?;
         if roots.is_empty() {
             bail!("No tasks specified.");
@@ -634,7 +634,11 @@ impl Devenv {
         let tasks: Vec<tasks::TaskConfig> =
             serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
         // run tasks
-        let config = tasks::Config { roots, tasks };
+        let config = tasks::Config {
+            roots,
+            tasks,
+            run_mode: mode.into(),
+        };
         debug!(
             "Tasks config: {}",
             serde_json::to_string_pretty(&config).unwrap()
