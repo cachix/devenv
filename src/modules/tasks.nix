@@ -154,13 +154,13 @@ in
       };
     };
     enterShell = ''
-      ${config.task.package}/bin/devenv-tasks run devenv:enterShell
+      ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode with_before_and_after
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi
     '';
     enterTest = ''
-      ${config.task.package}/bin/devenv-tasks run devenv:enterTest
+      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode with_before_and_after
     '';
   };
 }
