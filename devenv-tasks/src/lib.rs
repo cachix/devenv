@@ -81,25 +81,25 @@ pub struct TaskConfig {
     inputs: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")] // TODO: which case?
-pub enum TaskRunMode {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMode {
     #[default]
-    /// Run only the specified task
+    /// Run only the specified task without dependencies
     Single,
-    /// Run the specified task and all tasks after it
-    WithAfter,
-    /// Run the specified task and all tasks before it
-    WithBefore,
-    /// Run the specified task and all tasks before and after it (full dependency graph)
-    WithBeforeAndAfter,
+    /// Run the specified task and all tasks that depend on it (downstream tasks)
+    After,
+    /// Run all dependency tasks first, then the specified task (upstream tasks)
+    Before,
+    /// Run the complete dependency graph (upstream and downstream tasks)
+    All,
 }
 
 #[derive(Deserialize, Serialize)]
 pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,
-    pub run_mode: TaskRunMode,
+    pub run_mode: RunMode,
 }
 
 #[derive(Serialize)]
@@ -401,7 +401,7 @@ struct Tasks {
     tasks_order: Vec<NodeIndex>,
     notify_finished: Arc<Notify>,
     notify_ui: Arc<Notify>,
-    run_mode: TaskRunMode,
+    run_mode: RunMode,
 }
 
 impl Tasks {
@@ -504,11 +504,11 @@ impl Tasks {
 
         // Find nodes to include based on run_mode
         match self.run_mode {
-            TaskRunMode::Single => {
+            RunMode::Single => {
                 // Only include the root nodes themselves
                 visited = self.roots.iter().cloned().collect();
             }
-            TaskRunMode::WithAfter => {
+            RunMode::After => {
                 // Include root nodes and all tasks that come after (successor nodes)
                 while let Some(node) = to_visit.pop() {
                     if visited.insert(node) {
@@ -522,7 +522,7 @@ impl Tasks {
                     }
                 }
             }
-            TaskRunMode::WithBefore => {
+            RunMode::Before => {
                 // Include root nodes and all tasks that come before (predecessor nodes)
                 while let Some(node) = to_visit.pop() {
                     if visited.insert(node) {
@@ -536,7 +536,7 @@ impl Tasks {
                     }
                 }
             }
-            TaskRunMode::WithBeforeAndAfter => {
+            RunMode::All => {
                 // Include the complete connected subgraph (all dependencies in both directions)
                 while let Some(node) = to_visit.pop() {
                     if visited.insert(node) {
@@ -1108,7 +1108,7 @@ mod test {
             assert_matches!(
                 Config::try_from(json!({
                     "roots": [],
-                    "run_mode": "with_before_and_after",
+                    "run_mode": "all",
                     "tasks": [{
                         "name": task.to_string()
                     }]
@@ -1129,7 +1129,7 @@ mod test {
             assert_matches!(
                 Config::try_from(serde_json::json!({
                     "roots": [],
-                    "run_mode": "with_before_and_after",
+                    "run_mode": "all",
                     "tasks": [{
                         "name": task.to_string()
                     }]
@@ -1160,7 +1160,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1", "myapp:task_4"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1205,7 +1205,7 @@ mod test {
         let result = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1253,7 +1253,7 @@ mod test {
             Tasks::new(
                 Config::try_from(json!({
                     "roots": [root],
-                    "run_mode": "with_before_and_after",
+                    "run_mode": "all",
                     "tasks": [
                         {
                             "name": "myapp:task_1",
@@ -1296,7 +1296,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1337,7 +1337,7 @@ mod test {
         let result = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1406,7 +1406,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1451,7 +1451,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1496,7 +1496,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1543,7 +1543,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_3"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1589,7 +1589,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_2"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1633,7 +1633,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_2"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1689,7 +1689,7 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_3"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1748,7 +1748,7 @@ fi
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1", "myapp:task_2"],
-                "run_mode": "with_before_and_after",
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",

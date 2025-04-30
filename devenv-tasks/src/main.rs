@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{Config, TaskConfig, TasksUi};
+use devenv_tasks::{Config, RunMode, TaskConfig, TasksUi};
 use std::env;
 
 #[derive(Parser)]
@@ -12,32 +12,13 @@ struct Args {
     command: Command,
 }
 
-#[derive(clap::ValueEnum, Debug, Clone, Copy)]
-enum RunMode {
-    Single,
-    WithAfter,
-    WithBefore,
-    WithBeforeAndAfter,
-}
-
-impl From<RunMode> for devenv_tasks::TaskRunMode {
-    fn from(mode: RunMode) -> Self {
-        match mode {
-            RunMode::Single => devenv_tasks::TaskRunMode::Single,
-            RunMode::WithAfter => devenv_tasks::TaskRunMode::WithAfter,
-            RunMode::WithBefore => devenv_tasks::TaskRunMode::WithBefore,
-            RunMode::WithBeforeAndAfter => devenv_tasks::TaskRunMode::WithBeforeAndAfter,
-        }
-    }
-}
-
 #[derive(Subcommand)]
 enum Command {
     Run {
         #[clap()]
         roots: Vec<String>,
 
-        #[clap(long, value_enum, default_value_t = RunMode::Single)]
+        #[clap(long, value_enum, default_value_t = RunMode::Single, help = "The execution mode for tasks (affects dependency resolution)")]
         mode: RunMode,
     },
     Export {
@@ -58,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let config = Config {
                 tasks,
                 roots,
-                run_mode: mode.into(),
+                run_mode: mode,
             };
 
             // Pass quiet flag to TasksUi (which will set the env var internally)

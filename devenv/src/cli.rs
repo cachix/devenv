@@ -1,5 +1,6 @@
 use crate::log::LogFormat;
 use clap::{crate_version, Parser, Subcommand};
+use devenv_tasks::RunMode;
 use std::path::PathBuf;
 use tracing::error;
 
@@ -361,32 +362,14 @@ pub enum TasksCommand {
     Run {
         tasks: Vec<String>,
 
-        #[arg(short, long, help = "The mode to use when running tasks (FIX)")]
+        #[arg(
+            short,
+            long,
+            help = "The execution mode for tasks (affects dependency resolution)",
+            value_enum
+        )]
         mode: RunMode,
     },
-}
-
-#[derive(clap::ValueEnum, Debug, Clone, Copy)]
-pub enum RunMode {
-    /// Run only the specified task
-    Single,
-    /// Run the specified task and all tasks after it
-    WithAfter,
-    /// Run the specified task and all tasks before it
-    WithBefore,
-    /// Run the specified task and all tasks before and after it (full dependency graph)
-    WithBeforeAndAfter,
-}
-
-impl From<RunMode> for devenv_tasks::TaskRunMode {
-    fn from(mode: RunMode) -> Self {
-        match mode {
-            RunMode::Single => devenv_tasks::TaskRunMode::Single,
-            RunMode::WithAfter => devenv_tasks::TaskRunMode::WithAfter,
-            RunMode::WithBefore => devenv_tasks::TaskRunMode::WithBefore,
-            RunMode::WithBeforeAndAfter => devenv_tasks::TaskRunMode::WithBeforeAndAfter,
-        }
-    }
 }
 
 #[derive(Subcommand, Clone)]
