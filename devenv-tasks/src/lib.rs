@@ -84,13 +84,13 @@ pub struct TaskConfig {
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, clap::ValueEnum)]
 #[serde(rename_all = "snake_case")]
 pub enum RunMode {
-    #[default]
     /// Run only the specified task without dependencies
     Single,
     /// Run the specified task and all tasks that depend on it (downstream tasks)
     After,
     /// Run all dependency tasks first, then the specified task (upstream tasks)
     Before,
+    #[default]
     /// Run the complete dependency graph (upstream and downstream tasks)
     All,
 }
