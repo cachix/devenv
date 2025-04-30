@@ -847,7 +847,8 @@ impl TasksUi {
                 );
                 if !tasks_status.lines.is_empty() {
                     let output = console::Style::new().apply_to(output);
-                    if last_list_height > 0 {
+                    // Only move cursor and clear screen if not in quiet mode
+                    if !self.quiet && last_list_height > 0 {
                         self.term.move_cursor_up(last_list_height as usize)?;
                         self.term.clear_to_end_of_screen()?;
                     }
