@@ -666,7 +666,12 @@ impl Devenv {
                 .instrument(span)
                 .await?
         };
-        let test_script = test_script[0].to_string_lossy().to_string();
+        let test_script_path = &test_script[0];
+
+        // Add GC root for test script to prevent garbage collection
+        self.nix.add_gc("test", test_script_path).await?;
+
+        let test_script = test_script_path.to_string_lossy().to_string();
 
         let temp_dir = tempfile::TempDir::with_prefix("devenv-test")
             .into_diagnostic()
