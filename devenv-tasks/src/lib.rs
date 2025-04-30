@@ -757,14 +757,27 @@ impl TasksUi {
     }
 
     pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
+        let tasks_clone = Arc::clone(&self.tasks);
+        let handle = tokio::spawn(async move { tasks_clone.run().await });
+
+        // If in quiet mode, just wait for tasks to complete and return
+        if self.quiet {
+            loop {
+                let tasks_status = self.get_tasks_status().await;
+                if tasks_status.pending == 0 && tasks_status.running == 0 {
+                    break;
+                }
+            }
+            let tasks_status = self.get_tasks_status().await;
+            return Ok((tasks_status, handle.await.unwrap()));
+        }
+
         let names = console::style(self.tasks.root_names.join(", ")).bold();
         let is_tty = self.term.is_term();
         self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
 
         // start processing tasks
         let started = std::time::Instant::now();
-        let tasks_clone = Arc::clone(&self.tasks);
-        let handle = tokio::spawn(async move { tasks_clone.run().await });
 
         // start TUI if we're connected to a TTY, otherwise use non-interactive output
         let mut last_list_height: u16 = 0;
@@ -986,11 +999,8 @@ impl TasksUi {
         Ok((tasks_status, handle.await.unwrap()))
     }
 
-    /// Outputs a message to the terminal, respecting the quiet flag
     fn console_write_line(&self, message: &str) -> std::io::Result<()> {
-        if !self.quiet {
-            self.term.write_line(message)?;
-        }
+        self.term.write_line(message)?;
         Ok(())
     }
 }
