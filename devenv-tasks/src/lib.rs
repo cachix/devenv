@@ -66,7 +66,7 @@ impl Display for Error {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
     name: String,
     #[serde(default)]
@@ -81,10 +81,25 @@ pub struct TaskConfig {
     inputs: Option<serde_json::Value>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMode {
+    /// Run only the specified task without dependencies
+    Single,
+    /// Run the specified task and all tasks that depend on it (downstream tasks)
+    After,
+    /// Run all dependency tasks first, then the specified task (upstream tasks)
+    Before,
+    #[default]
+    /// Run the complete dependency graph (upstream and downstream tasks)
+    All,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,
+    pub run_mode: RunMode,
 }
 
 #[derive(Serialize)]
@@ -386,6 +401,7 @@ struct Tasks {
     tasks_order: Vec<NodeIndex>,
     notify_finished: Arc<Notify>,
     notify_ui: Arc<Notify>,
+    run_mode: RunMode,
 }
 
 impl Tasks {
@@ -429,6 +445,7 @@ impl Tasks {
             notify_finished: Arc::new(Notify::new()),
             notify_ui: Arc::new(Notify::new()),
             tasks_order: vec![],
+            run_mode: config.run_mode,
         };
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
@@ -485,17 +502,57 @@ impl Tasks {
             to_visit.push(root_index);
         }
 
-        // Depth-first search including dependencies
-        while let Some(node) = to_visit.pop() {
-            if visited.insert(node) {
-                let new_node = subgraph.add_node(self.graph[node].clone());
-                node_map.insert(node, new_node);
-
-                // Add dependencies to visit
-                for neighbor in self.graph.neighbors_undirected(node) {
-                    to_visit.push(neighbor);
+        // Find nodes to include based on run_mode
+        match self.run_mode {
+            RunMode::Single => {
+                // Only include the root nodes themselves
+                visited = self.roots.iter().cloned().collect();
+            }
+            RunMode::After => {
+                // Include root nodes and all tasks that come after (successor nodes)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add outgoing neighbors (tasks that come after this one)
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Outgoing)
+                        {
+                            to_visit.push(neighbor);
+                        }
+                    }
                 }
             }
+            RunMode::Before => {
+                // Include root nodes and all tasks that come before (predecessor nodes)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add incoming neighbors (tasks that come before this one)
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Incoming)
+                        {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
+            }
+            RunMode::All => {
+                // Include the complete connected subgraph (all dependencies in both directions)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add all connected neighbors in both directions
+                        for neighbor in self.graph.neighbors_undirected(node) {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Create nodes in the subgraph
+        for &node in &visited {
+            let new_node = subgraph.add_node(self.graph[node].clone());
+            node_map.insert(node, new_node);
         }
 
         // Add edges to subgraph
@@ -673,7 +730,7 @@ impl TasksUi {
 
         // Set environment variable for tracing logs
         if quiet {
-            std::env::set_var("DEVENV_TASKS_QUIET", "true");
+            unsafe { std::env::set_var("DEVENV_TASKS_QUIET", "true") };
         }
 
         Ok(Self {
@@ -870,7 +927,7 @@ impl TasksUi {
                 last_list_height = tasks_status.lines.len() as u16 + 1;
             } else {
                 // Non-interactive mode - print only status changes
-                for (_index, task_state) in self.tasks.graph.node_weights().enumerate() {
+                for task_state in self.tasks.graph.node_weights() {
                     let task_state = task_state.read().await;
                     let task_name = &task_state.task.name;
                     let current_status = match &task_state.status {
@@ -1051,9 +1108,10 @@ mod test {
             assert_matches!(
                 Config::try_from(json!({
                     "roots": [],
-                        "tasks": [{
-                            "name": task.to_string()
-                        }]
+                    "run_mode": "all",
+                    "tasks": [{
+                        "name": task.to_string()
+                    }]
                 }))
                 .map(Tasks::new)
                 .unwrap()
@@ -1071,6 +1129,7 @@ mod test {
             assert_matches!(
                 Config::try_from(serde_json::json!({
                     "roots": [],
+                    "run_mode": "all",
                     "tasks": [{
                         "name": task.to_string()
                     }]
@@ -1101,6 +1160,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1", "myapp:task_4"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1145,6 +1205,7 @@ mod test {
         let result = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1161,15 +1222,15 @@ mod test {
             .unwrap(),
         )
         .await;
-        if let Err(Error::CycleDetected(task)) = result {
-            assert_eq!(task, "myapp:task_2".to_string());
+        if let Err(Error::CycleDetected(_)) = result {
+            // The source of the cycle can be either task.
+            Ok(())
         } else {
-            return Err(Error::TaskNotFound(format!(
+            Err(Error::TaskNotFound(format!(
                 "Expected Error::CycleDetected, got {:?}",
                 result
-            )));
+            )))
         }
-        Ok(())
     }
 
     #[tokio::test]
@@ -1190,6 +1251,7 @@ mod test {
             Tasks::new(
                 Config::try_from(json!({
                     "roots": [root],
+                    "run_mode": "all",
                     "tasks": [
                         {
                             "name": "myapp:task_1",
@@ -1232,6 +1294,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1272,6 +1335,7 @@ mod test {
         let result = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1288,6 +1352,106 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_run_mode() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let config = Config::try_from(json!({
+            "roots": ["myapp:task_2"],
+            "run_mode": "single",
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": script1.to_str().unwrap(),
+                },
+                {
+                    "name": "myapp:task_2",
+                    "command": script2.to_str().unwrap(),
+                    "before": ["myapp:task_3"],
+                    "after": ["myapp:task_1"],
+                },
+                {
+                    "name": "myapp:task_3",
+                    "command": script3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap();
+
+        // Single task
+        {
+            let tasks = Tasks::new(config.clone()).await?;
+            tasks.run().await;
+
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name2 == "myapp:task_2"
+            );
+        }
+
+        // Before tasks
+        {
+            let config = Config {
+                run_mode: RunMode::Before,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
+            );
+        }
+
+        // After tasks
+        {
+            let config = Config {
+                run_mode: RunMode::After,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name2 == "myapp:task_2" && name3 == "myapp:task_3"
+            );
+        }
+
+        // All tasks
+        {
+            let config = Config {
+                run_mode: RunMode::All,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_before_tasks() -> Result<(), Error> {
         let script1 = create_basic_script("1")?;
         let script2 = create_basic_script("2")?;
@@ -1296,6 +1460,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1340,6 +1505,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1384,6 +1550,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1430,6 +1597,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_3"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1475,6 +1643,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_2"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1518,6 +1687,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_2"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1573,6 +1743,7 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_3"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1631,6 +1802,7 @@ fi
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1", "myapp:task_2"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",

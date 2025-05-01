@@ -1,5 +1,6 @@
 use crate::log::LogFormat;
 use clap::{crate_version, Parser, Subcommand};
+use devenv_tasks::RunMode;
 use std::path::PathBuf;
 use tracing::error;
 
@@ -358,7 +359,17 @@ pub enum ProcessesCommand {
 #[clap(about = "Run tasks. https://devenv.sh/tasks/")]
 pub enum TasksCommand {
     #[command(about = "Run tasks.")]
-    Run { tasks: Vec<String> },
+    Run {
+        tasks: Vec<String>,
+
+        #[arg(
+            short,
+            long,
+            help = "The execution mode for tasks (affects dependency resolution)",
+            value_enum
+        )]
+        mode: RunMode,
+    },
 }
 
 #[derive(Subcommand, Clone)]

@@ -199,7 +199,7 @@ async fn main() -> Result<()> {
             command: ProcessesCommand::Down {},
         } => devenv.down(),
         Commands::Tasks { command } => match command {
-            TasksCommand::Run { tasks } => devenv.tasks_run(tasks).await,
+            TasksCommand::Run { tasks, mode } => devenv.tasks_run(tasks, mode).await,
         },
         Commands::Inputs { command } => match command {
             InputsCommand::Add { name, url, follows } => devenv.inputs_add(&name, &url, &follows),

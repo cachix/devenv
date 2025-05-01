@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{Config, TaskConfig, TasksUi};
+use devenv_tasks::{Config, RunMode, TaskConfig, TasksUi};
 use std::env;
 
 #[derive(Parser)]
@@ -17,6 +17,9 @@ enum Command {
     Run {
         #[clap()]
         roots: Vec<String>,
+
+        #[clap(long, value_enum, default_value_t = RunMode::Single, help = "The execution mode for tasks (affects dependency resolution)")]
+        mode: RunMode,
     },
     Export {
         #[clap()]
@@ -29,11 +32,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     match args.command {
-        Command::Run { roots } => {
+        Command::Run { roots, mode } => {
             let tasks_json = env::var("DEVENV_TASKS")?;
             let tasks: Vec<TaskConfig> = serde_json::from_str(&tasks_json)?;
 
-            let config = Config { tasks, roots };
+            let config = Config {
+                tasks,
+                roots,
+                run_mode: mode,
+            };
 
             // Pass quiet flag to TasksUi (which will set the env var internally)
             let mut tasks_ui = TasksUi::new(config, args.quiet).await?;
