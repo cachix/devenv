@@ -66,7 +66,7 @@ impl Display for Error {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
     name: String,
     #[serde(default)]
@@ -95,7 +95,7 @@ pub enum RunMode {
     All,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,
@@ -1223,10 +1223,8 @@ mod test {
         )
         .await;
         if let Err(Error::CycleDetected(_)) = result {
+            // The source of the cycle can be either task.
             Ok(())
-            // TODO: we seem to detect the cycle in both tasks, non-deterministically.
-            // Investigate if this is expected, or if something changed.
-            // assert_eq!(task, "myapp:task_2".to_string());
         } else {
             Err(Error::TaskNotFound(format!(
                 "Expected Error::CycleDetected, got {:?}",
@@ -1354,45 +1352,101 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_single_task() -> Result<(), Error> {
+    async fn test_run_mode() -> Result<(), Error> {
         let script1 = create_basic_script("1")?;
         let script2 = create_basic_script("2")?;
         let script3 = create_basic_script("3")?;
 
-        let tasks = Tasks::new(
-            Config::try_from(json!({
-                "roots": ["myapp:task_2"],
-                "run_mode": "single",
-                "tasks": [
-                    {
-                        "name": "myapp:task_1",
-                        "command": script1.to_str().unwrap(),
-                    },
-                    {
-                        "name": "myapp:task_2",
-                        "command": script2.to_str().unwrap(),
-                        "before": ["myapp:task_3"],
-                        "after": ["myapp:task_1"],
-                    },
-                    {
-                        "name": "myapp:task_3",
-                        "command": script3.to_str().unwrap()
-                    }
-                ]
-            }))
-            .unwrap(),
-        )
-        .await?;
-        tasks.run().await;
+        let config = Config::try_from(json!({
+            "roots": ["myapp:task_2"],
+            "run_mode": "single",
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": script1.to_str().unwrap(),
+                },
+                {
+                    "name": "myapp:task_2",
+                    "command": script2.to_str().unwrap(),
+                    "before": ["myapp:task_3"],
+                    "after": ["myapp:task_1"],
+                },
+                {
+                    "name": "myapp:task_3",
+                    "command": script3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap();
 
-        let task_statuses = inspect_tasks(&tasks).await;
-        let task_statuses = task_statuses.as_slice();
-        assert_matches!(
-            task_statuses,
-            [
-                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
-            ] if name2 == "myapp:task_2"
-        );
+        // Single task
+        {
+            let tasks = Tasks::new(config.clone()).await?;
+            tasks.run().await;
+
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name2 == "myapp:task_2"
+            );
+        }
+
+        // Before tasks
+        {
+            let config = Config {
+                run_mode: RunMode::Before,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
+            );
+        }
+
+        // After tasks
+        {
+            let config = Config {
+                run_mode: RunMode::After,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name2 == "myapp:task_2" && name3 == "myapp:task_3"
+            );
+        }
+
+        // All tasks
+        {
+            let config = Config {
+                run_mode: RunMode::All,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+            );
+        }
 
         Ok(())
     }
