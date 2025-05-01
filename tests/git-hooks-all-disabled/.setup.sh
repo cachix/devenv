@@ -1,5 +1,5 @@
 if ! test -f "$DEVENV_ROOT/.pre-commit-config.yaml"; then
-  echo "Test not setup correctly: .pre-commit-config.yaml not found"
+  echo "Test not setup correctly: .pre-commit-config.yaml not found" >&2
   exit 1
 fi
 
