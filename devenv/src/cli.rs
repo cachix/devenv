@@ -366,7 +366,8 @@ pub enum TasksCommand {
             short,
             long,
             help = "The execution mode for tasks (affects dependency resolution)",
-            value_enum
+            value_enum,
+            default_value_t = RunMode::Single
         )]
         mode: RunMode,
     },
