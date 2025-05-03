@@ -9,12 +9,8 @@
     components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
   };
 
-  # git-hooks.hooks = {
-  #   rustfmt.enable = true;
-  #   clippy.enable = true;
-  # };
-
-  packages = lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
-    frameworks.Security
-  ]);
+  git-hooks.hooks = {
+    rustfmt.enable = true;
+    clippy.enable = true;
+  };
 }
