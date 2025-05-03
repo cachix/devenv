@@ -33,6 +33,7 @@ in
   };
 
   enterTest = ''
+    wait_for_processes
     python manage.py test
   '';
 }
