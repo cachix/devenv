@@ -28,7 +28,7 @@
               languages.terraform.enable = true;
               languages.terraform.version = "1.8.4";
 
-              pre-commit.hooks.terraform-format.enable = true;
+              git-hooks.hooks.terraform-format.enable = true;
             }];
           };
         });

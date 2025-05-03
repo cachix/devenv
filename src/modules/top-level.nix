@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
 let
   types = lib.types;
   # Returns a list of all the entries in a folder
@@ -60,6 +60,21 @@ in
       default = "";
     };
 
+    overlays = lib.mkOption {
+      type = types.listOf (types.functionTo (types.functionTo types.attrs));
+      description = "List of overlays to apply to pkgs. Each overlay is a function that takes two arguments: final and prev. Supported by devenv 1.4.2 or newer.";
+      default = [ ];
+      example = lib.literalExpression ''
+        [
+          (final: prev: {
+            hello = prev.hello.overrideAttrs (oldAttrs: {
+              patches = (oldAttrs.patches or []) ++ [ ./hello-fix.patch ];
+            });
+          })
+        ]
+      '';
+    };
+
     packages = lib.mkOption {
       type = types.listOf types.package;
       description = "A list of packages to expose inside the developer environment. Search available packages using ``devenv search NAME``.";
@@ -70,6 +85,33 @@ in
       type = types.package;
       description = "The stdenv to use for the developer environment.";
       default = pkgs.stdenv;
+      defaultText = lib.literalExpression "pkgs.stdenv";
+
+      # Remove the default apple-sdk on macOS.
+      # Allow users to specify an optional SDK in `apple.sdk`.
+      apply = stdenv:
+        if stdenv.isDarwin
+        then
+          stdenv.override
+            (prev: {
+              extraBuildInputs =
+                builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
+            })
+        else stdenv;
+
+    };
+
+    apple = {
+      sdk = lib.mkOption {
+        type = types.nullOr types.package;
+        description = ''
+          The Apple SDK to add to the developer environment on macOS.
+
+          If set to `null`, the system SDK can be used if the shell allows access to external environment variables.
+        '';
+        default = if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null;
+        defaultText = lib.literalExpression "if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null";
+      };
     };
 
     unsetEnvVars = lib.mkOption {
@@ -186,16 +228,11 @@ in
         # - free to create as an unprivileged user across OSes
         default =
           let
-            runtimeEnv = builtins.getEnv "DEVENV_RUNTIME";
-
             hashedRoot = builtins.hashString "sha256" config.devenv.state;
-
             # same length as git's abbreviated commit hashes
             shortHash = builtins.substring 0 7 hashedRoot;
           in
-          if runtimeEnv != ""
-          then runtimeEnv
-          else "${config.devenv.tmpdir}/devenv-${shortHash}";
+          "${config.devenv.tmpdir}/devenv-${shortHash}";
       };
 
       tmpdir = lib.mkOption {
@@ -213,13 +250,13 @@ in
         type = types.package;
         internal = true;
       };
-
     };
   };
 
   imports = [
     ./info.nix
     ./outputs.nix
+    ./files.nix
     ./processes.nix
     ./outputs.nix
     ./scripts.nix
@@ -247,6 +284,12 @@ in
           See https://devenv.sh/guides/using-with-flakes/ how to use it with flakes.
         '';
       }
+      {
+        assertion = config.devenv.flakesIntegration || config.overlays == [ ] || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
+        message = ''
+          Using overlays requires devenv 1.4.2 or higher, while your current version is ${config.devenv.cliVersion}.
+        '';
+      }
     ];
     # use builtins.toPath to normalize path if root is "/" (container)
     devenv.state = builtins.toPath (config.devenv.dotfile + "/state");
@@ -262,10 +305,21 @@ in
     packages = [
       # needed to make sure we can load libs
       pkgs.pkg-config
-    ];
+    ]
+    ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
 
-    enterShell = ''
+    enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
+
+      # override temp directories after "nix develop"
+      for var in TMP TMPDIR TEMP TEMPDIR; do
+        if [ -n "''${!var-}" ]; then
+          export "$var"=${config.devenv.tmpdir}
+        fi
+      done
+      if [ -n "''${NIX_BUILD_TOP-}" ]; then
+        unset NIX_BUILD_TOP
+      fi
 
       # set path to locales on non-NixOS Linux hosts
       ${lib.optionalString (pkgs.stdenv.isLinux && (pkgs.glibcLocalesUtf8 != null)) ''
@@ -274,15 +328,10 @@ in
         fi
       ''}
 
-      # note what environments are active, but make sure we don't repeat them
-      if [[ ! "''${DIRENV_ACTIVE-}" =~ (^|:)"$PWD"(:|$) ]]; then
-        export DIRENV_ACTIVE="$PWD:''${DIRENV_ACTIVE-}"
-      fi
-
-      # devenv helper
+      # direnv helper
       if [ ! type -p direnv &>/dev/null && -f .envrc ]; then
-        echo "You have .envrc but direnv command is not installed."
-        echo "Please install direnv: https://direnv.net/docs/installation.html"
+        echo "An .envrc file was detected, but the direnv command is not installed."
+        echo "To use this configuration, please install direnv: https://direnv.net/docs/installation.html"
       fi
 
       mkdir -p "$DEVENV_STATE"
@@ -296,17 +345,28 @@ in
       ln -snf ${lib.escapeShellArg config.devenv.runtime} ${lib.escapeShellArg config.devenv.dotfile}/run
     '';
 
-    shell = performAssertions (
-      (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-        hardeningDisable = config.hardeningDisable;
-        name = "devenv-shell";
-        packages = config.packages;
-        shellHook = ''
-          ${lib.optionalString config.devenv.debug "set -x"}
-          ${config.enterShell}
-        '';
-      } // config.env)
-    );
+    shell =
+      let
+        # `mkShell` merges `packages` into `nativeBuildInputs`.
+        # This distinction is generally not important for devShells, except when it comes to setup hooks and their run order.
+        # On macOS, the default apple-sdk is added to stdenv via `extraBuildInputs`.
+        # If we don't remove it from stdenv, then its setup hooks will clobber any SDK added to `packages`.
+        isAppleSDK = pkg: builtins.match ".*apple-sdk.*" (pkg.pname or "") != null;
+        partitionedPkgs = builtins.partition isAppleSDK config.packages;
+        buildInputs = partitionedPkgs.right;
+        nativeBuildInputs = partitionedPkgs.wrong;
+      in
+      performAssertions (
+        (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
+          name = "devenv-shell";
+          hardeningDisable = config.hardeningDisable;
+          inherit buildInputs nativeBuildInputs;
+          shellHook = ''
+            ${lib.optionalString config.devenv.debug "set -x"}
+            ${config.enterShell}
+          '';
+        } // config.env)
+      );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
     infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);

@@ -1,42 +1,27 @@
-If you're familiar with the Nix language and ecosystem, `devenv` can be used without the `devenv` CLI by integrating into [Nix Flakes](https://www.tweag.io/blog/2020-05-25-flakes/) using [flake-parts](https://flake.parts).
-
-Using `devenv` configuration in flakes is useful for projects that need to define other Nix flake features in addition to the development shell.
-Additional flake features may include the Nix package for the project or NixOS and Home Manager modules related to the project.
-Using the same lock file for the development shell and other features ensures that everything is based on the same `nixpkgs`.
-
-A Nix flake needs to consist of at least the input declarations from `devenv.yaml`, as well as the `devenv` configuration that you would usually find in `devenv.nix`. `flake.lock` is the lock file for Nix flakes, the equivalent to `devenv.lock`.
+Many experienced Nix users prefer to use [Nix flakes](https://wiki.nixos.org/wiki/Flakes),
+although devenv is considered a superior interface since it's way simpler,
+but lacks integration with existing tooling.
 
 ## Getting started
 
-To quickly set a project up with Nix flakes, use `nix flake init`:
+To quickly set up project with Nix flakes, use `nix flake init`:
 
 ```console
 nix flake init --template github:cachix/devenv#flake-parts
 ```
 
-This will create a `flake.nix` file with `devenv` configuration and a `.envrc` file with direnv configuration.
+This will create a `flake.nix` file with a basic `devenv` configuration and a `.envrc` file for direnv support.
 
-Open the `devenv` shell using:
+## Working with flake shells
 
-```console
-nix develop --no-pure-eval
-```
-
-This will also create a lock file and open a new shell that adheres to the `devenv` configuration contained in `flake.nix`.
-
-!!! note "Why do I need to use the `--no-pure-eval` flag?"
-    devenv needs to know the path to the current working directory to create and manage mutable state.
-    Flakes use "pure evaluation" by default, which prevents devenv from accessing external data, like the `$PWD` environment variable.
-    The `--no-pure-eval` flag relaxes this restriction.
-
-## The `flake.nix` file
+### The `flake.nix` file
 
 Here's an example of a minimal `flake.nix` file that includes `devenv`:
 
 ```nix
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
     devenv.url = "github:cachix/devenv";
   };
 
@@ -68,21 +53,58 @@ Here's an example of a minimal `flake.nix` file that includes `devenv`:
 }
 ```
 
-Here a single shell is defined for all listed [systems](https://flake.parts/options/flake-parts.html#opt-systems). The shell includes a single `devenv` configuration module, under [`devenv.shells`](https://flake.parts/options/devenv.html#opt-perSystem.devenv.shells), named `default`.
+Here a single shell is defined for all listed [systems](https://flake.parts/options/flake-parts.html#opt-systems).
+The shell includes a single `devenv` configuration module, under [`devenv.shells`](https://flake.parts/options/devenv.html#opt-perSystem.devenv.shells), named `default`.
 
-Add your `devenv` configuration (usually in the `devenv.nix` file) to this module. See [`devenv.nix` options](../reference/options.md) for more information about configuration options.
+Add your `devenv` configuration (usually in the `devenv.nix` file) to this module.
+See [`devenv.nix` options](../reference/options.md) for more information about configuration options.
 
-## The direnv extension
 
-To use direnv in your Nix flake project, you'll need [nix-direnv](https://github.com/nix-community/nix-direnv).
+### Entering the shell
 
-To configure direnv, ensure your project has a `.envrc` file that includes the following line:
+Enter the `devenv` shell using:
 
-```text
-use flake . --no-pure-eval
+```console
+nix develop --no-pure-eval
 ```
 
-## Import a devenv module
+This will create a lock file and open a new shell using the `devenv` configuration from your `flake.nix`.
+
+!!! note "Why do I need to use the `--no-pure-eval` flag?"
+    Flakes use "pure evaluation" by default, which prevents devenv from figuring out the environment its running in: for example, querying the working directory.
+    The `--no-pure-eval` flag relaxes this restriction.
+
+    An alternative, and less flexible, workaround is to override the `devenv.root` option to the absolute path to your project directory.
+    This makes the flake non-portable between machines, but does allow the shell to be evaluated in pure mode.
+
+
+### Launching processes, services, and tests
+
+Once in the shell, you can launch [processes and services with `devenv up`](/processes).
+
+```console
+$ devenv up
+17:34:37 system | run.1 started (pid=1046939)
+17:34:37 run.1  | Hello, world!
+17:34:37 system | run.1 stopped (rc=0)
+```
+
+And run [tests with `devenv test`](/tests).
+
+```console
+$ devenv test
+Running tasks     devenv:enterShell
+Succeeded         devenv:git-hooks:install 10ms
+Succeeded         devenv:enterShell         4ms
+2 Succeeded                                 14.75ms
+• Testing ...
+Running tasks     devenv:enterTest
+Succeeded         devenv:git-hooks:run     474ms
+Not implemented   devenv:enterTest
+1 Skipped, 1 Succeeded                      474.62ms
+```
+
+### Import a devenv module
 
 You can import a devenv configuration or module, such as `devenv-foo.nix` into an individual shell as follows.
 
@@ -141,15 +163,31 @@ in {
 }
 ```
 
+### Automated shell switching
+
+You can configure your shell to launch automatically when you enter the project directory.
+
+First, install [nix-direnv](https://github.com/nix-community/nix-direnv).
+
+Then add the following line to your `.envrc`:
+
+```text
+use flake . --no-pure-eval
+```
+
+Allow `direnv` to evaluate the updated `.envrc`:
+
+```console
+direnv allow
+```
+
 ## Multiple shells
 
-Depending on the structure of your project, you may want to define multiple development shells using flakes. We'll take a look at two use cases for multiple shells here: A single project with multiple shells and a project with an external flake.
+Some projects lend themselves to defining multiple development shells. For instance, you may want to define multiple development shells for different subprojects in a monorepo.
+You can do this by defining the various development shells in a central `flake.nix` file in the root of the repository.
 
-### Single project with multiple shells
-
-Some projects lend themselves to defining multiple development shells. For instance, you may want to define multiple development shells for different subprojects in a monorepo. You can do this by defining the various development shells in a central `flake.nix` file in the root of the repository.
-
-The `flake.nix` file outputs multiple [`devShells`](https://flake.parts/options/flake-parts.html#opt-flake.devShells) when you provide multiple [perSystem.devenv.shells](https://flake.parts/options/devenv.html#opt-perSystem.devenv.shells) definitions. For example:
+The `flake.nix` file outputs multiple [`devShells`](https://flake.parts/options/flake-parts.html#opt-flake.devShells) when you provide multiple [perSystem.devenv.shells](https://flake.parts/options/devenv.html#opt-perSystem.devenv.shells) definitions.
+For example:
 
 ```nix
 # inside perSystem = { ... }: {
@@ -204,24 +242,26 @@ this is project A
 (devenv) $ 
 ```
 
-### Projects with an external flake
+## External flakes
 
-If you cannot or don't want to add a `flake.nix` file to your project repository, you can refer to external flakes.
+If you cannot, or don't want to, add a `flake.nix` file to your project's repository, you can use external flakes instead.
 
-You can create a repository with a `flake.nix` file as in the example above. You can now refer to this flake in a different project:
+Create a separate repository with a `flake.nix` file, as in the example above. Then refer to this flake in your project:
 
 ```console
 $ nix develop --no-pure-eval file:/path/to/central/flake#projectA
 this is project A
-(devenv) $ 
+(devenv) $
 ```
 
-You can also add this to the direnv configuration of the project. Just make sure the following line is in `.envrc`:
+You can also add this to the `direnv` configuration of the project. Make sure the following line is in `.envrc`:
 
 ```text
 nix flake --no-pure-eval file:/path/to/central/flake#projectA
 ```
 
-Note that instead of referring to a directory on a local file system that includes the `flake.nix`, like `/path/to/central/flake`, it is also possible to use different references to a flake, for instance, `github:` or `git:`. See [Nix flake references](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html#flake-references) for more information.
+External flakes aren't limited to local paths using `file:`. You can refer to flakes on `github:` and generic `git:` repositories.
+See [Nix flake references](https://nixos.org/manual/nix/stable/command-ref/new-cli/nix3-flake.html#flake-references) for more options.
 
-When using this method to refer to external flakes, it's important to remember that there is no lock file, so there is no certainty about which version of the flake is used. A local project flake file will give you more control over which version of the flake is used.
+When using this method to refer to external flakes, it's important to remember that there is no lock file, so there is no certainty about which version of the flake is used.
+A local project flake file will give you more control over which version of the flake is used.

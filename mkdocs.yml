@@ -4,6 +4,12 @@ site_url: "https://devenv.sh"
 repo_name: "cachix/devenv"
 repo_url: "https://github.com/cachix/devenv"
 edit_uri: "edit/main/docs"
+strict: true
+validation:
+  omitted_files: warn
+  absolute_links: info # Or 'relative_to_docs' - new in MkDocs 1.6
+  unrecognized_links: warn
+  anchors: warn # New in MkDocs 1.6
 extra_css:
   - assets/top-level.css
 theme:
@@ -57,6 +63,7 @@ plugins:
       color: "#425C82"
   rss:
     use_git: false
+    use_material_social_cards: true
     match_path: blog/posts/.*
     date_from_meta:
       as_creation: date

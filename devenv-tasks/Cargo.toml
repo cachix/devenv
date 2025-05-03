@@ -1,12 +1,13 @@
 [package]
 name = "devenv-tasks"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 clap.workspace = true
 console.workspace = true
+eyre.workspace = true
 miette.workspace = true
 petgraph.workspace = true
 serde.workspace = true

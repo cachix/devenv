@@ -30,6 +30,8 @@ Entering shell ...
 jq-1.6
 ```
 
+To add unstable packages see [Common patterns](common-patterns.md).
+
 ## Searching
 
 To search for available packages, use ``devenv search <NAME>``:

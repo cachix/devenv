@@ -1,4 +1,8 @@
-{ pkgs, lib, config, ... }:
+{ pkgs
+, lib
+, config
+, ...
+}:
 
 let
   cfg = config.services.temporal;
@@ -6,17 +10,19 @@ let
 
   databaseFile = config.env.DEVENV_STATE + "/temporal.sqlite";
 
-  commandArgs = [
-    "--log-format=pretty"
-    "--ip=${cfg.ip}"
-    "--port=${toString cfg.port}"
-    "--headless=${lib.boolToString (!cfg.ui.enable)}"
-    "--ui-ip=${cfg.ui.ip}"
-    "--ui-port=${toString cfg.ui.port}"
-  ] ++
-  (lib.forEach cfg.namespaces (namespace: "--namespace=${namespace}")) ++
-  (lib.optionals (!cfg.state.ephemeral) [ "--db-filename=${databaseFile}" ]) ++
-  (lib.mapAttrsToList (name: value: "--sqlite-pragma ${name}=${value}") cfg.state.sqlite-pragma);
+  commandArgs =
+    [
+      "--log-format=pretty"
+      "--ip=${cfg.ip}"
+      "--port=${toString cfg.port}"
+      "--headless=${lib.boolToString (!cfg.ui.enable)}"
+      "--ui-ip=${cfg.ui.ip}"
+      "--ui-port=${toString cfg.ui.port}"
+    ]
+    ++ (lib.forEach cfg.namespaces (namespace: "--namespace=${namespace}"))
+    ++ (lib.optionals (!cfg.state.ephemeral) [ "--db-filename=${databaseFile}" ])
+    ++ (lib.mapAttrsToList (name: value: "--sqlite-pragma ${name}=${value}") cfg.state.sqlite-pragma)
+    ++ (lib.mapAttrsToList (name: value: "--dynamic-config-value ${name}=${value}") cfg.dynamicConfig);
 in
 {
   options.services.temporal = {
@@ -100,6 +106,16 @@ in
       };
       default = { };
       description = "State configuration.";
+    };
+
+    dynamicConfig = lib.mkOption {
+      type = types.attrsOf types.str;
+      default = { };
+      description = "Dynamic configuration for the Temporal server.";
+      example = {
+        "frontend.rps" = "2500";
+        "frontend.namespacerps" = "2500";
+      };
     };
   };
 

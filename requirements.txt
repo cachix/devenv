@@ -4,6 +4,8 @@ babel==2.16.0
     # via mkdocs-material
 bracex==2.5
     # via wcmatch
+cachecontrol==0.14.2
+    # via mkdocs-rss-plugin
 cairocffi==1.7.1
     # via cairosvg
 cairosvg==2.7.1
@@ -22,11 +24,13 @@ cssselect2==0.7.0
     # via cairosvg
 defusedxml==0.7.1
     # via cairosvg
+filelock==3.18.0
+    # via cachecontrol
 ghp-import==2.1.0
     # via mkdocs
-gitdb==4.0.11
+gitdb==4.0.12
     # via gitpython
-gitpython==3.1.43
+gitpython==3.1.44
     # via mkdocs-rss-plugin
 idna==3.7
     # via requests
@@ -49,25 +53,33 @@ mergedeep==1.3.4
     #   mkdocs-get-deps
 mkdocs==1.6.0
     # via
+    #   -r requirements.in
     #   mkdocs-awesome-pages-plugin
     #   mkdocs-include-markdown-plugin
     #   mkdocs-markdownextradata-plugin
     #   mkdocs-material
     #   mkdocs-rss-plugin
 mkdocs-awesome-pages-plugin==2.9.3
+    # via -r requirements.in
 mkdocs-get-deps==0.2.0
     # via mkdocs
 mkdocs-include-markdown-plugin==6.2.1
+    # via -r requirements.in
 mkdocs-markdownextradata-plugin==0.2.5
+    # via -r requirements.in
 mkdocs-material==9.5.31
+    # via -r requirements.in
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
-mkdocs-rss-plugin==1.13.1
+mkdocs-rss-plugin==1.16.0
+    # via -r requirements.in
+msgpack==1.1.0
+    # via cachecontrol
 natsort==8.4.0
     # via mkdocs-awesome-pages-plugin
 packaging==24.1
     # via mkdocs
-paginate==0.5.6
+paginate==0.5.7
     # via mkdocs-material
 pathspec==0.12.1
     # via mkdocs
@@ -75,13 +87,13 @@ pillow==10.4.0
     # via
     #   cairosvg
     #   mkdocs-material
-platformdirs==4.2.2
+platformdirs==4.3.6
     # via mkdocs-get-deps
 pycparser==2.22
     # via cffi
 pygments==2.18.0
     # via mkdocs-material
-pymdown-extensions==10.9
+pymdown-extensions==10.12
     # via mkdocs-material
 python-dateutil==2.9.0.post0
     # via ghp-import
@@ -94,23 +106,24 @@ pyyaml==6.0.2
     #   pyyaml-env-tag
 pyyaml-env-tag==0.1
     # via mkdocs
-regex==2024.7.24
+regex==2024.11.6
     # via mkdocs-material
 requests==2.32.3
     # via
+    #   cachecontrol
     #   mkdocs-material
     #   mkdocs-rss-plugin
 six==1.16.0
     # via python-dateutil
-smmap==5.0.1
+smmap==5.0.2
     # via gitdb
-tinycss2==1.3.0
+tinycss2==1.4.0
     # via
     #   cairosvg
     #   cssselect2
-urllib3==2.2.2
+urllib3==2.2.3
     # via requests
-watchdog==4.0.1
+watchdog==6.0.0
     # via mkdocs
 wcmatch==8.5.2
     # via

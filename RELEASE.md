@@ -1,12 +1,12 @@
-- bump version in devenv/Cargo.toml
-- `cargo build`
-- bump version in package.nix
-- git commit
-- git tag
-- git push --tags
-- create a release on github
+### Release on GitHub
 
-# Once nixpkgs has been updated
+- Update `devenv_nix` if necessary and run all tests
+- Tag a new release using https://github.com/cachix/devenv/releases/new
 
-- write a blog post
-- src/modules/latest-version
+### Release on nixpkgs
+
+- Sync the `package.nix` in nixpkgs with [./package.nix](./package.nix) and bump `devenv_nix` if necessary
+
+### After nixpkgs release
+
+- Write a blog post

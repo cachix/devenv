@@ -18,11 +18,12 @@ let
           type = types.package;
           description = "The package to use to run the script.";
           default = pkgs.bash;
+          defaultText = lib.literalExpression "pkgs.bash";
         };
         binary = lib.mkOption {
-          type = types.str;
-          description = "Override the binary name if it doesn't match package name";
-          default = config.package.pname;
+          type = types.nullOr types.str;
+          description = "Override the binary name from the default `package.meta.mainProgram`";
+          default = null;
         };
         description = lib.mkOption {
           type = types.str;
@@ -36,9 +37,15 @@ let
       };
 
       config.scriptPackage =
+        let
+          binary =
+            if config.binary != null
+            then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+            else pkgs.lib.getExe config.package;
+        in
         lib.hiPrioSet (
           pkgs.writeScriptBin name ''
-            #!${pkgs.lib.getBin config.package}/bin/${config.binary}
+            #!${binary}
             ${config.exec}
           ''
         );

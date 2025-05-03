@@ -11,7 +11,7 @@
 # [devenv.sh](https://devenv.sh) - Fast, Declarative, Reproducible, and Composable Developer Environments
 
 [![Built with Nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
-[![Discord channel](https://img.shields.io/discord/1036369714731036712?color=7389D8&label=discord&logo=discord&logoColor=ffffff)](https://discord.gg/naMgvexb6q)
+[![Discord channel](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2FnaMgvexb6q%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord%20users&color=green&style=flat)](https://discord.gg/naMgvexb6q)
 ![License: Apache 2.0](https://img.shields.io/github/license/cachix/devenv)
 [![Version](https://img.shields.io/github/v/release/cachix/devenv?color=green&label=version&sort=semver)](https://github.com/cachix/devenv/releases)
 [![CI](https://github.com/cachix/devenv/actions/workflows/buildtest.yml/badge.svg)](https://github.com/cachix/devenv/actions/workflows/buildtest.yml?branch=main)
@@ -47,8 +47,8 @@ Running ``devenv init`` generates ``devenv.nix``:
   # https://devenv.sh/services/
   services.postgres.enable = true;
 
-  # https://devenv.sh/pre-commit-hooks/
-  pre-commit.hooks.shellcheck.enable = true;
+  # https://devenv.sh/git-hooks/
+  git-hooks.hooks.shellcheck.enable = true;
 
   # https://devenv.sh/processes/
   processes.ping.exec = "ping localhost";
@@ -62,47 +62,112 @@ And ``devenv shell`` activates the environment.
 
 ```
 $ devenv
-https://devenv.sh 1.0.1: Fast, Declarative, Reproducible, and Composable Developer Environments
+https://devenv.sh 1.6.0: Fast, Declarative, Reproducible, and Composable Developer Environments
 
-Usage: devenv [OPTIONS] <COMMAND>
+Usage: devenv [OPTIONS] [COMMAND]
 
 Commands:
   init       Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.
+  generate   Generate devenv.yaml and devenv.nix using AI
   shell      Activate the developer environment. https://devenv.sh/basics/
   update     Update devenv.lock from devenv.yaml inputs. http://devenv.sh/inputs/
   search     Search for packages and options in nixpkgs. https://devenv.sh/packages/#searching-for-a-file
   info       Print information about this developer environment.
   up         Start processes in the foreground. https://devenv.sh/processes/
-  processes  Start or stop processes.
+  processes  Start or stop processes. https://devenv.sh/processes/
+  tasks      Run tasks. https://devenv.sh/tasks/
   test       Run tests. http://devenv.sh/tests/
   container  Build, copy, or run a container. https://devenv.sh/containers/
   inputs     Add an input to devenv.yaml. https://devenv.sh/inputs/
-  gc         Deletes previous shell generations. See http://devenv.sh/garbage-collection
+  repl       Launch an interactive environment for inspecting the devenv configuration.
+  gc         Delete previous shell generations. See https://devenv.sh/garbage-collection
   build      Build any attribute in devenv.nix.
+  direnvrc   Print a direnvrc that adds devenv support to direnv. See https://devenv.sh/automatic-shell-activation.
   version    Print the version of devenv.
   help       Print this message or the help of the given subcommand(s)
 
 Options:
+  -V, --version
+          Print version information and exit
+
   -v, --verbose
-          Enable debug log level.
+          Enable additional debug logs.
+
+  -q, --quiet
+          Silence all logs
+
+      --log-format <LOG_FORMAT>
+          Configure the output format of the logs.
+
+          [default: cli]
+
+          Possible values:
+          - cli:            The default human-readable log format used in the CLI
+          - tracing-full:   A verbose structured log format used for debugging
+          - tracing-pretty: A pretty human-readable log format used for debugging
+
   -j, --max-jobs <MAX_JOBS>
-          Maximum number of Nix builds at any time. [default: 8]
-  -j, --cores <CORES>
-          Maximum number CPU cores being used by a single build.. [default: 2]
+          Maximum number of Nix builds at any time.
+
+          [default: 8]
+
+  -u, --cores <CORES>
+          Maximum number CPU cores being used by a single build.
+
+          [default: 2]
+
   -s, --system <SYSTEM>
           [default: x86_64-linux]
+
   -i, --impure
           Relax the hermeticity of the environment.
+
+      --no-eval-cache
+          Disable caching of Nix evaluation results.
+
+      --refresh-eval-cache
+          Force a refresh of the Nix evaluation cache.
+
+      --offline
+          Disable substituters and consider all previously downloaded files up-to-date.
+
   -c, --clean [<CLEAN>...]
           Ignore existing environment variables when entering the shell. Pass a list of comma-separated environment variables to let through.
-  -d, --nix-debugger
-          Enter Nix debugger on failure.
-  -n, --nix-option <NIX_OPTION> <NIX_OPTION>
-          Pass additional options to nix commands, see `man nix.conf` for full list.
-  -o, --override-input <OVERRIDE_INPUT> <OVERRIDE_INPUT>
+
+      --nix-debugger
+          Enter the Nix debugger on failure.
+
+  -n, --nix-option <NAME> <VALUE>
+          Pass additional options to nix commands.
+
+          These options are passed directly to Nix using the --option flag.
+          See `man nix.conf` for the full list of available options.
+
+          Examples:
+            --nix-option sandbox false
+            --nix-option keep-outputs true
+            --nix-option system x86_64-darwin
+
+  -o, --override-input <NAME> <URI>
           Override inputs in devenv.yaml.
+
+          Examples:
+            --override-input nixpkgs github:NixOS/nixpkgs/nixos-unstable
+            --override-input nixpkgs path:/path/to/local/nixpkgs
+
+  -O, --option <OPTION> <VALUE>
+          Override configuration options with typed values.
+
+          OPTION must include a type: <attribute>:<type>
+          Supported types: string, int, float, bool, path
+
+          Examples:
+            --option languages.rust.channel:string beta
+            --option services.postgres.enable:bool true
+            --option languages.python.version:string 3.10
+
   -h, --help
-          Print help
+          Print help (see a summary with '-h')
 ```
 
 ## Documentation

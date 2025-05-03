@@ -81,7 +81,11 @@ in
 
     process.manager.args = {
       "config" = cfg.configFile;
+      "disable-dotenv" = true;
       "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
+      # Prevent the TUI from immediately closing if all processes fail.
+      # Improves the UX by letting users inspect the logs.
+      "keep-project" = cfg.tui.enable;
       "unix-socket" =
         if cfg.unixSocket.enable
         then cfg.unixSocket.path
@@ -90,13 +94,22 @@ in
     };
 
     process.manager.command = lib.mkDefault ''
+      ${if cfg.unixSocket.enable then ''
+      # Check if process-compose server is already running on the socket
+      if [ -S "${cfg.unixSocket.path}" ]; then
+        echo "Attaching to existing process-compose server at ${cfg.unixSocket.path}"
+        exec ${cfg.package}/bin/process-compose --unix-socket "${cfg.unixSocket.path}" attach "$@"
+      fi
+      '' else ""}
+
+      # Start a new process-compose server if none exists
       ${cfg.package}/bin/process-compose \
         ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
         -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
         up "$@" &
     '';
 
-    packages = [ cfg.package ] ++ lib.optional cfg.tui.enable pkgs.ncurses;
+    packages = [ cfg.package ];
 
     process.managers.process-compose = {
       configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);

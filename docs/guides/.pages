@@ -1,3 +1,4 @@
 nav:
-   - Using With Flakes: using-with-flakes.md
-   - Using With flake.parts: using-with-flake-parts.md
+   - Profiles: profiles.md
+   - Using with Flakes: using-with-flakes.md
+   - Using with flake.parts: using-with-flake-parts.md

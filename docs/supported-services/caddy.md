@@ -179,7 +179,7 @@ string
 
 
 
-Use saved config, if any (and prefer over configuration passed with [` caddy.config `](\#caddyconfig))\.
+Use saved config, if any (and prefer over configuration passed with [` caddy.config `](\#servicescaddyconfig))\.
 
 
 

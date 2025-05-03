@@ -4,27 +4,27 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
 
 1. Add `nixpkgs-unstable` input to `devenv.yaml`:
 
-```yaml
-inputs:
-  nixpkgs:
-    url: github:cachix/devenv-nixpkgs/rolling
-  nixpkgs-unstable:
-    url: github:nixos/nixpkgs/nixpkgs-unstable
-```
+   ```yaml
+   inputs:
+     nixpkgs:
+       url: github:cachix/devenv-nixpkgs/rolling
+     nixpkgs-unstable:
+       url: github:nixos/nixpkgs/nixpkgs-unstable
+   ```
 
 2. Use the package in your `devenv.nix`:
 
-```nix
-{ pkgs, inputs, ... }:
-let
-  pkgs-unstable = import inputs.nixpkgs-unstable { system = pkgs.stdenv.system; };
-in
-{
-  packages = [
-    pkgs-unstable.elmPackages.elm-test-rs
-  ];
-}
-```
+   ```nix
+   { pkgs, inputs, ... }:
+   let
+     pkgs-unstable = import inputs.nixpkgs-unstable { system = pkgs.stdenv.system; };
+   in
+   {
+     packages = [
+       pkgs-unstable.elmPackages.elm-test-rs
+     ];
+   }
+   ```
 
 ## Nix patterns
 
@@ -93,7 +93,7 @@ A few of the most commonly used functions are:
   ] ++ lib.optionals pkgs.stdenv.isLinux [
     pkgs.inotify-tools
   ] ++ lib.optionals pkgs.stdenv.isDarwin [
-    pkgs.darwin.apple_sdk.frameworks.Security
+    pkgs.libiconv
   ];
 }
 ```
@@ -103,41 +103,61 @@ A few of the most commonly used functions are:
 
 ### Link against macOS system frameworks
 
-When compiling for macOS, you may need to link against system frameworks, like CoreFoundation.
-These frameworks can be found in `pkgs.darwin.apple_sdk.frameworks`.
+When compiling for macOS, you may need to link against system frameworks, like CoreFoundation and Security.
+These frameworks are shipped in a versioned SDK bundle available as `pkgs.apple-sdk`.
 
-Add the frameworks you need to `packages` and Nix will configure the shell with necessary linker flags.
+You can use the [`apple.sdk`](reference/options.md#applesdk) option to override the default SDK or remove it completely.
 
 ```nix
 { pkgs, lib, ... }:
 
 {
-  packages = [
-    # Other dependencies
-  ] ++ lib.optionals pkgs.stdenv.isDarwin [
-    pkgs.darwin.apple_sdk.frameworks.CoreFoundation
-    pkgs.darwin.apple_sdk.frameworks.Security
-    pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
-  ];
+  # Use a different SDK version.
+  apple.sdk =
+    if pkgs.stdenv.isDarwin
+    then pkgs.apple-sdk_15
+    else null;
+
+  # Remove the default Apple SDK.
+  # This allows you to use the system SDK at the cost of reducing reproducibility.
+  # apple.sdk = null;
 }
 ```
 
-### Run x86 binaries on ARM Macs via Rosetta
+!!! note "Legacy framework pattern"
 
-It's possible to tell Nix to use Intel packages on macOS machines running on ARM.
+    You previously had to add each framework to `packages` individually. For example:
+
+    ```nix
+    { pkgs, lib, ... }:
+
+    {
+      packages = lib.optionals pkgs.stdenv.isDarwin [
+        pkgs.darwin.apple_sdk.frameworks.CoreFoundation
+      ];
+    }
+    ```
+
+    This is no longer necessary. Frameworks are bundled together in a single versioned SDK.
+
+
+### Run x86 binaries on Apple Silicon with Rosetta
+
+Rosetta 2 enables a Mac with Apple Silicon to transparently run x86 binaries.
+
+Nixpkgs provides a convenient set of x86_64-darwin packages.
+This can come in handy for packages that don't yet have an aarch64-compatible build or are temporarily broken on nixpkgs.
 
 ```nix
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 let
-  rosettaPkgs =
-    if pkgs.stdenv.isDarwin && pkgs.stdenv.isAarch64
-    then pkgs.pkgsx86_64Darwin
-    else pkgs;
+  rosettaPkgs = pkgs.pkgsx86_64Darwin;
 in {
   packages = [
     pkgs.git
-    rosettaPkgs.vim
+  ] ++ lib.optionals (pkgs.stdenv.isDarwin && pkgs.stdenv.isAarch64) [
+    rosettaPkgs.dmd
   ];
 }
 ```

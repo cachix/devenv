@@ -13,6 +13,14 @@ in
       default = pkgs.typst;
       defaultText = lib.literalExpression "pkgs.typst";
     };
+
+    fontPaths = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      description = "Directories to be searched for fonts.";
+      default = [ ];
+      defaultText = lib.literalExpression "[]";
+      example = lib.literalExpression ''[ "''${pkgs.roboto}/share/fonts/truetype" ]'';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -21,5 +29,7 @@ in
       pkgs.tinymist # lsp
       pkgs.typstyle # formatter
     ];
+
+    env.TYPST_FONT_PATHS = lib.concatStringsSep ":" cfg.fontPaths;
   };
 }

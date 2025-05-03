@@ -4,11 +4,14 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
     let
       devenvType = (devenvFlake.lib.mkEval {
         inherit inputs pkgs;
-        modules = [{
-          config = {
-            # Add flake-parts-specific config here if necessary
-          };
-        }] ++ config.devenv.modules;
+        modules = [
+          ({ config, ... }: {
+            config = {
+              _module.args.pkgs = pkgs.appendOverlays config.overlays;
+              # Add flake-parts-specific config here if necessary
+            };
+          })
+        ] ++ config.devenv.modules;
       }).type;
 
       shellPrefix = shellName: if shellName == "default" then "" else "${shellName}-";
@@ -21,7 +24,9 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
           Extra modules to import into every shell.
           Allows flakeModules to add options to devenv for example.
         '';
-        default = [ ];
+        default = [
+          devenvFlake.flakeModules.readDevenvRoot
+        ];
       };
       options.devenv.shells = lib.mkOption {
         type = lib.types.lazyAttrsOf devenvType;
@@ -57,6 +62,7 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
               devenv.containers
             ) // {
               "${shellPrefix shellName}devenv-up" = devenv.procfileScript;
+              "${shellPrefix shellName}devenv-test" = devenv.test;
             }
           )
           config.devenv.shells;

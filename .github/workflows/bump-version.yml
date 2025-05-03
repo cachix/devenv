@@ -1,0 +1,36 @@
+name: "Bump Version on Tag"
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: cachix/install-nix-action@v26
+      - uses: cachix/cachix-action@v14
+        with:
+          name: devenv
+      - name: Install devenv.sh
+        run: nix profile install nixpkgs#devenv
+
+      - name: Bump version
+        run: devenv shell -- cargo set-version -p devenv --bump patch
+
+      - name: Get new version
+        id: get-version
+        run: echo "VERSION=$(nix eval --raw --expr '(builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version' --impure)" >> $GITHUB_OUTPUT
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Next release is ${{ steps.get-version.outputs.VERSION }}"
+          file_pattern: "Cargo.toml Cargo.lock"

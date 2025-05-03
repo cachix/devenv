@@ -88,6 +88,8 @@ The available extensions are:
  - jsonb_deep_sum
  - lantern
  - periods
+ - pg-gvm
+ - pg-semver
  - pg_auto_failover
  - pg_bigm
  - pg_cron
@@ -110,6 +112,7 @@ The available extensions are:
  - pg_uuidv7
  - pgaudit
  - pgjwt
+ - pgmq
  - pgroonga
  - pgrouting
  - pgsodium
@@ -121,10 +124,11 @@ The available extensions are:
  - plr
  - plv8
  - postgis
- - promscale_extension
  - repmgr
  - rum
  - smlar
+ - sqlite_fdw
+ - system_stats
  - tds_fdw
  - temporal_tables
  - timescaledb
@@ -358,7 +362,19 @@ CREATE ROLE bar;
 
 
 
-Listen address
+A comma-separated list of TCP/IP address(es) on which the server should listen for connections\.
+
+By default, the server only accepts connections over unix sockets\.
+
+This option is parsed to set the ` PGHOST ` environment variable\.
+
+Special values:
+
+ - '\*' to listen on all available network interfaces\.
+ - '0\.0\.0\.0' to listen on all available IPv4 network interfaces\.
+ - '::' to listen on all available IPv6 network interfaces\.
+ - 'localhost' to listen only on the loopback interface\.
+ - '' (empty string) disables TCP/IP connections and listens only on the unix socket\.
 
 
 

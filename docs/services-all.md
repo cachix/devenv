@@ -11,6 +11,7 @@
   services.elasticsearch.enable = true;
   services.httpbin.enable = true;
   services.influxdb.enable = true;
+  services.kafka.enable = true;
   services.mailhog.enable = true;
   services.mailpit.enable = true;
   services.meilisearch.enable = true;
@@ -22,10 +23,13 @@
   services.opensearch.enable = true;
   services.opentelemetry-collector.enable = true;
   services.postgres.enable = true;
+  services.prometheus.enable = true;
   services.rabbitmq.enable = true;
   services.redis.enable = true;
   services.sqld.enable = true;
+  services.tailscale.enable = true;
   services.temporal.enable = true;
+  services.tideways.enable = true;
   services.trafficserver.enable = true;
   services.typesense.enable = true;
   services.varnish.enable = true;

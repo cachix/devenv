@@ -1,27 +1,41 @@
-use super::command::FilePath;
+use super::command::{EnvInputDesc, FileInputDesc, Input};
 use sqlx::sqlite::{Sqlite, SqliteConnectOptions, SqliteJournalMode, SqliteRow, SqliteSynchronous};
-use sqlx::{Acquire, Row, SqlitePool};
+use sqlx::{migrate::MigrateDatabase, Acquire, Row, SqlitePool};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::error;
 
 pub async fn setup_db<P: AsRef<str>>(database_url: P) -> Result<SqlitePool, sqlx::Error> {
-    let conn_options = SqliteConnectOptions::from_str(database_url.as_ref())?
+    let mut pool = SqlitePool::connect_with(connection_options(&database_url)?).await?;
+
+    // Attempt to run the migrations
+    if let Err(err) = sqlx::migrate!().run(&pool).await {
+        error!(error = %err, "Failed to migrate the Nix evaluation cache database. Attempting to recreate the database.");
+
+        // Close the existing connection
+        pool.close().await;
+        // Delete the database
+        Sqlite::drop_database(database_url.as_ref()).await?;
+        // Recreate the database and connection pool
+        pool = SqlitePool::connect_with(connection_options(&database_url)?).await?;
+        sqlx::migrate!().run(&pool).await?;
+    }
+
+    Ok(pool)
+}
+
+fn connection_options<P: AsRef<str>>(database_url: P) -> Result<SqliteConnectOptions, sqlx::Error> {
+    Ok(SqliteConnectOptions::from_str(database_url.as_ref())?
         .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
         .pragma("mmap_size", "134217728")
         .pragma("journal_size_limit", "27103364")
         .pragma("cache_size", "2000")
-        .create_if_missing(true);
-
-    let pool = SqlitePool::connect_with(conn_options).await?;
-
-    sqlx::migrate!("./migrations").run(&pool).await?;
-
-    Ok(pool)
+        .create_if_missing(true))
 }
 
 /// The row type for the `cached_cmd` table.
@@ -48,14 +62,14 @@ impl sqlx::FromRow<'_, SqliteRow> for CommandRow {
         let cmd_hash: String = row.get("cmd_hash");
         let input_hash: String = row.get("input_hash");
         let output: Vec<u8> = row.get("output");
-        let updated_at: u64 = row.get("updated_at");
+        let updated_at: i64 = row.get("updated_at");
         Ok(Self {
             id,
             raw,
             cmd_hash,
             input_hash,
             output,
-            updated_at: UNIX_EPOCH + std::time::Duration::from_secs(updated_at),
+            updated_at: system_time_from_unix_seconds(updated_at),
         })
     }
 }
@@ -83,14 +97,14 @@ where
     Ok(record)
 }
 
-pub async fn insert_command_with_files<'a, A>(
+pub async fn insert_command_with_inputs<'a, A>(
     conn: A,
     raw_cmd: &str,
     cmd_hash: &str,
     input_hash: &str,
     output: &[u8],
-    paths: &[FilePath],
-) -> Result<(i64, Vec<i64>), sqlx::Error>
+    inputs: &[Input],
+) -> Result<(i64, Vec<i64>, Vec<i64>), sqlx::Error>
 where
     A: Acquire<'a, Database = Sqlite>,
 {
@@ -99,11 +113,16 @@ where
 
     delete_command(&mut tx, cmd_hash).await?;
     let command_id = insert_command(&mut tx, raw_cmd, cmd_hash, input_hash, output).await?;
-    let file_ids = insert_files(&mut tx, paths, command_id).await?;
+
+    // Partition and extract file and env inputs
+    let (file_inputs, env_inputs) = Input::partition_refs(inputs);
+
+    let file_ids = insert_file_inputs(&mut tx, &file_inputs, command_id).await?;
+    let env_ids = insert_env_inputs(&mut tx, &env_inputs, command_id).await?;
 
     tx.commit().await?;
 
-    Ok((command_id, file_ids))
+    Ok((command_id, file_ids, env_ids))
 }
 
 async fn insert_command<'a, A>(
@@ -118,21 +137,22 @@ where
 {
     let mut conn = conn.acquire().await?;
 
-    let record = sqlx::query!(
+    let record = sqlx::query(
         r#"
         INSERT INTO cached_cmd (raw, cmd_hash, input_hash, output)
         VALUES (?, ?, ?, ?)
         RETURNING id
         "#,
-        raw_cmd,
-        cmd_hash,
-        input_hash,
-        output
     )
+    .bind(raw_cmd)
+    .bind(cmd_hash)
+    .bind(input_hash)
+    .bind(output)
     .fetch_one(&mut *conn)
     .await?;
 
-    Ok(record.id)
+    let id: i64 = record.get(0);
+    Ok(id)
 }
 
 async fn delete_command<'a, A>(conn: A, cmd_hash: &str) -> Result<(), sqlx::Error>
@@ -141,13 +161,13 @@ where
 {
     let mut conn = conn.acquire().await?;
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         DELETE FROM cached_cmd
         WHERE cmd_hash = ?
         "#,
-        cmd_hash
     )
+    .bind(cmd_hash)
     .execute(&mut *conn)
     .await?;
 
@@ -159,24 +179,26 @@ where
     A: Acquire<'a, Database = Sqlite>,
 {
     let mut conn = conn.acquire().await?;
+    let now = system_time_to_unix_seconds(SystemTime::now());
 
-    sqlx::query!(
+    sqlx::query(
         r#"
         UPDATE cached_cmd
-        SET updated_at = strftime('%s', 'now')
+        SET updated_at = ?
         WHERE id = ?
         "#,
-        id
     )
+    .bind(now)
+    .bind(id)
     .execute(&mut *conn)
     .await?;
 
     Ok(())
 }
 
-async fn insert_files<'a, A>(
+async fn insert_file_inputs<'a, A>(
     conn: A,
-    paths: &[FilePath],
+    file_inputs: &[&FileInputDesc],
     command_id: i64,
 ) -> Result<Vec<i64>, sqlx::Error>
 where
@@ -184,31 +206,33 @@ where
 {
     let mut conn = conn.acquire().await?;
 
-    let file_path_query = r#"
-        INSERT INTO file_path (path, is_directory, content_hash, modified_at)
+    let insert_file_input = r#"
+        INSERT INTO file_input (path, is_directory, content_hash, modified_at)
         VALUES (?, ?, ?, ?)
         ON CONFLICT (path) DO UPDATE
         SET content_hash = excluded.content_hash,
             is_directory = excluded.is_directory,
             modified_at = excluded.modified_at,
-            updated_at = strftime('%s', 'now')
+            updated_at = ?
         RETURNING id
     "#;
 
-    let mut file_ids = Vec::with_capacity(paths.len());
-    for FilePath {
+    let now = system_time_to_unix_seconds(SystemTime::now());
+    let mut file_ids = Vec::with_capacity(file_inputs.len());
+    for FileInputDesc {
         path,
         is_directory,
         content_hash,
         modified_at,
-    } in paths
+    } in file_inputs
     {
-        let modified_at = modified_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        let id: i64 = sqlx::query(file_path_query)
+        let modified_at = system_time_to_unix_seconds(*modified_at);
+        let id: i64 = sqlx::query(insert_file_input)
             .bind(path.to_path_buf().into_os_string().as_bytes())
             .bind(is_directory)
-            .bind(content_hash)
+            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
             .bind(modified_at)
+            .bind(now)
             .fetch_one(&mut *conn)
             .await?
             .get(0);
@@ -216,9 +240,9 @@ where
     }
 
     let cmd_input_path_query = r#"
-        INSERT INTO cmd_input_path (cached_cmd_id, file_path_id)
+        INSERT INTO cmd_input_path (cached_cmd_id, file_input_id)
         VALUES (?, ?)
-        ON CONFLICT (cached_cmd_id, file_path_id) DO NOTHING
+        ON CONFLICT (cached_cmd_id, file_input_id) DO NOTHING
     "#;
 
     for &file_id in &file_ids {
@@ -231,11 +255,48 @@ where
     Ok(file_ids)
 }
 
-/// The row type for the `file_path` table.
+async fn insert_env_inputs<'a, A>(
+    conn: A,
+    env_inputs: &[&EnvInputDesc],
+    command_id: i64,
+) -> Result<Vec<i64>, sqlx::Error>
+where
+    A: Acquire<'a, Database = Sqlite>,
+{
+    let mut conn = conn.acquire().await?;
+
+    let insert_env_input = r#"
+        INSERT INTO env_input (cached_cmd_id, name, content_hash)
+        VALUES (?, ?, ?)
+        ON CONFLICT (cached_cmd_id, name) DO UPDATE
+        SET content_hash = excluded.content_hash,
+            updated_at = ?
+        RETURNING id
+    "#;
+
+    let now = system_time_to_unix_seconds(SystemTime::now());
+    let mut env_input_ids = Vec::with_capacity(env_inputs.len());
+    for EnvInputDesc { name, content_hash } in env_inputs {
+        let id: i64 = sqlx::query(insert_env_input)
+            .bind(command_id)
+            .bind(name)
+            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
+            .bind(now)
+            .fetch_one(&mut *conn)
+            .await?
+            .get(0);
+        env_input_ids.push(id);
+    }
+
+    Ok(env_input_ids)
+}
+
+/// The row type for the `file_input` table.
 #[derive(Clone, Debug, PartialEq)]
-pub struct FilePathRow {
+pub struct FileInputRow {
     /// A path
     pub path: PathBuf,
+    /// Whether the path is a directory
     pub is_directory: bool,
     /// The hash of the file's content
     pub content_hash: String,
@@ -245,32 +306,46 @@ pub struct FilePathRow {
     pub updated_at: SystemTime,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for FilePathRow {
+impl sqlx::FromRow<'_, SqliteRow> for FileInputRow {
     fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
         let path: &[u8] = row.get("path");
         let is_directory: bool = row.get("is_directory");
         let content_hash: String = row.get("content_hash");
-        let modified_at: u64 = row.get("modified_at");
-        let updated_at: u64 = row.get("updated_at");
+        let modified_at: i64 = row.get("modified_at");
+        let updated_at: i64 = row.get("updated_at");
         Ok(Self {
             path: PathBuf::from(OsStr::from_bytes(path)),
             is_directory,
             content_hash,
-            modified_at: UNIX_EPOCH + std::time::Duration::from_secs(modified_at),
-            updated_at: UNIX_EPOCH + std::time::Duration::from_secs(updated_at),
+            modified_at: system_time_from_unix_seconds(modified_at),
+            updated_at: system_time_from_unix_seconds(updated_at),
         })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnvInputRow {
+    pub name: String,
+    pub content_hash: String,
+}
+
+impl sqlx::FromRow<'_, SqliteRow> for EnvInputRow {
+    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+        let name: String = row.get("name");
+        let content_hash: String = row.get("content_hash");
+        Ok(Self { name, content_hash })
     }
 }
 
 pub async fn get_files_by_command_id(
     pool: &SqlitePool,
     command_id: i64,
-) -> Result<Vec<FilePathRow>, sqlx::Error> {
+) -> Result<Vec<FileInputRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
-            SELECT fp.path, fp.is_directory, fp.content_hash, fp.modified_at, fp.updated_at
-            FROM file_path fp
-            JOIN cmd_input_path cip ON fp.id = cip.file_path_id
+            SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at
+            FROM file_input f
+            JOIN cmd_input_path cip ON f.id = cip.file_input_id
             WHERE cip.cached_cmd_id = ?
         "#,
     )
@@ -284,13 +359,50 @@ pub async fn get_files_by_command_id(
 pub async fn get_files_by_command_hash(
     pool: &SqlitePool,
     command_hash: &str,
-) -> Result<Vec<FilePathRow>, sqlx::Error> {
+) -> Result<Vec<FileInputRow>, sqlx::Error> {
     let files = sqlx::query_as(
         r#"
-            SELECT fp.path, fp.is_directory, fp.content_hash, fp.modified_at, fp.updated_at
-            FROM file_path fp
-            JOIN cmd_input_path cip ON fp.id = cip.file_path_id
+            SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at
+            FROM file_input f
+            JOIN cmd_input_path cip ON f.id = cip.file_input_id
             JOIN cached_cmd cc ON cip.cached_cmd_id = cc.id
+            WHERE cc.cmd_hash = ?
+        "#,
+    )
+    .bind(command_hash)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(files)
+}
+
+pub async fn get_envs_by_command_id(
+    pool: &SqlitePool,
+    command_id: i64,
+) -> Result<Vec<EnvInputRow>, sqlx::Error> {
+    let files = sqlx::query_as(
+        r#"
+            SELECT e.name, e.content_hash, e.updated_at
+            FROM env_input e
+            WHERE e.cached_cmd_id = ?
+        "#,
+    )
+    .bind(command_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(files)
+}
+
+pub async fn get_envs_by_command_hash(
+    pool: &SqlitePool,
+    command_hash: &str,
+) -> Result<Vec<EnvInputRow>, sqlx::Error> {
+    let files = sqlx::query_as(
+        r#"
+            SELECT e.name, e.content_hash, e.updated_at
+            FROM env_input e
+            JOIN cached_cmd cc ON e.cached_cmd_id = cc.id
             WHERE cc.cmd_hash = ?
         "#,
     )
@@ -306,16 +418,18 @@ pub async fn update_file_modified_at<P: AsRef<Path>>(
     path: P,
     modified_at: SystemTime,
 ) -> Result<(), sqlx::Error> {
-    let modified_at = modified_at.duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+    let modified_at = system_time_to_unix_seconds(modified_at);
+    let now = system_time_to_unix_seconds(SystemTime::now());
 
     sqlx::query(
         r#"
-        UPDATE file_path
-        SET modified_at = ?, updated_at = strftime('%s', 'now')
+        UPDATE file_input
+        SET modified_at = ?, updated_at = ?
         WHERE path = ?
         "#,
     )
     .bind(modified_at)
+    .bind(now)
     .bind(path.as_ref().to_path_buf().into_os_string().as_bytes())
     .execute(pool)
     .await?;
@@ -326,11 +440,11 @@ pub async fn update_file_modified_at<P: AsRef<Path>>(
 pub async fn delete_unreferenced_files(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
     let result = sqlx::query(
         r#"
-        DELETE FROM file_path
+        DELETE FROM file_input
         WHERE NOT EXISTS (
             SELECT 1
             FROM cmd_input_path
-            WHERE cmd_input_path.file_path_id = file_path.id
+            WHERE cmd_input_path.file_input_id = file_input.id
         )
         "#,
     )
@@ -338,6 +452,23 @@ pub async fn delete_unreferenced_files(pool: &SqlitePool) -> Result<u64, sqlx::E
     .await?;
 
     Ok(result.rows_affected())
+}
+
+/// Truncate a unix timestamp to seconds.
+///
+/// Returns an i64 because SQLite doesn't support u64.
+fn system_time_to_unix_seconds(time: SystemTime) -> i64 {
+    time.duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        .min(i64::MAX as u64) as i64
+}
+
+/// Convert an integer unix timestamp in seconds to a SystemTime.
+///
+/// Takes an i64 because SQLite doesn't support u64.
+fn system_time_from_unix_seconds(seconds: i64) -> SystemTime {
+    UNIX_EPOCH + std::time::Duration::from_secs(seconds as u64)
 }
 
 #[cfg(test)]
@@ -353,29 +484,29 @@ mod tests {
         let cmd_hash = hash::digest(raw_cmd);
         let output = b"Hello, world!";
         let modified_at = SystemTime::now();
-        let paths = vec![
-            FilePath {
+        let inputs = vec![
+            Input::File(FileInputDesc {
                 path: "/path/to/file1".into(),
                 is_directory: false,
-                content_hash: "hash1".to_string(),
+                content_hash: Some("hash1".to_string()),
                 modified_at,
-            },
-            FilePath {
+            }),
+            Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
-            },
+            }),
         ];
         let input_hash = hash::digest(
-            &paths
+            inputs
                 .iter()
-                .map(|fp| fp.content_hash.clone())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
-        let (command_id, file_ids) =
-            insert_command_with_files(&pool, raw_cmd, &cmd_hash, &input_hash, output, &paths)
+        let (command_id, file_ids, _) =
+            insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash, output, &inputs)
                 .await
                 .unwrap();
 
@@ -404,62 +535,74 @@ mod tests {
         let cmd_hash1 = hash::digest(raw_cmd1);
         let output1 = b"Hello, world!";
         let modified_at = SystemTime::now();
-        let paths1 = vec![
-            FilePath {
+        let inputs1 = vec![
+            Input::File(FileInputDesc {
                 path: "/path/to/file1".into(),
                 is_directory: false,
-                content_hash: "hash1".to_string(),
+                content_hash: Some("hash1".to_string()),
                 modified_at,
-            },
-            FilePath {
+            }),
+            Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
-            },
+            }),
         ];
         let input_hash1 = hash::digest(
-            &paths1
+            inputs1
                 .iter()
-                .map(|p| p.content_hash.clone())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
-        let (command_id1, file_ids1) =
-            insert_command_with_files(&pool, raw_cmd1, &cmd_hash1, &input_hash1, output1, &paths1)
-                .await
-                .unwrap();
+        let (command_id1, file_ids1, _) = insert_command_with_inputs(
+            &pool,
+            raw_cmd1,
+            &cmd_hash1,
+            &input_hash1,
+            output1,
+            &inputs1,
+        )
+        .await
+        .unwrap();
 
         // Second command
         let raw_cmd2 = "nix-build -A goodbye";
         let cmd_hash2 = hash::digest(raw_cmd2);
         let output2 = b"Goodbye, world!";
         let modified_at = SystemTime::now();
-        let paths2 = vec![
-            FilePath {
+        let inputs2 = vec![
+            Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
-            },
-            FilePath {
+            }),
+            Input::File(FileInputDesc {
                 path: "/path/to/file3".into(),
                 is_directory: false,
-                content_hash: "hash3".to_string(),
+                content_hash: Some("hash3".to_string()),
                 modified_at,
-            },
+            }),
         ];
         let input_hash2 = hash::digest(
-            &paths2
+            inputs2
                 .iter()
-                .map(|p| p.content_hash.clone())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
-        let (command_id2, file_ids2) =
-            insert_command_with_files(&pool, raw_cmd2, &cmd_hash2, &input_hash2, output2, &paths2)
-                .await
-                .unwrap();
+        let (command_id2, file_ids2, _) = insert_command_with_inputs(
+            &pool,
+            raw_cmd2,
+            &cmd_hash2,
+            &input_hash2,
+            output2,
+            &inputs2,
+        )
+        .await
+        .unwrap();
 
         // Verify first command
         let retrieved_command1 = get_command_by_hash(&pool, &cmd_hash1)
@@ -499,56 +642,56 @@ mod tests {
         let cmd_hash = hash::digest(raw_cmd);
         let output = b"Hello, world!";
         let modified_at = SystemTime::now();
-        let paths1 = vec![
-            FilePath {
+        let inputs1 = vec![
+            Input::File(FileInputDesc {
                 path: "/path/to/file1".into(),
                 is_directory: false,
-                content_hash: "hash1".to_string(),
+                content_hash: Some("hash1".to_string()),
                 modified_at,
-            },
-            FilePath {
+            }),
+            Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
-            },
+            }),
         ];
         let input_hash = hash::digest(
-            &paths1
+            inputs1
                 .iter()
-                .map(|p| p.content_hash.clone())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
-        let (_command_id1, file_ids1) =
-            insert_command_with_files(&pool, raw_cmd, &cmd_hash, &input_hash, output, &paths1)
+        let (_command_id1, file_ids1, _) =
+            insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash, output, &inputs1)
                 .await
                 .unwrap();
 
         // Second command
-        let paths2 = vec![
-            FilePath {
+        let inputs2 = vec![
+            Input::File(FileInputDesc {
                 path: "/path/to/file2".into(),
                 is_directory: false,
-                content_hash: "hash2".to_string(),
+                content_hash: Some("hash2".to_string()),
                 modified_at,
-            },
-            FilePath {
+            }),
+            Input::File(FileInputDesc {
                 path: "/path/to/file3".into(),
                 is_directory: false,
-                content_hash: "hash3".to_string(),
+                content_hash: Some("hash3".to_string()),
                 modified_at,
-            },
+            }),
         ];
         let input_hash2 = hash::digest(
-            &paths2
+            inputs2
                 .iter()
-                .map(|p| p.content_hash.clone())
+                .filter_map(Input::content_hash)
                 .collect::<String>(),
         );
 
-        let (command_id2, file_ids2) =
-            insert_command_with_files(&pool, raw_cmd, &cmd_hash, &input_hash2, output, &paths2)
+        let (command_id2, file_ids2, _) =
+            insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash2, output, &inputs2)
                 .await
                 .unwrap();
 
@@ -563,7 +706,12 @@ mod tests {
         }
 
         // Check if files are being accumulated instead of replaced
-        assert_eq!(files.len(), 2, "Expected 2 files, but found {}. Files might be accumulating instead of being replaced.", files.len());
+        assert_eq!(
+            files.len(),
+            2,
+            "Expected 2 files, but found {}. Files might be accumulating instead of being replaced.",
+            files.len()
+        );
 
         // Verify the correct files are associated
         let file_paths: Vec<_> = files.iter().map(|f| f.path.to_str().unwrap()).collect();

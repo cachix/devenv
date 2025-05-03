@@ -1,0 +1,30 @@
+name: Update Latest Version
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  schedule:
+    - cron: '0 * * * *'  # Run hourly
+  workflow_dispatch:     # Allow manual trigger
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v26
+
+      - name: Fetch latest version
+        run: |
+          mkdir -p src/modules
+          nix eval github:NixOS/nixpkgs/nixpkgs-unstable#devenv.version --raw > src/modules/latest-version
+
+      - name: Auto-commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update latest devenv version"
+          file_pattern: "src/modules/latest-version"

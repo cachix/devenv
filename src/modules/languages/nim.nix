@@ -18,7 +18,7 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-      pkgs.nimlsp
+      pkgs.nimlangserver
     ];
   };
 }

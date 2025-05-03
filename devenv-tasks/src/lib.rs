@@ -1,4 +1,5 @@
 use console::Term;
+use eyre::WrapErr;
 use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -65,7 +66,7 @@ impl Display for Error {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
     name: String,
     #[serde(default)]
@@ -80,10 +81,25 @@ pub struct TaskConfig {
     inputs: Option<serde_json::Value>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, clap::ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMode {
+    /// Run only the specified task without dependencies
+    Single,
+    /// Run the specified task and all tasks that depend on it (downstream tasks)
+    After,
+    /// Run all dependency tasks first, then the specified task (upstream tasks)
+    Before,
+    #[default]
+    /// Run the complete dependency graph (upstream and downstream tasks)
+    All,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,
+    pub run_mode: RunMode,
 }
 
 #[derive(Serialize)]
@@ -163,17 +179,20 @@ impl TaskState {
         &self,
         cmd: &str,
         outputs: &BTreeMap<String, serde_json::Value>,
-    ) -> (Command, tempfile::NamedTempFile) {
+    ) -> eyre::Result<(Command, tempfile::NamedTempFile)> {
         let mut command = Command::new(cmd);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         // Set DEVENV_TASK_INPUTS
         if let Some(inputs) = &self.task.inputs {
-            command.env("DEVENV_TASK_INPUT", serde_json::to_string(inputs).unwrap());
+            let inputs_json = serde_json::to_string(inputs)
+                .wrap_err("Failed to serialize task inputs to JSON")?;
+            command.env("DEVENV_TASK_INPUT", inputs_json);
         }
 
         // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
-        let outputs_file = tempfile::NamedTempFile::new().unwrap();
+        let outputs_file = tempfile::NamedTempFile::new()
+            .wrap_err("Failed to create temporary file for task output")?;
         command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
 
         // Set environment variables from task outputs
@@ -198,10 +217,11 @@ impl TaskState {
         command.env("DEVENV_TASK_ENV", devenv_env);
 
         // Set DEVENV_TASKS_OUTPUTS
-        let outputs_json = serde_json::to_string(outputs).unwrap();
+        let outputs_json =
+            serde_json::to_string(outputs).wrap_err("Failed to serialize task outputs to JSON")?;
         command.env("DEVENV_TASKS_OUTPUTS", outputs_json);
 
-        (command, outputs_file)
+        Ok((command, outputs_file))
     }
 
     async fn get_outputs(outputs_file: &tempfile::NamedTempFile) -> Output {
@@ -222,75 +242,79 @@ impl TaskState {
         &self,
         now: Instant,
         outputs: &BTreeMap<String, serde_json::Value>,
-    ) -> TaskCompleted {
+    ) -> eyre::Result<TaskCompleted> {
         if let Some(cmd) = &self.task.status {
-            let (mut command, outputs_file) = self.prepare_command(cmd, outputs);
+            let (mut command, outputs_file) = self
+                .prepare_command(cmd, outputs)
+                .wrap_err("Failed to prepare status command")?;
 
             let result = command.status().await;
             match result {
                 Ok(status) => {
                     if status.success() {
-                        return TaskCompleted::Skipped(Skipped::Cached(
+                        return Ok(TaskCompleted::Skipped(Skipped::Cached(
                             Self::get_outputs(&outputs_file).await,
-                        ));
+                        )));
                     }
                 }
                 Err(e) => {
                     // TODO: stdout, stderr
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: e.to_string(),
                         },
-                    );
+                    ));
                 }
             }
         }
         if let Some(cmd) = &self.task.command {
-            let (mut command, outputs_file) = self.prepare_command(cmd, outputs);
+            let (mut command, outputs_file) = self
+                .prepare_command(cmd, outputs)
+                .wrap_err("Failed to prepare task command")?;
 
             let result = command.spawn();
 
             let mut child = match result {
                 Ok(c) => c,
                 Err(e) => {
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: e.to_string(),
                         },
-                    );
+                    ));
                 }
             };
 
             let stdout = match child.stdout.take() {
                 Some(stdout) => stdout,
                 None => {
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: "Failed to capture stdout".to_string(),
                         },
-                    )
+                    ));
                 }
             };
             let stderr = match child.stderr.take() {
                 Some(stderr) => stderr,
                 None => {
-                    return TaskCompleted::Failed(
+                    return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
                             error: "Failed to capture stderr".to_string(),
                         },
-                    )
+                    ));
                 }
             };
 
@@ -305,7 +329,11 @@ impl TaskState {
                     result = stdout_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => {
-                                info!(stdout = %line);
+                                // Only log to tracing if not quiet
+                                let is_quiet = std::env::var("DEVENV_TASKS_QUIET").map(|v| v == "true").unwrap_or(false);
+                                if !is_quiet {
+                                    info!(stdout = %line);
+                                }
                                 stdout_lines.push((std::time::Instant::now(), line));
                             },
                             Ok(None) => {},
@@ -330,35 +358,35 @@ impl TaskState {
                         match result {
                             Ok(status) => {
                                 if status.success() {
-                                    return TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await);
+                                    return Ok(TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await));
                                 } else {
-                                    return TaskCompleted::Failed(
+                                    return Ok(TaskCompleted::Failed(
                                         now.elapsed(),
                                         TaskFailure {
                                             stdout: stdout_lines,
                                             stderr: stderr_lines,
                                             error: format!("Task exited with status: {}", status),
                                         },
-                                    );
+                                    ));
                                 }
                             },
                             Err(e) => {
                                 error!("Error waiting for command: {}", e);
-                                return TaskCompleted::Failed(
+                                return Ok(TaskCompleted::Failed(
                                     now.elapsed(),
                                     TaskFailure {
                                         stdout: stdout_lines,
                                         stderr: stderr_lines,
                                         error: format!("Error waiting for command: {}", e),
                                     },
-                                );
+                                ));
                             }
                         }
                     }
                 }
             }
         } else {
-            return TaskCompleted::Skipped(Skipped::NotImplemented);
+            return Ok(TaskCompleted::Skipped(Skipped::NotImplemented));
         }
     }
 }
@@ -373,6 +401,7 @@ struct Tasks {
     tasks_order: Vec<NodeIndex>,
     notify_finished: Arc<Notify>,
     notify_ui: Arc<Notify>,
+    run_mode: RunMode,
 }
 
 impl Tasks {
@@ -416,6 +445,7 @@ impl Tasks {
             notify_finished: Arc::new(Notify::new()),
             notify_ui: Arc::new(Notify::new()),
             tasks_order: vec![],
+            run_mode: config.run_mode,
         };
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
@@ -449,8 +479,8 @@ impl Tasks {
             }
         }
 
-        for (dep_idx, idx) in edges_to_add {
-            self.graph.add_edge(dep_idx, idx, ());
+        for (from, to) in edges_to_add {
+            self.graph.update_edge(from, to, ());
         }
 
         if unresolved.is_empty() {
@@ -472,20 +502,57 @@ impl Tasks {
             to_visit.push(root_index);
         }
 
-        // Depth-first search including dependencies
-        while let Some(node) = to_visit.pop() {
-            if visited.insert(node) {
-                let new_node = subgraph.add_node(self.graph[node].clone());
-                node_map.insert(node, new_node);
-
-                // Add dependencies to visit
-                for neighbor in self
-                    .graph
-                    .neighbors_directed(node, petgraph::Direction::Incoming)
-                {
-                    to_visit.push(neighbor);
+        // Find nodes to include based on run_mode
+        match self.run_mode {
+            RunMode::Single => {
+                // Only include the root nodes themselves
+                visited = self.roots.iter().cloned().collect();
+            }
+            RunMode::After => {
+                // Include root nodes and all tasks that come after (successor nodes)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add outgoing neighbors (tasks that come after this one)
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Outgoing)
+                        {
+                            to_visit.push(neighbor);
+                        }
+                    }
                 }
             }
+            RunMode::Before => {
+                // Include root nodes and all tasks that come before (predecessor nodes)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add incoming neighbors (tasks that come before this one)
+                        for neighbor in self
+                            .graph
+                            .neighbors_directed(node, petgraph::Direction::Incoming)
+                        {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
+            }
+            RunMode::All => {
+                // Include the complete connected subgraph (all dependencies in both directions)
+                while let Some(node) = to_visit.pop() {
+                    if visited.insert(node) {
+                        // Add all connected neighbors in both directions
+                        for neighbor in self.graph.neighbors_undirected(node) {
+                            to_visit.push(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Create nodes in the subgraph
+        for &node in &visited {
+            let new_node = subgraph.add_node(self.graph[node].clone());
+            node_map.insert(node, new_node);
         }
 
         // Add edges to subgraph
@@ -572,7 +639,20 @@ impl Tasks {
                 running_tasks.spawn(async move {
                     let completed = {
                         let outputs = outputs_clone.lock().await.clone();
-                        task_state_clone.read().await.run(now, &outputs).await
+                        match task_state_clone.read().await.run(now, &outputs).await {
+                            Ok(result) => result,
+                            Err(e) => {
+                                error!("Task failed with error: {}", e);
+                                TaskCompleted::Failed(
+                                    now.elapsed(),
+                                    TaskFailure {
+                                        stdout: Vec::new(),
+                                        stderr: Vec::new(),
+                                        error: format!("Task failed: {}", e),
+                                    },
+                                )
+                            }
+                        }
                     };
                     {
                         let mut task_state = task_state_clone.write().await;
@@ -603,7 +683,7 @@ impl Tasks {
         while let Some(res) = running_tasks.join_next().await {
             match res {
                 Ok(_) => (),
-                Err(e) => eprintln!("Task crashed: {}", e),
+                Err(e) => error!("Task crashed: {}", e),
             }
         }
 
@@ -640,13 +720,23 @@ impl TasksStatus {
 
 pub struct TasksUi {
     tasks: Arc<Tasks>,
+    quiet: bool,
+    term: Term,
 }
 
 impl TasksUi {
-    pub async fn new(config: Config) -> Result<Self, Error> {
+    pub async fn new(config: Config, quiet: bool) -> Result<Self, Error> {
         let tasks = Tasks::new(config).await?;
+
+        // Set environment variable for tracing logs
+        if quiet {
+            unsafe { std::env::set_var("DEVENV_TASKS_QUIET", "true") };
+        }
+
         Ok(Self {
             tasks: Arc::new(tasks),
+            quiet,
+            term: Term::stderr(),
         })
     }
 
@@ -724,21 +814,34 @@ impl TasksUi {
     }
 
     pub async fn run(&mut self) -> Result<(TasksStatus, Outputs), Error> {
-        let names = console::style(self.tasks.root_names.join(", ")).bold();
-        let term = Term::stderr();
-        term.write_line(&format!("{:17} {}\n", "Running tasks", names))?;
-
-        // start processing tasks
-        let started = std::time::Instant::now();
         let tasks_clone = Arc::clone(&self.tasks);
         let handle = tokio::spawn(async move { tasks_clone.run().await });
 
-        // start TUI
+        // If in quiet mode, just wait for tasks to complete and return
+        if self.quiet {
+            loop {
+                let tasks_status = self.get_tasks_status().await;
+                if tasks_status.pending == 0 && tasks_status.running == 0 {
+                    break;
+                }
+            }
+            let tasks_status = self.get_tasks_status().await;
+            return Ok((tasks_status, handle.await.unwrap()));
+        }
+
+        let names = console::style(self.tasks.root_names.join(", ")).bold();
+        let is_tty = self.term.is_term();
+        self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
+
+        // start processing tasks
+        let started = std::time::Instant::now();
+
+        // start TUI if we're connected to a TTY, otherwise use non-interactive output
         let mut last_list_height: u16 = 0;
+        let mut last_statuses = std::collections::HashMap::new();
 
         loop {
             let tasks_status = self.get_tasks_status().await;
-
             let status_summary = [
                 if tasks_status.pending > 0 {
                     format!(
@@ -800,32 +903,116 @@ impl TasksUi {
             .collect::<Vec<_>>()
             .join(", ");
 
-            let elapsed_time = format!("{:.2?}", started.elapsed());
+            if is_tty {
+                let elapsed_time = format!("{:.2?}", started.elapsed());
 
-            let output = format!(
-                "{}\n{status_summary}{}{elapsed_time}",
-                tasks_status.lines.join("\n"),
-                " ".repeat(
-                    (19 + self.tasks.longest_task_name)
-                        .saturating_sub(console::measure_text_width(&status_summary))
-                        .max(1)
-                )
-            );
-            if tasks_status.lines.len() > 0 {
-                let output = console::Style::new().apply_to(output);
-                if last_list_height > 0 {
-                    term.move_cursor_up(last_list_height as usize)?;
-                    term.clear_to_end_of_screen()?;
+                let output = format!(
+                    "{}\n{status_summary}{}{elapsed_time}",
+                    tasks_status.lines.join("\n"),
+                    " ".repeat(
+                        (19 + self.tasks.longest_task_name)
+                            .saturating_sub(console::measure_text_width(&status_summary))
+                            .max(1)
+                    )
+                );
+                if !tasks_status.lines.is_empty() {
+                    let output = console::Style::new().apply_to(output);
+                    if last_list_height > 0 {
+                        self.term.move_cursor_up(last_list_height as usize)?;
+                        self.term.clear_to_end_of_screen()?;
+                    }
+                    self.console_write_line(&output.to_string())?;
                 }
-                term.write_line(&output.to_string())?;
+
+                last_list_height = tasks_status.lines.len() as u16 + 1;
+            } else {
+                // Non-interactive mode - print only status changes
+                for task_state in self.tasks.graph.node_weights() {
+                    let task_state = task_state.read().await;
+                    let task_name = &task_state.task.name;
+                    let current_status = match &task_state.status {
+                        TaskStatus::Pending => "Pending".to_string(),
+                        TaskStatus::Running(_) => {
+                            if let Some(previous) = last_statuses.get(task_name) {
+                                if previous != "Running" {
+                                    self.console_write_line(&format!(
+                                        "{:17} {}",
+                                        console::style("Running").blue().bold(),
+                                        console::style(task_name).bold()
+                                    ))?;
+                                }
+                            } else {
+                                self.console_write_line(&format!(
+                                    "{:17} {}",
+                                    console::style("Running").blue().bold(),
+                                    console::style(task_name).bold()
+                                ))?;
+                            }
+                            "Running".to_string()
+                        }
+                        TaskStatus::Completed(completed) => {
+                            let (status, style, duration_str) = match completed {
+                                TaskCompleted::Success(duration, _) => (
+                                    format!("Succeeded ({:.2?})", duration),
+                                    console::style("Succeeded").green().bold(),
+                                    format!(" ({:.2?})", duration),
+                                ),
+                                TaskCompleted::Skipped(Skipped::Cached(_)) => (
+                                    "Cached".to_string(),
+                                    console::style("Cached").blue().bold(),
+                                    "".to_string(),
+                                ),
+                                TaskCompleted::Skipped(Skipped::NotImplemented) => (
+                                    "Not implemented".to_string(),
+                                    console::style("Not implemented").blue().bold(),
+                                    "".to_string(),
+                                ),
+                                TaskCompleted::Failed(duration, _) => (
+                                    format!("Failed ({:.2?})", duration),
+                                    console::style("Failed").red().bold(),
+                                    format!(" ({:.2?})", duration),
+                                ),
+                                TaskCompleted::DependencyFailed => (
+                                    "Dependency failed".to_string(),
+                                    console::style("Dependency failed").red().bold(),
+                                    "".to_string(),
+                                ),
+                            };
+
+                            if let Some(previous) = last_statuses.get(task_name) {
+                                if previous != &status {
+                                    self.console_write_line(&format!(
+                                        "{:17} {}{}",
+                                        style,
+                                        console::style(task_name).bold(),
+                                        duration_str
+                                    ))?;
+                                }
+                            } else {
+                                self.console_write_line(&format!(
+                                    "{:17} {}{}",
+                                    style,
+                                    console::style(task_name).bold(),
+                                    duration_str
+                                ))?;
+                            }
+                            status
+                        }
+                    };
+
+                    last_statuses.insert(task_name.clone(), current_status);
+                }
             }
 
+            // Break early if there are no more tasks left
             if tasks_status.pending == 0 && tasks_status.running == 0 {
+                if !is_tty {
+                    self.console_write_line(&status_summary)?;
+                }
                 break;
             }
 
-            last_list_height = tasks_status.lines.len() as u16 + 1;
-
+            // Wait for task updates before looping
             self.tasks.notify_ui.notified().await;
         }
 
@@ -860,10 +1047,18 @@ impl TasksUi {
             }
             console::Style::new().apply_to(errors)
         };
-        term.write_line(&errors.to_string())?;
+
+        if !errors.to_string().is_empty() {
+            self.console_write_line(&errors.to_string())?;
+        }
 
         let tasks_status = self.get_tasks_status().await;
         Ok((tasks_status, handle.await.unwrap()))
+    }
+
+    fn console_write_line(&self, message: &str) -> std::io::Result<()> {
+        self.term.write_line(message)?;
+        Ok(())
     }
 }
 
@@ -913,9 +1108,10 @@ mod test {
             assert_matches!(
                 Config::try_from(json!({
                     "roots": [],
-                        "tasks": [{
-                            "name": task.to_string()
-                        }]
+                    "run_mode": "all",
+                    "tasks": [{
+                        "name": task.to_string()
+                    }]
                 }))
                 .map(Tasks::new)
                 .unwrap()
@@ -933,6 +1129,7 @@ mod test {
             assert_matches!(
                 Config::try_from(serde_json::json!({
                     "roots": [],
+                    "run_mode": "all",
                     "tasks": [{
                         "name": task.to_string()
                     }]
@@ -963,6 +1160,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1", "myapp:task_4"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1007,6 +1205,7 @@ mod test {
         let result = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1023,12 +1222,15 @@ mod test {
             .unwrap(),
         )
         .await;
-        if let Err(Error::CycleDetected(task)) = result {
-            assert_eq!(task, "myapp:task_2".to_string());
+        if let Err(Error::CycleDetected(_)) = result {
+            // The source of the cycle can be either task.
+            Ok(())
         } else {
-            panic!("Expected Error::CycleDetected, got {:?}", result);
+            Err(Error::TaskNotFound(format!(
+                "Expected Error::CycleDetected, got {:?}",
+                result
+            )))
         }
-        Ok(())
     }
 
     #[tokio::test]
@@ -1049,6 +1251,7 @@ mod test {
             Tasks::new(
                 Config::try_from(json!({
                     "roots": [root],
+                    "run_mode": "all",
                     "tasks": [
                         {
                             "name": "myapp:task_1",
@@ -1091,6 +1294,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1131,6 +1335,7 @@ mod test {
         let result = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1147,25 +1352,120 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_run_mode() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let config = Config::try_from(json!({
+            "roots": ["myapp:task_2"],
+            "run_mode": "single",
+            "tasks": [
+                {
+                    "name": "myapp:task_1",
+                    "command": script1.to_str().unwrap(),
+                },
+                {
+                    "name": "myapp:task_2",
+                    "command": script2.to_str().unwrap(),
+                    "before": ["myapp:task_3"],
+                    "after": ["myapp:task_1"],
+                },
+                {
+                    "name": "myapp:task_3",
+                    "command": script3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap();
+
+        // Single task
+        {
+            let tasks = Tasks::new(config.clone()).await?;
+            tasks.run().await;
+
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name2 == "myapp:task_2"
+            );
+        }
+
+        // Before tasks
+        {
+            let config = Config {
+                run_mode: RunMode::Before,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name1 == "myapp:task_1" && name2 == "myapp:task_2"
+            );
+        }
+
+        // After tasks
+        {
+            let config = Config {
+                run_mode: RunMode::After,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name2 == "myapp:task_2" && name3 == "myapp:task_3"
+            );
+        }
+
+        // All tasks
+        {
+            let config = Config {
+                run_mode: RunMode::All,
+                ..config.clone()
+            };
+            let tasks = Tasks::new(config).await?;
+            tasks.run().await;
+            let task_statuses = inspect_tasks(&tasks).await;
+            assert_matches!(
+                &task_statuses[..],
+                [
+                    (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                    (name3, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_before_tasks() -> Result<(), Error> {
-        let script1 = create_script(
-            "#!/bin/sh\necho 'Task 1 is running' && sleep 0.5 && echo 'Task 1 completed'",
-        )?;
-        let script2 = create_script(
-            "#!/bin/sh\necho 'Task 2 is running' && sleep 0.5 && echo 'Task 2 completed'",
-        )?;
-        let script3 = create_script(
-            "#!/bin/sh\necho 'Task 3 is running' && sleep 0.5 && echo 'Task 3 completed'",
-        )?;
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
 
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
                         "command": script1.to_str().unwrap(),
-                        "after": ["myapp:task_3"]
+                        "before": ["myapp:task_2", "myapp:task_3"]
                     },
                     {
                         "name": "myapp:task_2",
@@ -1191,7 +1491,190 @@ mod test {
                 (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
                 (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
                 (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
-            ] if name1 == "myapp:task_2" && name2 == "myapp:task_3" && name3 == "myapp:task_1"
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_after_tasks() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "run_mode": "all",
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                        "after": ["myapp:task_3", "myapp:task_2"]
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "after": ["myapp:task_3"],
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "command": script3.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_3" && name2 == "myapp:task_2" && name3 == "myapp:task_1"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_before_and_after_tasks() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_1"],
+                "run_mode": "all",
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "after": ["myapp:task_1"],
+                        "command": script3.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "before": ["myapp:task_3"],
+                        "after": ["myapp:task_1"],
+                        "command": script2.to_str().unwrap()
+                    },
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+        );
+        Ok(())
+    }
+
+    // Test that tasks indirectly linked to the root are picked up and run.
+    #[tokio::test]
+    async fn test_transitive_dependencies() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_3"],
+                "run_mode": "all",
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "after": ["myapp:task_1"],
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "after": ["myapp:task_2"],
+                        "command": script3.to_str().unwrap()
+                    },
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
+        );
+        Ok(())
+    }
+
+    // Ensure that tasks before and after a root are run in the correct order.
+    #[tokio::test]
+    async fn test_non_root_before_and_after() -> Result<(), Error> {
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+
+        let tasks = Tasks::new(
+            Config::try_from(json!({
+                "roots": ["myapp:task_2"],
+                "run_mode": "all",
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap(),
+                        "before": [ "myapp:task_2"]
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "after": ["myapp:task_2"],
+                        "command": script3.to_str().unwrap()
+                    },
+                ]
+            }))
+            .unwrap(),
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+        assert_matches!(
+            task_statuses,
+            [
+                (name1, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name2, TaskStatus::Completed(TaskCompleted::Success(_, _))),
+                (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+            ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
         );
         Ok(())
     }
@@ -1204,6 +1687,7 @@ mod test {
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_2"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1259,6 +1743,7 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_3"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1317,6 +1802,7 @@ fi
         let tasks = Tasks::new(
             Config::try_from(json!({
                 "roots": ["myapp:task_1", "myapp:task_2"],
+                "run_mode": "all",
                 "tasks": [
                     {
                         "name": "myapp:task_1",
@@ -1357,7 +1843,6 @@ fi
         Ok(())
     }
 
-    #[cfg(test)]
     async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
         let mut result = Vec::new();
         for index in &tasks.tasks_order {
@@ -1367,7 +1852,6 @@ fi
         result
     }
 
-    #[cfg(test)]
     fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
         let mut temp_file = tempfile::Builder::new()
             .prefix("script")
@@ -1378,5 +1862,11 @@ fi
             .as_file_mut()
             .set_permissions(fs::Permissions::from_mode(0o755))?;
         Ok(temp_file.into_temp_path())
+    }
+
+    fn create_basic_script(tag: &str) -> std::io::Result<tempfile::TempPath> {
+        create_script(&format!(
+            "#!/bin/sh\necho 'Task {tag} is running' && sleep 0.1 && echo 'Task {tag} completed'"
+        ))
     }
 }

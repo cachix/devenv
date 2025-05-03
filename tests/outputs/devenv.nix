@@ -15,12 +15,12 @@
   };
   config = {
     enterTest = ''
-      devenv build | grep -E '(myapp1|git|myapp2|ncdu)'
+      devenv build | grep -E '(myapp1|git|myapp2|hello)'
       devenv build myapp2.package | grep myapp2
     '';
     outputs = {
       myproject.git = pkgs.git;
-      ncdu = pkgs.ncdu;
+      hello = pkgs.hello;
     };
   };
 }

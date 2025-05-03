@@ -1,7 +1,11 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
-  devenv = import ./../../package.nix { inherit pkgs inputs; build_tasks = true; };
+  devenv-tasks = pkgs.callPackage ./../../package.nix {
+    build_tasks = true;
+    cachix = null;
+    inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
+  };
   taskType = types.submodule
     ({ name, config, ... }:
       let
@@ -9,11 +13,17 @@ let
           if builtins.isNull command
           then null
           else
+            let
+              binary =
+                if config.binary != null
+                then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+                else pkgs.lib.getExe config.package;
+            in
             pkgs.writeScript name ''
-              #!${pkgs.lib.getBin config.package}/bin/${config.binary}
+              #!${binary}
               ${lib.optionalString (!isStatus) "set -e"}
               ${command}
-              ${lib.optionalString (config.exports != [] && !isStatus) "${devenv}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
+              ${lib.optionalString (config.exports != [] && !isStatus) "${devenv-tasks}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in
       {
@@ -24,13 +34,14 @@ let
             description = "Command to execute the task.";
           };
           binary = lib.mkOption {
-            type = types.str;
-            description = "Override the binary name if it doesn't match package name";
-            default = config.package.pname;
+            type = types.nullOr types.str;
+            description = "Override the binary name from the default `package.meta.mainProgram`.";
+            default = null;
           };
           package = lib.mkOption {
             type = types.package;
             default = pkgs.bash;
+            defaultText = lib.literalExpression "pkgs.bash";
             description = "Package to install for this task.";
           };
           command = lib.mkOption {
@@ -105,6 +116,11 @@ in
       internal = true;
       description = "The generated tasks.json file.";
     };
+    task.package = lib.mkOption {
+      type = config.lib.types.output;
+      internal = true;
+      default = lib.getBin devenv-tasks;
+    };
   };
 
   config = {
@@ -112,8 +128,8 @@ in
 
     assertions = [
       {
-        assertion = lib.all (task: task.binary == "bash" || task.export == [ ]) (lib.attrValues config.tasks);
-        message = "The 'export' option can only be set when 'binary' is set to 'bash'.";
+        assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
+        message = "The 'exports' option for a task can only be set when 'package' is a bash package.";
       }
     ];
 
@@ -128,7 +144,7 @@ in
       "devenv:enterShell" = {
         description = "Runs when entering the shell";
         exec = ''
-          mkdir -p "$DEVENV_DOTFILE"
+          mkdir -p "$DEVENV_DOTFILE" || { echo "Failed to create $DEVENV_DOTFILE"; exit 1; }
           echo "$DEVENV_TASK_ENV" > "$DEVENV_DOTFILE/load-exports"
           chmod +x "$DEVENV_DOTFILE/load-exports"
         '';
@@ -138,13 +154,13 @@ in
       };
     };
     enterShell = ''
-      ${devenv}/bin/devenv-tasks run devenv:enterShell
+      ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi
     '';
     enterTest = ''
-      ${devenv}/bin/devenv-tasks run devenv:enterTest
+      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all
     '';
   };
 }

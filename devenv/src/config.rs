@@ -1,8 +1,8 @@
-use miette::{IntoDiagnostic, Result};
+use miette::{IntoDiagnostic, Result, WrapErr};
 use schemars::{schema_for, JsonSchema};
 use schematic::ConfigLoader;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, path::Path};
+use std::{collections::BTreeMap, fmt, path::Path};
 
 const YAML_CONFIG: &str = "devenv.yaml";
 
@@ -17,22 +17,10 @@ pub struct Input {
     pub flake: bool,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub follows: Option<String>,
-    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-    pub inputs: HashMap<String, Input>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub inputs: BTreeMap<String, Input>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub overlays: Vec<String>,
-}
-
-impl Input {
-    pub fn new() -> Self {
-        Input {
-            url: None,
-            flake: true,
-            follows: None,
-            inputs: HashMap::new(),
-            overlays: Vec::new(),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, JsonSchema)]
@@ -41,8 +29,8 @@ pub struct FlakeInput {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub follows: Option<String>,
-    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-    pub inputs: HashMap<String, Input>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub inputs: BTreeMap<String, Input>,
     #[serde(skip_serializing_if = "is_true", default = "true_default")]
     pub flake: bool,
 }
@@ -102,12 +90,12 @@ pub struct Clean {
 }
 
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
-#[config(rename_all = "camelCase")]
+#[config(rename_all = "camelCase", allow_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested)]
-    pub inputs: HashMap<String, Input>,
+    pub inputs: BTreeMap<String, Input>,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub allow_unfree: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
@@ -124,12 +112,16 @@ pub struct Config {
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105
-pub fn write_json_schema() {
+pub fn write_json_schema() -> Result<()> {
     let schema = schema_for!(Config);
-    let schema = serde_json::to_string_pretty(&schema).unwrap();
+    let schema = serde_json::to_string_pretty(&schema)
+        .into_diagnostic()
+        .wrap_err("Failed to serialize JSON schema")?;
     let path = Path::new("docs/devenv.schema.json");
-    std::fs::write(path, schema)
-        .unwrap_or_else(|_| panic!("Failed to write json schema to {}", path.display()));
+    std::fs::write(path, &schema)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to write json schema to {}", path.display()))?;
+    Ok(())
 }
 
 impl Config {
@@ -148,35 +140,58 @@ impl Config {
         Ok(result?.config)
     }
 
-    pub fn write(&self) {
-        let yaml = serde_yaml::to_string(&self).unwrap();
-        std::fs::write(YAML_CONFIG, yaml).expect("Failed to write devenv.yaml");
+    pub fn write(&self) -> Result<()> {
+        let yaml = serde_yaml::to_string(&self)
+            .into_diagnostic()
+            .wrap_err("Failed to serialize config to YAML")?;
+        std::fs::write(YAML_CONFIG, yaml)
+            .into_diagnostic()
+            .wrap_err("Failed to write devenv.yaml")?;
+        Ok(())
     }
 
-    pub fn add_input(&mut self, name: &str, url: &str, follows: &[String]) {
-        let mut inputs = HashMap::new();
+    /// Add a new input, overwriting any existing input with the same name.
+    pub fn add_input(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
+        // A set of inputs built from the follows list.
+        let mut inputs = BTreeMap::new();
 
-        let mut input_names = self.inputs.clone();
-        // we know we have a default for this one
-        input_names.insert(String::from("nixpkgs"), Input::new());
-
+        // Resolve the follows to top-level inputs.
+        // We assume that nixpkgs is always available.
         for follow in follows {
-            // check if it's not in self.inputs
-            match input_names.get(follow) {
-                Some(_) => {
-                    let mut input = Input::new();
-                    input.follows = Some(follow.to_string());
-                    inputs.insert(follow.to_string(), input);
-                }
-                None => {
-                    panic!("Input {follow} does not exist so it can't be followed.");
-                }
+            if self.inputs.contains_key(follow) || follow == "nixpkgs" {
+                let input = Input {
+                    follows: Some(follow.to_string()),
+                    ..Default::default()
+                };
+                inputs.insert(follow.to_string(), input);
+            } else {
+                return Err(miette::miette!(
+                    "Input {follow} does not exist so it can't be followed."
+                ));
             }
         }
-        let mut input = Input::new();
-        input.url = Some(url.to_string());
-        input.inputs = inputs;
+
+        let input = Input {
+            url: Some(url.to_string()),
+            inputs,
+            ..Default::default()
+        };
         self.inputs.insert(name.to_string(), input);
+        Ok(())
+    }
+
+    /// Override the URL of an existing input.
+    pub fn override_input_url(&mut self, name: &str, url: &str) -> Result<()> {
+        if let Some(input) = self.inputs.get_mut(name) {
+            input.url = Some(url.to_string());
+            Ok(())
+        } else if name == "nixpkgs" || name == "devenv" {
+            self.add_input(name, url, &[])
+        } else {
+            Err(miette::miette!(
+                "Input {name} does not exist so it can't be overridden."
+            ))
+        }
     }
 }
 
@@ -194,5 +209,91 @@ mod tests {
         let result = FlakeInput::try_from(&input);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), FlakeInputError::UrlAndFollowsBothSet);
+    }
+
+    #[test]
+    fn add_input() {
+        let mut config = Config::default();
+        config
+            .add_input("nixpkgs", "github:NixOS/nixpkgs/nixpkgs-unstable", &[])
+            .expect("Failed to add input");
+        assert_eq!(config.inputs.len(), 1);
+        assert_eq!(
+            config.inputs["nixpkgs"].url,
+            Some("github:NixOS/nixpkgs/nixpkgs-unstable".to_string())
+        );
+        assert!(config.inputs["nixpkgs"].flake);
+    }
+
+    #[test]
+    fn add_input_with_follows() {
+        let mut config = Config::default();
+        config
+            .add_input("other", "github:org/repo", &[])
+            .expect("Failed to add input");
+        config
+            .add_input(
+                "input-with-follows",
+                "github:org/repo",
+                &["nixpkgs".to_string(), "other".to_string()],
+            )
+            .expect("Failed to add input with follows");
+        assert_eq!(config.inputs.len(), 2);
+        let input = &config.inputs["input-with-follows"];
+        assert_eq!(input.inputs.len(), 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "Input other does not exist so it can't be followed.")]
+    fn add_input_with_missing_follows() {
+        let mut config = Config::default();
+        let result = config.add_input(
+            "input-with-follows",
+            "github:org/repo",
+            &["other".to_string()],
+        );
+        result.unwrap(); // This will panic with the Err from add_input
+    }
+
+    #[test]
+    fn override_input_url() {
+        let mut config = Config::default();
+        config
+            .add_input("nixpkgs", "github:NixOS/nixpkgs/nixpkgs-unstable", &[])
+            .expect("Failed to add input");
+        assert_eq!(
+            config.inputs["nixpkgs"].url,
+            Some("github:NixOS/nixpkgs/nixpkgs-unstable".to_string())
+        );
+        config
+            .override_input_url("nixpkgs", "github:NixOS/nixpkgs/nixos-24.11")
+            .expect("Failed to override input URL");
+        assert_eq!(
+            config.inputs["nixpkgs"].url,
+            Some("github:NixOS/nixpkgs/nixos-24.11".to_string())
+        );
+    }
+
+    #[test]
+    fn preserve_options_on_override_input_url() {
+        let mut config = Config {
+            inputs: BTreeMap::from_iter(vec![(
+                "non-flake".to_string(),
+                Input {
+                    url: Some("path:some-path".to_string()),
+                    flake: false,
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        };
+        config
+            .override_input_url("non-flake", "path:some-other-path")
+            .expect("Failed to override input URL");
+        assert!(!config.inputs["non-flake"].flake);
+        assert_eq!(
+            config.inputs["non-flake"].url,
+            Some("path:some-other-path".to_string())
+        );
     }
 }

@@ -4,7 +4,7 @@ Tests are a way to ensure that your development environment is working as expect
 
 Running `devenv test` will build your environment and run the tests defined in `enterTest`.
 
-If you have [processes](/processes.md) defined in your environment, they will be started and stopped for you.
+If you have [processes](processes.md) defined in your environment, they will be started and stopped for you.
 
 ## Writing your first test
 
@@ -35,7 +35,7 @@ By default, the `enterTest` detects if `.test.sh` file exists and runs it.
 
 ## Testing with processes
 
-If you have [processes](/processes.md) defined in your environment,
+If you have [processes](processes.md) defined in your environment,
 they will be started and stopped for you.
 
 ```nix title="devenv.nix"

@@ -3,7 +3,13 @@ use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     config, log, Devenv,
 };
-use miette::Result;
+use miette::{IntoDiagnostic, Result, WrapErr};
+use std::{
+    os::unix::process::CommandExt,
+    process::{self, Command},
+};
+use tempfile::TempDir;
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -19,8 +25,11 @@ async fn main() -> Result<()> {
     };
 
     let command = match cli.command {
-        None => return print_version(),
-        Some(Commands::Version { .. }) => return print_version(),
+        None | Some(Commands::Version) => return print_version(),
+        Some(Commands::Direnvrc) => {
+            print!("{}", *devenv::DIRENVRC);
+            return Ok(());
+        }
         Some(cmd) => cmd,
     };
 
@@ -29,18 +38,24 @@ async fn main() -> Result<()> {
     } else if cli.global_options.quiet {
         log::Level::Silent
     } else {
-        log::Level::Info
+        log::Level::default()
     };
 
-    let logger = log::Logger::new(level);
+    log::init_tracing(level, cli.global_options.log_format);
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
-        config.add_input(&input[0].clone(), &input[1].clone(), &[]);
+        config
+            .override_input_url(&input[0].clone(), &input[1].clone())
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to override input {} with URL {}",
+                    &input[0], &input[1]
+                )
+            })?;
     }
 
     let mut options = devenv::DevenvOptions {
-        logger: Some(logger.clone()),
         global_options: Some(cli.global_options),
         config,
         ..Default::default()
@@ -51,14 +66,22 @@ async fn main() -> Result<()> {
         dont_override_dotfile,
     } = command
     {
-        let pwd = std::env::current_dir().expect("Failed to get current directory");
-        let tmpdir =
-            tempdir::TempDir::new_in(pwd, ".devenv").expect("Failed to create temporary directory");
+        let pwd = std::env::current_dir()
+            .into_diagnostic()
+            .wrap_err("Failed to get current directory")?;
+        let tmpdir = TempDir::with_prefix_in(".devenv.", pwd)
+            .into_diagnostic()
+            .wrap_err("Failed to create temporary directory")?;
         if !dont_override_dotfile {
-            logger.info(&format!(
-                "Overriding .devenv to {}",
-                tmpdir.path().file_name().unwrap().to_str().unwrap()
-            ));
+            let file_name = tmpdir
+                .path()
+                .file_name()
+                .ok_or_else(|| miette::miette!("Temporary directory path is invalid"))?
+                .to_str()
+                .ok_or_else(|| {
+                    miette::miette!("Temporary directory name contains invalid Unicode")
+                })?;
+            info!("Overriding .devenv to {}", file_name);
             options.devenv_dotfile = Some(tmpdir.path().to_path_buf());
         }
         Some(tmpdir)
@@ -69,7 +92,16 @@ async fn main() -> Result<()> {
     let mut devenv = Devenv::new(options).await;
 
     match command {
-        Commands::Shell { cmd, args } => devenv.shell(&cmd, &args, true).await,
+        Commands::Shell { cmd, ref args } => match cmd {
+            Some(cmd) => {
+                let output = devenv.exec_in_shell(cmd, args).await?;
+                if !output.status.success() {
+                    process::exit(output.status.code().unwrap_or(1));
+                }
+                Ok(())
+            }
+            None => devenv.shell().await,
+        },
         Commands::Test { .. } => devenv.test().await,
         Commands::Container {
             registry,
@@ -106,15 +138,13 @@ async fn main() -> Result<()> {
                 Some(name) => {
                     match (copy, docker_run) {
                         (true, false) => {
-                            logger.warn(
-                                "--copy flag is deprecated, use `devenv container copy` instead",
-                            );
+                            warn!("--copy flag is deprecated, use `devenv container copy` instead",);
                             devenv
                                 .container_copy(&name, &copy_args, registry.as_deref())
                                 .await?;
                         }
                         (_, true) => {
-                            logger.warn(
+                            warn!(
                                 "--docker-run flag is deprecated, use `devenv container run` instead",
                             );
                             devenv
@@ -122,7 +152,9 @@ async fn main() -> Result<()> {
                                 .await?;
                         }
                         _ => {
-                            logger.warn("Calling without a subcommand is deprecated, use `devenv container build` instead");
+                            warn!(
+                                "Calling without a subcommand is deprecated, use `devenv container build` instead"
+                            );
                             let _ = devenv.container_build(&name).await?;
                         }
                     };
@@ -131,33 +163,56 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Init { target } => devenv.init(&target),
+        Commands::Generate { .. } => match which::which("devenv-generate") {
+            Ok(devenv_generate) => {
+                let error = Command::new(devenv_generate)
+                    .args(std::env::args().skip(1).filter(|arg| arg != "generate"))
+                    .exec();
+                miette::bail!("failed to execute devenv-generate {error}");
+            }
+            Err(_) => {
+                miette::bail!(indoc::formatdoc! {"
+                    devenv-generate was not found in PATH
+
+                    It was moved to a separate binary due to https://github.com/cachix/devenv/issues/1733
+                "})
+            }
+        },
         Commands::Search { name } => devenv.search(&name).await,
         Commands::Gc {} => devenv.gc(),
         Commands::Info {} => devenv.info().await,
-        Commands::Repl {} => devenv.repl(),
+        Commands::Repl {} => devenv.repl().await,
         Commands::Build { attributes } => devenv.build(&attributes).await,
         Commands::Update { name } => devenv.update(&name).await,
-        Commands::Up { process, detach } => devenv.up(process.as_deref(), &detach, &detach).await,
-        Commands::Processes { command } => match command {
-            ProcessesCommand::Up { process, detach } => {
-                devenv.up(process.as_deref(), &detach, &detach).await
-            }
-            ProcessesCommand::Down {} => devenv.down(),
-        },
+        Commands::Up { processes, detach }
+        | Commands::Processes {
+            command: ProcessesCommand::Up { processes, detach },
+        } => {
+            let options = devenv::ProcessOptions {
+                detach,
+                log_to_file: detach,
+                ..Default::default()
+            };
+            devenv.up(processes, &options).await
+        }
+        Commands::Processes {
+            command: ProcessesCommand::Down {},
+        } => devenv.down(),
         Commands::Tasks { command } => match command {
-            TasksCommand::Run { tasks } => devenv.tasks_run(tasks).await,
+            TasksCommand::Run { tasks, mode } => devenv.tasks_run(tasks, mode).await,
         },
         Commands::Inputs { command } => match command {
             InputsCommand::Add { name, url, follows } => devenv.inputs_add(&name, &url, &follows),
         },
 
         // hidden
-        Commands::Assemble => devenv.assemble(false),
+        Commands::Assemble => devenv.assemble(false).await,
         Commands::PrintDevEnv { json } => devenv.print_dev_env(json).await,
         Commands::GenerateJSONSchema => {
-            config::write_json_schema();
+            config::write_json_schema().wrap_err("Failed to generate JSON schema")?;
             Ok(())
         }
-        Commands::Version {} => unreachable!(),
+        Commands::Direnvrc => unreachable!(),
+        Commands::Version => unreachable!(),
     }
 }

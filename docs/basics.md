@@ -36,22 +36,16 @@ jq-1.6
 hello
 ```
 
-
-
-
-See [Nix language tutorial](https://nix.dev/tutorials/first-steps/nix-language) for a 1-2 hour deep dive 
+See [Nix language tutorial](https://nix.dev/tutorials/first-steps/nix-language) for a 1-2 hour deep dive
 that will allow you to read any Nix file.
 
-!!! note
-
-    We're running [a fundraiser to improve the developer experience around error messages](https://opencollective.com/nix-errors-enhancement), with the goal of lowering the barrier to learning Nix.
 
 ## Environment Summary
 
 If you'd like to print the summary of the current environment:
 
 ```shell-session
-$ devenv info 
+$ devenv info
 ...
 
 # env
@@ -68,3 +62,4 @@ $ devenv info
 # processes
 
 ```
+

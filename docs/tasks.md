@@ -59,7 +59,7 @@ Tasks can also use another package for execution, for example when entering the 
 
 {
   tasks = {
-    "python:hello"" = {
+    "python:hello" = {
       exec = ''
         print("Hello world from Python!")
       '';
@@ -102,7 +102,7 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
     "myapp:mytask" = {
       exec = ''
         echo $DEVENV_TASK_INPUTS> $DEVENV_ROOT/input.json
-        echo '{ "output" = 1; }' > $DEVENV_TASK_OUTPUT_FILE
+        echo '{ "output": 1 }' > $DEVENV_TASK_OUTPUT_FILE
         echo $DEVENV_TASKS_OUTPUTS > $DEVENV_ROOT/outputs.json
       '';
       input = {

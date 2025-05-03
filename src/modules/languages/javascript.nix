@@ -90,7 +90,7 @@ let
 
       if [ "$ACTUAL_YARN_CHECKSUM" != "$EXPECTED_YARN_CHECKSUM" ]
       then
-        if ${cfg.yarn.package}/bin/yarn install ${lib.optionalString (cfg.directory != config.devenv.root) "--cwd ${cfg.directory}"}
+        if ${cfg.yarn.package}/bin/yarn ${lib.optionalString (cfg.directory != config.devenv.root) "--cwd ${cfg.directory}"} install
         then
           echo "$ACTUAL_YARN_CHECKSUM" > "$YARN_CHECKSUM_FILE"
         else
@@ -243,7 +243,11 @@ in
       '') ++
       (lib.optional cfg.bun.install.enable ''
         source ${initBunScript}
-      '')
+      '') ++ [
+        ''
+          export PATH="${nodeModulesPath}/.bin:$PATH"
+        ''
+      ]
     );
   };
 }

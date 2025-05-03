@@ -38,7 +38,7 @@ package
 
 
 *Default:*
-` pkgs.elixir `
+` pkgs.solc `
 
 
 

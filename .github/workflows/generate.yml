@@ -22,9 +22,9 @@ jobs:
       - name: Install devenv
         run: nix profile install . -L --accept-flake-config
 
-      - name: Disable pre-commit hooks
+      - name: Disable git-hooks
         run: |
-          echo '{ pre-commit.default_stages = ["manual"]; }' > devenv.local.nix
+          echo '{ git-hooks.default_stages = ["manual"]; }' > devenv.local.nix
 
       - name: Generate doc options
         run: devenv shell devenv-generate-doc-options

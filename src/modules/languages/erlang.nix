@@ -2,6 +2,9 @@
 
 let
   cfg = config.languages.erlang;
+  rebar3 = pkgs.rebar3.overrideAttrs (oldAttrs: {
+    buildInputs = [ cfg.package ];
+  });
 in
 {
   options.languages.erlang = {
@@ -10,7 +13,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       description = "Which package of Erlang to use.";
-      default = pkgs.erlang;
+      default = pkgs.erlang_27;
       defaultText = lib.literalExpression "pkgs.erlang";
     };
   };
@@ -20,7 +23,7 @@ in
       packages = [
         cfg.package
         pkgs.erlang-ls
-        pkgs.rebar3
+        rebar3
       ];
     };
 }

@@ -1,10 +1,18 @@
-{ inputs, pkgs, lib, config, ... }: {
+{ inputs
+, pkgs
+, lib
+, config
+, ...
+}:
+{
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix;
   # ignore annoying browserlists warning that breaks pre-commit hooks
   env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
   env.RUST_LOG = "devenv=debug";
   env.RUST_LOG_SPAN_EVENTS = "full";
   env.DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
+
+  apple.sdk = if pkgs.stdenv.isDarwin then pkgs.apple-sdk_11 else null;
 
   packages = [
     pkgs.cairo
@@ -15,13 +23,14 @@
     pkgs.watchexec
     pkgs.openssl
     pkgs.sqlx-cli
-  ] ++ lib.optionals pkgs.stdenv.isDarwin (with pkgs.darwin.apple_sdk; [
-    frameworks.SystemConfiguration
-  ]);
+    pkgs.cargo-outdated # Find outdated crates
+    pkgs.cargo-machete # Find unused crates
+  ];
 
   languages.nix.enable = true;
   # for cli
   languages.rust.enable = true;
+  languages.rust.channel = "nightly";
   # for docs
   languages.python.enable = true;
   # it breaks glibc
@@ -49,16 +58,22 @@
       set -xe
       set -o pipefail
 
-      pushd examples/simple
-        # this should fail since files already exist
-        devenv init && exit 1
-      popd
-
       tmp="$(mktemp -d)"
       devenv init "$tmp"
       pushd "$tmp"
         devenv version
         devenv --override-input devenv path:${config.devenv.root}?dir=src/modules test
+      popd
+      rm -rf "$tmp"
+
+      # Test devenv init with target path
+      tmp="$(mktemp -d)"
+      pushd "$tmp"
+        devenv init target
+        test -z "$(ls -A1 | grep -v target)"
+        pushd target
+          devenv --override-input devenv path:${config.devenv.root}?dir=src/modules test
+        popd
       popd
       rm -rf "$tmp"
 
@@ -92,7 +107,7 @@
         grep -F 'nix-develop started succesfully' <./console
         grep -F "$(${lib.getExe pkgs.hello})" <./console
         # Test that a container can be built
-        if $(uname) == "Linux"
+        if [ "$(uname)" = "Linux" ]
         then
           nix build --override-input devenv-root "file+file://"<(printf %s "$PWD") --accept-flake-config --show-trace .#container-processes
         fi
@@ -102,7 +117,7 @@
   };
   scripts."devenv-generate-doc-css" = {
     description = "Generate CSS for the docs.";
-    exec = "${lib.getExe pkgs.tailwindcss} build -i docs/assets/extra.css -o docs/assets/output.css";
+    exec = "${lib.getExe pkgs.tailwindcss} -m -i docs/assets/extra.css -o docs/assets/output.css";
   };
   scripts."devenv-generate-doc-options" = {
     description = "Generate option docs.";
@@ -127,7 +142,9 @@
       { pkgs, ... }: {
 
         # Enable all languages tooling!
-        ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
+        ${lib.concatStringsSep "\n  " (
+          map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages)
+        )}
 
         # If you're missing a language, please contribute it by following examples of other languages <3
       }
@@ -139,12 +156,16 @@
     exec = ''
       cat > docs/services-all.md <<EOF
         \`\`\`nix
-        ${lib.concatStringsSep "\n  " (map (lang: "services.${lang}.enable = true;") (builtins.attrNames config.services))}
+        ${lib.concatStringsSep "\n  " (
+          map (lang: "services.${lang}.enable = true;") (builtins.attrNames config.services)
+        )}
         \`\`\`
       EOF
       cat > docs/languages-all.md <<EOF
         \`\`\`nix
-        ${lib.concatStringsSep "\n  " (map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages))}
+        ${lib.concatStringsSep "\n  " (
+          map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages)
+        )}
         \`\`\`
       EOF
     '';
@@ -163,64 +184,78 @@
     description = "Generate missing template markdown files";
     exec = ''
 
-    process_directory() {
-      local nix_dir=$1
-      local md_dir=$2
-      local category=$3
+          process_directory() {
+            local nix_dir=$1
+            local md_dir=$2
+            local category=$3
 
-      nixFiles=($(ls $nix_dir/*.nix))
-      mdFiles=($(ls $md_dir/*.md))
+            nixFiles=($(ls $nix_dir/*.nix))
+            mdFiles=($(ls $md_dir/*.md))
 
-      declare -a nixList
-      declare -a mdList
+            declare -a nixList
+            declare -a mdList
 
-      # Remove extensions and populate lists
-      for file in "''${nixFiles[@]}"; do
-        baseName=$(basename "$file" .nix)
-        nixList+=("$baseName")
-      done
+            # Remove extensions and populate lists
+            for file in "''${nixFiles[@]}"; do
+              baseName=$(basename "$file" .nix)
+              nixList+=("$baseName")
+            done
 
-      for file in "''${mdFiles[@]}"; do
-        baseName=$(basename "$file" .md)
-        mdList+=("$baseName")
-      done
+            for file in "''${mdFiles[@]}"; do
+              baseName=$(basename "$file" .md)
+              mdList+=("$baseName")
+            done
 
-      IFS=$'\n' sorted_nix=($(sort <<<"''${nixList[*]}"))
-      IFS=$'\n' sorted_md=($(sort <<<"''${mdList[*]}"))
+            IFS=$'\n' sorted_nix=($(sort <<<"''${nixList[*]}"))
+            IFS=$'\n' sorted_md=($(sort <<<"''${mdList[*]}"))
 
-      # Compare and create missing files
-      missing_files=()
-      for item in "''${sorted_nix[@]}"; do
-        if [[ ! " ''${sorted_md[@]} " =~ " $item " ]]; then
-          missing_files+=("$item")
-          cat << EOF > "$md_dir/$item.md"
+            # Compare and create missing files
+            missing_files=()
+            for item in "''${sorted_nix[@]}"; do
+              if [[ ! " ''${sorted_md[@]} " =~ " $item " ]]; then
+                missing_files+=("$item")
+                cat << EOF > "$md_dir/$item.md"
 
 
-[comment]: # (Please add your documentation on top of this line)
+      [comment]: # (Please add your documentation on top of this line)
 
-@AUTOGEN_OPTIONS@
-EOF
-          echo "Created missing file: $md_dir/$item.md"
-        fi
-      done
+      @AUTOGEN_OPTIONS@
+      EOF
+                echo "Created missing file: $md_dir/$item.md"
+              fi
+            done
 
-      if [ ''${#missing_files[@]} -eq 0 ]; then
-        echo "All $category docs markdown files are present."
-      fi
-    }
+            if [ ''${#missing_files[@]} -eq 0 ]; then
+              echo "All $category docs markdown files are present."
+            fi
+          }
 
-    process_directory "src/modules/languages" "docs/individual-docs/languages" "language"
-    process_directory "src/modules/services" "docs/individual-docs/services" "service"
-    process_directory "src/modules/process-managers" "docs/individual-docs/process-managers" "process manager"
+          process_directory "src/modules/languages" "docs/individual-docs/languages" "language"
+          process_directory "src/modules/services" "docs/individual-docs/services" "service"
+          process_directory "src/modules/process-managers" "docs/individual-docs/process-managers" "process manager"
     '';
+  };
+
+  tasks = {
+    "devenv:compile-requirements" = {
+      exec = "uv pip compile requirements.in -o requirements.txt";
+      before = [ "devenv:python:virtualenv" ];
+      status = ''
+        get_last_modified() {
+          stat -c %Y $1 2>/dev/null || stat -f %m $1 2>/dev/null || echo 0
+        }
+        input=$(get_last_modified "requirements.in")
+        output=$(get_last_modified "requirements.txt")
+        if [[ $output -eq 0 || $input -gt $output ]]; then
+          exit 1
+        fi
+      '';
+    };
   };
 
   pre-commit.hooks = {
     nixpkgs-fmt.enable = true;
-    #shellcheck.enable = true;
-    #clippy.enable = true;
     rustfmt.enable = true;
-    #markdownlint.enable = true;
     markdownlint.settings.configuration = {
       MD013 = {
         line_length = 120;
@@ -232,6 +267,7 @@ EOF
       enable = true;
       name = "generate-doc-css";
       entry = config.scripts."devenv-generate-doc-css".exec;
+      files = "docs/assets/extra.css";
     };
   };
 }
