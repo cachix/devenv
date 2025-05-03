@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 {
   services.prometheus = {
     enable = true;
@@ -19,6 +19,6 @@
   };
 
   scripts.ping-prometheus.exec = ''
-    ${pkgs.curl}/bin/curl -sf http://localhost:9090/-/healthy
+    ${lib.getExe pkgs.curl} -sf http://localhost:9090/-/healthy
   '';
 }

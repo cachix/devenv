@@ -1,7 +1,5 @@
 set -e
 
-trap 'rm -rf "${DEVENV_STATE}/prometheus"' EXIT
-
 wait_for_port 9090
 
 # Test the API endpoints
