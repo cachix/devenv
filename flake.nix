@@ -45,10 +45,13 @@
     let
       systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
-      mkPackage = pkgs: pkgs.callPackage ./package.nix {
-        inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
-        inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
-      };
+      mkPackage = pkgs: attrs: pkgs.callPackage ./package.nix
+        (
+          {
+            inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
+            inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
+          } // attrs
+        );
       mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions = pkgs:
         let
@@ -109,7 +112,8 @@
         in
         {
           default = self.packages.${system}.devenv;
-          devenv = mkPackage pkgs;
+          devenv = mkPackage pkgs { };
+          devenv-tasks = mkPackage pkgs { build_tasks = true; };
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
           devenv-generate-individual-docs =
