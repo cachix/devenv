@@ -177,6 +177,9 @@ let
       echo
     fi
     unset POSTGRES_RUN_INITIAL_SCRIPT
+
+    # Create a file marker to indicate PostgreSQL has completed initialization
+    touch "$PGDATA/.devenv_initialized"
   '';
   startScript = pkgs.writeShellScriptBin "start-postgres" ''
     set -euo pipefail
@@ -403,7 +406,16 @@ in
         shutdown.signal = 2;
 
         readiness_probe = {
-          exec.command = "${postgresPkg}/bin/pg_isready -d template1";
+          # pg_isready does not distinguish between a server that is ready and one that's being initialized by initdb.
+          exec.command = ''
+            if [[ -f "$PGDATA/.devenv_initialized" ]]; then
+              ${postgresPkg}/bin/pg_isready -d template1 && \
+              ${postgresPkg}/bin/psql -c "SELECT 1" template1 > /dev/null 2>&1
+            else
+              echo "Waiting for PostgreSQL initialization to complete..." 2>&1
+              exit 1
+            fi
+          '';
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 4;
