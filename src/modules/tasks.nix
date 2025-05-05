@@ -23,7 +23,7 @@ let
               #!${binary}
               ${lib.optionalString (!isStatus) "set -e"}
               ${command}
-              ${lib.optionalString (config.exports != [] && !isStatus) "${devenv-tasks}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
+              ${lib.optionalString (config.exports != [] && !isStatus) "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
       in
       {
