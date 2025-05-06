@@ -208,7 +208,11 @@ impl GlobalOptions {
 #[derive(Subcommand, Clone)]
 pub enum Commands {
     #[command(about = "Scaffold devenv.yaml, devenv.nix, .gitignore and .envrc.")]
-    Init { target: Option<PathBuf> },
+    Init {
+        target: Option<PathBuf>,
+        #[arg(long, help = "Use template")]
+        template: Option<String>,
+    },
 
     #[command(about = "Generate devenv.yaml and devenv.nix using AI")]
     Generate {
