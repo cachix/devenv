@@ -16,7 +16,7 @@ jobs:
           - system: "aarch64-darwin"
             runs-on: [self-hosted, macOS, ARM64]
           - system: "x86_64-darwin"
-            runs-on: [macos-13]
+            runs-on: [self-hosted, macOS, ARM64]
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
       - uses: actions/checkout@v4
