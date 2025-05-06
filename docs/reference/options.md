@@ -41568,7 +41568,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r](https://github.com/cachix/devenv/blob/main/src/modules/languages/r)
 
 
 
@@ -41589,7 +41589,49 @@ package
 ` pkgs.R `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r](https://github.com/cachix/devenv/blob/main/src/modules/languages/r)
+
+
+
+## languages.r.descriptionFile.installPackages.enable
+
+
+
+Whether to enable installation of R packages listed in DESCRIPTION file.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r](https://github.com/cachix/devenv/blob/main/src/modules/languages/r)
+
+
+
+## languages.r.descriptionFile.path
+
+
+
+Path to DESCRIPTION file
+
+
+
+*Type:*
+path in the Nix store
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r](https://github.com/cachix/devenv/blob/main/src/modules/languages/r)
 
 
 
@@ -41615,7 +41657,7 @@ boolean
 ` true `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r](https://github.com/cachix/devenv/blob/main/src/modules/languages/r)
 
 
 
@@ -41636,7 +41678,7 @@ package
 ` pkgs.radianWrapper `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r](https://github.com/cachix/devenv/blob/main/src/modules/languages/r)
 
 
 
