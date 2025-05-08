@@ -25,6 +25,7 @@
     pkgs.sqlx-cli
     pkgs.cargo-outdated # Find outdated crates
     pkgs.cargo-machete # Find unused crates
+    pkgs.cargo-edit # Adds the set-version command
   ];
 
   languages.nix.enable = true;
