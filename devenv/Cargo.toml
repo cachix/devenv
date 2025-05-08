@@ -12,6 +12,7 @@ default-run = "devenv"
 [dependencies]
 devenv-eval-cache.workspace = true
 devenv-tasks.workspace = true
+devenv-cache-core.workspace = true
 http-client-tls.workspace = true
 nix-conf-parser.workspace = true
 

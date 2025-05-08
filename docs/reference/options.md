@@ -87285,6 +87285,27 @@ null or string
 
 
 
+## tasks.\<name>.execIfModified
+
+
+
+Paths to files that should trigger a task execution if modified.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks.\<name>.exports
 
 
