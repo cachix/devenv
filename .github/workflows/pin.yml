@@ -20,22 +20,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [
+        runs-on: [
           [self-hosted, linux, ARM64],
           [self-hosted, linux, X64],
           [self-hosted, macOS, ARM64],
           [self-hosted, macOS, X64],
         ]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
     - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v30
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v30
       with:
         extra_nix_config: |
           access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-    - uses: cachix/cachix-action@v15
+
+    - name: Configure Cachix
+      uses: cachix/cachix-action@v15
       with:
         name: devenv
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}

@@ -2,11 +2,7 @@
 name: Publish containers
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - v*
+  workflow_call:
   workflow_dispatch:
 
 env:
@@ -15,7 +11,6 @@ env:
 
 jobs:
   devcontainer:
-    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -62,8 +57,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VERSION=${{ github.sha }}
+
   devenv:
-    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read

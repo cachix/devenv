@@ -1,0 +1,37 @@
+name: "Build"
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        systems:
+          - system: "aarch64-linux"
+            runs-on: [self-hosted, linux, ARM64]
+          - system: "x86_64-linux"
+            runs-on: [self-hosted, linux, X64]
+          - system: "aarch64-darwin"
+            runs-on: [self-hosted, macOS, ARM64]
+          - system: "x86_64-darwin"
+            runs-on: [self-hosted, macOS, ARM64]
+    runs-on: ${{ matrix.systems.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build devenv-${{ matrix.systems.system }}
+        run: |
+          nix build -L --show-trace --print-out-paths --system ${{ matrix.systems.system }}
