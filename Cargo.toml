@@ -53,7 +53,7 @@ petgraph = "0.7.1"
 pretty_assertions = { version = "1.4.0", features = ["unstable"] }
 regex = "1.10.3"
 schemars = "0.8.16"
-schematic = { version = "0.17.11", features = [
+schematic = { version = "0.18.2", features = [
     "schema",
     "yaml",
     "renderer_template",

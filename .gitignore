@@ -19,3 +19,5 @@ target
 
 # JavaScript
 /node_modules
+
+**/.claude/settings.local.json
