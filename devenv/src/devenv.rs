@@ -647,10 +647,17 @@ impl Devenv {
             tasks::VerbosityLevel::Normal
         };
 
+        // Get Task Server Protocol executables from environment
+        let tsp_executables = std::env::var("DEVENV_TASK_SERVER_PROTOCOL_EXECUTABLES")
+            .map(|val| serde_json::from_str::<Vec<String>>(&val))
+            .unwrap_or(Ok(vec![]))
+            .unwrap_or_default();
+
         let config = tasks::Config {
             roots,
             tasks,
             run_mode,
+            task_server_protocol_executables: tsp_executables,
         };
         debug!(
             "Tasks config: {}",

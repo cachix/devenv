@@ -21,6 +21,12 @@ blake3.workspace = true
 walkdir = "2.4.0"
 devenv-cache-core.workspace = true
 shell-escape.workspace = true
+karyon_jsonrpc = { version = "0.3.1", default-features = false, features = [
+    "tokio",
+    "unix",
+] }
+futures-util = "0.3.30"
+async-trait = "0.1.77"
 
 [dev-dependencies]
 pretty_assertions.workspace = true

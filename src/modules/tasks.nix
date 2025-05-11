@@ -117,6 +117,13 @@ in
       description = "A set of tasks.";
     };
 
+    task.serverProtocolExecutables = lib.mkOption {
+      type = types.listOf types.str;
+      description = "List of Task Server Protocol executables to register with the task system.";
+      default = [ ];
+      example = [ "my-tsp-provider" ];
+    };
+
     task.config = lib.mkOption {
       type = types.package;
       internal = true;
@@ -131,6 +138,7 @@ in
 
   config = {
     env.DEVENV_TASKS = builtins.toJSON tasksJSON;
+    env.DEVENV_TASK_SERVER_PROTOCOL_EXECUTABLES = builtins.toJSON config.task.serverProtocolExecutables;
 
     assertions = [
       {

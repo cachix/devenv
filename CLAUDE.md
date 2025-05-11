@@ -8,6 +8,7 @@
 - Lint code: `cargo clippy`
 - Run all tests: `cargo test` or `devenv-run-tests tests`
 - Run single test: `devenv-run-tests --only <test_name> tests`
+- Look up docs at https://docs.rs/{crate}
 
 ## Code Style Guidelines
 - **Imports**: Group by category (std lib first, then external crates, then internal)

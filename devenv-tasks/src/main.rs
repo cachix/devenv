@@ -54,10 +54,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let tasks_json = env::var("DEVENV_TASKS")?;
             let tasks: Vec<TaskConfig> = serde_json::from_str(&tasks_json)?;
 
+            // Get the task server protocol executables from environment variable
+            let tsp_executables = env::var("DEVENV_TASK_SERVER_PROTOCOL_EXECUTABLES")
+                .map(|s| serde_json::from_str::<Vec<String>>(&s).unwrap_or_default())
+                .unwrap_or_default();
+
             let config = Config {
                 tasks,
                 roots,
                 run_mode: mode,
+                task_server_protocol_executables: tsp_executables,
             };
 
             // Pass verbosity level directly to TasksUi
