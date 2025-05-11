@@ -248,7 +248,7 @@
     };
   };
 
-  pre-commit.hooks = {
+  git-hooks.hooks = {
     nixpkgs-fmt.enable = true;
     rustfmt.enable = true;
     markdownlint.settings.configuration = {
