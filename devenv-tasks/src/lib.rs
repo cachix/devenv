@@ -304,7 +304,7 @@ impl TaskState {
                 }
             };
 
-            let (mut command, outputs_file) = self
+            let (mut command, _) = self
                 .prepare_command(cmd, outputs)
                 .wrap_err("Failed to prepare status command")?;
 

@@ -335,4 +335,186 @@ mod tests {
             .await
             .unwrap());
     }
+
+    #[sqlx::test]
+    async fn test_directory_modification_detection() {
+        let dotfile_dir = TempDir::new().unwrap();
+        std::env::set_var("DEVENV_DOTFILE", dotfile_dir.path().to_str().unwrap());
+
+        let cache = TaskCache::new().await.unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path().join("test_dir");
+        std::fs::create_dir(&dir_path).unwrap();
+
+        let task_name = "test_task_dir";
+        let dir_path_str = dir_path.to_str().unwrap().to_string();
+
+        // First check should consider it modified (initial run)
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Second check should consider it unmodified
+        assert!(!cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Sleep to ensure clock advances
+        sleep(Duration::from_millis(10)).await;
+
+        // Add a new file in the directory
+        let file_path = dir_path.join("test_file.txt");
+        {
+            let mut file = File::create(&file_path).unwrap();
+            file.write_all(b"new file content").unwrap();
+            file.sync_all().unwrap();
+        }
+
+        // Check should detect the directory modification
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Second check should consider it unmodified
+        assert!(!cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Sleep to ensure clock advances
+        sleep(Duration::from_millis(10)).await;
+
+        // Modify an existing file
+        {
+            let mut file = File::create(&file_path).unwrap();
+            file.write_all(b"modified file content").unwrap();
+            file.sync_all().unwrap();
+        }
+
+        // Check should detect the directory modification
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Sleep to ensure clock advances
+        sleep(Duration::from_millis(10)).await;
+
+        // Create a subdirectory
+        let subdir_path = dir_path.join("subdir");
+        std::fs::create_dir(&subdir_path).unwrap();
+
+        // Check should detect the directory modification
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Sleep to ensure clock advances
+        sleep(Duration::from_millis(10)).await;
+
+        // Add a file in the subdirectory
+        let subdir_file_path = subdir_path.join("nested_file.txt");
+        {
+            let mut file = File::create(&subdir_file_path).unwrap();
+            file.write_all(b"nested file content").unwrap();
+            file.sync_all().unwrap();
+        }
+
+        // Check should detect the directory modification
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // After the final check, it should be unmodified again
+        assert!(!cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Create a deeply nested directory structure
+        let deep_dir1 = subdir_path.join("level1");
+        std::fs::create_dir(&deep_dir1).unwrap();
+        let deep_dir2 = deep_dir1.join("level2");
+        std::fs::create_dir(&deep_dir2).unwrap();
+        let deep_dir3 = deep_dir2.join("level3");
+        std::fs::create_dir(&deep_dir3).unwrap();
+
+        // Check should detect the deep directory modification
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Second check should consider it unmodified
+        assert!(!cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Sleep to ensure clock advances
+        sleep(Duration::from_millis(10)).await;
+
+        // Add a file deep in the nested structure
+        let deep_file_path = deep_dir3.join("deep_file.txt");
+        {
+            let mut file = File::create(&deep_file_path).unwrap();
+            file.write_all(b"deep nested file content").unwrap();
+            file.sync_all().unwrap();
+        }
+
+        // Check should detect the deep file modification
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Sleep to ensure clock advances
+        sleep(Duration::from_millis(10)).await;
+
+        // Update the deep file
+        {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .append(true)
+                .open(&deep_file_path)
+                .unwrap();
+            file.write_all(b" with additional content").unwrap();
+            file.sync_all().unwrap();
+        }
+
+        // Check should detect the deep file update
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Remove a deep file
+        std::fs::remove_file(&deep_file_path).unwrap();
+
+        // Check should detect the removal
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // Remove a deep directory
+        std::fs::remove_dir(&deep_dir3).unwrap();
+
+        // Check should detect the directory removal
+        assert!(cache
+            .check_modified_files(task_name, &[dir_path_str.clone()])
+            .await
+            .unwrap());
+
+        // After the final check, it should be unmodified again
+        assert!(!cache
+            .check_modified_files(task_name, &[dir_path_str])
+            .await
+            .unwrap());
+    }
 }
