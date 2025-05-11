@@ -1,6 +1,48 @@
-Many experienced Nix users prefer to use [Nix flakes](https://wiki.nixos.org/wiki/Flakes),
-although devenv is considered a superior interface since it's way simpler,
-but lacks integration with existing tooling.
+# Using devenv with Nix Flakes
+
+[Nix Flakes](https://wiki.nixos.org/wiki/Flakes) provide a standardized way to manage Nix projects. They allow you to:
+
+* Specify dependencies as inputs
+* Pin those dependencies in a lock file
+* Define structured outputs for your project
+
+!!! note "For those new to devenv and Nix"
+    If you're new to both devenv and Nix, starting with the standard devenv CLI approach will provide the smoothest experience. [Getting started with devenv.](/getting-started)
+
+You can integrate the devenv module system (languages, processes, services, etc.) into a Nix Flake as a `devShell` output. This allows devenv to work within your existing Flake-based projects.
+
+While Flakes are more widely supported by existing tooling,  be aware that using devenv through Flakes has some performance limitations and reduced features compared to the dedicated devenv CLI, which we'll explain in the comparison below.
+
+## Choosing between devenv and Nix Flakes
+
+For most projects, we recommend using devenv.nix with the dedicated devenv CLI for the best developer experience. This approach offers several advantages:
+
+* **Simplicity**: A more straightforward interface with less boilerplate
+* **Performance**: Faster evaluation and more efficient caching of environments
+* **Developer-focused**: Purpose-built for development environments with integrated tooling
+
+[Getting started with devenv.](/getting-started)
+
+Consider using the Flake integration when:
+
+* You maintain an existing flake-based project ecosystem
+* Your developer environment needs to be consumed by downstream flakes
+* You're an experienced Nix user
+* You understand and can work around the technical limitations of Flakes (evaluation model, impurity constraints, etc.)
+
+### Comparison of features
+
+| Feature | devenv CLI | Nix Flakes |
+| ------- | ------ | ------ |
+| External flake inputs | :material-check: | :material-check: |
+| Shared remote configs | :material-check: | :material-check: |
+| Designed for developer environments | :material-check: | :material-close: |
+| Built-in container support | :material-check: | :material-close: |
+| Protection from garbage-collection | :material-check: | :material-close: |
+| Faster evaluation (lazy trees) | :material-check: | :material-close: |
+| Evaluation caching | :material-check: | :material-close: |
+| Pure evaluation | :material-check: | :material-close: (`impure` by default) |
+| Export as a flake | :material-close: | :material-check: |
 
 ## Getting started
 

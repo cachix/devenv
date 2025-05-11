@@ -1,6 +1,8 @@
-Many experienced Nix users prefer to use [Nix flakes](https://wiki.nixos.org/wiki/Flakes),
-although devenv is considered a superior interface since it's way simpler,
-but lacks integration with existing tooling.
+# Using devenv with flake-parts
+
+[Flake Parts](https://flake.parts/) provides a modular framework for organizing [Nix Flakes](/guides/using-with-flakes). This integration helps you structure your devenv configuration within a Nix Flake.
+
+Before proceeding, we recommend reading about the [benefits and downsides of using Nix Flakes](/guides/using-with-flakes) as this approach requires familiarity with Nix Flakes concepts.
 
 ## Getting started
 
@@ -223,7 +225,7 @@ To enter the shell of `projectA`:
 ```console
 $ nix develop --no-pure-eval .#projectA
 this is project A
-(devenv) $ 
+(devenv) $
 ```
 
 To enter the shell of `projectB`:
@@ -231,7 +233,7 @@ To enter the shell of `projectB`:
 ```console
 $ nix develop --no-pure-eval .#projectB
 this is project B
-(devenv) $ 
+(devenv) $
 ```
 
 The last line makes `projectA` the default shell:
@@ -239,7 +241,7 @@ The last line makes `projectA` the default shell:
 ```console
 $ nix develop --no-pure-eval .
 this is project A
-(devenv) $ 
+(devenv) $
 ```
 
 ## External flakes
