@@ -308,22 +308,11 @@ impl TaskState {
                 .prepare_command(cmd, outputs)
                 .wrap_err("Failed to prepare status command")?;
 
-            let result = command.status().await;
-            match result {
-                Ok(status) => {
-                    if status.success() {
-                        // Get any output from the status command
-                        let current_output = Self::get_outputs(&outputs_file).await;
-
-                        // Use cached output if available and status command didn't produce output
-                        let output = match current_output {
-                            Output(None) if cached_output.is_some() => {
-                                tracing::debug!("Using cached output for task {}", task_name);
-                                Output(cached_output)
-                            }
-                            _ => current_output,
-                        };
-
+            // Use spawn and wait with output to properly handle status script execution
+            match command.output().await {
+                Ok(output) => {
+                    if output.status.success() {
+                        let output = Output(cached_output);
                         tracing::debug!("Task {} skipped with output: {:?}", task_name, output);
                         return Ok(TaskCompleted::Skipped(Skipped::Cached(output)));
                     }
@@ -2408,6 +2397,65 @@ echo "Task executed successfully"
                     TaskStatus::Completed(TaskCompleted::DependencyFailed)
                 )
             ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
+        );
+
+        Ok(())
+    }
+
+    /// Test for issue #1878: Status scripts that exit with 0 should skip the task
+    /// even if they output to stdout or stderr
+    #[tokio::test]
+    async fn test_status_script_with_output() -> Result<(), Error> {
+        // Create a unique tempdir for this test
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("tasks.db");
+
+        // Status script that exits with 0 but prints to both stdout and stderr
+        let status_script = create_script(
+            r#"#!/bin/sh
+echo "This is a log message to stdout"
+echo "And this is a log message to stderr" >&2
+exit 0
+"#,
+        )?;
+
+        // Command script should not be run if status exits with 0
+        let command_script = create_script(
+            r#"#!/bin/sh
+echo "Task should be skipped - this should not run!"
+exit 0
+"#,
+        )?;
+
+        let task_name = "test:status_output";
+
+        let tasks = Tasks::new_with_db_path(
+            Config::try_from(json!({
+                "roots": [task_name],
+                "run_mode": "all",
+                "tasks": [
+                    {
+                        "name": task_name,
+                        "command": command_script.to_str().unwrap(),
+                        "status": status_script.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+            db_path,
+        )
+        .await?;
+
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+
+        // The task should be skipped even though the status script printed to stdout/stderr
+        assert_matches!(
+            &task_statuses[..],
+            [(name, TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))))]
+            if name == task_name,
+            "Task should be skipped even when status script prints to stdout/stderr"
         );
 
         Ok(())
