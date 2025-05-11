@@ -562,12 +562,30 @@ impl Tasks {
             task_indices.insert(name, index);
         }
         let mut roots = Vec::new();
+
         for name in config.roots.clone() {
+            // Check for exact match first
             if let Some(index) = task_indices.get(&name) {
                 roots.push(*index);
-            } else {
-                return Err(Error::TaskNotFound(name));
+                continue;
             }
+
+            // Check if this is a namespace prefix (no colon)
+            if !name.contains(':') {
+                // This is a namespace prefix, find all tasks with this prefix
+                let matching_tasks: Vec<_> = task_indices
+                    .iter()
+                    .filter(|(task_name, _)| task_name.starts_with(&format!("{}:", name)))
+                    .map(|(_, &index)| index)
+                    .collect();
+
+                if !matching_tasks.is_empty() {
+                    roots.extend(matching_tasks);
+                    continue;
+                }
+            }
+
+            return Err(Error::TaskNotFound(name));
         }
         let mut tasks = Self {
             roots,
@@ -2281,6 +2299,69 @@ echo "Task executed successfully"
                 (name3, TaskStatus::Completed(TaskCompleted::Success(_, _)))
             ] if name1 == "myapp:task_1" && name2 == "myapp:task_2" && name3 == "myapp:task_3"
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_prefix_matching() -> Result<(), Error> {
+        // Create a unique tempdir for this test
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("tasks.db");
+
+        let script1 = create_basic_script("1")?;
+        let script2 = create_basic_script("2")?;
+        let script3 = create_basic_script("3")?;
+        let script4 = create_basic_script("4")?;
+
+        // Create tasks in two different namespaces
+        let tasks = Tasks::new_with_db_path(
+            Config::try_from(json!({
+                "roots": ["myapp"], // Just use the namespace prefix
+                "run_mode": "all",
+                "tasks": [
+                    {
+                        "name": "myapp:task_1",
+                        "command": script1.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_2",
+                        "command": script2.to_str().unwrap()
+                    },
+                    {
+                        "name": "myapp:task_3",
+                        "command": script3.to_str().unwrap()
+                    },
+                    {
+                        "name": "other:task_4",
+                        "command": script4.to_str().unwrap()
+                    }
+                ]
+            }))
+            .unwrap(),
+            db_path,
+        )
+        .await?;
+        tasks.run().await;
+
+        let task_statuses = inspect_tasks(&tasks).await;
+        let task_statuses = task_statuses.as_slice();
+
+        // Should only match the "myapp" namespace tasks, not "other"
+        assert_eq!(
+            task_statuses.len(),
+            3,
+            "Should only run the myapp namespace tasks"
+        );
+
+        // Verify we got the three myapp tasks and they all succeeded
+        assert!(
+            task_statuses
+                .iter()
+                .all(|(name, status)| name.starts_with("myapp:")
+                    && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))),
+            "All tasks should be from myapp namespace and have succeeded"
+        );
+
         Ok(())
     }
 

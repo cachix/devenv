@@ -23,6 +23,19 @@ Succeeded         myapp:hello         9ms
 1 Succeeded                           10.14ms
 ```
 
+!!! info "New in version 1.7"
+
+You can also run all tasks in a namespace by providing just the namespace prefix:
+
+```shell-session
+$ devenv tasks run myapp
+Running tasks     myapp:hello myapp:build myapp:test
+Succeeded         myapp:hello           9ms
+Succeeded         myapp:build         120ms
+Succeeded         myapp:test          350ms
+3 Succeeded                           479.14ms
+```
+
 ## enterShell / enterTest
 
 If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
