@@ -1,5 +1,5 @@
 ---
-draft: false 
+draft: false
 date: 2023-03-02
 authors:
   - domenkozar
@@ -50,8 +50,8 @@ You can read more in the new [Containers](../../containers.md) section of the do
 - [How to generate a container to start all processes](../../containers.md#running-processes)
 - [How to generate a container to start a single process](../../containers.md#running-a-single-process)
 - [How to generate a container to start a custom built binary](../../containers.md#running-artifacts)
-- [How to copy the containers to a registry](../../containers.md#copying-container-to-a-registry)
-- [How to conditionalize environment based on native/container target](../../containers.md#changing-environment-based-on-the-build-type)
+- [How to copy the containers to a registry](../../containers.md#copying-a-container-to-a-registry)
+- [How to conditionalize environment based on native/container target](../../containers.md#changing-the-environment-based-on-the-build-type)
 
 ## Instant shell activation
 
@@ -62,7 +62,7 @@ when something changes** and if not, the environment
 can be used **instantly using a cached snapshot**.
 
 With the latest [direnv.net integration](../../automatic-shell-activation.md),
-we've **finally reached that goal** by making caching work properly (it will even watch each of your imports for changes!). 
+we've **finally reached that goal** by making caching work properly (it will even watch each of your imports for changes!).
 
 !!! note "Migrating from an older devenv"
     Make sure to use the latest `.envrc` from `devenv init` and for everyone on the team to [upgrade to devenv 0.6](../../getting-started.md).
