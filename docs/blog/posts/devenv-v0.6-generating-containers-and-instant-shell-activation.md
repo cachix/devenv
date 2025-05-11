@@ -7,7 +7,7 @@ authors:
 
 # devenv 0.6: Generating containers and instant shell activation
 
-After about two months of active development, I'm happy to announce [devenv 0.6](/getting-started/) is ready.
+After about two months of active development, I'm happy to announce [devenv 0.6](../../getting-started.md) is ready.
 
 This release comes with the most notable improvements based on the feedback from existing users:
 
@@ -18,7 +18,7 @@ This release comes with the most notable improvements based on the feedback from
 
 ## Generating containers
 
-While `devenv shell` provides a [simple native developer environment](/basics/) experience,
+While `devenv shell` provides a [simple native developer environment](../../basics.md) experience,
 `devenv container <name>` allows you to generate and copy [OCI container](https://opencontainers.org/) into a registry.
 
 Containers are a great way to distribute ready-made applications, leveraging platforms like [fly.io](https://github.com/cachix/devenv/tree/main/examples/fly.io) to deploy them into production.
@@ -44,14 +44,14 @@ $ devenv container shell --docker-run
 ruby 3.2.1 (2023-02-08 revision 31819e82c8) [x86_64-linux]
 ```
 
-You can read more in the new [Containers](/containers/) section of the documentation, specifically:
+You can read more in the new [Containers](../../containers.md) section of the documentation, specifically:
 
-- [How to generate a container for shell](/containers/#entering-the-development-environment)
-- [How to generate a container to start all processes](/containers/#running-processes)
-- [How to generate a container to start a single process](/containers/#running-a-single-process)
-- [How to generate a container to start a custom built binary](/containers/#running-artifacts)
-- [How to copy the containers to a registry](/containers/#copying-container-to-a-registry)
-- [How to conditionalize environment based on native/container target](/containers/#changing-environment-based-on-the-build-type)
+- [How to generate a container for shell](../../containers.md#entering-the-development-environment)
+- [How to generate a container to start all processes](../../containers.md#running-processes)
+- [How to generate a container to start a single process](../../containers.md#running-a-single-process)
+- [How to generate a container to start a custom built binary](../../containers.md#running-artifacts)
+- [How to copy the containers to a registry](../../containers.md#copying-container-to-a-registry)
+- [How to conditionalize environment based on native/container target](../../containers.md#changing-environment-based-on-the-build-type)
 
 ## Instant shell activation
 
@@ -61,11 +61,11 @@ A developer **environment should only be built
 when something changes** and if not, the environment
 can be used **instantly using a cached snapshot**.
 
-With the latest [direnv.net integration](/automatic-shell-activation/),
+With the latest [direnv.net integration](../../automatic-shell-activation.md),
 we've **finally reached that goal** by making caching work properly (it will even watch each of your imports for changes!). 
 
 !!! note "Migrating from an older devenv"
-    Make sure to use the latest `.envrc` from `devenv init` and for everyone on the team to [upgrade to devenv 0.6](/getting-started/).
+    Make sure to use the latest `.envrc` from `devenv init` and for everyone on the team to [upgrade to devenv 0.6](../../getting-started.md).
 
 In the near future we'll experiment to improve [devenv shell](https://github.com/cachix/devenv/issues/240) experience.
 
@@ -93,7 +93,7 @@ Hosts and certificates can now be specified declaratively:
 }
 ```
 
-And when you run `devenv up` to start [the processes](/processes/), these hosts and certificates will be provisioned locally.
+And when you run `devenv up` to start [the processes](../../processes.md), these hosts and certificates will be provisioned locally.
 
 ## `allowUnfree` and `overlays`
 
@@ -114,7 +114,7 @@ Will allow building unfree software and wire up `default` overlay into `pkgs` fr
 
 
 !!! note "Migrating from an older devenv"
-    Make sure *everyone* on the team upgrades [to devenv 0.6](/getting-started/).
+    Make sure *everyone* on the team upgrades [to devenv 0.6](../../getting-started.md).
 
 
 ## Languages changelog

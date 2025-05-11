@@ -24,7 +24,7 @@ Setting up `devenv` inside a flake requires wiring up a few outputs.
 Here's a minimal `flake.nix` to start you off that includes:
 
 * A `devShell` created with `devenv.lib.mkShell`.
-  See [the reference documentation](/reference/options/) for the possible options to use here.
+  See [the reference documentation](../reference/options.md) for the possible options to use here.
 * Two packages, `devenv-up` and `devenv-test`, that are needed for `devenv up` and `devenv test` to work inside the shell.
 
 ```nix
@@ -87,7 +87,7 @@ This will evaluate the inputs to your flake, create a `flake.lock` lock file, an
 
 ### Launching processes, services, and tests
 
-Once in the shell, you can launch [processes and services with `devenv up`](/processes).
+Once in the shell, you can launch [processes and services with `devenv up`](../processes.md).
 
 ```console
 $ devenv up
@@ -96,7 +96,7 @@ $ devenv up
 17:34:37 system | run.1 stopped (rc=0)
 ```
 
-And run [tests with `devenv test`](/tests).
+And run [tests with `devenv test`](../tests.md).
 
 ```console
 $ devenv test

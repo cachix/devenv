@@ -10,7 +10,7 @@ authors:
 In February 2020, I went on a 16-day, 1200km moped trip across northern Thailand with a couple of friends.
 
 <figure markdown="span">
-  ![Somewhere in the northern Thailand](/assets/images/thailand.jpg){ width="300" }
+  ![Somewhere in the northern Thailand](../../assets/images/thailand.jpg){ width="300" }
   <figcaption>Somewhere in northern Thailand near Pai.</figcaption>
 </figure>
 
@@ -18,7 +18,7 @@ As we drove for hours on end, I was listening to an audiobook fittingly called [
 The book explores the challenges faced by nacent technologies on their way to mainstream adoption.
 
 <figure markdown="span">
-  ![Crossing the chasm](/assets/images/chasm.webp)
+  ![Crossing the chasm](../../assets/images/chasm.webp)
 </figure>
 
 In the years that followed, I couldn't help noticing the disconnect between Nix's devoted user base
@@ -48,7 +48,7 @@ but eventually went quiet. Having companies like Shopify adopt Nix would be a ma
 ## An interface as the heart of the Developer Experience
 
 Since the [0.1 release two years ago](https://devenv.sh/blog/2022/11/11/hello-world-devenv-01/), we've been rapidly iterating on a declarative interface for
-developer environments. We now have support for over [50 languages](/supported-languages/ansible/) and [30 services](/supported-services/adminer/):
+developer environments. We now have support for over [50 languages](../../supported-languages/ansible.md) and [30 services](../../supported-services/adminer.md):
 
 ```nix title="devenv.nix"
 { pkgs, config, ... }: {
@@ -78,7 +78,7 @@ With the introduction of [tasks in the 1.2 release](https://devenv.sh/blog/2024/
 the `devenv` command-line interface and the extensible nature of the module system.
 
 The modular architecture of the module system allows for seamless addition, modification, and removal of configuration options.
-This flexibility extends to defining [your own options](/composing-using-imports/) for the software you're writing.
+This flexibility extends to defining [your own options](../../composing-using-imports.md) for the software you're writing.
 
 
 ## Why do we need a Nix rewrite?

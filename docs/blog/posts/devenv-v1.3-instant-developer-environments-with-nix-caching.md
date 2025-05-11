@@ -8,7 +8,7 @@ authors:
 
 # devenv 1.3: Instant developer environments with Nix caching
 
-Hot on the heels of the [previous release of tasks](/blog/2024/09/24/devenv-12-tasks-for-convergent-configuration-with-nix/),
+Hot on the heels of the [previous release of tasks](../posts/devenv-v1.2-tasks.md),
  we're releasing devenv 1.3! 🎉
 
 This release brings precise caching to Nix evaluation, significantly speeding up developer environments.
@@ -17,7 +17,7 @@ Once cached, the results of a Nix eval or build can be recalled in single-digit 
 
 If any of the automatically-detected inputs change, the cache is invalidated and the build is performed.
 
-![Caching comparison](/assets/images/caching.gif)
+![Caching comparison](../../assets/images/caching.gif)
 
 !!!note
 

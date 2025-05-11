@@ -80,7 +80,7 @@ This will create a lock file and open a new shell using the `devenv` configurati
 
 ### Launching processes, services, and tests
 
-Once in the shell, you can launch [processes and services with `devenv up`](/processes).
+Once in the shell, you can launch [processes and services with `devenv up`](../processes.md).
 
 ```console
 $ devenv up
@@ -89,7 +89,7 @@ $ devenv up
 17:34:37 system | run.1 stopped (rc=0)
 ```
 
-And run [tests with `devenv test`](/tests).
+And run [tests with `devenv test`](../tests.md).
 
 ```console
 $ devenv test
