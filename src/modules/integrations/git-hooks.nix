@@ -20,7 +20,7 @@ let
 in
 {
   imports = [
-    (lib.mkAliasOptionModule [ "pre-commit" ] [ "git-hooks" ])
+    (lib.mkRenamedOptionModule [ "pre-commit" ] [ "git-hooks" ])
   ];
 
   options.git-hooks = lib.mkOption {
