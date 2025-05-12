@@ -38,7 +38,7 @@ in
       type = nullOr (
         lib.types.pathWith {
           inStore = false;
-          absolute = true;
+          absolute = false;
         }
       );
       default = null;
@@ -53,7 +53,7 @@ in
       type = nullOr (
         lib.types.pathWith {
           inStore = false;
-          absolute = true;
+          absolute = false;
         }
       );
       default = null;
@@ -113,7 +113,7 @@ in
               type = nullOr (
                 lib.types.pathWith {
                   inStore = false;
-                  absolute = true;
+                  absolute = false;
                 }
               );
               default = null;
