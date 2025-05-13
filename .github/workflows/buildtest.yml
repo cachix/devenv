@@ -4,6 +4,9 @@ on:
   pull_request:
     paths-ignore:
       - "docs/**"
+      - "mkdocs.yml"
+      - "requirements.in"
+      - "requirements.txt"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
