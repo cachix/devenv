@@ -1,7 +1,3 @@
 inputs:
   devenv:
     url: path:../../?dir=src/modules
-clean:
-  enabled: true
-  keep:
-    - DEVENV_NIX
