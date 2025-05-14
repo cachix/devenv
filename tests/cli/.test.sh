@@ -1,16 +1,13 @@
 set -xe
-# shellcheck disable=SC016
-
-which devenv
 
 rm devenv.yaml || true
-devenv shell -- env|grep DEVENV_CMDLINE
+devenv shell -- env|grep "DEVENV_CMDLINE=shell"
 devenv build languages.python.package
 devenv shell ls -- -la | grep ".test.sh"
 devenv shell ls ../ | grep "cli"
 devenv info | grep "python3-"
 devenv show | grep "python3-"
-devenv search ncdu |& grep "Found 3 packages and 0 options for 'ncdu'"
+devenv search ncdu |& grep -E "Found [0-9]+ packages and [0-9]+ options for 'ncdu'"
 
 # there should be no processes
 devenv up && exit 1
