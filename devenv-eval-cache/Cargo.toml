@@ -17,6 +17,7 @@ sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+devenv-cache-core.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

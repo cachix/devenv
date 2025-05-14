@@ -114,11 +114,15 @@ impl Nix {
     // Defer creating local project state
     pub async fn assemble(&mut self) -> Result<()> {
         if self.pool.is_none() {
-            self.pool = Some(
-                devenv_eval_cache::db::setup_db(&self.database_url)
-                    .await
-                    .into_diagnostic()?,
-            );
+            // Extract database path from URL
+            let path = PathBuf::from(self.database_url.trim_start_matches("sqlite:"));
+
+            // Connect to database and run migrations in one step
+            let db = devenv_cache_core::db::Database::new(path, &devenv_eval_cache::db::MIGRATIONS)
+                .await
+                .into_diagnostic()?;
+
+            self.pool = Some(db.pool().clone());
         }
 
         Ok(())

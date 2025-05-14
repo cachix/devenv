@@ -25,6 +25,7 @@
     pkgs.sqlx-cli
     pkgs.cargo-outdated # Find outdated crates
     pkgs.cargo-machete # Find unused crates
+    pkgs.cargo-edit # Adds the set-version command
   ];
 
   languages.nix.enable = true;
@@ -238,22 +239,16 @@
 
   tasks = {
     "devenv:compile-requirements" = {
-      exec = "uv pip compile requirements.in -o requirements.txt";
       before = [ "devenv:python:virtualenv" ];
-      status = ''
-        get_last_modified() {
-          stat -c %Y $1 2>/dev/null || stat -f %m $1 2>/dev/null || echo 0
-        }
-        input=$(get_last_modified "requirements.in")
-        output=$(get_last_modified "requirements.txt")
-        if [[ $output -eq 0 || $input -gt $output ]]; then
-          exit 1
-        fi
-      '';
+      exec = "uv pip compile requirements.in -o requirements.txt";
+      execIfModified = [
+        "requirements.in"
+        "requirements.txt"
+      ];
     };
   };
 
-  pre-commit.hooks = {
+  git-hooks.hooks = {
     nixpkgs-fmt.enable = true;
     rustfmt.enable = true;
     markdownlint.settings.configuration = {

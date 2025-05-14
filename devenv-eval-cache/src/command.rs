@@ -10,10 +10,11 @@ use thiserror::Error;
 use tracing::{debug, trace};
 
 use crate::{
-    db, hash,
+    db,
     internal_log::{InternalLog, Verbosity},
     op::Op,
 };
+use devenv_cache_core::{compute_file_hash, compute_string_hash};
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum CommandError {
@@ -80,7 +81,7 @@ impl<'a> CachedCommand<'a> {
     /// the cached output will be returned.
     pub async fn output(mut self, cmd: &'a mut Command) -> Result<Output, CommandError> {
         let raw_cmd = format!("{:?}", cmd);
-        let cmd_hash = hash::digest(&raw_cmd);
+        let cmd_hash = compute_string_hash(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
         if !self.force_refresh {
@@ -259,8 +260,8 @@ impl Input {
     }
 
     pub fn compute_input_hash(inputs: &[Self]) -> String {
-        hash::digest(
-            inputs
+        compute_string_hash(
+            &inputs
                 .iter()
                 .filter_map(Input::content_hash)
                 .collect::<String>(),
@@ -332,9 +333,16 @@ impl FileInputDesc {
                 .filter_map(Result::ok)
                 .map(|entry| entry.path().to_string_lossy().to_string())
                 .collect::<String>();
-            Some(hash::digest(&paths))
+            Some(compute_string_hash(&paths))
         } else {
-            hash::compute_file_hash(&path).ok()
+            compute_file_hash(&path)
+                .map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Failed to compute file hash: {}", e),
+                    )
+                })
+                .ok()
         };
         let modified_at = truncate_to_seconds(
             path.metadata()
@@ -371,7 +379,7 @@ impl PartialOrd for EnvInputDesc {
 impl EnvInputDesc {
     pub fn new(name: String) -> Result<Self, io::Error> {
         let value = std::env::var(&name).ok();
-        let content_hash = value.map(hash::digest);
+        let content_hash = value.map(|v| compute_string_hash(&v));
         Ok(Self { name, content_hash })
     }
 }
@@ -647,9 +655,14 @@ fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
             .filter_map(Result::ok)
             .map(|entry| entry.path().to_string_lossy().to_string())
             .collect::<String>();
-        hash::digest(&paths)
+        compute_string_hash(&paths)
     } else {
-        hash::compute_file_hash(&file.path)?
+        compute_file_hash(&file.path).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to compute file hash: {}", e),
+            )
+        })?
     };
 
     if Some(&new_hash) == file.content_hash.as_ref() {
@@ -675,7 +688,7 @@ fn check_env_state(env: &EnvInputDesc) -> io::Result<FileState> {
         }
     }
 
-    let new_hash = hash::digest(value.unwrap_or("".into()));
+    let new_hash = compute_string_hash(&value.unwrap_or("".into()));
 
     if Some(&new_hash) != env.content_hash.as_ref() {
         Ok(FileState::Modified {
@@ -710,7 +723,14 @@ mod test {
         let metadata = file_path.metadata().unwrap();
         let modified_at = metadata.modified().unwrap();
         let truncated_modified_at = truncate_to_seconds(modified_at).unwrap();
-        let content_hash = hash::compute_file_hash(&file_path).unwrap();
+        let content_hash = compute_file_hash(&file_path)
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to compute file hash: {}", e),
+                )
+            })
+            .unwrap();
 
         db::FileInputRow {
             path: file_path,

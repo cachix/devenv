@@ -9,10 +9,11 @@ members = [
     "http-client-tls",
     "nix-conf-parser",
     "xtask",
+    "devenv-cache-core",
 ]
 
 [workspace.package]
-version = "1.6.1"
+version = "1.7.0"
 edition = "2021"
 license = "APACHE-2.0"
 homepage = "https://devenv.sh/"
@@ -23,6 +24,7 @@ devenv = { path = "devenv" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-tasks = { path = "devenv-tasks" }
+devenv-cache-core = { path = "devenv-cache-core" }
 http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }
@@ -83,6 +85,7 @@ which = "7.0.2"
 whoami = "1.5.1"
 xdg = "2.5.2"
 tokio-tar = "0.3.1"
+walkdir = "2.3"
 
 # The version of rustls must match the version used by reqwest to set up rustls-platform-verifier.
 # If you encounter an error, lock these versions down.

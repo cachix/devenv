@@ -19,7 +19,7 @@ where we define the desired end-state and let the system figure out how to get t
 To bridge this gap and make Nix more versatile, we're introducing tasks. These allow you to
 handle those pesky real-world scenarios while still leveraging Nix's powerful ecosystem.
 
-![Tasks interactive example](/assets/images/tasks.gif)
+![Tasks interactive example](../../assets/images/tasks.gif)
 
 ## Usage
 
@@ -44,7 +44,7 @@ For example if you'd like to execute python code after virtualenv has been creat
 
 `python:setup` task executes before `devenv:enterShell` but after `python:virtualenv` task:
 
-For all supported use cases see [tasks documentation](/tasks/).
+For all supported use cases see [tasks documentation](../../tasks.md).
 
 
 ## Task Server Protocol for SDKs

@@ -643,11 +643,12 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "clap",
  "cli-table",
  "console",
+ "devenv-cache-core",
  "devenv-eval-cache",
  "devenv-tasks",
  "dialoguer",
@@ -682,10 +683,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "devenv-eval-cache"
-version = "1.6.1"
+name = "devenv-cache-core"
+version = "0.1.0"
 dependencies = [
  "blake3",
+ "eyre",
+ "miette",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.12",
+ "tokio",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
+name = "devenv-eval-cache"
+version = "1.7.0"
+dependencies = [
+ "blake3",
+ "devenv-cache-core",
  "futures",
  "lazy_static",
  "miette",
@@ -702,7 +720,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "binaryornot",
  "clap",
@@ -723,7 +741,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
  "clap",
  "devenv",
@@ -734,20 +752,24 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "1.6.1"
+version = "1.7.0"
 dependencies = [
+ "blake3",
  "clap",
  "console",
+ "devenv-cache-core",
  "eyre",
  "miette",
  "petgraph",
  "pretty_assertions",
  "serde",
  "serde_json",
+ "sqlx",
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
+ "walkdir",
 ]
 
 [[package]]
@@ -3026,6 +3048,8 @@ dependencies = [
  "memchr",
  "once_cell",
  "percent-encoding",
+ "rustls",
+ "rustls-pemfile",
  "serde",
  "serde_json",
  "sha2",
@@ -3036,6 +3060,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
+ "webpki-roots",
 ]
 
 [[package]]

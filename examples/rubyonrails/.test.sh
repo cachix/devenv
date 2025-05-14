@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -ex
 
+wait_for_processes
+
 pushd blog
   rails db:create
 popd

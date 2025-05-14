@@ -1,0 +1,38 @@
+[package]
+name = "devenv-cache-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core utilities for file tracking and caching in devenv"
+license = "MIT"
+
+[dependencies]
+# Database
+sqlx = { workspace = true, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "sqlite",
+    "migrate",
+    "macros",
+] }
+
+# Error handling
+thiserror.workspace = true
+miette.workspace = true
+eyre.workspace = true
+
+# Hashing
+blake3.workspace = true
+
+# File operations
+walkdir.workspace = true
+
+# Async runtime
+tokio = { workspace = true, features = ["fs", "macros", "time"] }
+
+# Logging
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }

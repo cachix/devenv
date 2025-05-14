@@ -1,10 +1,16 @@
-{% extends "base.html" %} {% block scripts %}
+{% extends "base.html" %}
+{% block extrahead %}
+<link rel="stylesheet" href="/assets/output.css" />
+{% endblock %}
+{% block scripts %}
 <script
     src="https://cdn.usefathom.com/script.js"
     data-site="ZLDAHRNN"
     defer
 ></script>
-{{ super() }} {% endblock %} {% block footer %}
+{{ super() }}
+{% endblock %}
+{% block footer %}
 <footer class="md-footer">
     <div class="bg-white py-10 px-4 border-t border-gray-200">
         <div class="mx-auto max-w-7xl md:px-6 lg:px-8">

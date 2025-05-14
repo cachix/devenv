@@ -17,10 +17,16 @@ let
     mkdir -p $out/bin
     ln -s ${cfg.package}/bin/pre-commit $out/bin/pre-commit
   '';
+
+  anyEnabled = builtins.any (hook: hook.enable) (lib.attrValues cfg.hooks);
+
+  # Store additional state in between evaluations to support uninstalling hooks.
+  hookStateDir = "${config.devenv.state}/git-hooks";
+  hookStateFile = "${hookStateDir}/config.json";
 in
 {
   imports = [
-    (lib.mkAliasOptionModule [ "pre-commit" ] [ "git-hooks" ])
+    (lib.mkRenamedOptionModule [ "pre-commit" ] [ "git-hooks" ])
   ];
 
   options.git-hooks = lib.mkOption {
@@ -40,20 +46,58 @@ in
     description = "Integration with https://github.com/cachix/git-hooks.nix";
   };
 
-  config = lib.mkIf ((lib.filterAttrs (id: value: value.enable) cfg.hooks) != { }) {
-    ci = [ cfg.run ];
-    # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
-    packages = lib.mkAfter ([ packageBin ] ++ (cfg.enabledPackages or [ ]));
-    tasks = {
-      # TODO: split installation script into status + exec
-      "devenv:git-hooks:install" = {
-        exec = cfg.installationScript;
-        before = [ "devenv:enterShell" ];
+  config = lib.mkMerge [
+    (lib.mkIf (!anyEnabled) {
+      # Remove the existing `configPath` if it exists and is in the nix store
+      #
+      # TODO(sander): turn this into a task.
+      # Introduce a task that only shows up in logs if executed or if running in verbose mode.
+      enterShell = ''
+        # Read the path to the installed `configPath` from the hook state.
+        configFile=""
+        if [ -f '${hookStateFile}' ]; then
+          prevConfigPath=$(${lib.getExe pkgs.jq} -r '.configPath' '${hookStateFile}')
+          if [ -n "$prevConfigPath" ] && [ "$prevConfigPath" != "null" ]; then
+            configFile="${config.devenv.root}/$prevConfigPath"
+          fi
+        fi
+
+        # Fall back to the current config path if state file doesn't exist or doesn't contain a path
+        if [ -z "$configFile" ]; then
+          configFile='${config.devenv.root}/${cfg.configPath}'
+        fi
+
+        # Only remove if it's a symlink to the nix store
+        if $(nix-store --quiet --verify-path "$configFile" > /dev/null 2>&1); then
+          echo "Removing $configFile"
+          rm "$configFile" || echo "Warning: Failed to uninstall git-hooks at $configFile" >&2
+        fi
+      '';
+    })
+
+    (lib.mkIf anyEnabled {
+      ci = [ cfg.run ];
+      # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
+      packages = lib.mkAfter ([ packageBin ] ++ (cfg.enabledPackages or [ ]));
+      tasks = {
+        # TODO: split installation script into status + exec
+        "devenv:git-hooks:install" = {
+          exec = ''
+            # Store the current `configPath` in the state file.
+            # This is used to remove previous configs when the git-hooks integration is disabled.
+            mkdir -p '${hookStateDir}'
+            echo "${builtins.toJSON { configPath = cfg.configPath; }}" > '${hookStateFile}'
+
+            # Install the hooks
+            ${cfg.installationScript}
+          '';
+          before = [ "devenv:enterShell" ];
+        };
+        "devenv:git-hooks:run" = {
+          exec = "pre-commit run -a";
+          before = [ "devenv:enterTest" ];
+        };
       };
-      "devenv:git-hooks:run" = {
-        exec = "pre-commit run -a";
-        before = [ "devenv:enterTest" ];
-      };
-    };
-  };
+    })
+  ];
 }

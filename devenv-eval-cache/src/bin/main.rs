@@ -5,7 +5,17 @@ use devenv_eval_cache::{command, db};
 #[tokio::main]
 async fn main() -> Result<(), command::CommandError> {
     let database_url = "sqlite:nix-eval-cache.db";
-    let pool = db::setup_db(database_url).await?;
+
+    // Extract database path from URL
+    let path = std::path::PathBuf::from(database_url.trim_start_matches("sqlite:"));
+
+    // Connect to database and run migrations
+    let db = devenv_cache_core::db::Database::new(path, &db::MIGRATIONS)
+        .await
+        .map_err(|e| {
+            command::CommandError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+        })?;
+    let pool = db.pool().clone();
 
     let mut cmd = Command::new("nix");
     cmd.args(["eval", ".#devenv.processes"]);

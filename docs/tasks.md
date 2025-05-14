@@ -23,6 +23,19 @@ Succeeded         myapp:hello         9ms
 1 Succeeded                           10.14ms
 ```
 
+!!! info "New in version 1.7"
+
+You can also run all tasks in a namespace by providing just the namespace prefix:
+
+```shell-session
+$ devenv tasks run myapp
+Running tasks     myapp:hello myapp:build myapp:test
+Succeeded         myapp:hello           9ms
+Succeeded         myapp:build         120ms
+Succeeded         myapp:test          350ms
+3 Succeeded                           479.14ms
+```
+
 ## enterShell / enterTest
 
 If you'd like the tasks to run as part of the `enterShell` or `enterTest`:
@@ -85,6 +98,34 @@ If you define a `status` command, it will be executed first and if it returns `0
   };
 }
 ```
+
+Tasks using the `status` attribute will also cache their outputs. When a task is skipped because its status command returns success, the output from the most recent successful run will be restored and passed to dependent tasks.
+
+## Executing tasks only when files have been modified
+
+You can specify a list of files to monitor with `execIfModified`. The task will only run if any of these files have been modified since the last successful run.
+
+```nix title="devenv.nix"
+{ pkgs, lib, config, ... }:
+
+{
+  tasks = {
+    "myapp:build" = {
+      exec = "npm run build";
+      execIfModified = [
+        "src"
+        "package.json"
+      ];
+    };
+  };
+}
+```
+
+This is particularly useful for tasks that depend on specific files and don't need to run if those files haven't changed.
+
+The system tracks both file modification times and content hashes to detect actual changes. If a file's timestamp changes but its content remains the same (which can happen when touching a file or when saving without making changes), the task will be skipped.
+
+When a task is skipped due to no file changes, any previous outputs from that task are preserved and passed to dependent tasks, making the caching more efficient.
 
 ## Inputs / Outputs
 

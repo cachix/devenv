@@ -83,7 +83,7 @@ If you don't want to specify the output type, you can just use `config.lib.types
 
 ## Referencing outputs from another devenv
 
-If you [import another `devenv.nix` file](/composing-using-imports), the outputs will be merged together,
+If you [import another `devenv.nix` file](../../composing-using-imports.md), the outputs will be merged together,
 allowing you to compose a developer environment and outputs in one logical unit.
 <br><br>
 
@@ -93,7 +93,7 @@ You could also import outputs from other applications as inputs instead of compo
 
 ## Documentation
 
-See [Outputs](/outputs) section in documentation for the latest comprehensive guide to outputs.
+See [Outputs](../../outputs.md) section in documentation for the latest comprehensive guide to outputs.
 <br><br>
 
 We're on [Discord](https://discord.gg/naMgvexb6q) if you need help, Domen

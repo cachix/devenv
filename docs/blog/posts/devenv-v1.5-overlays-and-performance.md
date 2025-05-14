@@ -70,7 +70,7 @@ And then using it in your `devenv.nix`:
 }
 ```
 
-For more details and examples, check out the [overlays documentation](/overlays/).
+For more details and examples, check out the [overlays documentation](../../overlays.md).
 
 ## TLS Improvements: Native System Certificates
 

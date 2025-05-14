@@ -57,9 +57,9 @@ The new `enterTest` attribute in `devenv.nix` allows you to define testing logic
 
 When you run `devenv test`, it will run the `enterTest` command and report the results.
 
-If you have any [processes](/processes) defined, they will be started and stopped.
+If you have any [processes](../../processes.md) defined, they will be started and stopped.
 
-Read more about this in the [testing documentation](/tests).
+Read more about this in the [testing documentation](../../tests.md).
 
 This allows for executing tests with all of your tooling and processes running—extremely convenient for integration and functional tests.
 
