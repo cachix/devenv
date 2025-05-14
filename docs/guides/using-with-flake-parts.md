@@ -1,8 +1,8 @@
 # Using devenv with flake-parts
 
-[Flake Parts](https://flake.parts/) provides a modular framework for organizing [Nix Flakes](/guides/using-with-flakes). This integration helps you structure your devenv configuration within a Nix Flake.
+[Flake Parts](https://flake.parts/) provides a modular framework for organizing [Nix Flakes](./using-with-flakes.md). This integration helps you structure your devenv configuration within a Nix Flake.
 
-Before proceeding, we recommend reading about the [benefits and downsides of using Nix Flakes](/guides/using-with-flakes) as this approach requires familiarity with Nix Flakes concepts.
+Before proceeding, we recommend reading about the [benefits and downsides of using Nix Flakes](./using-with-flakes.md) as this approach requires familiarity with Nix Flakes concepts.
 
 ## Getting started
 

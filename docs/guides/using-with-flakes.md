@@ -7,7 +7,7 @@
 * Define structured outputs for your project
 
 !!! note "For those new to devenv and Nix"
-    If you're new to both devenv and Nix, starting with the standard devenv CLI approach will provide the smoothest experience. [Getting started with devenv.](/getting-started)
+    If you're new to both devenv and Nix, starting with the standard devenv CLI approach will provide the smoothest experience. [Getting started with devenv.](../getting-started.md)
 
 You can integrate the devenv module system (languages, processes, services, etc.) into a Nix Flake as a `devShell` output. This allows devenv to work within your existing Flake-based projects.
 
@@ -21,7 +21,7 @@ For most projects, we recommend using devenv.nix with the dedicated devenv CLI f
 * **Performance**: Faster evaluation and more efficient caching of environments
 * **Developer-focused**: Purpose-built for development environments with integrated tooling
 
-[Getting started with devenv.](/getting-started)
+[Getting started with devenv.](../getting-started.md)
 
 Consider using the Flake integration when:
 

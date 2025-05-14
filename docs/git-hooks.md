@@ -48,7 +48,7 @@ If you commit a Python or Markdown file or a script, these hooks will run at com
 
 Run ``devenv test``.
 
-See [the list of all available hooks](reference/options.md#pre-commithooks).
+See [the list of all available hooks](reference/options.md#git-hooks).
 
 ## Managing the `.pre-commit-config.yaml` file
 
