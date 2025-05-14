@@ -4,6 +4,7 @@ use devenv::{
     config, log, Devenv,
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
+use std::env;
 use std::{
     os::unix::process::CommandExt,
     process::{self, Command},
@@ -23,6 +24,14 @@ async fn main() -> Result<()> {
         );
         Ok(())
     };
+
+    let args: Vec<String> = env::args().skip(1).collect();
+
+    // Join the arguments into a single space-separated string
+    let args_as_string = args.join(" ");
+
+    // Set an environment variable to this string
+    env::set_var("DEVENV_CMDLINE", args_as_string);
 
     let command = match cli.command {
         None | Some(Commands::Version) => return print_version(),
