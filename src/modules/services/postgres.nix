@@ -67,6 +67,11 @@ let
             if [ 1 -ne "$dbAlreadyExists" ]; then
               echo "Creating database: ${database.name}"
               echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
+              if [ ${q database.initialScript} != null ]
+              then
+                echo "Running initial script on database ${database.name}"
+                echo ${q database.initialScript} | psql --dbname ${database.name}
+              fi
               ${lib.optionalString (database.user != null && database.pass != null) ''
               echo "Creating role ${database.user}..."
               psql --dbname postgres <<'EOF'
@@ -330,6 +335,14 @@ in
             default = null;
             description = ''
               Password of owner of the database (only takes effect if `user` is not `null`).
+            '';
+          };
+          initialScript = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Initial SQL commands to run during the database initialization. This can be
+              multiple SQL expressions separated by a semi-colon.
             '';
           };
         };
