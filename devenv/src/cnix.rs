@@ -259,6 +259,21 @@ impl Nix {
 
         Ok(())
     }
+    
+    pub async fn flake_clone(&self, path: &PathBuf, flake_ref: &str) -> Result<()> {
+        let dest_path = path.to_str().unwrap();
+        self.run_nix("nix", &["flake", "clone", flake_ref, "--dest", dest_path], &self.options).await?;
+        Ok(())
+    }
+
+    pub async fn init(&self, path: &Path, flake_ref: &String) -> Result<()> {
+        let mut cmd =
+            self.prepare_command("nix", &["flake", "init", "--template", flake_ref], &self.options)?;
+        cmd.current_dir(path);
+        self.run_nix_command(cmd, &self.options).await?;
+
+        Ok(())
+    }
 
     pub async fn metadata(&self) -> Result<String> {
         let options = Options {
