@@ -15,7 +15,7 @@
       {
         name = "testdb";
         pass = "testuserpass";
-        initialScript = ''
+        initialSQL = ''
           CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
         '';
       }
