@@ -648,8 +648,16 @@ impl Devenv {
             serde_json::to_string_pretty(&config).unwrap()
         );
 
-        // Pass quiet flag from global options to TasksUi (which will set the env var internally)
-        let mut tui = tasks::TasksUi::new(config, self.global_options.quiet).await?;
+        // Convert quiet flag to VerbosityLevel
+        let verbosity = if self.global_options.quiet {
+            tasks::VerbosityLevel::Quiet
+        } else if self.global_options.verbose {
+            tasks::VerbosityLevel::Verbose
+        } else {
+            tasks::VerbosityLevel::Normal
+        };
+
+        let mut tui = tasks::TasksUi::new(config, verbosity).await?;
         let (tasks_status, outputs) = tui.run().await?;
 
         if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
