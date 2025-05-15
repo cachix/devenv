@@ -5,8 +5,8 @@ pg_isready -d template1
 
 # check whether the pg_uuidv7 extension is installed for the testdb database
 psql \
-	--set ON_ERROR_STOP=on \
-	--dbname=testdb \
+    --set ON_ERROR_STOP=on \
+    --dbname=testdb \
     --tuples-only \
     --command="SELECT extname FROM pg_extension WHERE extname = 'pg_uuidv7';" \
     | grep -qw pg_uuidv7
