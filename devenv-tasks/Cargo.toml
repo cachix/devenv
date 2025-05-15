@@ -20,6 +20,7 @@ sqlx.workspace = true
 blake3.workspace = true
 walkdir = "2.4.0"
 devenv-cache-core.workspace = true
+shell-escape.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

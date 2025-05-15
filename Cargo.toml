@@ -93,6 +93,7 @@ walkdir = "2.3"
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
 rustls = { version = "0.23.4" }
 rustls-platform-verifier = "0.5.1"
+shell-escape = "0.1.5"
 
 [profile.release]
 strip = true

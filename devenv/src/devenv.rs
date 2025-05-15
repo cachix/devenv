@@ -291,8 +291,8 @@ impl Devenv {
                     "\nexec {} {}",
                     cmd,
                     args.iter()
-                        .map(|arg| shell_escape(arg))
-                        .collect::<Vec<String>>()
+                        .map(|arg| shell_escape::escape(std::borrow::Cow::Borrowed(arg)))
+                        .collect::<Vec<_>>()
                         .join(" ")
                 );
                 output.extend_from_slice(command.as_bytes());
@@ -1248,21 +1248,4 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     }
 
     (to_gc, removed_symlinks)
-}
-
-/// Escapes a string for use in shell commands by surrounding it with single quotes and properly escaping any existing single quotes.
-pub fn shell_escape(s: &str) -> String {
-    let mut r = String::with_capacity(s.len() + 2);
-    r.push('\'');
-
-    for c in s.chars() {
-        if c == '\'' {
-            r.push_str("'\\''")
-        } else {
-            r.push(c);
-        }
-    }
-
-    r.push('\'');
-    r
 }
