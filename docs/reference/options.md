@@ -1094,7 +1094,7 @@ Add a path to the container. Defaults to the whole git repo.
 
 
 *Type:*
-path or list of path
+absolute path or list of absolute path
 
 
 
@@ -5739,7 +5739,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -12112,7 +12112,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -15657,7 +15657,7 @@ Path to hlint.yaml. By default, hlint searches for .hlint.yaml in the project ro
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -20790,7 +20790,7 @@ mkdocs-linkcheck binary path. Should be used to specify the mkdocs-linkcheck bin
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -26410,7 +26410,7 @@ Use a string instead of a path to avoid having to Git track the file in projects
 
 
 *Type:*
-null or string or path
+null or string or absolute path
 
 
 
@@ -26677,7 +26677,7 @@ Multiple values are accepted.
 
 
 *Type:*
-list of (string or path)
+list of (string or absolute path)
 
 
 
@@ -38237,7 +38237,7 @@ sources.
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -38331,7 +38331,7 @@ sources.
 
 
 *Type:*
-path
+absolute path
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -40990,7 +40990,7 @@ This is useful when you want to use Python wheels that depend on native librarie
 
 
 *Type:*
-list of path
+list of absolute path
 
 
 
@@ -41507,7 +41507,7 @@ This is passed to ` pip install -r ` during ` devenv shell ` initialisation.
 
 
 *Type:*
-null or strings concatenated with “\\n” or path
+null or strings concatenated with “\\n” or absolute path
 
 
 
@@ -41896,7 +41896,7 @@ languages.ruby.versionFile = ./.ruby-version;
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -44023,7 +44023,7 @@ See [https://caddyserver.com/docs/conventions\#file-locations](https://caddyserv
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -44731,7 +44731,7 @@ service runs as (couchdb by default).
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -44779,7 +44779,7 @@ runs the CouchDB service (couchdb by default).
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -44802,7 +44802,7 @@ be writable and readable for the user that runs the CouchDB service
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -45438,7 +45438,7 @@ Kafka log4j property configuration file path
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -45460,7 +45460,7 @@ Defaults to the rendered ` settings `.
 
 
 *Type:*
-path
+absolute path
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka.nix)
@@ -45727,7 +45727,7 @@ Note: symlinks will be followed to discover dependencies or plugins.
 
 
 *Type:*
-null or (list of (string or path))
+null or (list of (string or absolute path))
 
 
 
@@ -46018,7 +46018,7 @@ Log file directories.
 
 
 *Type:*
-list of path
+list of absolute path
 
 
 
@@ -47259,7 +47259,7 @@ an empty database is created.
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -47394,7 +47394,7 @@ Linux distributions.
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -47771,7 +47771,7 @@ Otherwise, disable the readiness probe by setting ` processes.opentelemetry-coll
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -47929,6 +47929,7 @@ The available extensions are:
  - pg-semver
  - pg_auto_failover
  - pg_bigm
+ - pg_byteamagic
  - pg_cron
  - pg_ed25519
  - pg_embedding
@@ -47945,9 +47946,11 @@ The available extensions are:
  - pg_safeupdate
  - pg_similarity
  - pg_squeeze
+ - pg_tle
  - pg_topn
  - pg_uuidv7
  - pgaudit
+ - pgddl
  - pgjwt
  - pgmq
  - pgroonga
@@ -47957,8 +47960,13 @@ The available extensions are:
  - pgtap
  - pgvecto-rs
  - pgvector
+ - pgvectorscale
+ - pgx_ulid
+ - plperl
  - plpgsql_check
+ - plpython3
  - plr
+ - pltcl
  - plv8
  - postgis
  - repmgr
@@ -47971,7 +47979,6 @@ The available extensions are:
  - timescaledb
  - timescaledb-apache
  - timescaledb_toolkit
- - tsearch_extras
  - tsja
  - wal2json
 
@@ -48157,7 +48164,7 @@ an empty database is created.
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
@@ -48916,7 +48923,7 @@ The list of directories containing external plugins
 
 
 *Type:*
-list of path
+list of absolute path
 
 
 
@@ -50907,7 +50914,7 @@ The Starship configuration file to use.
 
 
 *Type:*
-path
+absolute path
 
 
 
