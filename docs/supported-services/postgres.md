@@ -336,12 +336,42 @@ null or string
 
 
 
+## services\.postgres\.initialDatabases\.\*\.initialSQL
+
+
+
+SQL commands to run on this specific database during it's initialization\. Multiple
+SQL expressions can be separated by semicolons\.
+
+
+
+*Type:*
+null or string
+
+
+
+*Example:*
+
+```
+CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
+INSERT INTO users (name) VALUES ('admin');
+CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
+
+```
+
+
+
+*Default:*
+` null `
 ## services\.postgres\.initialScript
 
 
 
 Initial SQL commands to run during database initialization\. This can be multiple
 SQL expressions separated by a semi-colon\.
+Use `initialScript` for server-wide setup, such as creating roles or configuring
+global settings. For database-specific initialization, use `initialSQL` within
+`initialDatabases`.
 
 
 
