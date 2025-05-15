@@ -67,6 +67,11 @@ let
             if [ 1 -ne "$dbAlreadyExists" ]; then
               echo "Creating database: ${database.name}"
               echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
+              if [ ${q database.initialSQL} != null ]
+              then
+                echo "Running initial SQL on database ${database.name}"
+                echo ${q database.initialSQL} | psql --dbname ${database.name}
+              fi
               ${lib.optionalString (database.user != null && database.pass != null) ''
               echo "Creating role ${database.user}..."
               psql --dbname postgres <<'EOF'
@@ -332,6 +337,19 @@ in
               Password of owner of the database (only takes effect if `user` is not `null`).
             '';
           };
+          initialSQL = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              SQL commands to run on this specific database during it's initialization.
+              Multiple SQL expressions can be separated by semicolons.
+            '';
+            example = lib.literalExpression ''
+              CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
+              INSERT INTO users (name) VALUES ('admin');
+              CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
+            '';
+          };
         };
       });
       default = [ ];
@@ -356,6 +374,9 @@ in
       description = ''
         Initial SQL commands to run during database initialization. This can be multiple
         SQL expressions separated by a semi-colon.
+        Use `initialScript` for server-wide setup, such as creating roles or configuring
+        global settings. For database-specific initialization, use `initialSQL` within
+        `initialDatabases`.
       '';
       example = lib.literalExpression ''
         CREATE ROLE postgres SUPERUSER;
