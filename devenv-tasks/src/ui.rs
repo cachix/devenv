@@ -2,7 +2,7 @@ use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::{Config, Error, Outputs, Skipped, TaskCompleted, TaskStatus, Tasks};
+use crate::{Config, Error, Outputs, Skipped, TaskCompleted, TaskStatus, Tasks, VerbosityLevel};
 
 /// Status information for all tasks
 pub struct TasksStatus {
@@ -32,23 +32,23 @@ impl TasksStatus {
 /// UI manager for tasks
 pub struct TasksUi {
     tasks: Arc<Tasks>,
-    quiet: bool,
+    verbosity: VerbosityLevel,
     term: Term,
 }
 
 impl TasksUi {
     /// Create a new TasksUi
-    pub async fn new(config: Config, quiet: bool) -> Result<Self, Error> {
+    pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
         let tasks = Tasks::new(config).await?;
 
-        // Set environment variable for tracing logs
-        if quiet {
+        // Set environment variable for tracing logs if quiet
+        if verbosity == VerbosityLevel::Quiet {
             unsafe { std::env::set_var("DEVENV_TASKS_QUIET", "true") };
         }
 
         Ok(Self {
             tasks: Arc::new(tasks),
-            quiet,
+            verbosity,
             term: Term::stderr(),
         })
     }
@@ -57,20 +57,25 @@ impl TasksUi {
     pub async fn new_with_db_path(
         config: Config,
         db_path: PathBuf,
-        quiet: bool,
+        verbosity: VerbosityLevel,
     ) -> Result<Self, Error> {
         let tasks = Tasks::new_with_db_path(config, db_path).await?;
 
-        // Set environment variable for tracing logs
-        if quiet {
+        // Set environment variable for tracing logs if quiet
+        if verbosity == VerbosityLevel::Quiet {
             std::env::set_var("DEVENV_TASKS_QUIET", "true");
         }
 
         Ok(Self {
             tasks: Arc::new(tasks),
-            quiet,
+            verbosity,
             term: Term::stderr(),
         })
+    }
+
+    /// Check if the UI is in quiet mode
+    fn is_quiet(&self) -> bool {
+        self.verbosity == VerbosityLevel::Quiet
     }
 
     async fn get_tasks_status(&self) -> TasksStatus {
@@ -148,7 +153,7 @@ impl TasksUi {
         let handle = tokio::spawn(async move { tasks_clone.run().await });
 
         // If in quiet mode, just wait for tasks to complete and return
-        if self.quiet {
+        if self.is_quiet() {
             loop {
                 let tasks_status = self.get_tasks_status().await;
                 if tasks_status.pending == 0 && tasks_status.running == 0 {

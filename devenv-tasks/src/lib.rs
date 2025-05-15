@@ -10,6 +10,17 @@ use std::path::PathBuf;
 mod task_cache;
 pub mod ui;
 
+/// Verbosity level for task output
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerbosityLevel {
+    /// Silence all output
+    Quiet,
+    /// Normal output level
+    Normal,
+    /// Verbose output with additional details
+    Verbose,
+}
+
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
