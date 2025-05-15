@@ -55,7 +55,7 @@ Otherwise, disable the readiness probe by setting ` processes.opentelemetry-coll
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
