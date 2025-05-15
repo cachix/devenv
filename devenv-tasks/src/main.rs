@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         VerbosityLevel::Normal
     };
 
-    // Override to quiet if DEVENV_TASKS_QUIET is set
+    // Keeping backwards compatibility for existing scripts that might set DEVENV_TASKS_QUIET
     if let Ok(quiet_var) = env::var("DEVENV_TASKS_QUIET") {
         if quiet_var == "true" || quiet_var == "1" {
             verbosity = VerbosityLevel::Quiet;

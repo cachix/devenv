@@ -39,12 +39,7 @@ pub struct TasksUi {
 impl TasksUi {
     /// Create a new TasksUi
     pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
-        let tasks = Tasks::new(config).await?;
-
-        // Set environment variable for tracing logs if quiet
-        if verbosity == VerbosityLevel::Quiet {
-            unsafe { std::env::set_var("DEVENV_TASKS_QUIET", "true") };
-        }
+        let tasks = Tasks::new(config, verbosity).await?;
 
         Ok(Self {
             tasks: Arc::new(tasks),
@@ -59,12 +54,7 @@ impl TasksUi {
         db_path: PathBuf,
         verbosity: VerbosityLevel,
     ) -> Result<Self, Error> {
-        let tasks = Tasks::new_with_db_path(config, db_path).await?;
-
-        // Set environment variable for tracing logs if quiet
-        if verbosity == VerbosityLevel::Quiet {
-            std::env::set_var("DEVENV_TASKS_QUIET", "true");
-        }
+        let tasks = Tasks::new_with_db_path(config, db_path, verbosity).await?;
 
         Ok(Self {
             tasks: Arc::new(tasks),
