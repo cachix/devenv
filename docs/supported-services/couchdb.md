@@ -152,7 +152,7 @@ service runs as (couchdb by default)\.
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -194,7 +194,7 @@ runs the CouchDB service (couchdb by default)\.
 
 
 *Type:*
-path
+absolute path
 
 
 
@@ -214,7 +214,7 @@ be writable and readable for the user that runs the CouchDB service
 
 
 *Type:*
-path
+absolute path
 
 
 

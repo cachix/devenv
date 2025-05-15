@@ -122,7 +122,7 @@ languages.ruby.versionFile = ./.ruby-version;
 
 
 *Type:*
-null or path
+null or absolute path
 
 
 
