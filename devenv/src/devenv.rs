@@ -329,9 +329,9 @@ impl Devenv {
 
         shell_cmd.env("SHELL", &bash);
 
-        // Set DEVENV_TASKS_QUIET if quiet mode is enabled in global options
-        if self.global_options.quiet {
-            shell_cmd.env("DEVENV_TASKS_QUIET", "true");
+        // Pass the DEVENV_CMDLINE environment variable from the current process
+        if let Ok(cmdline) = std::env::var("DEVENV_CMDLINE") {
+            shell_cmd.env("DEVENV_CMDLINE", cmdline);
         }
 
         Ok(shell_cmd)
@@ -638,6 +638,15 @@ impl Devenv {
         let tasks: Vec<tasks::TaskConfig> =
             serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
         // run tasks
+        // Convert global options to verbosity level
+        let verbosity = if self.global_options.quiet {
+            tasks::VerbosityLevel::Quiet
+        } else if self.global_options.verbose {
+            tasks::VerbosityLevel::Verbose
+        } else {
+            tasks::VerbosityLevel::Normal
+        };
+
         let config = tasks::Config {
             roots,
             tasks,
@@ -647,15 +656,6 @@ impl Devenv {
             "Tasks config: {}",
             serde_json::to_string_pretty(&config).unwrap()
         );
-
-        // Convert quiet flag to VerbosityLevel
-        let verbosity = if self.global_options.quiet {
-            tasks::VerbosityLevel::Quiet
-        } else if self.global_options.verbose {
-            tasks::VerbosityLevel::Verbose
-        } else {
-            tasks::VerbosityLevel::Normal
-        };
 
         let mut tui = tasks::TasksUi::new(config, verbosity).await?;
         let (tasks_status, outputs) = tui.run().await?;
