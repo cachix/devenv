@@ -69,7 +69,7 @@ let
               echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
               if [ ${q database.initialSQL} != null ]
               then
-                echo "Running initial script on database ${database.name}"
+                echo "Running initial SQL on database ${database.name}"
                 echo ${q database.initialSQL} | psql --dbname ${database.name}
               fi
               ${lib.optionalString (database.user != null && database.pass != null) ''
