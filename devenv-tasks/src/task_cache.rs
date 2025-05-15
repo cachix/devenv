@@ -255,9 +255,11 @@ mod tests {
     #[sqlx::test]
     async fn test_task_cache_initialization() {
         let temp_dir = TempDir::new().unwrap();
-        std::env::set_var("DEVENV_DOTFILE", temp_dir.path().to_str().unwrap());
+        let db_path = temp_dir.path().join("tasks.db");
 
-        let cache = TaskCache::new().await.unwrap();
+        // Use with_db_path directly instead of environment variable
+        let cache = TaskCache::with_db_path(db_path).await.unwrap();
+
         // Check if the database connection is valid using a simple query
         let result = sqlx::query("SELECT 1").fetch_one(cache.db.pool()).await;
         assert!(result.is_ok());
@@ -265,12 +267,12 @@ mod tests {
 
     #[sqlx::test]
     async fn test_file_modification_detection() {
-        let dotfile_dir = TempDir::new().unwrap();
-        std::env::set_var("DEVENV_DOTFILE", dotfile_dir.path().to_str().unwrap());
+        let db_temp_dir = TempDir::new().unwrap();
+        let db_path = db_temp_dir.path().join("tasks-file-mod.db");
 
-        let cache = TaskCache::new().await.unwrap();
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.txt");
+        let cache = TaskCache::with_db_path(db_path).await.unwrap();
+        let test_temp_dir = TempDir::new().unwrap();
+        let file_path = test_temp_dir.path().join("test.txt");
 
         // Create a test file
         {
@@ -338,12 +340,12 @@ mod tests {
 
     #[sqlx::test]
     async fn test_directory_modification_detection() {
-        let dotfile_dir = TempDir::new().unwrap();
-        std::env::set_var("DEVENV_DOTFILE", dotfile_dir.path().to_str().unwrap());
+        let db_temp_dir = TempDir::new().unwrap();
+        let db_path = db_temp_dir.path().join("tasks-dir-mod.db");
 
-        let cache = TaskCache::new().await.unwrap();
-        let temp_dir = TempDir::new().unwrap();
-        let dir_path = temp_dir.path().join("test_dir");
+        let cache = TaskCache::with_db_path(db_path).await.unwrap();
+        let test_temp_dir = TempDir::new().unwrap();
+        let dir_path = test_temp_dir.path().join("test_dir");
         std::fs::create_dir(&dir_path).unwrap();
 
         let task_name = "test_task_dir";
