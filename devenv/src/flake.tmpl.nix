@@ -33,6 +33,7 @@
             config = {
               allowUnfree = devenv.allowUnfree or false;
               allowBroken = devenv.allowBroken or false;
+              cudaSupport = devenv.cudaSupport or false;
               permittedInsecurePackages = devenv.permittedInsecurePackages or [ ];
             };
             inherit overlays;

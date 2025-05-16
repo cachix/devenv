@@ -100,6 +100,8 @@ pub struct Config {
     pub allow_unfree: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub allow_broken: bool,
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    pub cuda_support: bool,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub imports: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
