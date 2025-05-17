@@ -1,13 +1,10 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{Config, RunMode, TaskConfig, TasksUi};
+use devenv_tasks::{Config, RunMode, TaskConfig, TasksUi, VerbosityLevel};
 use std::env;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
 struct Args {
-    #[clap(short, long, env = "DEVENV_TASKS_QUIET")]
-    quiet: bool,
-
     #[clap(subcommand)]
     command: Command,
 }
@@ -31,6 +28,27 @@ enum Command {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    // Determine verbosity level from DEVENV_CMDLINE
+    let mut verbosity = if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
+        let cmdline = cmdline.to_lowercase();
+        if cmdline.contains("--quiet") || cmdline.contains(" -q ") {
+            VerbosityLevel::Quiet
+        } else if cmdline.contains("--verbose") || cmdline.contains(" -v ") {
+            VerbosityLevel::Verbose
+        } else {
+            VerbosityLevel::Normal
+        }
+    } else {
+        VerbosityLevel::Normal
+    };
+
+    // Keeping backwards compatibility for existing scripts that might set DEVENV_TASKS_QUIET
+    if let Ok(quiet_var) = env::var("DEVENV_TASKS_QUIET") {
+        if quiet_var == "true" || quiet_var == "1" {
+            verbosity = VerbosityLevel::Quiet;
+        }
+    }
+
     match args.command {
         Command::Run { roots, mode } => {
             let tasks_json = env::var("DEVENV_TASKS")?;
@@ -42,8 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 run_mode: mode,
             };
 
-            // Pass quiet flag to TasksUi (which will set the env var internally)
-            let mut tasks_ui = TasksUi::new(config, args.quiet).await?;
+            // Pass verbosity level directly to TasksUi
+            let mut tasks_ui = TasksUi::new(config, verbosity).await?;
             let (status, _outputs) = tasks_ui.run().await?;
 
             if status.failed + status.dependency_failed > 0 {
