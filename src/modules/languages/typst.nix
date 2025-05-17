@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.typst;
@@ -30,6 +35,6 @@ in
       pkgs.typstyle # formatter
     ];
 
-    env.TYPST_FONT_PATHS = lib.concatStringsSep ":" cfg.fontPaths;
+    env.TYPST_FONT_PATHS = if cfg.fontPaths != [] then (lib.concatStringsSep ":" cfg.fontPaths) else null;
   };
 }
