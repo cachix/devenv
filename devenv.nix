@@ -23,6 +23,7 @@
     pkgs.watchexec
     pkgs.openssl
     pkgs.sqlx-cli
+    pkgs.process-compose
     pkgs.cargo-outdated # Find outdated crates
     pkgs.cargo-machete # Find unused crates
     pkgs.cargo-edit # Adds the set-version command
