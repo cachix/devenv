@@ -46035,6 +46035,489 @@ list of absolute path
 
 
 
+## services.keycloak.enable
+
+
+
+Whether to enable the Keycloak identity and access management
+server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.package
+
+
+
+The keycloak package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.keycloak `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.database.type
+
+
+
+The type of database Keycloak should connect to.
+If you use ` dev-mem `, the realm export over script
+` keycloak-realm-export-* ` does not work.
+
+
+
+*Type:*
+one of “dev-mem”, “dev-file”
+
+
+
+*Default:*
+` "dev-file" `
+
+
+
+*Example:*
+` "dev-mem" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.initialAdminPassword
+
+
+
+Initial password set for the temporary ` admin ` user.
+The password is not stored safely and should be changed
+immediately in the admin panel.
+
+See [Admin bootstrap and recovery](https://www.keycloak.org/server/bootstrap-admin-recovery) for details.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "admin" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.plugins
+
+
+
+Keycloak plugin jar, ear files or derivations containing
+them. Packaged plugins are available through
+` pkgs.keycloak.plugins `.
+
+
+
+*Type:*
+list of absolute path
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.realms
+
+
+
+Specify the realms you want to import on start up and
+export on a manual start of process/script ‘keycloak-realm-export-all’.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  myrealm = {
+    path = "./myfolder/export.json";
+    import = true; # default
+    export = true;
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.realms.\<name>.export
+
+
+
+If you want to export that realm on process/script launch ` keycloak-export-realms `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.realms.\<name>.import
+
+
+
+If you want to import that realm on start up, if the realm does not yet exist.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.realms.\<name>.path
+
+
+
+The path (string, relative to ` DEVENV_ROOT `) where you want to import (or export) this realm «name» to.
+If not set and ` import ` is ` true ` this realm is not imported.
+If not set and ` export ` is ` true ` its exported to ` $DEVENV_STATE/keycloak/realm-export/«name».json `.
+
+
+
+*Type:*
+null or relative path not in the Nix store
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "./realms/a.json" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.settings
+
+
+
+Configuration options corresponding to parameters set in
+` conf/keycloak.conf `.
+
+Most available options are documented at [https://www.keycloak.org/server/all-config](https://www.keycloak.org/server/all-config).
+
+Options containing secret data should be set to an attribute
+set containing the attribute ` _secret ` - a
+string pointing to a file containing the value the option
+should be set to. See the example to get a better picture of
+this: in the resulting
+` conf/keycloak.conf ` file, the
+` https-key-store-password ` key will be set
+to the contents of the
+` /run/keys/store_password ` file.
+
+
+
+*Type:*
+attribute set of (null or string or signed integer or boolean or attribute set of absolute path)
+
+
+
+*Example:*
+
+```
+{
+  hostname = "localhost";
+  https-key-store-file = "/path/to/file";
+  https-key-store-password = { _secret = "/run/keys/store_password"; };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.settings.hostname
+
+
+
+The hostname part of the public URL used as base for
+all frontend requests.
+
+See [https://www.keycloak.org/server/hostname](https://www.keycloak.org/server/hostname)
+for more information about hostname configuration.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "localhost" `
+
+
+
+*Example:*
+` "localhost" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.settings.http-host
+
+
+
+On which address Keycloak should accept new connections.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "::" `
+
+
+
+*Example:*
+` "::1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.settings.http-port
+
+
+
+On which port Keycloak should listen for new HTTP connections.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 8080 `
+
+
+
+*Example:*
+` 8080 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.settings.http-relative-path
+
+
+
+The path relative to ` / ` for serving
+resources.
+
+**Note:** In versions of Keycloak using Wildfly (\<17),
+this defaulted to ` /auth `. If
+upgrading from the Wildfly version of Keycloak,
+i.e. a NixOS version before 22.05, you’ll likely
+want to set this to ` /auth ` to
+keep compatibility with your clients.
+
+See [https://www.keycloak.org/migration/migrating-to-quarkus](https://www.keycloak.org/migration/migrating-to-quarkus)
+for more information on migrating from Wildfly to Quarkus.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/" `
+
+
+
+*Example:*
+` "/auth" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.settings.https-port
+
+
+
+On which port Keycloak should listen for new HTTPS connections.
+If its not set, its disabled.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 34429 `
+
+
+
+*Example:*
+` 34429 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.sslCertificate
+
+
+
+The path to a PEM formatted certificate to use for TLS/SSL
+connections.
+
+
+
+*Type:*
+null or relative path not in the Nix store
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "/run/keys/ssl_cert" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.sslCertificateKey
+
+
+
+The path to a PEM formatted private key to use for TLS/SSL
+connections.
+
+
+
+*Type:*
+null or relative path not in the Nix store
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "/run/keys/ssl_key" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
 ## services.mailhog.enable
 
 
