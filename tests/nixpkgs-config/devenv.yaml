@@ -1,0 +1,20 @@
+inputs:
+  devenv:
+    url: path:../../?dir=src/modules
+
+config:
+  i386-linux:
+    cudaSupport: true
+    cudaCapabilities: [ "8.0" ]
+  x86_64-linux:
+    cudaSupport: true
+    cudaCapabilities: [ "8.0" ]
+  aarch64-linux:
+    cudaSupport: true
+    cudaCapabilities: [ "8.0" ]
+  aarch64-darwin:
+    cudaSupport: true
+    cudaCapabilities: [ "8.0" ]
+  x86_64-darmin:
+    cudaSupport: true
+    cudaCapabilities: [ "8.0" ]
