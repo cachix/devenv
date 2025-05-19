@@ -1002,20 +1002,18 @@ impl Devenv {
         }
         util::write_file_with_lock(
             self.devenv_dotfile.join("flake.json"),
-            &serde_json::to_string(&flake_inputs).unwrap(),
+            serde_json::to_string(&flake_inputs).unwrap(),
         )?;
-        fs::write(
+        util::write_file_with_lock(
             self.devenv_dotfile.join("devenv.json"),
             serde_json::to_string(&self.config).unwrap(),
-        )
-        .expect("Failed to write devenv.json");
+        )?;
         // TODO: superceded by eval caching.
         // Remove once direnvrc migration is implemented.
-        fs::write(
+        util::write_file_with_lock(
             self.devenv_dotfile.join("imports.txt"),
             self.config.imports.join("\n"),
-        )
-        .expect("Failed to write imports.txt");
+        )?;
 
         fs::create_dir_all(&self.devenv_runtime).map_err(|e| {
             miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
@@ -1066,8 +1064,7 @@ impl Devenv {
 
             cli_options.push_str("}\n");
 
-            fs::write(self.devenv_dotfile.join("cli-options.nix"), cli_options)
-                .expect("Failed to write cli-options.nix");
+            util::write_file_with_lock(self.devenv_dotfile.join("cli-options.nix"), &cli_options)?;
         } else {
             // Remove the file if it exists but there are no CLI options
             let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
@@ -1120,7 +1117,7 @@ impl Devenv {
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
         use devenv_eval_cache::command::{FileInputDesc, Input};
-        fs::write(
+        util::write_file_with_lock(
             self.devenv_dotfile.join("input-paths.txt"),
             env.inputs
                 .iter()
@@ -1139,8 +1136,7 @@ impl Devenv {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-        )
-        .expect("Failed to write input-paths.txt");
+        )?;
 
         Ok(DevEnv { output: env.stdout })
     }
