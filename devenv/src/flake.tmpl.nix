@@ -31,10 +31,11 @@
           pkgs = import nixpkgs {
             inherit system;
             config = {
-              allowUnfree = devenv.allowUnfree or false;
-              allowBroken = devenv.allowBroken or false;
-              cudaSupport = devenv.cudaSupport or false;
-              permittedInsecurePackages = devenv.permittedInsecurePackages or [ ];
+              allowUnfree = devenv.config."${system}".allowUnfree or devenv.allowUnfree or false;
+              allowBroken = devenv.config."${system}".allowBroken or devenv.allowBroken or false;
+              cudaSupport = devenv.config."${system}".cudaSupport or devenv.cudaSupport or false;
+              cudaCapabilities = devenv.config."${system}".cudaCapabilities or devenv.cudaCapabilities or [ ];
+              permittedInsecurePackages = devenv.config."${system}".permittedInsecurePackages or devenv.permittedInsecurePackages or [ ];
             };
             inherit overlays;
           };
