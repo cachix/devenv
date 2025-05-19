@@ -9,6 +9,22 @@ const YAML_CONFIG: &str = "devenv.yaml";
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+pub struct NixpkgsConfig {
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    pub allow_unfree: bool,
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    pub allow_broken: bool,
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    pub cuda_support: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub cuda_capabilities: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub permitted_insecure_packages: Vec<String>,
+}
+
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[config(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub url: Option<String>,
@@ -102,6 +118,11 @@ pub struct Config {
     pub allow_broken: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub cuda_support: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub cuda_capabilities: Vec<String>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    #[setting(nested)]
+    pub config: BTreeMap<String, NixpkgsConfig>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub imports: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]

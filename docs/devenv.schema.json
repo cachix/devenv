@@ -37,6 +37,12 @@
         "$ref": "#/definitions/Input"
       }
     },
+    "config": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/NixpkgsConfig"
+      }
+    },
     "permittedInsecurePackages": {
       "type": "array",
       "items": {
@@ -92,6 +98,32 @@
             "string",
             "null"
           ]
+        }
+      }
+    },
+    "NixpkgsConfig": {
+      "type": "object",
+      "properties": {
+        "allowBroken": {
+          "type": "boolean"
+        },
+        "allowUnfree": {
+          "type": "boolean"
+        },
+        "cudaSupport": {
+          "type": "boolean"
+        },
+        "cudaCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "permittedInsecurePackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }
