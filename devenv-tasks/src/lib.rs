@@ -3,12 +3,34 @@ use miette::Diagnostic;
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
+use tracing::info;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 mod task_cache;
 pub mod ui;
+
+/// Verbosity level for task output
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VerbosityLevel {
+    /// Silence all output
+    Quiet,
+    /// Normal output level
+    Normal,
+    /// Verbose output with additional details
+    Verbose,
+}
+
+impl Display for VerbosityLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VerbosityLevel::Quiet => write!(f, "quiet"),
+            VerbosityLevel::Normal => write!(f, "normal"),
+            VerbosityLevel::Verbose => write!(f, "verbose"),
+        }
+    }
+}
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -27,7 +49,7 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader},
     sync::Mutex,
 };
-use tracing::{error, info, instrument};
+use tracing::{error, instrument};
 
 #[derive(Error, Diagnostic, Debug)]
 pub enum Error {
@@ -174,13 +196,15 @@ enum TaskStatus {
 struct TaskState {
     task: TaskConfig,
     status: TaskStatus,
+    verbosity: VerbosityLevel,
 }
 
 impl TaskState {
-    fn new(task: TaskConfig) -> Self {
+    fn new(task: TaskConfig, verbosity: VerbosityLevel) -> Self {
         Self {
             task,
             status: TaskStatus::Pending,
+            verbosity,
         }
     }
 
@@ -424,10 +448,8 @@ impl TaskState {
                     result = stdout_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => {
-                                // Only log to tracing if not quiet
-                                let is_quiet = std::env::var("DEVENV_TASKS_QUIET").map(|v| v == "true").unwrap_or(false);
-                                if !is_quiet {
-                                    info!(stdout = %line);
+                                if self.verbosity == VerbosityLevel::Verbose {
+                                    eprintln!("[{}] {}", self.task.name, line);
                                 }
                                 stdout_lines.push((std::time::Instant::now(), line));
                             },
@@ -441,10 +463,14 @@ impl TaskState {
                     result = stderr_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => {
+                                if self.verbosity == VerbosityLevel::Verbose {
+                                    eprintln!("[{}] {}", self.task.name, line);
+                                }
                                 stderr_lines.push((std::time::Instant::now(), line));
                             },
                             Ok(None) => {},
                             Err(e) => {
+                                error!("Error reading stderr: {}", e);
                                 stderr_lines.push((std::time::Instant::now(), e.to_string()));
                             },
                         }
@@ -466,7 +492,7 @@ impl TaskState {
                                 }
                             },
                             Err(e) => {
-                                error!("Error waiting for command: {}", e);
+                                error!("{}> Error waiting for command: {}", self.task.name, e);
                                 return Ok(TaskCompleted::Failed(
                                     now.elapsed(),
                                     TaskFailure {
@@ -501,7 +527,7 @@ struct Tasks {
 }
 
 impl Tasks {
-    async fn new(config: Config) -> Result<Self, Error> {
+    async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
         // Initialize the task cache using the environment variable
         let cache = TaskCache::new().await.map_err(|e| {
             Error::IoError(std::io::Error::new(
@@ -510,11 +536,15 @@ impl Tasks {
             ))
         })?;
 
-        Self::new_with_config_and_cache(config, cache).await
+        Self::new_with_config_and_cache(config, cache, verbosity).await
     }
 
     /// Create a new Tasks instance with a specific database path.
-    async fn new_with_db_path(config: Config, db_path: PathBuf) -> Result<Self, Error> {
+    async fn new_with_db_path(
+        config: Config,
+        db_path: PathBuf,
+        verbosity: VerbosityLevel,
+    ) -> Result<Self, Error> {
         // Initialize the task cache with a specific database path
         let cache = TaskCache::with_db_path(db_path).await.map_err(|e| {
             Error::IoError(std::io::Error::new(
@@ -523,10 +553,14 @@ impl Tasks {
             ))
         })?;
 
-        Self::new_with_config_and_cache(config, cache).await
+        Self::new_with_config_and_cache(config, cache, verbosity).await
     }
 
-    async fn new_with_config_and_cache(config: Config, cache: TaskCache) -> Result<Self, Error> {
+    async fn new_with_config_and_cache(
+        config: Config,
+        cache: TaskCache,
+        verbosity: VerbosityLevel,
+    ) -> Result<Self, Error> {
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
         let mut longest_task_name = 0;
@@ -547,7 +581,7 @@ impl Tasks {
             if task.status.is_some() && task.command.is_none() {
                 return Err(Error::MissingCommand(name));
             }
-            let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(task))));
+            let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(task, verbosity))));
             task_indices.insert(name, index);
         }
         let mut roots = Vec::new();
@@ -919,7 +953,7 @@ mod test {
             }))
             .unwrap();
             assert_matches!(
-                Tasks::new_with_db_path(config, db_path.clone()).await,
+                Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await,
                 Err(Error::InvalidTaskName(_))
             );
         }
@@ -941,7 +975,7 @@ mod test {
             }))
             .unwrap();
             assert_matches!(
-                Tasks::new_with_db_path(config, db_path.clone()).await,
+                Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await,
                 Ok(_)
             );
         }
@@ -994,6 +1028,7 @@ mod test {
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
         tasks.run().await;
@@ -1036,6 +1071,7 @@ mod test {
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await;
         if let Err(Error::CycleDetected(_)) = result {
@@ -1094,7 +1130,8 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
         }))
         .unwrap();
 
-        let tasks1 = Tasks::new_with_db_path(config1, db_path.clone()).await?;
+        let tasks1 =
+            Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
         tasks1.run().await;
 
         assert_eq!(tasks1.tasks_order.len(), 1);
@@ -1128,7 +1165,7 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
         }))
         .unwrap();
 
-        let tasks2 = Tasks::new_with_db_path(config2, db_path2).await?;
+        let tasks2 = Tasks::new_with_db_path(config2, db_path2, VerbosityLevel::Verbose).await?;
         tasks2.run().await;
 
         assert_eq!(tasks2.tasks_order.len(), 1);
@@ -1194,7 +1231,8 @@ exit 0
         }))
         .unwrap();
 
-        let tasks1 = Tasks::new_with_db_path(config1, db_path.clone()).await?;
+        let tasks1 =
+            Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
         let outputs1 = tasks1.run().await;
 
         // Print the status and outputs for debugging
@@ -1234,7 +1272,7 @@ exit 0
         }))
         .unwrap();
 
-        let tasks2 = Tasks::new_with_db_path(config2, db_path).await?;
+        let tasks2 = Tasks::new_with_db_path(config2, db_path, VerbosityLevel::Verbose).await?;
         let outputs2 = tasks2.run().await;
 
         // Print the status and outputs for debugging
@@ -1313,7 +1351,8 @@ echo "Task executed successfully"
         }))
         .unwrap();
 
-        let tasks = Tasks::new_with_db_path(config, db_path.clone()).await?;
+        let tasks =
+            Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
 
         // Run task first time - should execute
         let outputs = tasks.run().await;
@@ -1361,7 +1400,8 @@ echo "Task executed successfully"
         }))
         .unwrap();
 
-        let tasks2 = Tasks::new_with_db_path(config2, db_path.clone()).await?;
+        let tasks2 =
+            Tasks::new_with_db_path(config2, db_path.clone(), VerbosityLevel::Verbose).await?;
         let outputs2 = tasks2.run().await;
 
         // Print status for debugging
@@ -1410,7 +1450,7 @@ echo "Task executed successfully"
         }))
         .unwrap();
 
-        let tasks3 = Tasks::new_with_db_path(config3, db_path).await?;
+        let tasks3 = Tasks::new_with_db_path(config3, db_path, VerbosityLevel::Verbose).await?;
         let outputs3 = tasks3.run().await;
 
         // Print status for debugging
@@ -1490,7 +1530,8 @@ echo "Multiple files task executed successfully"
         .unwrap();
 
         // Create tasks with multiple files in exec_if_modified
-        let tasks = Tasks::new_with_db_path(config1, db_path.clone()).await?;
+        let tasks =
+            Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
 
         // Run task first time - should execute
         let outputs = tasks.run().await;
@@ -1525,7 +1566,8 @@ echo "Multiple files task executed successfully"
         }))
         .unwrap();
 
-        let tasks = Tasks::new_with_db_path(config2, db_path.clone()).await?;
+        let tasks =
+            Tasks::new_with_db_path(config2, db_path.clone(), VerbosityLevel::Verbose).await?;
         let outputs = tasks.run().await;
 
         // Verify the output is preserved in the skipped task
@@ -1554,7 +1596,8 @@ echo "Multiple files task executed successfully"
         }))
         .unwrap();
 
-        let tasks2 = Tasks::new_with_db_path(config3, db_path.clone()).await?;
+        let tasks2 =
+            Tasks::new_with_db_path(config3, db_path.clone(), VerbosityLevel::Verbose).await?;
         let outputs2 = tasks2.run().await;
 
         // Verify output is still preserved on subsequent runs
@@ -1585,7 +1628,8 @@ echo "Multiple files task executed successfully"
         }))
         .unwrap();
 
-        let tasks = Tasks::new_with_db_path(config4, db_path.clone()).await?;
+        let tasks =
+            Tasks::new_with_db_path(config4, db_path.clone(), VerbosityLevel::Verbose).await?;
         let outputs = tasks.run().await;
 
         // Verify the output after modification of second file
@@ -1622,7 +1666,8 @@ echo "Multiple files task executed successfully"
         }))
         .unwrap();
 
-        let tasks = Tasks::new_with_db_path(config5, db_path.clone()).await?;
+        let tasks =
+            Tasks::new_with_db_path(config5, db_path.clone(), VerbosityLevel::Verbose).await?;
         let outputs = tasks.run().await;
 
         // Verify the output when both files have been modified
@@ -1693,7 +1738,8 @@ echo "Task executed successfully"
             .unwrap();
 
             // Create the tasks with explicit db path
-            let tasks1 = Tasks::new_with_db_path(config1, db_path.clone()).await?;
+            let tasks1 =
+                Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
 
             // Run task first time - should execute
             let outputs1 = tasks1.run().await;
@@ -1739,7 +1785,8 @@ echo "Task executed successfully"
             .unwrap();
 
             // Create the tasks with explicit db path
-            let tasks2 = Tasks::new_with_db_path(config2, db_path.clone()).await?;
+            let tasks2 =
+                Tasks::new_with_db_path(config2, db_path.clone(), VerbosityLevel::Verbose).await?;
             let outputs2 = tasks2.run().await;
 
             // Print the status and outputs for debugging
@@ -1800,7 +1847,7 @@ echo "Task executed successfully"
             .unwrap();
 
             // Create the tasks with explicit db path
-            let tasks3 = Tasks::new_with_db_path(config3, db_path).await?;
+            let tasks3 = Tasks::new_with_db_path(config3, db_path, VerbosityLevel::Verbose).await?;
             let outputs3 = tasks3.run().await;
 
             // Print the status and outputs for debugging
@@ -1859,6 +1906,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path.clone(),
+            VerbosityLevel::Verbose,
         )
         .await?;
 
@@ -1905,6 +1953,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await;
 
@@ -1946,7 +1995,9 @@ echo "Task executed successfully"
 
         // Single task
         {
-            let tasks = Tasks::new_with_db_path(config.clone(), db_path.clone()).await?;
+            let tasks =
+                Tasks::new_with_db_path(config.clone(), db_path.clone(), VerbosityLevel::Verbose)
+                    .await?;
             tasks.run().await;
 
             let task_statuses = inspect_tasks(&tasks).await;
@@ -1964,7 +2015,8 @@ echo "Task executed successfully"
                 run_mode: RunMode::Before,
                 ..config.clone()
             };
-            let tasks = Tasks::new_with_db_path(config, db_path.clone()).await?;
+            let tasks =
+                Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
             tasks.run().await;
             let task_statuses = inspect_tasks(&tasks).await;
             assert_matches!(
@@ -1982,7 +2034,8 @@ echo "Task executed successfully"
                 run_mode: RunMode::After,
                 ..config.clone()
             };
-            let tasks = Tasks::new_with_db_path(config, db_path.clone()).await?;
+            let tasks =
+                Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
             tasks.run().await;
             let task_statuses = inspect_tasks(&tasks).await;
             assert_matches!(
@@ -2000,7 +2053,8 @@ echo "Task executed successfully"
                 run_mode: RunMode::All,
                 ..config.clone()
             };
-            let tasks = Tasks::new_with_db_path(config, db_path.clone()).await?;
+            let tasks =
+                Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
             tasks.run().await;
             let task_statuses = inspect_tasks(&tasks).await;
             assert_matches!(
@@ -2049,6 +2103,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
         tasks.run().await;
@@ -2099,6 +2154,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path.clone(),
+            VerbosityLevel::Verbose,
         )
         .await?;
         tasks.run().await;
@@ -2150,6 +2206,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
         tasks.run().await;
@@ -2201,6 +2258,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
         tasks.run().await;
@@ -2252,6 +2310,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
         tasks.run().await;
@@ -2306,6 +2365,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
         tasks.run().await;
@@ -2359,6 +2419,7 @@ echo "Task executed successfully"
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
 
@@ -2421,6 +2482,7 @@ exit 0
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
 
@@ -2484,6 +2546,7 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
 
@@ -2544,6 +2607,7 @@ fi
             }))
             .unwrap(),
             db_path,
+            VerbosityLevel::Verbose,
         )
         .await?;
 

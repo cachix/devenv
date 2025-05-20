@@ -2,7 +2,7 @@ use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::{Config, Error, Outputs, Skipped, TaskCompleted, TaskStatus, Tasks};
+use crate::{Config, Error, Outputs, Skipped, TaskCompleted, TaskStatus, Tasks, VerbosityLevel};
 
 /// Status information for all tasks
 pub struct TasksStatus {
@@ -32,23 +32,18 @@ impl TasksStatus {
 /// UI manager for tasks
 pub struct TasksUi {
     tasks: Arc<Tasks>,
-    quiet: bool,
+    verbosity: VerbosityLevel,
     term: Term,
 }
 
 impl TasksUi {
     /// Create a new TasksUi
-    pub async fn new(config: Config, quiet: bool) -> Result<Self, Error> {
-        let tasks = Tasks::new(config).await?;
-
-        // Set environment variable for tracing logs
-        if quiet {
-            unsafe { std::env::set_var("DEVENV_TASKS_QUIET", "true") };
-        }
+    pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
+        let tasks = Tasks::new(config, verbosity).await?;
 
         Ok(Self {
             tasks: Arc::new(tasks),
-            quiet,
+            verbosity,
             term: Term::stderr(),
         })
     }
@@ -57,18 +52,13 @@ impl TasksUi {
     pub async fn new_with_db_path(
         config: Config,
         db_path: PathBuf,
-        quiet: bool,
+        verbosity: VerbosityLevel,
     ) -> Result<Self, Error> {
-        let tasks = Tasks::new_with_db_path(config, db_path).await?;
-
-        // Set environment variable for tracing logs
-        if quiet {
-            std::env::set_var("DEVENV_TASKS_QUIET", "true");
-        }
+        let tasks = Tasks::new_with_db_path(config, db_path, verbosity).await?;
 
         Ok(Self {
             tasks: Arc::new(tasks),
-            quiet,
+            verbosity,
             term: Term::stderr(),
         })
     }
@@ -148,7 +138,7 @@ impl TasksUi {
         let handle = tokio::spawn(async move { tasks_clone.run().await });
 
         // If in quiet mode, just wait for tasks to complete and return
-        if self.quiet {
+        if self.verbosity == VerbosityLevel::Quiet {
             loop {
                 let tasks_status = self.get_tasks_status().await;
                 if tasks_status.pending == 0 && tasks_status.running == 0 {
@@ -160,13 +150,18 @@ impl TasksUi {
         }
 
         let names = console::style(self.tasks.root_names.join(", ")).bold();
-        let is_tty = self.term.is_term();
+
+        // Disable TUI in verbose mode to prevent it from overwriting task output
+        let is_tty = self.term.is_term() && self.verbosity != VerbosityLevel::Verbose;
+
+        // Always show which tasks are being run
         self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
 
         // start processing tasks
         let started = std::time::Instant::now();
 
-        // start TUI if we're connected to a TTY, otherwise use non-interactive output
+        // start TUI if we're connected to a TTY and not in verbose mode, otherwise use non-interactive output
+        // This prevents the TUI from overwriting stdout/stderr in verbose mode
         let mut last_list_height: u16 = 0;
         let mut last_statuses = std::collections::HashMap::new();
 
