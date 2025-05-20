@@ -7,8 +7,9 @@ use std::path::Path;
 /// Safely write a file with locking, avoiding writing if the content hasn't changed.
 ///
 /// Returns Ok(true) if the file was written, Ok(false) if no write was needed.
-pub fn write_file_with_lock<P: AsRef<Path>>(path: P, content: &str) -> Result<bool> {
+pub fn write_file_with_lock<P: AsRef<Path>, S: AsRef<str>>(path: P, content: S) -> Result<bool> {
     let path = path.as_ref();
+    let content = content.as_ref();
 
     // Create parent directories if they don't exist
     if let Some(parent) = path.parent() {
@@ -24,7 +25,7 @@ pub fn write_file_with_lock<P: AsRef<Path>>(path: P, content: &str) -> Result<bo
         .read(true)
         .write(true)
         .create(true)
-        .truncate(true)
+        .truncate(false)
         .open(path)
         .into_diagnostic()
         .map_err(|e| miette!("Failed to open file {}: {}", path.display(), e))?;
