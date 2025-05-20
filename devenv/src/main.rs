@@ -169,7 +169,7 @@ async fn main() -> Result<()> {
             };
             Ok(())
         }
-        Commands::Init { target } => devenv.init(&target),
+        Commands::Init { target, template } => devenv.init(&target, &template).await,
         Commands::Generate { .. } => match which::which("devenv-generate") {
             Ok(devenv_generate) => {
                 let error = Command::new(devenv_generate)
