@@ -51466,6 +51466,37 @@ package
 
 
 
+## task.serverProtocolExecutables
+
+
+
+List of Task Server Protocol executables to register with the task system.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "my-tsp-provider"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks
 
 
