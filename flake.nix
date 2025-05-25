@@ -75,8 +75,26 @@
               url = "${source.url}${path}";
             in
             { name = url; url = url; };
+
+          filterOptions = import ./filterOptions.nix lib;
+
+          # Apply a filter to process git-hooks options
+          filterGitHooks = path: opt:
+            # Test if path starts with "git-hooks.hooks"
+            if lib.lists.hasPrefix [ "git-hooks" "hooks" ] path then
+            # Document the generic submodule options: git-hooks.hooks.<name>.<option>
+              if builtins.elemAt path 2 == "_freeformOptions"
+              then true
+              else
+              # For pre-configured hooks, document certain values, like the settings and description.
+              # Importantly, don't document the generic submodule options to avoid cluttering the docs.
+                if builtins.elem (builtins.elemAt path 3) [ "enable" "description" "packageOverrides" "settings" ]
+                then true
+                else false
+            else true;
+
           options = pkgs.nixosOptionsDoc {
-            options = builtins.removeAttrs eval.options [ "_module" ];
+            options = filterOptions filterGitHooks (builtins.removeAttrs eval.options [ "_module" ]);
             transformOptions = opt: (
               opt // { declarations = map rewriteSource opt.declarations; }
             );
