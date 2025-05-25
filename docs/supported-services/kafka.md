@@ -74,6 +74,278 @@ absolute path
 
 
 
+## services\.kafka\.connect\.enable
+
+
+
+Whether to enable Kafka Connect\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## services\.kafka\.connect\.initialConnectors
+
+
+
+List of Kafka Connect connectors to set up initially
+
+
+
+*Type:*
+list of (lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string)))
+
+
+
+*Default:*
+` [ ] `
+
+
+
+## services\.kafka\.connect\.initialConnectors\.\*\.config
+
+
+
+Initial configuration for the connector
+
+
+
+*Type:*
+attribute set
+
+
+
+## services\.kafka\.connect\.initialConnectors\.\*\.name
+
+
+
+Name of the connector
+
+
+
+*Type:*
+string
+
+
+
+## services\.kafka\.connect\.settings
+
+
+
+` connect-standalone.properties `\.
+
+Note that \.properties files contain mappings from string to string\.
+Keys with dots are NOT represented by nested attrs in these settings,
+but instead as quoted strings (ie\. ` settings."broker.id" `, NOT
+` settings.broker.id `)\.
+
+
+
+*Type:*
+lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
+
+
+
+*Default:*
+` { } `
+
+
+
+## services\.kafka\.connect\.settings\."bootstrap\.servers"
+
+
+
+A list of host/port pairs to use for establishing the initial connection to the Kafka cluster\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "localhost:9092"
+]
+```
+
+
+
+## services\.kafka\.connect\.settings\."key\.converter"
+
+
+
+The key converter to use for the connector\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "org.apache.kafka.connect.json.JsonConverter" `
+
+
+
+## services\.kafka\.connect\.settings\."key\.converter\.schemas\.enable"
+
+
+
+Whether the key converter should include schema information in the message\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## services\.kafka\.connect\.settings\.listeners
+
+
+
+List of listeners for Kafka Connect
+(By default Kafka Connect listens on http://localhost:8083)
+
+
+
+*Type:*
+null or (list of string)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+[
+  "http://localhost:8080"
+]
+```
+
+
+
+## services\.kafka\.connect\.settings\."offset\.flush\.interval\.ms"
+
+
+
+Interval at which to try committing offsets for tasks
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 10000 `
+
+
+
+## services\.kafka\.connect\.settings\."offset\.storage\.file\.filename"
+
+
+
+The file to store connector offsets in\. By storing offsets on disk, a standalone process can be stopped and started on a single node and resume where it previously left off\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "/home/runner/work/devenv/devenv/.devenv/state/kafka/connect/connect.offsets" `
+
+
+
+## services\.kafka\.connect\.settings\."plugin\.path"
+
+
+
+The list should consist of top level directories that include any combination of:
+a) directories immediately containing jars with plugins and their dependencies
+b) uber-jars with plugins and their dependencies
+c) directories immediately containing the package directory structure of classes of plugins and their dependencies
+Note: symlinks will be followed to discover dependencies or plugins\.
+
+
+
+*Type:*
+null or (list of (string or absolute path))
+
+
+
+*Default:*
+` null `
+
+
+
+## services\.kafka\.connect\.settings\."value\.converter"
+
+
+
+The value converter to use for the connector\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "org.apache.kafka.connect.json.JsonConverter" `
+
+
+
+## services\.kafka\.connect\.settings\."value\.converter\.schemas\.enable"
+
+
+
+Whether the value converter should include schema information in the message\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
 ## services\.kafka\.defaultMode
 
 
@@ -289,9 +561,4 @@ list of absolute path
 
 
 *Default:*
-
-```
-[
-  "/home/runner/work/devenv/devenv/.devenv/state/kafka/logs"
-]
-```
+` [ "${config.devenv.state + "/kafka"}/logs" ] `
