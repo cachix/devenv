@@ -106,21 +106,14 @@
     {
       packages = forAllSystems (system:
         let
-          inherit (pkgs) lib;
           pkgs = nixpkgs.legacyPackages.${system};
           options = mkDocOptions pkgs;
-          filterOptions = import ./filterOptions.nix lib;
           evaluatedModules = pkgs.lib.evalModules {
             modules = [
               ./src/modules/top-level.nix
             ];
             specialArgs = { inherit pkgs inputs; };
           };
-          generateKeyOptions = key:
-            filterOptions
-              (path: option:
-                lib.any (lib.hasSuffix "/${key}.nix") option.declarations)
-              evaluatedModules.options;
 
           optionsDocs = optionParameter: pkgs.nixosOptionsDoc {
             options = optionParameter;
@@ -137,14 +130,15 @@
           devenv-generate-individual-docs =
             let
               inherit (pkgs) lib;
-              languageOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.languages;
-              serviceOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.services;
-              processManagersOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.process.managers;
+              languageOptions = evaluatedModules.options.languages;
+              serviceOptions = evaluatedModules.options.services;
+              processManagersOptions = evaluatedModules.options.process.managers;
               processedOptions = option: builtins.mapAttrs (key: options: optionsDocs options) option;
             in
             pkgs.stdenv.mkDerivation {
               name = "generate-individual-docs";
               src = ./docs/individual-docs;
+              allowSubstitutes = false;
               buildPhase = ''
                 languageDir=./languages
                 serviceDir=./services
