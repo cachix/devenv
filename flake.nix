@@ -75,8 +75,26 @@
               url = "${source.url}${path}";
             in
             { name = url; url = url; };
+
+          filterOptions = import ./filterOptions.nix lib;
+
+          # Apply a filter to process git-hooks options
+          filterGitHooks = path: opt:
+            # Test if path starts with "git-hooks.hooks"
+            if lib.lists.hasPrefix [ "git-hooks" "hooks" ] path then
+            # Document the generic submodule options: git-hooks.hooks.<name>.<option>
+              if builtins.elemAt path 2 == "_freeformOptions"
+              then true
+              else
+              # For pre-configured hooks, document certain values, like the settings and description.
+              # Importantly, don't document the generic submodule options to avoid cluttering the docs.
+                if builtins.elem (builtins.elemAt path 3) [ "enable" "description" "packageOverrides" "settings" ]
+                then true
+                else false
+            else true;
+
           options = pkgs.nixosOptionsDoc {
-            options = builtins.removeAttrs eval.options [ "_module" ];
+            options = filterOptions filterGitHooks (builtins.removeAttrs eval.options [ "_module" ]);
             transformOptions = opt: (
               opt // { declarations = map rewriteSource opt.declarations; }
             );
@@ -88,21 +106,14 @@
     {
       packages = forAllSystems (system:
         let
-          inherit (pkgs) lib;
           pkgs = nixpkgs.legacyPackages.${system};
           options = mkDocOptions pkgs;
-          filterOptions = import ./filterOptions.nix lib;
           evaluatedModules = pkgs.lib.evalModules {
             modules = [
               ./src/modules/top-level.nix
             ];
             specialArgs = { inherit pkgs inputs; };
           };
-          generateKeyOptions = key:
-            filterOptions
-              (path: option:
-                lib.any (lib.hasSuffix "/${key}.nix") option.declarations)
-              evaluatedModules.options;
 
           optionsDocs = optionParameter: pkgs.nixosOptionsDoc {
             options = optionParameter;
@@ -119,14 +130,15 @@
           devenv-generate-individual-docs =
             let
               inherit (pkgs) lib;
-              languageOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.languages;
-              serviceOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.services;
-              processManagersOptions = builtins.mapAttrs (key: _: generateKeyOptions key) evaluatedModules.config.process.managers;
+              languageOptions = evaluatedModules.options.languages;
+              serviceOptions = evaluatedModules.options.services;
+              processManagersOptions = evaluatedModules.options.process.managers;
               processedOptions = option: builtins.mapAttrs (key: options: optionsDocs options) option;
             in
             pkgs.stdenv.mkDerivation {
               name = "generate-individual-docs";
               src = ./docs/individual-docs;
+              allowSubstitutes = false;
               buildPhase = ''
                 languageDir=./languages
                 serviceDir=./services

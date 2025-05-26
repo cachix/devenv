@@ -46,7 +46,8 @@ in
     storage = {
       path = lib.mkOption {
         type = lib.types.str;
-        default = "${config.env.DEVENV_STATE}/prometheus";
+        default = "${config.devenv.state}/prometheus";
+        defaultText = lib.literalExpression "\${config.devenv.state}/prometheus";
         description = "Path where Prometheus will store its database";
       };
 

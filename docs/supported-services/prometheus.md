@@ -297,7 +297,7 @@ string
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/prometheus" `
+` ${config.devenv.state}/prometheus `
 
 
 

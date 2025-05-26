@@ -2,9 +2,8 @@
 
 let
   cfg = config.services.kafka;
-  types = lib.types;
 
-  stateDir = config.env.DEVENV_STATE + "/kafka";
+  stateDir = config.devenv.state + "/kafka";
 
   mkPropertyString =
     let
@@ -66,6 +65,7 @@ in
             # to have users choose a safer value -- /tmp might be volatile and is a
             # slightly scary default choice.
             default = [ "${stateDir}/logs" ];
+            defaultText = lib.literalExpression ''[ "''${config.devenv.state + "/kafka"}/logs" ]'';
             type = with lib.types; listOf path;
           };
 
@@ -152,7 +152,6 @@ in
     let
       # From config file example
       clusterIdFile = stateDir + "/clusterid";
-      logsDir = stateDir + "/logs";
 
       getOrGenerateClusterId = ''
         CLUSTER_ID=$(cat ${clusterIdFile} 2>/dev/null || ${cfg.package}/bin/kafka-storage.sh random-uuid | tee ${clusterIdFile})
