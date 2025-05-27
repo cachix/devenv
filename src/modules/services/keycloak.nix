@@ -334,10 +334,20 @@ in
 
       # Generate the command to import realms.
       realmImport = lib.mapAttrsToList
-        (realm: e: ''
-          echo "Symlinking realm file '${e.path}' to import path '$KC_HOME_DIR/data/import'."
-          ln -fs "${config.env.DEVENV_ROOT + "/" + e.path}" "$KC_HOME_DIR/data/import/"
-        '')
+        (
+          realm: e:
+            let
+              f = config.env.DEVENV_ROOT + "/" + e.path;
+            in
+            ''
+              echo "Symlinking realm file '${f}' to import path '$KC_HOME_DIR/data/import'."
+              if [ ! -f "${f}" ]; then
+                echo "Realm file '${f}' does not exist!" >&2
+                exit 1
+              fi
+              ln -fs "${f}" "$KC_HOME_DIR/data/import/"
+            ''
+        )
         (lib.filterAttrs (_: v: v.import && v.path != null) cfg.realms);
 
       # Generate the command to export realms.
