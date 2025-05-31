@@ -285,7 +285,7 @@ in
     ];
 
     env.ANDROID_HOME = "${androidSdk}/libexec/android-sdk";
-    env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk/";
+    env.ANDROID_NDK_ROOT = "${config.env.ANDROID_HOME}/ndk-bundle";
 
     # override the aapt2 binary that gradle uses with the patched one from the sdk
     env.GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidSdk}/libexec/android-sdk/build-tools/${lib.head cfg.buildTools.version}/aapt2";
@@ -295,7 +295,7 @@ in
 
     enterShell = ''
       set -e
-      export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath [pkgs.vulkan-loader pkgs.libGL]}:${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/lib64/:${config.env.ANDROID_NDK_ROOT}/${lib.head cfg.ndk.version}/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
+      export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath [pkgs.vulkan-loader pkgs.libGL]}:${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/lib64/:${config.env.ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
 
       export PATH="$PATH:${config.env.ANDROID_HOME}/tools:${config.env.ANDROID_HOME}/tools/bin:${config.env.ANDROID_HOME}/platform-tools"
       cat <<EOF > local.properties
