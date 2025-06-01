@@ -16,11 +16,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
+    packages = [
       cfg.package
     ];
 
-    env.DOTNET_ROOT = "${cfg.package}";
+    env.DOTNET_ROOT = "${
+        if lib.hasAttr "unwrapped" cfg.package
+        then cfg.package.unwrapped
+        else cfg.package
+    }/share/dotnet";
     env.LD_LIBRARY_PATH = "$LD_LIBRARY_PATH:${lib.makeLibraryPath [ pkgs.icu ]}";
   };
 }
