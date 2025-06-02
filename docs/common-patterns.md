@@ -4,7 +4,7 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
 
 1. Add `nixpkgs-unstable` input to `devenv.yaml`:
 
-   ```yaml
+   ```yaml title="devenv.yaml"
    inputs:
      nixpkgs:
        url: github:cachix/devenv-nixpkgs/rolling
@@ -14,7 +14,7 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
 
 2. Use the package in your `devenv.nix`:
 
-   ```nix
+   ```nix title="devenv.nix"
    { pkgs, inputs, ... }:
    let
      pkgs-unstable = import inputs.nixpkgs-unstable { system = pkgs.stdenv.system; };
@@ -32,7 +32,7 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
 
 This example adds Elixir install scripts to `~/.mix/escripts`:
 
-```nix
+```nix title="devenv.nix"
 { ... }:
 
 {
@@ -46,7 +46,7 @@ This example adds Elixir install scripts to `~/.mix/escripts`:
 
 ### Escape Nix curly braces inside shell scripts
 
-```nix
+```nix title="devenv.nix"
 { pkgs, ... }: {
   scripts.myscript.exec = ''
     foobar=1
@@ -60,8 +60,8 @@ This example adds Elixir install scripts to `~/.mix/escripts`:
 
 ### Exclude packages from a container
 
-```nix
-{ pkgs, ... }: {
+```nix title="devenv.nix"
+{ pkgs, lib, config, ... }: {
   packages = [
     pkgs.git
   ] ++ lib.optionals (!config.container.isBuilding) [
@@ -125,7 +125,7 @@ This approach will cause Nix to fail with the dreaded `infinite recursion` error
 ```
 
 <div class="result" >
-  ```
+  ``` { .console .no-copy }
   error: infinite recursion encountered
   ```
 </div>
@@ -165,7 +165,7 @@ These frameworks are shipped in a versioned SDK bundle available as `pkgs.apple-
 
 You can use the [`apple.sdk`](reference/options.md#applesdk) option to override the default SDK or remove it completely.
 
-```nix
+```nix title="devenv.nix"
 { pkgs, lib, ... }:
 
 {
@@ -180,12 +180,13 @@ You can use the [`apple.sdk`](reference/options.md#applesdk) option to override 
   # apple.sdk = null;
 }
 ```
+<div class="result" markdown>
 
 !!! note "Legacy framework pattern"
 
     You previously had to add each framework to `packages` individually. For example:
 
-    ```nix
+    ```nix title="devenv.nix"
     { pkgs, lib, ... }:
 
     {
@@ -197,6 +198,8 @@ You can use the [`apple.sdk`](reference/options.md#applesdk) option to override 
 
     This is no longer necessary. Frameworks are bundled together in a single versioned SDK.
 
+</div>
+
 
 ### Run x86 binaries on Apple Silicon with Rosetta
 
@@ -205,7 +208,7 @@ Rosetta 2 enables a Mac with Apple Silicon to transparently run x86 binaries.
 Nixpkgs provides a convenient set of x86_64-darwin packages.
 This can come in handy for packages that don't yet have an aarch64-compatible build or are temporarily broken on nixpkgs.
 
-```nix
+```nix title="devenv.nix"
 { pkgs, lib, ... }:
 
 let
