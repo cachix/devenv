@@ -24,7 +24,6 @@ nav:
       - Tests: tests.md
       - Overlays: overlays.md
       - Outputs: outputs.md
-      - Common patterns: common-patterns.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
       - Imports: composing-using-imports.md
@@ -36,7 +35,8 @@ nav:
     - Tutorial: https://github.com/cachix/nixcon-2024-workshop
     - Examples: examples.md
     - Editor support: editor-support
-  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix
   - Reference: reference
+  - Recipes: common-patterns.md
   - Blog: blog
+  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix
   - Community: community

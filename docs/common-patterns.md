@@ -1,10 +1,12 @@
-## Getting a recent version of a package from `nixpkgs-unstable`
+## Nix patterns
+
+### Getting a recent version of a package from `nixpkgs-unstable`
 
 By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/devenv-10-rewrite-in-rust/#devenv-nixpkgs) with additional fixes. This fork can be several months behind `nixpkgs-unstable`. You can still get a more recently updated package from `nixpkgs-unstable` into your devenv.
 
 1. Add `nixpkgs-unstable` input to `devenv.yaml`:
 
-   ```yaml title="devenv.yaml"
+   ```yaml title="devenv.yaml" hl_lines="4-5"
    inputs:
      nixpkgs:
        url: github:cachix/devenv-nixpkgs/rolling
@@ -14,7 +16,7 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
 
 2. Use the package in your `devenv.nix`:
 
-   ```nix title="devenv.nix"
+   ```nix title="devenv.nix" hl_lines="3 7"
    { pkgs, inputs, ... }:
    let
      pkgs-unstable = import inputs.nixpkgs-unstable { system = pkgs.stdenv.system; };
@@ -25,8 +27,6 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
      ];
    }
    ```
-
-## Nix patterns
 
 ### Add a directory to `$PATH`
 
