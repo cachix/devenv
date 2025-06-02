@@ -1,6 +1,23 @@
-@tailwind base;
+/* Nest tailwind CSS under .tailwind to avoid conflicts with mkdocs.
+* We use two approaches:
+*   - Explicit nesting for the base preflight styles.
+*   - `important: ".tailwind" in the tailwind config for the components and utils.`
+*
+* We explicitly nest the base styles because The config approach doesn't apply to them.
+* And we use the config approach for the rest, because the explicit approach skips over media queries.
+*/
+.tailwind {
+    @tailwind base;
+}
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+    .language-shell::before {
+        content: attr(data-shell-prefix);
+        @apply me-2 text-blue-300;
+    }
+}
 
 /* mobile make code snippets scrollable */
 .image-wrapper {
@@ -12,9 +29,3 @@
     padding-bottom: 1rem;
 }
 
-@layer components {
-    .language-shell::before {
-        content: attr(data-shell-prefix);
-        @apply me-2 text-blue-300;
-    }
-}
