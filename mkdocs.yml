@@ -55,7 +55,7 @@ plugins:
   search: {}
   markdownextradata: {}
   include-markdown: {}
-  awesome-pages: {}
+  awesome-nav: {}
   blog: {}
   social:
     cards_layout_options:

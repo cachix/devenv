@@ -45,7 +45,7 @@ $ devenv up -d
 ## Supported services
 
 {%
-  include-markdown "services-all.md"
+  include-markdown ".services-all.md"
 %}
 
 You can find all supported options for services [here](https://devenv.sh/reference/options/#servicesadminerenable).

@@ -156,14 +156,14 @@
   scripts."devenv-generate-docs" = {
     description = "Generate lists of all languages and services.";
     exec = ''
-      cat > docs/services-all.md <<EOF
+      cat > docs/.services-all.md <<EOF
         \`\`\`nix
         ${lib.concatStringsSep "\n  " (
           map (lang: "services.${lang}.enable = true;") (builtins.attrNames config.services)
         )}
         \`\`\`
       EOF
-      cat > docs/languages-all.md <<EOF
+      cat > docs/.languages-all.md <<EOF
         \`\`\`nix
         ${lib.concatStringsSep "\n  " (
           map (lang: "languages.${lang}.enable = true;") (builtins.attrNames config.languages)

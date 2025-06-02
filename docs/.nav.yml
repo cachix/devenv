@@ -1,3 +1,4 @@
+ignore: "languages-all.md"
 nav:
   - Home: index.md
   - Guide:
@@ -38,5 +39,5 @@ nav:
   - Reference: reference
   - Recipes: common-patterns.md
   - Blog: blog
-  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix
+  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/
   - Community: community

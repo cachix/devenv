@@ -6,3 +6,4 @@ nav:
    - Devenv Container: devenv-container.md
    - Codespaces / devcontainer: codespaces-devcontainer.md
    - Difftastic: difftastic.md
+   - Delta: delta.md
