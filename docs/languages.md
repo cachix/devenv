@@ -29,7 +29,7 @@ Python 3.11.3
 ## Supported languages
 
 {%
-  include-markdown ".languages-all.md"
+  include-markdown "snippets/languages-all.md"
 %}
 
 You can find all supported options for languages [here](https://devenv.sh/reference/options/#languagesansibleenable).

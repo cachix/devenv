@@ -49,6 +49,7 @@ theme:
 
 # Exclude doc templates
 exclude_docs: |
+  /snippets/
   /individual-docs/**/*.md
 
 plugins:
