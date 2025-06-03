@@ -341,40 +341,45 @@ in
         (lib.filterAttrs (_: v: v.import && v.path != null) cfg.realms);
 
       # Generate the command to export realms.
-      realmExport = lib.mapAttrsToList
-        (
-          realm: e:
-            let
-              file =
-                if e.path == null then
-                  (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
-                else
-                  e.path;
-            in
-            ''
-              if ${keycloak-health}/bin/keycloak-health; then
-                echo "You must first stop keycloak and then run this command again." >&2
-                exit 1
-              fi
+      realmExport =
+        [
+          ''
+            if ${keycloak-health}/bin/keycloak-health; then
+              echo "You must first stop keycloak and then run this command again." >&2
+              exit 1
+            fi
+          ''
+        ]
+        ++ lib.mapAttrsToList
+          (
+            realm: e:
+              let
+                file =
+                  if e.path == null then
+                    (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
+                  else
+                    e.path;
+              in
+              ''
+                echo "Exporting realm '${realm}' to '${file}'."
+                mkdir -p "$(dirname "${file}")"
+                ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
 
-              echo "Exporting realm '${realm}' to '${file}'."
-              mkdir -p "$(dirname "${file}")"
-              ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
-            ''
-        )
-        (lib.filterAttrs (_: v: v.export) cfg.realms);
+                echo "Beautifying realm export '${file}' for diffing."
+                temp_file=$(${pkgs.coreutils}/bin/mktemp)
+                ${pkgs.jq}/bin/jq --sort-keys . "${file}" > "$temp_file"
+                ${pkgs.coreutils}/bin/mv "$temp_file" "${file}"
+              ''
+          )
+          (lib.filterAttrs (_: v: v.export) cfg.realms);
 
       keycloak-realm-exports = pkgs.writeShellScriptBin "keycloak-realm-exports" (
         lib.concatStringsSep "\n" realmExport
       );
 
-      keycloak-health =
-        let
-          host = "${cfg.settings.hostname}:9000";
-        in
-        pkgs.writeShellScriptBin "keycloak-health" ''
-          ${pkgs.curl}/bin/curl -k --head -fsS "https://${host}/health/ready"
-        '';
+      keycloak-health = pkgs.writeShellScriptBin "keycloak-health" ''
+        ${pkgs.curl}/bin/curl -k --head -fsS "https://localhost:9000/health/ready"
+      '';
     in
     mkIf cfg.enable {
       assertions = [
@@ -485,6 +490,11 @@ in
             Save the configured realms from keycloak, to back them up. You can run it manually.
           '';
           disabled = true;
+          depends_on = {
+            keycloak = {
+              condition = "process_completed";
+            };
+          };
         };
       };
     };

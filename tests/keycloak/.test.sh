@@ -25,6 +25,20 @@ test_export() {
   echo "Stop keycloak..."
   process-compose process stop keycloak -u "$PC_SOCKET_PATH"
 
+  for i in $(seq 1 10); do
+    if
+      [ "$(
+        process-compose process get keycloak -o json -u "$PC_SOCKET_PATH" |
+          jq -r ".[0].status"
+      )" = "Completed" ]
+    then
+      completed="true"
+      break
+    fi
+
+    sleep 2
+  done
+
   old_timestamp=$(stat -c %Y "./realms/test.json")
 
   echo "Export realms..."
