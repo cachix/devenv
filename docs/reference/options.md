@@ -16285,6 +16285,11 @@ outputOf (attribute set)
 
 
 *Default:*
+` { } `
+
+
+
+*Example:*
 
 ```
 {
