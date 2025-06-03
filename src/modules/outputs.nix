@@ -2,13 +2,8 @@
   options = {
     outputs = lib.mkOption {
       type = config.lib.types.outputOf lib.types.attrs;
-      default = {
-        git = pkgs.git;
-        foo = {
-          ncdu = pkgs.ncdu;
-        };
-      };
-      defaultText = lib.literalExpression ''
+      default = { };
+      example = lib.literalExample ''
         {
           git = pkgs.git;
           foo = {
