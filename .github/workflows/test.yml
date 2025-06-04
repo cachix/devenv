@@ -37,7 +37,36 @@ jobs:
       - name: Run devenv-test-cli
         run: devenv shell devenv-test-cli
       - name: Run tests
-        run: devenv-run-tests tests
+        id: run_tests
+        run: |
+          mkdir -p test-results
+          # Run tests with JSON output and save to file
+          devenv-run-tests --json tests > test-results/test-output.json || echo "::warning::Tests failed but continuing to process results"
+          
+          # Process the JSON results and create a GitHub summary
+          cat test-results/test-output.json | jq -r '
+            "# Test Results\n\n" +
+            "## Summary\n\n" +
+            "- **Total Tests**: \(.summary.total)\n" +
+            "- **Passed**: \(.summary.passed)\n" +
+            "- **Failed**: \(.summary.failed)\n\n" +
+            if .summary.failed > 0 then
+              "## Failed Tests\n\n" +
+              (to_entries.results[] | select(.value == "Failed") | "- ❌ **\(.key)**\n") +
+              "\n"
+            else
+              "✅ All tests passed!\n"
+            end
+          ' > $GITHUB_STEP_SUMMARY
+          
+          # Set output to use in other steps if needed
+          failed_count=$(cat test-results/test-output.json | jq -r .summary.failed)
+          echo "failed_count=$failed_count" >> $GITHUB_OUTPUT
+          
+          # Exit with error code if tests failed
+          if [ "$failed_count" -gt 0 ]; then
+            exit 1
+          fi
 
   generate-examples:
     runs-on: [self-hosted, linux, X64]
@@ -87,7 +116,36 @@ jobs:
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
       - name: Run examples
-        run: devenv-run-tests --only ${{ matrix.example }} examples
+        id: run_examples
+        run: |
+          mkdir -p test-results
+          # Run tests with JSON output and save to file
+          devenv-run-tests --json --only ${{ matrix.example }} examples > test-results/example-output.json || echo "::warning::Example failed but continuing to process results"
+          
+          # Process the JSON results and create a GitHub summary
+          cat test-results/example-output.json | jq -r '
+            "# Example Test Results: ${{ matrix.example }}\n\n" +
+            "## Summary\n\n" +
+            "- **Total Tests**: \(.summary.total)\n" +
+            "- **Passed**: \(.summary.passed)\n" +
+            "- **Failed**: \(.summary.failed)\n\n" +
+            if .summary.failed > 0 then
+              "## Failed Tests\n\n" +
+              (to_entries.results[] | select(.value == "Failed") | "- ❌ **\(.key)**\n") +
+              "\n"
+            else
+              "✅ Example test passed!\n"
+            end
+          ' > $GITHUB_STEP_SUMMARY
+          
+          # Set output to use in other steps if needed
+          failed_count=$(cat test-results/example-output.json | jq -r .summary.failed)
+          echo "failed_count=$failed_count" >> $GITHUB_OUTPUT
+          
+          # Exit with error code if tests failed
+          if [ "$failed_count" -gt 0 ]; then
+            exit 1
+          fi
 
   direnv:
     name: direnv (${{ join(matrix.systems.runs-on) }})
