@@ -41,16 +41,16 @@
                 <a href="/tests" class="text-[#425C82] font-medium">Run tests</a> •
                 <a href="/git-hooks" class="text-[#425C82] font-medium">Enforce git hooks</a>
             </p>
-            <form class="flex mt-10 gap-2" id="generate" onsubmit="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value); return false;">
+            <form class="flex max-sm:flex-col gap-4 mt-10" id="generate" onsubmit="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value); return false;">
                 <input
                     type="text"
                     name="q"
-                    class="w-full px-4 py-2 rounded-lg ring-1 ring-gray-600 focus:outline-none focus:ring-2 focus:ring-[#425C82] focus:border-transparent shadow-sm"
+                    class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#425C82] focus:border-transparent text-base transition-all"
                     placeholder="Describe your environment..."
                 />
                 <button
                     type="submit"
-                    class="px-6 py-2 bg-[#425C82] text-white font-medium rounded-lg hover:bg-[#344968] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#425C82] focus:ring-offset-2 shadow-sm"
+                    class="w-full text-base px-6 py-2 sm:w-auto bg-[#425C82] text-white font-medium rounded-lg hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-[#425C82] focus:ring-offset-2 transition-colors"
                 >
                     Generate
                 </button>
