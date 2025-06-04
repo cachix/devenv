@@ -140,7 +140,7 @@ This function adds extra metadata to the attrset, which is why you then merge mu
 
 Use this pattern when you need to conditionally define entire configuration sections, rather than just adding packages or values within existing sections.
 
-```nix title="devenv.nix" hl_lines="4 9"
+```nix title="devenv.nix" hl_lines="3 9"
 { pkgs, lib, ... }:
 
 lib.mkMerge [
