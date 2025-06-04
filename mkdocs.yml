@@ -12,6 +12,9 @@ validation:
   anchors: warn # New in MkDocs 1.6
 extra_css:
   - assets/top-level.css
+extra_javascript:
+  - javascript/highlight.min.js
+  - javascript/extra.js
 theme:
   name: material
   logo: assets/logo.webp
