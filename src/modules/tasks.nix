@@ -123,7 +123,7 @@ in
       description = "The generated tasks.json file.";
     };
     task.package = lib.mkOption {
-      type = config.lib.types.output;
+      type = types.package;
       internal = true;
       default = lib.getBin devenv-tasks;
     };

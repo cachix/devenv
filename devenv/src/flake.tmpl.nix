@@ -112,11 +112,13 @@
               );
           };
 
+          # Recursively search for outputs in the config.
+          # This is used when not building a specific output by attrpath.
           build = options: config:
             lib.concatMapAttrs
               (name: option:
-                if builtins.hasAttr "type" option then
-                  if option.type.name == "output" || option.type.name == "outputOf" then {
+                if lib.isOption option then
+                  if lib.isType "output" option || lib.isType "outputOf" option then {
                     ${name} = config.${name};
                   } else { }
                 else
