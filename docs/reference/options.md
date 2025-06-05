@@ -9267,6 +9267,8 @@ boolean
 
 ## git-hooks.hooks.pylint.description
 
+
+
 Description of the hook. Used for metadata purposes only.
 
 
@@ -11384,6 +11386,8 @@ string
 
 
 ## git-hooks.hooks.yamllint.settings.format
+
+
 
 Format for parsing output.
 
@@ -13854,6 +13858,8 @@ attribute set of (submodule)
 
 ## languages.php.fpm.pools.\<name>.extraConfig
 
+
+
 Extra lines that go into the pool configuration.
 See the documentation on ` php-fpm.conf ` for
 details on configuration directives.
@@ -16172,6 +16178,8 @@ boolean
 
 
 ## languages.vala.package
+
+
 
 The Vala package to use.
 
@@ -18622,6 +18630,8 @@ package
 
 ## services.influxdb.config
 
+
+
 Configuration for InfluxDB-server
 
 
@@ -21049,6 +21059,8 @@ lazy attribute set of lazy attribute set of anything
 
 ## services.mysql.useDefaultsExtraFile
 
+
+
 Whether to use defaults-exta-file for the mysql command instead of defaults-file.
 This is useful if you want to provide a config file on the command line.
 However this can problematic if you have MySQL installed globaly because its config might leak into your environment.
@@ -23466,6 +23478,8 @@ boolean
 
 
 ## services.trafficserver.package
+
+
 
 Apache Traffic Server package
 
