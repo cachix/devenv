@@ -9,15 +9,6 @@
     "allowUnfree": {
       "type": "boolean"
     },
-    "cudaSupport": {
-      "type": "boolean"
-    },
-    "cudaCapabilities": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    },
     "clean": {
       "anyOf": [
         {

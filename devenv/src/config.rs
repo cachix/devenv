@@ -130,10 +130,6 @@ pub struct Config {
     pub allow_unfree: bool,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub allow_broken: bool,
-    #[serde(skip_serializing_if = "is_false", default = "false_default")]
-    pub cuda_support: bool,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub cuda_capabilities: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(nested)]
     pub nixpkgs: Option<Nixpkgs>,

@@ -6,7 +6,6 @@
 | allowUnfree                                           | (deprecated) Allow unfree packages. Defaults to `false`.                      |
 | clean.enabled                                         | Clean the environment when entering the shell. Defaults to `false`.           |
 | clean.keep                                            | A list of environment variables to keep when cleaning the environment.        |
-| cudaSupport                                           | (deprecated) Enable CUDA support for nixpkgs. Defaults to `false`.            |
 | imports                                               | A list of relative paths or references to inputs to import ``devenv.nix``.    |
 | impure                                                | Relax the hermeticity of the environment.                                     |
 | inputs                                                | Defaults to `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.       |

@@ -2,13 +2,11 @@ inputs:
   devenv:
     url: path:../../?dir=src/modules
 
+# This value is overridden in the platform-specific config below on purpose
 allowUnfree: false
-cudaSupport: false
-cudaCapabilities: []
 
 nixpkgs:
-  # These values need to be overriden by the platform-specific values below
-  allowUnfree: false
+  # These values are overridden in the platform-specific config below on purpose
   cudaSupport: false
   cudaCapabilities: []
 

@@ -28,16 +28,14 @@
                   input.overlays.${overlay} or (throw "Input `${inputName}` has no overlay called `${overlay}`. Supported overlays: ${nixpkgs.lib.concatStringsSep ", " (builtins.attrNames input.overlays)}"))
               inputAttrs.overlays or [ ];
           overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.inputs or { }));
-          getNixpkgsConfigVar = system: name: default:
-            devenv.nixpkgs.per-platform."${system}".${name} or devenv.nixpkgs.${name} or devenv.${name} or default;
           pkgs = import nixpkgs {
             inherit system;
             config = {
-              allowUnfree = getNixpkgsConfigVar system "allowUnfree" false;
-              allowBroken = getNixpkgsConfigVar system "allowBroken" false;
-              cudaSupport = getNixpkgsConfigVar system "cudaSupport" false;
-              cudaCapabilities = getNixpkgsConfigVar system "cudaCapabilities" [ ];
-              permittedInsecurePackages = getNixpkgsConfigVar system "permittedInsecurePackages" [ ];
+              allowUnfree = devenv.nixpkgs.per-platform."${system}".allowUnfree or devenv.nixpkgs.allowUnfree or devenv.allowUnfree or false;
+              allowBroken = devenv.nixpkgs.per-platform."${system}".allowBroken or devenv.nixpkgs.allowBroken or devenv.allowBroken or false;
+              cudaSupport = devenv.nixpkgs.per-platform."${system}".cudaSupport or devenv.nixpkgs.cudaSupport or false;
+              cudaCapabilities = devenv.nixpkgs.per-platform."${system}".cudaCapabilities or devenv.nixpkgs.cudaCapabilities or [ ];
+              permittedInsecurePackages = devenv.nixpkgs.per-platform."${system}".permittedInsecurePackages or devenv.nixpkgs.permittedInsecurePackages or devenv.permittedInsecurePackages or [ ];
             };
             inherit overlays;
           };
