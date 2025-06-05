@@ -34,6 +34,16 @@
         "$ref": "#/definitions/Input"
       }
     },
+    "nixpkgs": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Nixpkgs"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "permittedInsecurePackages": {
       "type": "array",
       "items": {
@@ -89,6 +99,64 @@
             "string",
             "null"
           ]
+        }
+      }
+    },
+    "Nixpkgs": {
+      "type": "object",
+      "properties": {
+        "allowBroken": {
+          "type": "boolean"
+        },
+        "allowUnfree": {
+          "type": "boolean"
+        },
+        "cudaCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cudaSupport": {
+          "type": "boolean"
+        },
+        "per-platform": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/NixpkgsConfig"
+          }
+        },
+        "permittedInsecurePackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "NixpkgsConfig": {
+      "type": "object",
+      "properties": {
+        "allowBroken": {
+          "type": "boolean"
+        },
+        "allowUnfree": {
+          "type": "boolean"
+        },
+        "cudaCapabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cudaSupport": {
+          "type": "boolean"
+        },
+        "permittedInsecurePackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }
