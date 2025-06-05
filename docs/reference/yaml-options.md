@@ -28,6 +28,10 @@
 | nixpkgs.&lt;per-platfom&gt;.cudaSupport               | (per-platform) Enable CUDA support for nixpkgs. Defaults to `false`.          |
 | nixpkgs.&lt;per-platfom&gt;.permittedInsecurePackages | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
 
+!!! note "Added in 1.7"
+
+    - `nixpkgs`
+
 !!! note "Added in 1.0"
 
     - relative file support in imports: `./mymodule.nix`
