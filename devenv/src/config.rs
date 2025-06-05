@@ -108,6 +108,20 @@ pub struct Clean {
 #[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
 #[config(rename_all = "camelCase", allow_unknown_fields)]
 #[serde(rename_all = "camelCase")]
+pub struct Nixpkgs {
+    #[serde(flatten)]
+    pub config_: NixpkgsConfig,
+    #[serde(
+        rename = "per-platform",
+        skip_serializing_if = "BTreeMap::is_empty",
+        default
+    )]
+    pub per_platform: BTreeMap<String, NixpkgsConfig>,
+}
+
+#[derive(schematic::Config, Clone, Serialize, Debug, JsonSchema)]
+#[config(rename_all = "camelCase", allow_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct Config {
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     #[setting(nested)]
@@ -120,9 +134,9 @@ pub struct Config {
     pub cuda_support: bool,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub cuda_capabilities: Vec<String>,
-    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     #[setting(nested)]
-    pub config: BTreeMap<String, NixpkgsConfig>,
+    pub nixpkgs: Option<Nixpkgs>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub imports: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]

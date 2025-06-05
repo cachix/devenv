@@ -12,6 +12,12 @@
     "cudaSupport": {
       "type": "boolean"
     },
+    "cudaCapabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "clean": {
       "anyOf": [
         {
@@ -37,7 +43,7 @@
         "$ref": "#/definitions/Input"
       }
     },
-    "config": {
+    "nixpkgs": {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/definitions/NixpkgsConfig"
@@ -123,6 +129,12 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "per-platforms": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/NixpkgsConfig"
           }
         }
       }

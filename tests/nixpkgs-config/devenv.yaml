@@ -2,19 +2,34 @@ inputs:
   devenv:
     url: path:../../?dir=src/modules
 
-config:
-  i386-linux:
-    cudaSupport: true
-    cudaCapabilities: [ "8.0" ]
-  x86_64-linux:
-    cudaSupport: true
-    cudaCapabilities: [ "8.0" ]
-  aarch64-linux:
-    cudaSupport: true
-    cudaCapabilities: [ "8.0" ]
-  aarch64-darwin:
-    cudaSupport: true
-    cudaCapabilities: [ "8.0" ]
-  x86_64-darmin:
-    cudaSupport: true
-    cudaCapabilities: [ "8.0" ]
+allowUnfree: false
+cudaSupport: false
+cudaCapabilities: []
+
+nixpkgs:
+  # These values need to be overriden by the platform-specific values below
+  allowUnfree: false
+  cudaSupport: false
+  cudaCapabilities: []
+
+  per-platform:
+    i386-linux:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    x86_64-linux:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    aarch64-linux:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    aarch64-darwin:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    x86_64-darmin:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
