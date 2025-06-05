@@ -283,6 +283,21 @@ impl Devenv {
         let mut shell_cmd = std::process::Command::new(&bash);
         let path = self.devenv_runtime.join("shell");
 
+        // Load the user's bashrc if it exists and if we're in an interactive shell.
+        // Disable alias expansion to avoid breaking the dev shell script.
+        let mut output = indoc::formatdoc! {
+            r#"
+            if [ -n "$PS1" ] && [ -e $HOME/.bashrc ]; then
+                source $HOME/.bashrc;
+            fi
+
+            shopt -u expand_aliases
+            {}
+            shopt -s expand_aliases
+            "#,
+            String::from_utf8_lossy(&output)
+        };
+
         match cmd {
             // Non-interactive mode.
             // exec the command at the end of the rcscript.
@@ -295,7 +310,7 @@ impl Devenv {
                         .collect::<Vec<_>>()
                         .join(" ")
                 );
-                output.extend_from_slice(command.as_bytes());
+                output.push_str(&command);
                 shell_cmd.arg(&path);
             }
             // Interactive mode. Use an rcfile.
@@ -304,7 +319,7 @@ impl Devenv {
             }
         }
 
-        tokio::fs::write(&path, &output)
+        tokio::fs::write(&path, output)
             .await
             .expect("Failed to write the shell script");
         tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
