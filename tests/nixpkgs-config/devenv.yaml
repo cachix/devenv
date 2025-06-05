@@ -1,0 +1,33 @@
+inputs:
+  devenv:
+    url: path:../../?dir=src/modules
+
+# This value is overridden in the platform-specific config below on purpose
+allowUnfree: false
+
+nixpkgs:
+  # These values are overridden in the platform-specific config below on purpose
+  cudaSupport: false
+  cudaCapabilities: []
+
+  per-platform:
+    i386-linux:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    x86_64-linux:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    aarch64-linux:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    aarch64-darwin:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]
+    x86_64-darmin:
+      allowUnfree: true
+      cudaSupport: true
+      cudaCapabilities: [ "8.0" ]

@@ -31,9 +31,11 @@
           pkgs = import nixpkgs {
             inherit system;
             config = {
-              allowUnfree = devenv.allowUnfree or false;
-              allowBroken = devenv.allowBroken or false;
-              permittedInsecurePackages = devenv.permittedInsecurePackages or [ ];
+              allowUnfree = devenv.nixpkgs.per-platform."${system}".allowUnfree or devenv.nixpkgs.allowUnfree or devenv.allowUnfree or false;
+              allowBroken = devenv.nixpkgs.per-platform."${system}".allowBroken or devenv.nixpkgs.allowBroken or devenv.allowBroken or false;
+              cudaSupport = devenv.nixpkgs.per-platform."${system}".cudaSupport or devenv.nixpkgs.cudaSupport or false;
+              cudaCapabilities = devenv.nixpkgs.per-platform."${system}".cudaCapabilities or devenv.nixpkgs.cudaCapabilities or [ ];
+              permittedInsecurePackages = devenv.nixpkgs.per-platform."${system}".permittedInsecurePackages or devenv.nixpkgs.permittedInsecurePackages or devenv.permittedInsecurePackages or [ ];
             };
             inherit overlays;
           };
