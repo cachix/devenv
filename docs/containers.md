@@ -21,6 +21,8 @@ Examples of what `devenv container` can do:
 - `devenv container --registry docker://ghcr.io/ copy <name>`: [Copy the container](#copying-a-container-to-a-registry) `<name>` into the **GitHub package registry**.
 - `devenv container run <name>`: Run the container `<name>` using **Docker**.
 
+See the [list of all container options](https://devenv.sh/reference/options/#containers).
+
 ## Entering the development environment
 
 Given a simple environment, using Python:
