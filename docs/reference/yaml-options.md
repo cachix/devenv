@@ -1,31 +1,31 @@
 # devenv.yaml
 
-| Key                                                   | Value                                                                         |
-|-------------------------------------------------------|-------------------------------------------------------------------------------|
-| allowBroken                                           | (deprecated) Allow packages marked as broken. Defaults to `false`.            |
-| allowUnfree                                           | (deprecated) Allow unfree packages. Defaults to `false`.                      |
-| clean.enabled                                         | Clean the environment when entering the shell. Defaults to `false`.           |
-| clean.keep                                            | A list of environment variables to keep when cleaning the environment.        |
-| imports                                               | A list of relative paths or references to inputs to import ``devenv.nix``.    |
-| impure                                                | Relax the hermeticity of the environment.                                     |
-| inputs                                                | Defaults to `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.       |
-| inputs.&lt;name&gt;                                   | Identifier name used when passing the input in your ``devenv.nix`` function.  |
-| inputs.&lt;name&gt;.flake                             | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
-| inputs.&lt;name&gt;.overlays                          | A list of overlays to include from the input.                                 |
-| inputs.&lt;name&gt;.url                               | URI specification of the input, see below for possible values.                |
-| permittedInsecurePackages                             | (deprecated) A list of insecure permitted packages.                           |
-|                                                       |                                                                               |
-| nixpkgs.allowBroken                                   | Allow packages marked as broken. Defaults to `false`.                         |
-| nixpkgs.allowUnfree                                   | Allow unfree packages. Defaults to `false`.                                   |
-| nixpkgs.cudaCapabilities                              | Select CUDA capabilities for nixpkgs. Defaults to `[]`                        |
-| nixpkgs.cudaSupport                                   | Enable CUDA support for nixpkgs. Defaults to `false`.                         |
-| nixpkgs.permittedInsecurePackages                     | A list of insecure permitted packages. Defaults to `[]`                       |
-|                                                       |                                                                               |
-| nixpkgs.&lt;per-platfom&gt;.allowBroken               | (per-platform) Allow packages marked as broken. Defaults to `false`.          |
-| nixpkgs.&lt;per-platfom&gt;.allowUnfree               | (per-platform) Allow unfree packages. Defaults to `false`.                    |
-| nixpkgs.&lt;per-platfom&gt;.cudaCapabilities          | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
-| nixpkgs.&lt;per-platfom&gt;.cudaSupport               | (per-platform) Enable CUDA support for nixpkgs. Defaults to `false`.          |
-| nixpkgs.&lt;per-platfom&gt;.permittedInsecurePackages | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
+| Key                                                           | Value                                                                         |
+|---------------------------------------------------------------|-------------------------------------------------------------------------------|
+| allowBroken                                                   | (deprecated) Allow packages marked as broken. Defaults to `false`.            |
+| allowUnfree                                                   | (deprecated) Allow unfree packages. Defaults to `false`.                      |
+| clean.enabled                                                 | Clean the environment when entering the shell. Defaults to `false`.           |
+| clean.keep                                                    | A list of environment variables to keep when cleaning the environment.        |
+| imports                                                       | A list of relative paths or references to inputs to import ``devenv.nix``.    |
+| impure                                                        | Relax the hermeticity of the environment.                                     |
+| inputs                                                        | Defaults to `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.       |
+| inputs.&lt;name&gt;                                           | Identifier name used when passing the input in your ``devenv.nix`` function.  |
+| inputs.&lt;name&gt;.flake                                     | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
+| inputs.&lt;name&gt;.overlays                                  | A list of overlays to include from the input.                                 |
+| inputs.&lt;name&gt;.url                                       | URI specification of the input, see below for possible values.                |
+| permittedInsecurePackages                                     | (deprecated) A list of insecure permitted packages.                           |
+|                                                               |                                                                               |
+| nixpkgs.allowBroken                                           | Allow packages marked as broken. Defaults to `false`.                         |
+| nixpkgs.allowUnfree                                           | Allow unfree packages. Defaults to `false`.                                   |
+| nixpkgs.cudaCapabilities                                      | Select CUDA capabilities for nixpkgs. Defaults to `[]`                        |
+| nixpkgs.cudaSupport                                           | Enable CUDA support for nixpkgs. Defaults to `false`.                         |
+| nixpkgs.permittedInsecurePackages                             | A list of insecure permitted packages. Defaults to `[]`                       |
+|                                                               |                                                                               |
+| nixpkgs.per-platform.&lt;system&gt;.allowBroken               | (per-platform) Allow packages marked as broken. Defaults to `false`.          |
+| nixpkgs.per-platform.&lt;system&gt;.allowUnfree               | (per-platform) Allow unfree packages. Defaults to `false`.                    |
+| nixpkgs.per-platform.&lt;system&gt;.cudaCapabilities          | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
+| nixpkgs.per-platform.&lt;system&gt;.cudaSupport               | (per-platform) Enable CUDA support for nixpkgs. Defaults to `false`.          |
+| nixpkgs.per-platform.&lt;system&gt;.permittedInsecurePackages | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
 
 !!! note "Added in 1.7"
 
