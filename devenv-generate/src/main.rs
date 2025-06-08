@@ -17,7 +17,7 @@ struct Cli {
     #[arg(num_args=0.., trailing_var_arg = true)]
     description: Vec<String>,
 
-    #[clap(long, default_value = "https://devenv.new")]
+    #[clap(long, default_value = "https://devenv.new/api/generate")]
     host: String,
 
     #[arg(
