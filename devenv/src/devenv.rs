@@ -319,12 +319,7 @@ impl Devenv {
             };
 
             let filtered_env = std::env::vars().filter(|(k, _)| keep.contains(k));
-
-            shell_cmd
-                .env_clear()
-                .envs(filtered_env)
-                .arg("--norc")
-                .arg("--noprofile");
+            shell_cmd.env_clear().envs(filtered_env);
         }
 
         shell_cmd.env("SHELL", &bash);
