@@ -2,7 +2,8 @@ use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::{Config, Error, Outputs, Skipped, TaskCompleted, TaskStatus, Tasks, VerbosityLevel};
+use crate::types::{Skipped, TaskCompleted, TaskStatus};
+use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
 
 /// Status information for all tasks
 pub struct TasksStatus {
