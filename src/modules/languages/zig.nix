@@ -1,4 +1,8 @@
-{ pkgs, config, lib, ... }:
+{ pkgs
+, config
+, lib
+, ...
+}:
 
 let
   cfg = config.languages.zig;
@@ -13,12 +17,19 @@ in
       default = pkgs.zig;
       defaultText = lib.literalExpression "pkgs.zig";
     };
+
+    zls.package = lib.mkOption {
+      type = lib.types.package;
+      description = "Which package of zls to use.";
+      default = pkgs.zls;
+      defaultText = lib.literalExpression "pkgs.zls";
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-      pkgs.zls
+      cfg.zls.package
     ];
   };
 }
