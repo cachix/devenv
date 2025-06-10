@@ -16250,6 +16250,27 @@ package
 
 
 
+## languages.zig.zls.package
+
+
+
+Which package of zls to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.zls `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
+
+
 ## name
 
 
