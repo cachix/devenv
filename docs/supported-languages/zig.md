@@ -39,3 +39,21 @@ package
 
 *Default:*
 ` pkgs.zig `
+
+
+
+## languages\.zig\.zls\.package
+
+
+
+Which package of Zls to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.zls `
