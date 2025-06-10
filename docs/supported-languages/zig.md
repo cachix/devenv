@@ -46,7 +46,7 @@ package
 
 
 
-Which package of Zls to use\.
+Which package of zls to use\.
 
 
 
