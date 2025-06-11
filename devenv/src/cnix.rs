@@ -669,7 +669,9 @@ impl Nix {
             };
             let caches_raw = self.eval(&["devenv.cachix"]).await?;
             let cachix_config: CachixConfig =
-                serde_json::from_str(&caches_raw).expect("Failed to parse JSON");
+                serde_json::from_str(&caches_raw)
+                    .into_diagnostic()
+                    .wrap_err("Failed to parse the cachix configuration")?;
 
             // Return empty caches if the Cachix integration is disabled
             if !cachix_config.enable {
@@ -679,9 +681,18 @@ impl Nix {
                 }));
             }
 
-            let known_keys = std::fs::read_to_string(self.cachix_trusted_keys.as_path())
-                .map(|known_keys| serde_json::from_str(&known_keys).expect("Failed to parse JSON"))
-                .unwrap_or_default();
+            let known_keys: BTreeMap<String, String> =
+                std::fs::read_to_string(self.cachix_trusted_keys.as_path())
+                    .into_diagnostic()
+                    .and_then(|content| serde_json::from_str(&content).into_diagnostic())
+                    .unwrap_or_else(|e| {
+                        error!(
+                            "Failed to load cachix trusted keys from {}:\n{}.",
+                            self.cachix_trusted_keys.display(),
+                            e
+                        );
+                        BTreeMap::new()
+                    });
 
             let mut caches = CachixCaches {
                 caches: cachix_config.caches,
@@ -691,7 +702,8 @@ impl Nix {
             let client = reqwest::Client::builder()
                 .use_preconfigured_tls(http_client_tls::tls_config())
                 .build()
-                .expect("Failed to create reqwest client");
+                .into_diagnostic()
+                .wrap_err("Failed to create HTTP client to query the Cachix API")?;
             let mut new_known_keys: BTreeMap<String, String> = BTreeMap::new();
             for name in caches.caches.pull.iter() {
                 if !caches.known_keys.contains_key(name) {
@@ -700,7 +712,9 @@ impl Nix {
                     if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
                         request = request.bearer_auth(ret);
                     }
-                    let resp = request.send().await.expect("Failed to get cache");
+                    let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
+                        format!("Failed to fetch information for cache '{}'", name)
+                    })?;
                     if resp.status().is_client_error() {
                         error!(
                             "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
@@ -711,9 +725,10 @@ impl Nix {
                             "Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured."
                         )
                     } else {
-                        let resp_json =
-                            serde_json::from_slice::<CachixResponse>(&resp.bytes().await.unwrap())
-                                .expect("Failed to parse JSON");
+                        let resp_json: CachixResponse =
+                            resp.json().await.into_diagnostic().wrap_err_with(|| {
+                                format!("Failed to parse Cachix API response for cache '{name}'")
+                            })?;
                         new_known_keys
                             .insert(name.clone(), resp_json.public_signing_keys[0].clone());
                     }
@@ -724,9 +739,10 @@ impl Nix {
                 let store = self
                     .run_nix("nix", &["store", "ping", "--json"], &no_logging)
                     .await?;
-                let trusted = serde_json::from_slice::<StorePing>(&store.stdout)
-                    .expect("Failed to parse JSON")
-                    .trusted;
+                let store_ping = serde_json::from_slice::<StorePing>(&store.stdout)
+                    .into_diagnostic()
+                    .wrap_err("Failed to query the Nix store")?;
+                let trusted = store_ping.trusted;
                 if trusted.is_none() {
                     warn!(
                         "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
@@ -753,11 +769,18 @@ impl Nix {
                     caches.known_keys.extend(new_known_keys);
                 }
 
-                std::fs::write(
-                    self.cachix_trusted_keys.as_path(),
-                    serde_json::to_string(&caches.known_keys).unwrap(),
-                )
-                .expect("Failed to write cachix caches to file");
+                serde_json::to_string(&caches.known_keys)
+                    .into_diagnostic()
+                    .and_then(|json_content| {
+                        std::fs::write(self.cachix_trusted_keys.as_path(), json_content)
+                            .into_diagnostic()
+                    })
+                    .wrap_err_with(|| {
+                        format!(
+                            "Failed to write cachix trusted keys to {}",
+                            self.cachix_trusted_keys.display()
+                        )
+                    })?;
 
                 // If the user is not a trusted user, we can't set up the caches for them.
                 // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
