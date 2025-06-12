@@ -138,7 +138,7 @@ impl TasksUi {
         let tasks_clone = Arc::clone(&self.tasks);
         let handle = tokio::spawn(async move { tasks_clone.run().await });
 
-        // If in quiet mode, just wait for tasks to complete and return
+        // If in quiet mode, just wait for tasks to complete
         if self.verbosity == VerbosityLevel::Quiet {
             loop {
                 let tasks_status = self.get_tasks_status().await;
@@ -146,6 +146,14 @@ impl TasksUi {
                     break;
                 }
             }
+
+            // Print errors even in quiet mode
+            let errors = self.format_task_errors().await;
+            if !errors.is_empty() {
+                let styled_errors = console::Style::new().apply_to(errors);
+                self.console_write_line(&styled_errors.to_string())?;
+            }
+
             let tasks_status = self.get_tasks_status().await;
             return Ok((tasks_status, handle.await.unwrap()));
         }
@@ -342,40 +350,10 @@ impl TasksUi {
             self.tasks.notify_ui.notified().await;
         }
 
-        let errors = {
-            let mut errors = String::new();
-            for index in &self.tasks.tasks_order {
-                let task_state = self.tasks.graph[*index].read().await;
-                if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) = &task_state.status
-                {
-                    errors.push_str(&format!(
-                        "\n--- {} failed with error: {}\n",
-                        task_state.task.name, failure.error
-                    ));
-                    errors.push_str(&format!("--- {} stdout:\n", task_state.task.name));
-                    for (time, line) in &failure.stdout {
-                        errors.push_str(&format!(
-                            "{:07.2}: {}\n",
-                            time.elapsed().as_secs_f32(),
-                            line
-                        ));
-                    }
-                    errors.push_str(&format!("--- {} stderr:\n", task_state.task.name));
-                    for (time, line) in &failure.stderr {
-                        errors.push_str(&format!(
-                            "{:07.2}: {}\n",
-                            time.elapsed().as_secs_f32(),
-                            line
-                        ));
-                    }
-                    errors.push_str("---\n")
-                }
-            }
-            console::Style::new().apply_to(errors)
-        };
-
-        if !errors.to_string().is_empty() {
-            self.console_write_line(&errors.to_string())?;
+        let errors = self.format_task_errors().await;
+        if !errors.is_empty() {
+            let styled_errors = console::Style::new().apply_to(errors);
+            self.console_write_line(&styled_errors.to_string())?;
         }
 
         let tasks_status = self.get_tasks_status().await;
@@ -385,5 +363,37 @@ impl TasksUi {
     fn console_write_line(&self, message: &str) -> std::io::Result<()> {
         self.term.write_line(message)?;
         Ok(())
+    }
+
+    /// Format error messages from failed tasks
+    async fn format_task_errors(&self) -> String {
+        let mut errors = String::new();
+        for index in &self.tasks.tasks_order {
+            let task_state = self.tasks.graph[*index].read().await;
+            if let TaskStatus::Completed(TaskCompleted::Failed(_, failure)) = &task_state.status {
+                errors.push_str(&format!(
+                    "\n--- {} failed with error: {}\n",
+                    task_state.task.name, failure.error
+                ));
+                errors.push_str(&format!("--- {} stdout:\n", task_state.task.name));
+                for (time, line) in &failure.stdout {
+                    errors.push_str(&format!(
+                        "{:07.2}: {}\n",
+                        time.elapsed().as_secs_f32(),
+                        line
+                    ));
+                }
+                errors.push_str(&format!("--- {} stderr:\n", task_state.task.name));
+                for (time, line) in &failure.stderr {
+                    errors.push_str(&format!(
+                        "{:07.2}: {}\n",
+                        time.elapsed().as_secs_f32(),
+                        line
+                    ));
+                }
+                errors.push_str("---\n")
+            }
+        }
+        errors
     }
 }
