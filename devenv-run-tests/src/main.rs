@@ -1,6 +1,7 @@
 use clap::Parser;
 use devenv::{log, Devenv, DevenvOptions};
 use miette::{IntoDiagnostic, Result, WrapErr};
+use serde_json::json;
 use std::{
     env, fs,
     path::PathBuf,
@@ -25,6 +26,9 @@ struct Args {
         help = "Override inputs in devenv.yaml."
     )]
     override_input: Vec<String>,
+
+    #[clap(long, help = "Output results as JSON.")]
+    json: bool,
 
     #[clap(value_parser, default_values = vec!["examples", "tests"])]
     directories: Vec<PathBuf>,
@@ -226,16 +230,41 @@ async fn run(args: &Args) -> Result<()> {
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
 
-    eprintln!();
+    if args.json {
+        // Build JSON output
+        let mut results_map = serde_json::Map::new();
+        for result in &test_results {
+            results_map.insert(
+                result.name.clone(),
+                json!(if result.passed { "Passed" } else { "Failed" }),
+            );
+        }
 
-    for result in test_results {
-        if !result.passed {
-            eprintln!("{}: Failed", result.name);
-        };
+        let output = json!({
+            "results": results_map,
+            "summary": {
+                "total": num_tests,
+                "passed": num_tests - num_failed_tests,
+                "failed": num_failed_tests
+            }
+        });
+
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).into_diagnostic()?
+        );
+    } else {
+        eprintln!();
+
+        for result in &test_results {
+            if !result.passed {
+                eprintln!("{}: Failed", result.name);
+            };
+        }
+
+        eprintln!();
+        eprintln!("Ran {} tests, {} failed.", num_tests, num_failed_tests);
     }
-
-    eprintln!();
-    eprintln!("Ran {} tests, {} failed.", num_tests, num_failed_tests);
 
     if num_failed_tests > 0 {
         Err(miette::miette!("Some tests failed"))
