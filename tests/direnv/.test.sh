@@ -5,7 +5,7 @@
 set -xeuo pipefail
 
 # Install direnv
-export PATH="$(nix build nixpkgs#direnv --print-out-paths --no-out-link)/bin:$PATH"
+export PATH="$(nix build nixpkgs#direnv --print-out-paths)/bin:$PATH"
 
 export TMPDIR=$(mktemp -d)
 export XDG_CONFIG_HOME=${TMPDIR}/config

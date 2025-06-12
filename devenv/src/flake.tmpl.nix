@@ -120,9 +120,11 @@
             lib.concatMapAttrs
               (name: option:
                 if lib.isOption option then
-                  if lib.isType "output" option || lib.isType "outputOf" option then {
-                    ${name} = config.${name};
-                  } else { }
+                  let typeName = option.type.name or "";
+                  in
+                  if builtins.elem typeName [ "output" "outputOf" ] then
+                    { ${name} = config.${name}; }
+                  else { }
                 else
                   let v = build option config.${name};
                   in if v != { } then {
