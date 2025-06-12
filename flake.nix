@@ -12,7 +12,7 @@
     url = "github:cachix/git-hooks.nix";
     inputs = {
       nixpkgs.follows = "nixpkgs";
-      flake-compat.follows = "";
+      flake-compat.follows = "flake-compat";
     };
   };
   inputs.flake-compat = {
@@ -20,12 +20,12 @@
     flake = false;
   };
   inputs.nix = {
-    url = "github:domenkozar/nix/devenv-2.24";
+    url = "github:cachix/nix/devenv-2.30";
     inputs = {
       # disabled until we fix https://github.com/cachix/devenv-nixpkgs/issues/2
       # nixpkgs.follows = "nixpkgs";
-      flake-compat.follows = "";
-      pre-commit-hooks.follows = "";
+      flake-compat.follows = "flake-compat";
+      git-hooks-nix.follows = "git-hooks";
       nixpkgs-23-11.follows = "";
       nixpkgs-regression.follows = "";
     };
@@ -33,10 +33,9 @@
   inputs.cachix = {
     url = "github:cachix/cachix/latest";
     inputs = {
-      # needs hnix-store-nar
-      # nixpkgs.follows = "nixpkgs";
+      nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "";
-      git-hooks.follows = "";
+      git-hooks.follows = "git-hooks";
       devenv.follows = "";
     };
   };
@@ -48,7 +47,7 @@
       mkPackage = pkgs: attrs: pkgs.callPackage ./package.nix
         (
           {
-            inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
+            nix = inputs.nix.packages.${pkgs.stdenv.system}.nix-cli;
             inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
           } // attrs
         );
@@ -193,8 +192,6 @@
         });
 
       modules = ./src/modules;
-      isTmpDir = true;
-      hasIsTesting = true;
 
       templates =
         let
