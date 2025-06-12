@@ -686,11 +686,17 @@ impl Nix {
                     .into_diagnostic()
                     .and_then(|content| serde_json::from_str(&content).into_diagnostic())
                     .unwrap_or_else(|e| {
-                        error!(
-                            "Failed to load cachix trusted keys from {}:\n{}.",
-                            self.cachix_trusted_keys.display(),
-                            e
-                        );
+                        if let Some(source) =
+                            e.chain().find_map(|s| s.downcast_ref::<std::io::Error>())
+                        {
+                            if source.kind() != std::io::ErrorKind::NotFound {
+                                error!(
+                                    "Failed to load cachix trusted keys from {}:\n{}.",
+                                    self.cachix_trusted_keys.display(),
+                                    e
+                                );
+                            }
+                        }
                         BTreeMap::new()
                     });
 
