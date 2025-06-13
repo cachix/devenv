@@ -5,7 +5,16 @@ let
 
   # Override the buildGoModule function to use the specified Go package.
   buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
-  buildWithSpecificGo = pkg: pkg.override { inherit buildGoModule; };
+  buildWithSpecificGo = pkg:
+    let
+      overrideArgs = lib.functionArgs pkg.override;
+    in
+    if builtins.hasAttr "buildGoModule" overrideArgs then
+      pkg.override { inherit buildGoModule; }
+    else if builtins.hasAttr "buildGoLatestModule" overrideArgs then
+      pkg.override { buildGoLatestModule = buildGoModule; }
+    else
+      throw "Package ${pkg.pname or "unknown"} does not accept buildGoModule or buildGoLatestModule arguments";
 in
 {
   options.languages.go = {
