@@ -3,7 +3,7 @@
     outputs = lib.mkOption {
       type = config.lib.types.outputOf lib.types.attrs;
       default = { };
-      example = lib.literalExample ''
+      example = lib.literalExpression ''
         {
           git = pkgs.git;
           foo = {
