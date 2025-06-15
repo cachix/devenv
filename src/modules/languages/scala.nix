@@ -1,4 +1,8 @@
-{ pkgs, config, lib, ... }:
+{ pkgs
+, config
+, lib
+, ...
+}:
 let
   cfg = config.languages.scala;
   java = config.languages.java;
@@ -35,25 +39,31 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      (cfg.package.override
-        { jre = java.jdk.package; })
-      (metals.override
-        { jre = java.jdk.package; })
-      (coursier.override
-        { jre = java.jdk.package; })
-      (scalafmt.override
-        { jre = java.jdk.package; })
-    ] ++ lib.optionals cfg.sbt.enable [
-      (sbt.override
-        { jre = java.jdk.package; })
-    ] ++ lib.optionals cfg.mill.enable [
-      (mill.override
-        { jre = java.jdk.package; })
-    ] ++ lib.optionals (lib.versionAtLeast java.jdk.package.version "17") [
-      (scala-cli.override
-        { jre = java.jdk.package; })
-    ];
+    packages =
+      with pkgs;
+      [
+        (cfg.package.override { jre = java.jdk.package; })
+        (metals.override { jre = java.jdk.package; })
+        (coursier.override { jre = java.jdk.package; })
+        (scalafmt.override { jre = java.jdk.package; })
+      ]
+      ++ lib.optionals cfg.sbt.enable [
+        (sbt.override (
+          old:
+          if (old ? "jre") then
+            { jre = java.jdk.package; }
+          else
+            {
+              sbt = old.sbt.override { jre = java.jdk.package; };
+            }
+        ))
+      ]
+      ++ lib.optionals cfg.mill.enable [
+        (mill.override { jre = java.jdk.package; })
+      ]
+      ++ lib.optionals (lib.versionAtLeast java.jdk.package.version "17") [
+        (scala-cli.override { jre = java.jdk.package; })
+      ];
 
     languages.java.enable = true;
   };
