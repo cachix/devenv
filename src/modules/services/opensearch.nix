@@ -25,7 +25,7 @@ let
 
     # Install plugins
     rm -rf "$OPENSEARCH_DATA/plugins"
-    mkdir -p "$OPENSEARCH_DATA/plugins"
+    ln -sf "${cfg.package}/plugins" "$OPENSEARCH_DATA/plugins"
 
     rm -f "$OPENSEARCH_DATA/lib"
     ln -sf ${cfg.package}/lib "$OPENSEARCH_DATA/lib"
