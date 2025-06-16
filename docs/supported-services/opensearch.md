@@ -208,6 +208,27 @@ string
 
 
 
+## services\.opensearch\.settings\."plugins\.security\.disabled"
+
+
+
+Whether to disable the security plugin\. When set to false, SSL configuration is required\.
+To enable SSL, set ` plugins.security.ssl.transport.keystore_filepath ` or both
+` plugins.security.ssl.transport.server.pemcert_filepath ` and
+` plugins.security.ssl.transport.client.pemcert_filepath `\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
 ## services\.opensearch\.settings\."transport\.port"
 
 
