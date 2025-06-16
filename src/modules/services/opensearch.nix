@@ -107,6 +107,17 @@ in
             The port to listen on for transport traffic.
           '';
         };
+
+        options."plugins.security.disabled" = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = ''
+            Whether to disable the security plugin. When set to false, SSL configuration is required.
+            To enable SSL, set `plugins.security.ssl.transport.keystore_filepath` or both
+            `plugins.security.ssl.transport.server.pemcert_filepath` and
+            `plugins.security.ssl.transport.client.pemcert_filepath`.
+          '';
+        };
       };
 
       default = { };
