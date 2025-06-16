@@ -25,7 +25,7 @@ let
 
     # Install plugins
     rm -rf "$OPENSEARCH_DATA/plugins"
-    mkdir -p "$OPENSEARCH_DATA/plugins"
+    ln -sf "${cfg.package}/plugins" "$OPENSEARCH_DATA/plugins"
 
     rm -f "$OPENSEARCH_DATA/lib"
     ln -sf ${cfg.package}/lib "$OPENSEARCH_DATA/lib"
@@ -105,6 +105,17 @@ in
           default = 9300;
           description = ''
             The port to listen on for transport traffic.
+          '';
+        };
+
+        options."plugins.security.disabled" = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = ''
+            Whether to disable the security plugin. When set to false, SSL configuration is required.
+            To enable SSL, set `plugins.security.ssl.transport.keystore_filepath` or both
+            `plugins.security.ssl.transport.server.pemcert_filepath` and
+            `plugins.security.ssl.transport.client.pemcert_filepath`.
           '';
         };
       };
