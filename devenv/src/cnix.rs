@@ -474,7 +474,7 @@ impl Nix {
         if !result.status.success() {
             let code = match result.status.code() {
                 Some(code) => format!("with exit code {}", code),
-                None => "without exit code".to_string(),
+                None => "without an exit code".to_string(),
             };
 
             if !options.logging {
@@ -493,10 +493,7 @@ impl Nix {
             }
 
             if options.bail_on_error {
-                bail!(format!(
-                    "Command `{}` failed with {code}",
-                    display_command(&cmd)
-                ))
+                bail!(format!("Command `{}` failed {code}", display_command(&cmd)))
             }
         }
 
