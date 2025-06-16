@@ -32,6 +32,7 @@ pub struct CachedCommand<'a> {
     extra_paths: Vec<PathBuf>,
     excluded_paths: Vec<PathBuf>,
     on_stderr: Option<OnStderr>,
+    project_root: Option<PathBuf>,
 }
 
 impl<'a> CachedCommand<'a> {
@@ -42,7 +43,14 @@ impl<'a> CachedCommand<'a> {
             extra_paths: Vec::new(),
             excluded_paths: Vec::new(),
             on_stderr: None,
+            project_root: None,
         }
+    }
+
+    /// Set the project root for resolving relative paths from stripped nix store paths.
+    pub fn with_project_root<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
+        self.project_root = Some(path.as_ref().to_path_buf());
+        self
     }
 
     /// Watch additional paths for changes.
@@ -170,13 +178,18 @@ impl<'a> CachedCommand<'a> {
                 | Op::ReadFile { source }
                 | Op::ReadDir { source }
                 | Op::PathExists { source }
-                | Op::TrackedPath { source }
-                    if !self
-                        .excluded_paths
-                        .iter()
-                        .any(|path| source.starts_with(path)) =>
-                {
-                    sources.push(source);
+                | Op::TrackedPath { source } => {
+                    if source.starts_with("/") {
+                        let stripped_source =
+                            strip_nix_store_path(source, self.project_root.as_deref());
+                        if !self
+                            .excluded_paths
+                            .iter()
+                            .any(|path| stripped_source.starts_with(path))
+                        {
+                            sources.push(stripped_source);
+                        }
+                    }
                 }
 
                 Op::GetEnv { name } => {
@@ -184,8 +197,6 @@ impl<'a> CachedCommand<'a> {
                         env_inputs.push(env_input);
                     }
                 }
-
-                _ => {}
             }
         }
 
@@ -589,23 +600,9 @@ async fn query_file_inputs(sources: &[PathBuf]) -> Vec<FileInputDesc> {
 }
 
 /// Convert a parse log line into into an `Op`.
-/// Filters out paths that don't impact caching.
 fn extract_op_from_log_line(log: &InternalLog) -> Option<Op> {
     match log {
-        InternalLog::Msg { .. } => Op::from_internal_log(log).and_then(|op| match op {
-            Op::EvaluatedFile { ref source }
-            | Op::ReadFile { ref source }
-            | Op::ReadDir { ref source }
-            | Op::CopiedSource { ref source, .. }
-            | Op::PathExists { ref source, .. }
-            | Op::TrackedPath { ref source }
-                if source.starts_with("/") && !source.starts_with("/nix/store") =>
-            {
-                Some(op)
-            }
-            Op::GetEnv { .. } => Some(op),
-            _ => None,
-        }),
+        InternalLog::Msg { .. } => Op::from_internal_log(log),
         _ => None,
     }
 }
@@ -706,6 +703,24 @@ fn truncate_to_seconds(time: SystemTime) -> io::Result<SystemTime> {
         .map_err(|_| io::Error::other("SystemTime before UNIX EPOCH"))?;
     let seconds = duration_since_epoch.as_secs();
     Ok(UNIX_EPOCH + std::time::Duration::from_secs(seconds))
+}
+
+/// Strip the nix store path from a source path by removing the first 3 directories.
+/// If a project root is provided, make the relative path absolute by joining with the project root.
+/// For example: '/nix/store/vbyx6s8rdl8snpsgbdlcrpm89wv5mrmr-source/devenv.local.nix' -> '/project/root/devenv.local.nix'
+fn strip_nix_store_path(source: PathBuf, project_root: Option<&Path>) -> PathBuf {
+    if source.starts_with("/nix/store/") {
+        let components: Vec<_> = source.components().collect();
+        if components.len() > 4 {
+            // Skip: root, "nix", "store", and the hash-source directory
+            let relative_path: PathBuf = components[4..].iter().collect();
+            if let Some(root) = project_root {
+                return root.join(relative_path);
+            }
+            return relative_path;
+        }
+    }
+    source
 }
 
 #[cfg(test)]
@@ -837,5 +852,36 @@ mod test {
             .subsec_millis();
         // Test that the last 3 digits are zeros
         assert_eq!(duration_since_epoch % 1_000, 0);
+    }
+
+    #[test]
+    fn test_strip_nix_store_path() {
+        // Test with nix store path (no project root)
+        let nix_store_path =
+            PathBuf::from("/nix/store/vbyx6s8rdl8snpsgbdlcrpm89wv5mrmr-source/devenv.local.nix");
+        let stripped = strip_nix_store_path(nix_store_path, None);
+        assert_eq!(stripped, PathBuf::from("devenv.local.nix"));
+
+        // Test with nested path (no project root)
+        let nested_path = PathBuf::from("/nix/store/abc123-source/some/nested/path.nix");
+        let stripped = strip_nix_store_path(nested_path, None);
+        assert_eq!(stripped, PathBuf::from("some/nested/path.nix"));
+
+        // Test with project root
+        let project_root = PathBuf::from("/project/root");
+        let nix_store_path =
+            PathBuf::from("/nix/store/vbyx6s8rdl8snpsgbdlcrpm89wv5mrmr-source/devenv.local.nix");
+        let stripped = strip_nix_store_path(nix_store_path, Some(&project_root));
+        assert_eq!(stripped, PathBuf::from("/project/root/devenv.local.nix"));
+
+        // Test with non-nix-store path (should return unchanged)
+        let regular_path = PathBuf::from("/home/user/project/file.nix");
+        let stripped = strip_nix_store_path(regular_path.clone(), None);
+        assert_eq!(stripped, regular_path);
+
+        // Test with short nix store path (should return unchanged)
+        let short_path = PathBuf::from("/nix/store/short");
+        let stripped = strip_nix_store_path(short_path.clone(), None);
+        assert_eq!(stripped, short_path);
     }
 }
