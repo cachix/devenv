@@ -427,8 +427,8 @@ in
         KC_CONF_DIR = config.env.DEVENV_STATE + "/keycloak/conf";
         KC_TMP_DIR = config.env.DEVENV_STATE + "/keycloak/tmp";
 
-        KC_BOOTSTRAP_ADMIN_PASSWORD = "admin";
-        KC_BOOTSTRAP_ADMIN_USERNAME = "${lib.escapeShellArg cfg.initialAdminPassword}";
+        KC_BOOTSTRAP_ADMIN_USERNAME = "admin";
+        KC_BOOTSTRAP_ADMIN_PASSWORD = "${lib.escapeShellArg cfg.initialAdminPassword}";
       };
 
       processes.keycloak =
