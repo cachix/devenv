@@ -270,7 +270,7 @@ impl Devenv {
         cmd: &Option<String>,
         args: &[String],
     ) -> Result<std::process::Command> {
-        let DevEnv { mut output, .. } = self.get_dev_environment(false).await?;
+        let DevEnv { output, .. } = self.get_dev_environment(false).await?;
 
         let bash = match self.get_bash(false).await {
             Err(e) => {
