@@ -94,6 +94,9 @@ in
     };
 
     process.manager.command = lib.mkDefault ''
+      # Ensure the log directory exists
+      mkdir -p "${config.env.DEVENV_STATE}/process-compose"
+      
       ${if cfg.unixSocket.enable then ''
       # Check if process-compose server is already running on the socket
       if [ -S "${cfg.unixSocket.path}" ]; then
@@ -116,6 +119,7 @@ in
       settings = {
         version = lib.mkDefault "0.5";
         is_strict = lib.mkDefault true;
+        log_location = lib.mkDefault "${config.env.DEVENV_STATE}/process-compose/process-compose.log";
         # Filter out the recursive PC_CONFIG_FILES env.
         # Otherwise, we would get a loop:
         #   PC_CONFIG_FILES -> configFile -> settings -> PC_CONFIG_FILES -> ...
