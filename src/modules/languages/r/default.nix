@@ -1,7 +1,11 @@
-{ pkgs, config, lib, ... }:
-
+{ pkgs
+, config
+, lib
+, ...
+}:
 let
   cfg = config.languages.r;
+  descriptionFile = import ./descriptionFile.nix;
 in
 {
   options.languages.r = {
@@ -21,9 +25,23 @@ in
         description = "The radian package to use.";
       };
     };
+    descriptionFile = {
+      path = lib.mkOption {
+        type = lib.types.pathInStore;
+        description = "Path to DESCRIPTION file";
+      };
+      installPackages = {
+        enable = lib.mkEnableOption "installation of R packages listed in DESCRIPTION file";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [ cfg.package ] ++ lib.lists.optional cfg.radian.enable cfg.radian.package;
+    packages =
+      [ cfg.package ]
+      ++ lib.lists.optional cfg.radian.enable cfg.radian.package
+      ++ lib.lists.optionals cfg.descriptionFile.installPackages.enable (
+        descriptionFile.getRPackages pkgs (builtins.readFile cfg.descriptionFile.path)
+      );
   };
 }
