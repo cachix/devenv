@@ -30,6 +30,7 @@ nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }
 
 ansiterm = "0.12.2"
+async-trait = "0.1"
 binaryornot = "1.0.0"
 blake3 = "1.5.4"
 clap = { version = "4.5.1", features = ["derive", "cargo", "env"] }
@@ -94,6 +95,8 @@ reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
 rustls = { version = "0.23.4" }
 rustls-platform-verifier = "0.5.1"
 shell-escape = "0.1.5"
+rmcp = { version = "0.1", features = ["server", "transport-io"] }
+rmcp-macros = "0.1"
 
 [profile.release]
 strip = true

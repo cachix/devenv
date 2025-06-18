@@ -47,3 +47,10 @@ xdg.workspace = true
 similar.workspace = true
 once_cell.workspace = true
 shell-escape.workspace = true
+rmcp.workspace = true
+rmcp-macros.workspace = true
+async-trait.workspace = true
+
+[features]
+default = ["integration-tests"]
+integration-tests = []

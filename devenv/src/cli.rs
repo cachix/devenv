@@ -337,6 +337,9 @@ pub enum Commands {
 
     #[clap(hide = true)]
     GenerateJSONSchema,
+
+    #[command(about = "Launch Model Context Protocol server for AI assistants")]
+    Mcp {},
 }
 
 #[derive(Subcommand, Clone)]

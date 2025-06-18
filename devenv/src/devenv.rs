@@ -66,7 +66,7 @@ pub struct Devenv {
     pub config: config::Config,
     pub global_options: cli::GlobalOptions,
 
-    nix: cnix::Nix,
+    pub nix: cnix::Nix,
 
     // All kinds of paths
     devenv_root: PathBuf,

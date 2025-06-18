@@ -3,6 +3,7 @@ pub(crate) mod cnix;
 pub mod config;
 mod devenv;
 pub mod log;
+pub mod mcp;
 mod util;
 
 pub use cli::{default_system, GlobalOptions};
