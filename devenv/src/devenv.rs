@@ -894,7 +894,7 @@ impl Devenv {
 
         let span = info_span!("up", devenv.user_message = "Starting processes");
         async {
-            let processes = processes.join("");
+            let processes = processes.join(" ");
 
             let processes_script = self.devenv_dotfile.join("processes");
             // we force disable process compose tui if detach is enabled
