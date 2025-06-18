@@ -64,6 +64,9 @@ impl Default for Options {
                 "--extra-experimental-features",
                 "flakes",
                 "--option",
+                "lazy-trees",
+                "true",
+                "--option",
                 "warn-dirty",
                 "false",
                 "--keep-going",
@@ -387,6 +390,7 @@ impl Nix {
         {
             let pool = self.pool.as_ref().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
+            cached_cmd.with_project_root(&self.devenv_root);
 
             cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
             cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
