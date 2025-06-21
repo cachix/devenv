@@ -3,3 +3,6 @@
 .devenv*
 devenv.local.nix
 
+# Test-generated files
+directory/python_uv_sync.egg-info/
+
