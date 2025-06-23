@@ -19442,6 +19442,28 @@ list of absolute path
 
 
 
+## services.keycloak.processes.exportRealms
+
+
+
+Global toggle to enable/disable the realms export process ` keycloak-realm-export-all `
+if any realms have ` realms.«name».export == true `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
 ## services.keycloak.realms
 
 
@@ -19553,6 +19575,28 @@ null or relative path not in the Nix store
 
 *Example:*
 ` "./realms/a.json" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
+
+
+## services.keycloak.scripts.exportRealm
+
+
+
+Global toggle to enable/disable the **single** realm export
+script ` keycloak-realm-export `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
