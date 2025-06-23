@@ -110,6 +110,25 @@ list of absolute path
 
 
 
+## services\.keycloak\.processes\.exportRealms
+
+
+
+Global toggle to enable/disable the realms export process ` keycloak-realm-export-all `
+if any realms have ` realms.«name».export == true `\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
 ## services\.keycloak\.realms
 
 
@@ -212,6 +231,25 @@ null or relative path not in the Nix store
 
 *Example:*
 ` "./realms/a.json" `
+
+
+
+## services\.keycloak\.scripts\.exportRealm
+
+
+
+Global toggle to enable/disable the **single** realm export
+script ` keycloak-realm-export `\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 
 
