@@ -11,6 +11,12 @@ let
     attribute = "languages.rust.channel";
     follows = [ "nixpkgs" ];
   };
+  cargo2nix = config.lib.getInput {
+    name = "cargo2nix";
+    url = "github:cargo2nix/cargo2nix";
+    attribute = "languages.rust.cargo2nixInput";
+    follows = [ "nixpkgs" ];
+  };
 in
 {
   imports = [
@@ -100,6 +106,93 @@ in
       description = ''
         The aggregated toolchain package, which includes the configured components and targets.
         This is automatically set based on the channel and components configuration.
+
+    import = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule ({ name, config, ... }: {
+        options = {
+          root = lib.mkOption {
+            type = lib.types.path;
+            description = "Path to the directory containing Cargo.toml";
+          };
+
+          workspaceMembers = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            description = "List of workspace members to build. If empty, builds all workspace members";
+          };
+
+          package = lib.mkOption {
+            type = lib.types.package;
+            readOnly = true;
+            description = "The built package or workspace";
+            default =
+              let
+                cargoNixPath = config.root + "/Cargo.nix";
+                cargoTomlPath = config.root + "/Cargo.toml";
+
+                # Check if Cargo.nix exists
+                cargoNixExists = builtins.pathExists cargoNixPath;
+
+                # Check if Cargo.toml exists
+                cargoTomlExists = builtins.pathExists cargoTomlPath;
+
+                # Use the same rust version as configured
+                rustVersion = if cfg.channel != "nixpkgs" then cfg.version else "latest";
+                rustChannel = cfg.channel;
+
+                rustPkgs = pkgs.rustBuilder.makePackageSet {
+                  rustVersion = if rustChannel == "nixpkgs" then "latest" else rustVersion;
+                  rustChannel = if rustChannel == "nixpkgs" then "stable" else rustChannel;
+                  packageFun = import cargoNixPath;
+                };
+              in
+              assert lib.assertMsg cargoTomlExists
+                "Cargo.toml not found at ${toString cargoTomlPath}. Please ensure the 'root' path points to a directory containing Cargo.toml.";
+              if !cargoNixExists then
+                throw "Cargo.nix not found at ${toString cargoNixPath}. Please run 'devenv tasks run cargo2nix:${name}' to generate it."
+              else if config.workspaceMembers == [ ] then
+              # Return the entire workspace when no specific members are specified
+                rustPkgs.workspace
+              else if builtins.length config.workspaceMembers == 1 then
+              # Single workspace member
+                rustPkgs.workspace.${builtins.head config.workspaceMembers} { }
+              else
+              # Multiple workspace members - create a combined derivation
+                pkgs.symlinkJoin {
+                  name = "${name}-combined";
+                  paths = map (member: rustPkgs.workspace.${member} { }) config.workspaceMembers;
+                  passthru = lib.listToAttrs (map
+                    (member: {
+                      name = member;
+                      value = rustPkgs.workspace.${member} { };
+                    })
+                    config.workspaceMembers);
+                };
+          };
+        };
+      }));
+      default = { };
+      description = ''
+        Import Rust projects using cargo2nix for granular builds.
+        
+        Example:
+        ```nix
+        languages.rust.import = {
+          myProject = {
+            root = ./.; # Directory containing Cargo.toml
+          };
+          
+          anotherProject = {
+            root = ./other;
+            workspaceMember = "my-crate";
+          };
+        };
+        
+        # Then use the packages:
+        packages = [ 
+          config.languages.rust.import.myProject.package
+        ];
+        ```
       '';
     };
   };
@@ -269,5 +362,23 @@ in
         packages = [ cfg.toolchainPackage ];
       }
     ))
+
+    (lib.mkIf (cfg.import != { }) {
+      # Apply cargo2nix overlay if not already applied
+      overlays = [ cargo2nix.overlays.default ];
+
+      # Create cargo2nix tasks for each import
+      tasks = lib.mapAttrs'
+        (name: importCfg:
+          lib.nameValuePair "cargo2nix:${name}" {
+            exec = ''
+              echo "Generating Cargo.nix for ${name}..."
+              ${cargo2nix.packages.${pkgs.system}.default}/bin/cargo2nix ${toString importCfg.root}
+            '';
+            description = "Generate Cargo.nix for ${name} project";
+          }
+        )
+        cfg.import;
+    })
   ]);
 }

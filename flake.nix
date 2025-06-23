@@ -38,6 +38,10 @@
       devenv.follows = "";
     };
   };
+  inputs.cargo2nix = {
+    url = "github:cargo2nix/cargo2nix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
 
   outputs =
     { self
@@ -47,32 +51,27 @@
     , ...
     }@inputs:
     let
-      systems = [
-        "x86_64-linux"
-        "i686-linux"
-        "x86_64-darwin"
-        "aarch64-linux"
-        "aarch64-darwin"
-      ];
-      forAllSystems =
-        f:
-        builtins.listToAttrs (
-          map
-            (name: {
-              inherit name;
-              value = f name;
-            })
-            systems
-        );
-      mkPackage =
-        pkgs: attrs:
-        pkgs.callPackage ./package.nix (
-          {
-            nix = inputs.nix.packages.${pkgs.stdenv.system}.nix-cli;
-            inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
-          }
-          // attrs
-        );
+      systems = [ "x86_64-linux" "i686-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
+      forAllSystems = f: builtins.listToAttrs (map (name: { inherit name; value = f name; }) systems);
+      mkPackage = pkgs: attrs:
+        let
+          eval = self.lib.mkEval {
+            pkgs = pkgs.extend inputs.cargo2nix.overlays.default;
+            inherit inputs;
+            modules = [
+              ./devenv.nix
+              {
+                # Override to specify which workspace members to build
+                languages.rust.import.devenv.workspaceMembers =
+                  if attrs.build_tasks or false then
+                    [ "devenv-tasks" ]
+                  else
+                    [ "devenv" "devenv-run-tests" ];
+              }
+            ];
+          };
+        in
+        eval.config.languages.rust.import.devenv.package;
       mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions =
         pkgs:
