@@ -1,0 +1,8 @@
+inputs:
+  devenv:
+    url: path:../..?dir=src/modules
+  cargo2nix:
+    url: github:cargo2nix/cargo2nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
