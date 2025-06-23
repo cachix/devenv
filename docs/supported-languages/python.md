@@ -474,6 +474,24 @@ list of string
 
 
 
+## languages\.python\.uv\.sync\.groups
+
+
+
+Which dependency groups to install\. See ` --group `\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
 ## languages\.python\.venv\.enable
 
 
