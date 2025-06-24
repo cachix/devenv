@@ -620,6 +620,11 @@ null or package
 *Default:*
 ` if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null `
 
+
+
+*Example:*
+` pkgs.apple-sdk_15 `
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
@@ -14895,7 +14900,7 @@ package
 
 
 *Default:*
-` pkgs.radianWrapper `
+` pkgs.radian or pkgs.radianWrapper `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
