@@ -620,6 +620,11 @@ null or package
 *Default:*
 ` if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null `
 
+
+
+*Example:*
+` pkgs.apple-sdk_15 `
+
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
 
