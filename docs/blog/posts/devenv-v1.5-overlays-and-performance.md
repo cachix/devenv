@@ -85,7 +85,7 @@ For macOS developers, we've added the ability to customize which Apple SDK is us
 { pkgs, ... }:
 
 {
-  apple.sdk.package = pkgs.darwin.apple_sdk.sdk;
+  apple.sdk = pkgs.apple-sdk_15;
 }
 ```
 
