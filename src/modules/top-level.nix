@@ -111,6 +111,7 @@ in
         '';
         default = if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null;
         defaultText = lib.literalExpression "if pkgs.stdenv.isDarwin then pkgs.apple-sdk else null";
+        example = lib.literalExpression "pkgs.apple-sdk_15";
       };
     };
 
