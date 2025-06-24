@@ -248,7 +248,9 @@ struct ListPackagesRequest {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct ListOptionsRequest {
-    #[schemars(description = "Optional prefix to filter options (e.g., 'languages.python')")]
+    #[schemars(
+        description = "Optional search string to filter options by name or description (e.g., 'python' or 'languages.python')"
+    )]
     prefix: Option<String>,
 }
 
@@ -304,11 +306,17 @@ impl DevenvMcpServer {
             vec![]
         });
 
-        // Filter options based on prefix
-        let filtered_options: Vec<OptionInfo> = if let Some(ref prefix_str) = request.prefix {
+        // Filter options based on search string (searches in both name and description)
+        let filtered_options: Vec<OptionInfo> = if let Some(ref search_str) = request.prefix {
+            let search_lower = search_str.to_lowercase();
             options
                 .into_iter()
-                .filter(|o| o.name.starts_with(prefix_str))
+                .filter(|o| {
+                    o.name.to_lowercase().contains(&search_lower)
+                        || o.description
+                            .as_ref()
+                            .map_or(false, |d| d.to_lowercase().contains(&search_lower))
+                })
                 .collect()
         } else {
             options
