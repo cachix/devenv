@@ -79,4 +79,4 @@ package
 
 
 *Default:*
-` pkgs.radianWrapper `
+` pkgs.radian or pkgs.radianWrapper `
