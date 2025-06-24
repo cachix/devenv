@@ -27,6 +27,7 @@
     pkgs.cargo-outdated # Find outdated crates
     pkgs.cargo-machete # Find unused crates
     pkgs.cargo-edit # Adds the set-version command
+    pkgs.protobuf
   ];
 
   languages.nix.enable = true;

@@ -51,6 +51,16 @@ rmcp.workspace = true
 rmcp-macros.workspace = true
 async-trait.workspace = true
 
+# Optional snix dependencies
+snix-eval = { git = "https://github.com/cachix/snix", optional = true }
+snix-glue = { git = "https://github.com/cachix/snix", optional = true }
+snix-castore = { git = "https://github.com/cachix/snix", optional = true }
+snix-store = { git = "https://github.com/cachix/snix", optional = true }
+snix-build = { git = "https://github.com/cachix/snix", optional = true }
+nix-compat = { git = "https://github.com/cachix/snix", optional = true }
+nix-compat-derive = { git = "https://github.com/cachix/snix", optional = true }
+
 [features]
 default = []
 integration-tests = []
+snix = ["snix-eval", "snix-glue", "snix-castore", "snix-store", "snix-build"]
