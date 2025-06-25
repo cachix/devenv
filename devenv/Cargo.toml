@@ -52,5 +52,5 @@ rmcp-macros.workspace = true
 async-trait.workspace = true
 
 [features]
-default = ["integration-tests"]
+default = []
 integration-tests = []

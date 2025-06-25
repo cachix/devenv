@@ -76,11 +76,14 @@ impl DevenvMcpServer {
             devenv_root: None,
             devenv_dotfile: None,
         };
-        let devenv = Devenv::new(devenv_options).await;
+        let mut devenv = Devenv::new(devenv_options).await;
 
-        // Use empty search term to get a broad set of packages
+        // Assemble the devenv to create required flake files
+        devenv.assemble(true).await?;
+
+        // Use broad search term to get a wide set of packages
         // We'll limit results later if needed
-        let search_output = devenv.nix.search("").await?;
+        let search_output = devenv.nix.search(".*").await?;
 
         // Parse the search results from JSON
         #[derive(Deserialize)]
@@ -128,7 +131,10 @@ impl DevenvMcpServer {
             devenv_root: None,
             devenv_dotfile: None,
         };
-        let devenv = Devenv::new(devenv_options).await;
+        let mut devenv = Devenv::new(devenv_options).await;
+
+        // Assemble the devenv to create required flake files
+        devenv.assemble(true).await?;
 
         // Build the optionsJSON attribute like in devenv.rs search function
         let build_options = cnix::Options {
@@ -352,6 +358,27 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[cfg(feature = "integration-tests")]
+    async fn create_test_devenv_dir() -> std::io::Result<tempfile::TempDir> {
+        let temp_dir = tempfile::tempdir()?;
+
+        // Create minimal devenv.yaml with just nixpkgs input
+        let devenv_yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable"#;
+
+        // Create minimal devenv.nix that enables the tests to work
+        let devenv_nix = r#"{ pkgs, ... }: {
+  # Minimal configuration for testing
+  packages = [ pkgs.git ];
+}"#;
+
+        tokio::fs::write(temp_dir.path().join("devenv.yaml"), devenv_yaml).await?;
+        tokio::fs::write(temp_dir.path().join("devenv.nix"), devenv_nix).await?;
+
+        Ok(temp_dir)
+    }
+
     #[test]
     fn test_package_info_serialization() {
         let package = PackageInfo {
@@ -422,6 +449,13 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_packages_live() {
+        // Create temporary directory with test devenv configuration
+        let temp_dir = create_test_devenv_dir().await.unwrap();
+
+        // Change to the temporary directory so DevenvOptions defaults to it
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
         let config = Config::default();
         let server = DevenvMcpServer::new(config);
 
@@ -475,14 +509,21 @@ mod tests {
         for package in packages.iter().take(5) {
             println!("  - {} ({})", package.name, package.version);
         }
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+        // Temporary directory will be automatically cleaned up when dropped
     }
 
     #[tokio::test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_options_live() {
-        // This test requires being run from a proper devenv project root
-        // It will fail in the test environment because it needs access to
-        // the devenv flake and its optionsJSON output
+        // Create temporary directory with test devenv configuration
+        let temp_dir = create_test_devenv_dir().await.unwrap();
+
+        // Change to the temporary directory so DevenvOptions defaults to it
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let config = Config::default();
         let server = DevenvMcpServer::new(config);
@@ -533,5 +574,9 @@ mod tests {
                 );
             }
         }
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+        // Temporary directory will be automatically cleaned up when dropped
     }
 }

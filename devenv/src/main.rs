@@ -219,10 +219,7 @@ async fn main() -> Result<()> {
             config::write_json_schema().wrap_err("Failed to generate JSON schema")?;
             Ok(())
         }
-        Commands::Mcp {} => {
-            use devenv::mcp;
-            mcp::run_mcp_server(devenv.config).await
-        }
+        Commands::Mcp {} => devenv::mcp::run_mcp_server(devenv.config).await,
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
     }
