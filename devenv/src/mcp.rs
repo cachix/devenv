@@ -358,6 +358,27 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[cfg(feature = "integration-tests")]
+    async fn create_test_devenv_dir() -> std::io::Result<tempfile::TempDir> {
+        let temp_dir = tempfile::tempdir()?;
+
+        // Create minimal devenv.yaml with just nixpkgs input
+        let devenv_yaml = r#"inputs:
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable"#;
+
+        // Create minimal devenv.nix that enables the tests to work
+        let devenv_nix = r#"{ pkgs, ... }: {
+  # Minimal configuration for testing
+  packages = [ pkgs.git ];
+}"#;
+
+        tokio::fs::write(temp_dir.path().join("devenv.yaml"), devenv_yaml).await?;
+        tokio::fs::write(temp_dir.path().join("devenv.nix"), devenv_nix).await?;
+
+        Ok(temp_dir)
+    }
+
     #[test]
     fn test_package_info_serialization() {
         let package = PackageInfo {
@@ -428,10 +449,12 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_packages_live() {
-        // Change to project root directory so the test finds the correct devenv.nix
+        // Create temporary directory with test devenv configuration
+        let temp_dir = create_test_devenv_dir().await.unwrap();
+
+        // Change to the temporary directory so DevenvOptions defaults to it
         let original_dir = std::env::current_dir().unwrap();
-        let project_root = original_dir.parent().unwrap();
-        std::env::set_current_dir(project_root).unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let config = Config::default();
         let server = DevenvMcpServer::new(config);
@@ -489,15 +512,18 @@ mod tests {
 
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
+        // Temporary directory will be automatically cleaned up when dropped
     }
 
     #[tokio::test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_options_live() {
-        // Change to project root directory so the test finds the correct devenv.nix
+        // Create temporary directory with test devenv configuration
+        let temp_dir = create_test_devenv_dir().await.unwrap();
+
+        // Change to the temporary directory so DevenvOptions defaults to it
         let original_dir = std::env::current_dir().unwrap();
-        let project_root = original_dir.parent().unwrap();
-        std::env::set_current_dir(project_root).unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
 
         let config = Config::default();
         let server = DevenvMcpServer::new(config);
@@ -551,5 +577,6 @@ mod tests {
 
         // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
+        // Temporary directory will be automatically cleaned up when dropped
     }
 }
