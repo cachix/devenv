@@ -422,6 +422,11 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_packages_live() {
+        // Change to project root directory so the test finds the correct devenv.nix
+        let original_dir = std::env::current_dir().unwrap();
+        let project_root = original_dir.parent().unwrap();
+        std::env::set_current_dir(project_root).unwrap();
+
         let config = Config::default();
         let server = DevenvMcpServer::new(config);
 
@@ -475,14 +480,18 @@ mod tests {
         for package in packages.iter().take(5) {
             println!("  - {} ({})", package.name, package.version);
         }
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]
     #[cfg(feature = "integration-tests")]
     async fn test_fetch_options_live() {
-        // This test requires being run from a proper devenv project root
-        // It will fail in the test environment because it needs access to
-        // the devenv flake and its optionsJSON output
+        // Change to project root directory so the test finds the correct devenv.nix
+        let original_dir = std::env::current_dir().unwrap();
+        let project_root = original_dir.parent().unwrap();
+        std::env::set_current_dir(project_root).unwrap();
 
         let config = Config::default();
         let server = DevenvMcpServer::new(config);
@@ -533,5 +542,8 @@ mod tests {
                 );
             }
         }
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
     }
 }
