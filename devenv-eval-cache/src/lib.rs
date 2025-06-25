@@ -289,11 +289,12 @@ mod integration_tests {
         assert!(output2.status.success(), "Second nix eval failed");
         assert!(output2.cache_hit, "Second run should hit cache");
 
-        // Sleep briefly to ensure different mtime
-        std::thread::sleep(std::time::Duration::from_millis(1100));
-
-        // Modify file content
+        // Modify file content and set mtime to ensure cache invalidation
         std::fs::write(&test_file, "modified content")?;
+
+        // Set file mtime to current time + 1 second to ensure it's different
+        let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
+        std::fs::File::open(&test_file)?.set_modified(new_time)?;
 
         // Third run - should invalidate cache (file changed)
         let output3 = run_nix_eval_cached(&pool, &nix_expr).await?;
