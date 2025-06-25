@@ -104,6 +104,28 @@ in
       '';
     };
 
+    scripts = {
+      exportRealm = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Global toggle to enable/disable the **single** realm export
+          script `keycloak-realm-export`.
+        '';
+      };
+    };
+
+    processes = {
+      exportRealms = mkOption {
+        type = types.bool;
+        default = true;
+        description = ''
+          Global toggle to enable/disable the realms export process `keycloak-realm-export-all`
+          if any realms have `realms.«name».export == true`.
+        '';
+      };
+    };
+
     realms = mkOption {
       default = { };
       type = types.attrsOf (
@@ -350,41 +372,58 @@ in
         )
         (lib.filterAttrs (_: v: v.import && v.path != null) cfg.realms);
 
-      # Generate the command to export realms.
-      realmExport =
-        [
-          ''
-            if ${keycloak-health}/bin/keycloak-health; then
-              echo "You must first stop keycloak and then run this command again." >&2
-              exit 1
-            fi
-          ''
-        ]
-        ++ lib.mapAttrsToList
-          (
-            realm: e:
-              let
-                file =
-                  if e.path == null then
-                    (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
-                  else
-                    e.path;
-              in
-              ''
-                echo "Exporting realm '${realm}' to '${file}'."
-                mkdir -p "$(dirname "${file}")"
-                ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
+      # Generate the commands to export realms.
+      assertKeycloakStopped = [
+        ''
+          if ${keycloak-health}/bin/keycloak-health; then
+            echo "You must first stop keycloak and then run this command again." >&2
+            exit 1
+          fi
+        ''
+      ];
 
-                echo "Beautifying realm export '${file}' for diffing."
-                temp_file=$(${pkgs.coreutils}/bin/mktemp)
-                ${pkgs.jq}/bin/jq --sort-keys . "${file}" > "$temp_file"
-                ${pkgs.coreutils}/bin/mv "$temp_file" "${file}"
-              ''
-          )
-          (lib.filterAttrs (_: v: v.export) cfg.realms);
+      keycloak-realm-export = pkgs.writeShellScriptBin "keycloak-realm-export" (
+        lib.concatStringsSep "\n" (
+          assertKeycloakStopped
+          ++ [
+            ''
+              ${keycloakBuild}/bin/kc.sh export --realm "$1" --file "$2"
+            ''
+          ]
+        )
+      );
 
-      keycloak-realm-exports = pkgs.writeShellScriptBin "keycloak-realm-exports" (
-        lib.concatStringsSep "\n" realmExport
+      realmsToExport = lib.filterAttrs (_: v: v.export) cfg.realms;
+      realmsExport =
+        if (!cfg.processes.exportRealms || lib.length (lib.attrNames realmsToExport) == 0) then
+          [ ]
+        else
+          assertKeycloakStopped
+          ++ lib.mapAttrsToList
+            (
+              realm: e:
+                let
+                  file =
+                    if e.path == null then
+                      (config.env.DEVENV_STATE + "/keycloak/realm-export/${realm}.json")
+                    else
+                      e.path;
+                in
+                ''
+                  echo "Exporting realm '${realm}' to '${file}'."
+                  mkdir -p "$(dirname "${file}")"
+                  ${keycloakBuild}/bin/kc.sh export --realm "${realm}" --file "${file}"
+
+                  echo "Beautifying realm export '${file}' for diffing."
+                  temp_file=$(${pkgs.coreutils}/bin/mktemp)
+                  ${pkgs.jq}/bin/jq --sort-keys . "${file}" > "$temp_file"
+                  ${pkgs.coreutils}/bin/mv "$temp_file" "${file}"
+                ''
+            )
+            realmsToExport;
+
+      keycloak-realm-export-all = pkgs.writeShellScriptBin "keycloak-realm-export-all" (
+        lib.concatStringsSep "\n" realmsExport
       );
 
       keycloak-health = pkgs.writeShellScriptBin "keycloak-health" ''
@@ -394,10 +433,11 @@ in
     mkIf cfg.enable {
       assertions = [
         {
-          assertion = cfg.database.type == "dev-mem" -> realmExport == [ ];
+          assertion = cfg.database.type == "dev-mem" -> realmsExport == [ ];
           message = ''
             You cannot export realms with `realms.«name».export == true` when
             using `database.type == 'dev-mem'`, import however works.
+            You can disable realms export with `exportRealms = true` globally.
           '';
         }
       ];
@@ -477,24 +517,24 @@ in
         };
 
       # Export a single realm.
-      scripts.keycloak-realm-export = {
-        exec = ''${keycloakBuild}/bin/kc.sh export --realm "$1" --file "$2"'';
+      scripts.keycloak-realm-export = mkIf cfg.scripts.exportRealm {
+        exec = "${keycloak-realm-export}/bin/keycloak-realm-export";
         description = ''
           Export a realm '$1' (first argument) from keycloak to location '$2' (second argument).
         '';
       };
 
       # Export all configured realms.
-      scripts.keycloak-realm-export-all = mkIf (realmExport != [ ]) {
-        exec = "${keycloak-realm-exports}/bin/keycloak-realm-exports";
+      scripts.keycloak-realm-export-all = mkIf (realmsExport != [ ]) {
+        exec = "${keycloak-realm-export-all}/bin/keycloak-realm-export-all";
         description = ''
           Save the configured realms from keycloak, to back them up. You can run it manually.
         '';
       };
 
       # Process to start for exporting the above.
-      processes.keycloak-realm-export-all = mkIf (realmExport != [ ]) {
-        exec = "${keycloak-realm-exports}/bin/keycloak-realm-exports";
+      processes.keycloak-realm-export-all = mkIf (realmsExport != [ ]) {
+        exec = "${keycloak-realm-export-all}/bin/keycloak-realm-export-all";
         process-compose = {
           description = ''
             Save the configured realms from keycloak, to back them up. You can run it manually.
