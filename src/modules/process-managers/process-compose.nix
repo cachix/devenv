@@ -120,12 +120,6 @@ in
         version = lib.mkDefault "0.5";
         is_strict = lib.mkDefault true;
         log_location = lib.mkDefault "${config.env.DEVENV_STATE}/process-compose/process-compose.log";
-        # Filter out the recursive PC_CONFIG_FILES env.
-        # Otherwise, we would get a loop:
-        #   PC_CONFIG_FILES -> configFile -> settings -> PC_CONFIG_FILES -> ...
-        environment = lib.mapAttrsToList
-          (name: value: "${name}=${toString value}")
-          (builtins.removeAttrs config.env [ "PC_CONFIG_FILES" ]);
         processes = lib.mapAttrs
           (name: value:
             let
