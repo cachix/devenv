@@ -10,7 +10,6 @@ use std::fs;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use tempfile::TempDir;
-use tokio::time::Duration;
 
 #[tokio::test]
 async fn test_task_name() -> Result<(), Error> {
@@ -336,9 +335,6 @@ exit 0
         "Task output should contain the expected result"
     );
 
-    // Wait to ensure file timestamps are different
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Second run: Use status command to skip execution but retrieve cached output
     let config2 = Config::try_from(json!({
         "roots": [task_name],
@@ -462,9 +458,6 @@ echo "Task executed successfully"
         "Task output should contain the expected result"
     );
 
-    // Wait to ensure file timestamps are different
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Second run without modifying the file - should be skipped
     // Use the same DEVENV_DOTFILE directory for cache persistence
     let config2 = Config::try_from(json!({
@@ -509,11 +502,10 @@ echo "Task executed successfully"
         "Task output should be preserved when skipped"
     );
 
-    // Wait to ensure file timestamps are different
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Modify the file
+    // Modify the file and set mtime to ensure detection
     std::fs::write(&test_file_path, "modified content")?;
+    let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
+    std::fs::File::open(&test_file_path)?.set_modified(new_time)?;
 
     // Run task third time - should execute because file has changed
     let config3 = Config::try_from(json!({
@@ -839,9 +831,6 @@ echo "Task executed successfully"
         );
     }
 
-    // Wait to ensure file timestamps are different
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
     // Second run - create a separate scope to ensure the DB connection is closed
     {
         // Run task second time - task should be skipped but output preserved
@@ -898,11 +887,10 @@ echo "Task executed successfully"
         assert!(valid_output, "Task output should be preserved in some form");
     }
 
-    // Wait to ensure file timestamps are different
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    // Modify the file to trigger a re-run
+    // Modify the file to trigger a re-run and set mtime to ensure detection
     std::fs::write(&test_file_path, "modified content")?;
+    let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
+    std::fs::File::open(&test_file_path)?.set_modified(new_time)?;
 
     // Third run - create a separate scope to ensure DB connection is closed
     {

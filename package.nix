@@ -40,13 +40,6 @@ rustPlatform.buildRustPackage {
 
   doCheck = !build_tasks;
 
-  # Explicitly exclude the failing tests
-  cargoTestFlags = [
-    "--"
-    "--skip=test_fetch_options_live"
-    "--skip=test_fetch_packages_live"
-  ];
-
   cargoLock = {
     lockFile = ./Cargo.lock;
   };

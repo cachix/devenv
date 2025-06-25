@@ -275,7 +275,6 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
     use tempfile::TempDir;
-    use tokio::time::{sleep, Duration};
 
     #[sqlx::test]
     async fn test_task_cache_initialization() {
@@ -325,29 +324,15 @@ mod tests {
         // 2. Change content to guarantee hash changes
         // 3. Use multiple write operations to maximize chance of timestamp change
 
-        // Sleep to ensure clock advances, even on platforms with low timestamp resolution
-        sleep(Duration::from_millis(10)).await;
-
-        // First update with different content
+        // Modify file content and set mtime to ensure detection
         {
             let mut file = File::create(&file_path).unwrap();
-            file.write_all(b"modified content").unwrap();
+            file.write_all(b"modified content with more text").unwrap();
             file.sync_all().unwrap(); // Force flush to filesystem
-        }
 
-        // Sleep again to ensure timestamps can change
-        sleep(Duration::from_millis(10)).await;
-
-        // Second write to ensure modification time updates
-        {
-            // Append more content to guarantee content hash differs
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .append(true)
-                .open(&file_path)
-                .unwrap();
-            file.write_all(b" with more text").unwrap();
-            file.sync_all().unwrap();
+            // Set mtime to ensure it's different from original
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
+            file.set_modified(new_time).unwrap();
         }
 
         // Check should detect the modification
@@ -388,15 +373,16 @@ mod tests {
             .await
             .unwrap());
 
-        // Sleep to ensure clock advances
-        sleep(Duration::from_millis(10)).await;
-
         // Add a new file in the directory
         let file_path = dir_path.join("test_file.txt");
         {
             let mut file = File::create(&file_path).unwrap();
             file.write_all(b"new file content").unwrap();
             file.sync_all().unwrap();
+
+            // Set mtime to ensure directory modification is detected
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
+            file.set_modified(new_time).unwrap();
         }
 
         // Check should detect the directory modification
@@ -411,14 +397,15 @@ mod tests {
             .await
             .unwrap());
 
-        // Sleep to ensure clock advances
-        sleep(Duration::from_millis(10)).await;
-
         // Modify an existing file
         {
             let mut file = File::create(&file_path).unwrap();
             file.write_all(b"modified file content").unwrap();
             file.sync_all().unwrap();
+
+            // Set mtime to ensure directory modification is detected
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(2);
+            file.set_modified(new_time).unwrap();
         }
 
         // Check should detect the directory modification
@@ -427,12 +414,16 @@ mod tests {
             .await
             .unwrap());
 
-        // Sleep to ensure clock advances
-        sleep(Duration::from_millis(10)).await;
-
-        // Create a subdirectory
+        // Create a subdirectory and set its mtime
         let subdir_path = dir_path.join("subdir");
         std::fs::create_dir(&subdir_path).unwrap();
+
+        // Set subdirectory mtime to ensure detection
+        let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(3);
+        std::fs::File::open(&subdir_path)
+            .unwrap()
+            .set_modified(new_time)
+            .unwrap();
 
         // Check should detect the directory modification
         assert!(cache
@@ -440,15 +431,16 @@ mod tests {
             .await
             .unwrap());
 
-        // Sleep to ensure clock advances
-        sleep(Duration::from_millis(10)).await;
-
         // Add a file in the subdirectory
         let subdir_file_path = subdir_path.join("nested_file.txt");
         {
             let mut file = File::create(&subdir_file_path).unwrap();
             file.write_all(b"nested file content").unwrap();
             file.sync_all().unwrap();
+
+            // Set mtime to ensure directory modification is detected
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(4);
+            file.set_modified(new_time).unwrap();
         }
 
         // Check should detect the directory modification
@@ -483,15 +475,16 @@ mod tests {
             .await
             .unwrap());
 
-        // Sleep to ensure clock advances
-        sleep(Duration::from_millis(10)).await;
-
         // Add a file deep in the nested structure
         let deep_file_path = deep_dir3.join("deep_file.txt");
         {
             let mut file = File::create(&deep_file_path).unwrap();
             file.write_all(b"deep nested file content").unwrap();
             file.sync_all().unwrap();
+
+            // Set mtime to ensure directory modification is detected
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+            file.set_modified(new_time).unwrap();
         }
 
         // Check should detect the deep file modification
@@ -499,9 +492,6 @@ mod tests {
             .check_modified_files(task_name, &[dir_path_str.clone()])
             .await
             .unwrap());
-
-        // Sleep to ensure clock advances
-        sleep(Duration::from_millis(10)).await;
 
         // Update the deep file
         {
@@ -512,6 +502,10 @@ mod tests {
                 .unwrap();
             file.write_all(b" with additional content").unwrap();
             file.sync_all().unwrap();
+
+            // Set mtime to ensure directory modification is detected
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(6);
+            file.set_modified(new_time).unwrap();
         }
 
         // Check should detect the deep file update
