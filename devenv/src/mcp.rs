@@ -11,6 +11,7 @@ use rmcp::{ServerHandler, ServiceExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -19,6 +20,7 @@ use tracing::{info, warn};
 struct DevenvMcpServer {
     config: Config,
     cache: Arc<RwLock<McpCache>>,
+    devenv_root: Option<PathBuf>,
 }
 
 #[derive(Default)]
@@ -29,9 +31,14 @@ struct McpCache {
 
 impl DevenvMcpServer {
     fn new(config: Config) -> Self {
+        Self::new_with_root(config, None)
+    }
+
+    fn new_with_root(config: Config, devenv_root: Option<PathBuf>) -> Self {
         Self {
             config,
             cache: Arc::new(RwLock::new(McpCache::default())),
+            devenv_root,
         }
     }
 
@@ -72,9 +79,8 @@ impl DevenvMcpServer {
         // Create a Devenv instance to access nix functionality
         let devenv_options = DevenvOptions {
             config: self.config.clone(),
-            global_options: None,
-            devenv_root: None,
-            devenv_dotfile: None,
+            devenv_root: self.devenv_root.clone(),
+            ..Default::default()
         };
         let mut devenv = Devenv::new(devenv_options).await;
 
@@ -127,9 +133,8 @@ impl DevenvMcpServer {
         // Create a Devenv instance to access nix functionality
         let devenv_options = DevenvOptions {
             config: self.config.clone(),
-            global_options: None,
-            devenv_root: None,
-            devenv_dotfile: None,
+            devenv_root: self.devenv_root.clone(),
+            ..Default::default()
         };
         let mut devenv = Devenv::new(devenv_options).await;
 
@@ -452,12 +457,8 @@ mod tests {
         // Create temporary directory with test devenv configuration
         let temp_dir = create_test_devenv_dir().await.unwrap();
 
-        // Change to the temporary directory so DevenvOptions defaults to it
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
         let config = Config::default();
-        let server = DevenvMcpServer::new(config);
+        let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
 
         let packages = server.fetch_packages().await;
 
@@ -510,8 +511,6 @@ mod tests {
             println!("  - {} ({})", package.name, package.version);
         }
 
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
         // Temporary directory will be automatically cleaned up when dropped
     }
 
@@ -521,12 +520,8 @@ mod tests {
         // Create temporary directory with test devenv configuration
         let temp_dir = create_test_devenv_dir().await.unwrap();
 
-        // Change to the temporary directory so DevenvOptions defaults to it
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
-
         let config = Config::default();
-        let server = DevenvMcpServer::new(config);
+        let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
 
         let options = server.fetch_options().await;
 
@@ -575,8 +570,6 @@ mod tests {
             }
         }
 
-        // Restore original directory
-        std::env::set_current_dir(original_dir).unwrap();
         // Temporary directory will be automatically cleaned up when dropped
     }
 }
