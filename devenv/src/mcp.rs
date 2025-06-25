@@ -76,7 +76,10 @@ impl DevenvMcpServer {
             devenv_root: None,
             devenv_dotfile: None,
         };
-        let devenv = Devenv::new(devenv_options).await;
+        let mut devenv = Devenv::new(devenv_options).await;
+
+        // Assemble the devenv to create required flake files
+        devenv.assemble(true).await?;
 
         // Use broad search term to get a wide set of packages
         // We'll limit results later if needed
@@ -128,7 +131,10 @@ impl DevenvMcpServer {
             devenv_root: None,
             devenv_dotfile: None,
         };
-        let devenv = Devenv::new(devenv_options).await;
+        let mut devenv = Devenv::new(devenv_options).await;
+
+        // Assemble the devenv to create required flake files
+        devenv.assemble(true).await?;
 
         // Build the optionsJSON attribute like in devenv.rs search function
         let build_options = cnix::Options {
