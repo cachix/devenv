@@ -329,7 +329,6 @@ impl Nix {
         {
             let pool = self.pool.as_ref().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
-            cached_cmd.with_project_root(&self.paths.root);
 
             cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
             cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
