@@ -251,10 +251,13 @@ mod tests {
         assert!(!tracked.is_modified().unwrap());
 
         // Modify the file
-        std::thread::sleep(std::time::Duration::from_millis(10)); // Ensure modification time changes
         {
             let mut file = File::create(&file_path).unwrap();
             file.write_all(b"modified content").unwrap();
+
+            // Set mtime to ensure it's different from original
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
+            file.set_modified(new_time).unwrap();
         }
 
         // Modification check should now return true
