@@ -21,3 +21,7 @@ devenv-cache-core.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[features]
+default = []
+integration-tests = []
