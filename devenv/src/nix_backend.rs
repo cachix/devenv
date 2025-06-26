@@ -71,7 +71,7 @@ pub trait NixBackend {
     async fn assemble(&mut self) -> Result<()>;
 
     /// Get the development environment
-    async fn dev_env(&self, json: bool, gc_root: &PathBuf) -> Result<Output>;
+    async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<Output>;
 
     /// Add a garbage collection root
     async fn add_gc(&self, name: &str, path: &Path) -> Result<()>;

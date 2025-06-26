@@ -124,7 +124,7 @@ impl NixBackend for SnixBackend {
         Ok(())
     }
 
-    async fn dev_env(&self, _json: bool, _gc_root: &PathBuf) -> Result<Output> {
+    async fn dev_env(&self, _json: bool, _gc_root: &Path) -> Result<Output> {
         // TODO: This is a complex operation that requires implementing the equivalent
         // of `nix print-dev-env`. For now, we'll return a placeholder error.
         bail!("dev_env is not yet implemented for Snix backend. This requires implementing shell environment generation.")

@@ -496,7 +496,6 @@ mod tests {
         // Update the deep file
         {
             let mut file = std::fs::OpenOptions::new()
-                .write(true)
                 .append(true)
                 .open(&deep_file_path)
                 .unwrap();

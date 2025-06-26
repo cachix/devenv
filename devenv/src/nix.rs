@@ -69,11 +69,7 @@ impl Nix {
         Ok(())
     }
 
-    pub async fn dev_env(
-        &self,
-        json: bool,
-        gc_root: &PathBuf,
-    ) -> Result<devenv_eval_cache::Output> {
+    pub async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<devenv_eval_cache::Output> {
         // Refresh the cache if the GC root is not a valid path.
         // This can happen if the store path is forcefully removed: GC'd or the Nix store is
         // tampered with.
@@ -842,7 +838,7 @@ impl NixBackend for Nix {
         self.assemble().await
     }
 
-    async fn dev_env(&self, json: bool, gc_root: &PathBuf) -> Result<devenv_eval_cache::Output> {
+    async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<devenv_eval_cache::Output> {
         self.dev_env(json, gc_root).await
     }
 

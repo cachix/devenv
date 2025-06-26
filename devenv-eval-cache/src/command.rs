@@ -763,7 +763,7 @@ mod test {
 
         assert!(matches!(
             check_file_state(&file_row.into()),
-            Ok(FileState::Unchanged { .. })
+            Ok(FileState::Unchanged)
         ));
     }
 

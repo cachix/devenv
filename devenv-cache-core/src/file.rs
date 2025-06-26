@@ -159,7 +159,7 @@ fn compute_directory_hash<P: AsRef<Path>>(path: P) -> CacheResult<Option<String>
                     let entry_type = if meta.is_dir() { "dir" } else { "file" };
                     let modified = meta
                         .modified()
-                        .map(|t| time::system_time_to_unix_seconds(t))
+                        .map(time::system_time_to_unix_seconds)
                         .unwrap_or(0);
 
                     entries.push(format!("{} {} {}", entry_type, modified, entry_path));

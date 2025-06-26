@@ -321,7 +321,7 @@ impl TaskState {
                                 // Update the file states to capture any changes the task made,
                                 // regardless of whether the task succeeded or failed
                                 for path in &self.task.exec_if_modified {
-                                    cache.update_file_state(&self.task.name, &path).await?;
+                                    cache.update_file_state(&self.task.name, path).await?;
                                 }
 
                                 if status.success() {

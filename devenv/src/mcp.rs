@@ -294,9 +294,9 @@ impl DevenvMcpServer {
                 .into_iter()
                 .filter(|p| {
                     p.name.to_lowercase().contains(&search_term.to_lowercase())
-                        || p.description.as_ref().map_or(false, |d| {
-                            d.to_lowercase().contains(&search_term.to_lowercase())
-                        })
+                        || p.description
+                            .as_ref()
+                            .is_some_and(|d| d.to_lowercase().contains(&search_term.to_lowercase()))
                 })
                 .collect()
         } else {
@@ -326,7 +326,7 @@ impl DevenvMcpServer {
                     o.name.to_lowercase().contains(&search_lower)
                         || o.description
                             .as_ref()
-                            .map_or(false, |d| d.to_lowercase().contains(&search_lower))
+                            .is_some_and(|d| d.to_lowercase().contains(&search_lower))
                 })
                 .collect()
         } else {
