@@ -3,16 +3,51 @@
 let
   cfg = config.languages.rust;
 
-  fenix = config.lib.getInput {
-    name = "fenix";
-    url = "github:nix-community/fenix";
-    attribute = "languages.rust.version";
+  rust-overlay = config.lib.getInput {
+    name = "rust-overlay";
+    url = "github:oxalica/rust-overlay";
+    attribute = "languages.rust.input";
     follows = [ "nixpkgs" ];
   };
+
+  cargo2nix = config.lib.getInput {
+    name = "cargo2nix";
+    url = "github:cargo2nix/cargo2nix";
+    attribute = "languages.rust.cargo2nixInput";
+    follows = [ "nixpkgs" ];
+  };
+
+  # https://github.com/nix-community/fenix/blob/cdfd7bf3e3edaf9e3f6d1e397d3ee601e513613c/lib/combine.nix
+  combine = name: paths:
+    pkgs.symlinkJoin {
+      inherit name paths;
+      postBuild = ''
+        for file in $(find $out/bin -xtype f -maxdepth 1); do
+          install -m755 $(realpath "$file") $out/bin
+    
+          if [[ $file =~ /rustfmt$ ]]; then
+            continue
+          fi
+    
+          ${lib.optionalString pkgs.stdenv.isLinux ''
+            if isELF "$file"; then
+              patchelf --set-rpath $out/lib "$file" || true
+            fi
+          ''}
+    
+          ${lib.optionalString pkgs.stdenv.isDarwin ''
+            install_name_tool -add_rpath $out/lib "$file" || true
+          ''}
+        done
+    
+        for file in $(find $out/lib -name "librustc_driver-*"); do
+          install $(realpath "$file") "$file"
+        done
+      '';
+    };
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "languages" "rust" "version" ] [ "languages" "rust" "channel" ])
     (lib.mkRenamedOptionModule [ "languages" "rust" "packages" ] [ "languages" "rust" "toolchain" ])
   ];
 
@@ -34,8 +69,8 @@ in
       default = [ ];
       defaultText = lib.literalExpression ''[ ]'';
       description = ''
-        List of extra [targets](https://github.com/nix-community/fenix#supported-platforms-and-targets)
-        to install. Defaults to only the native target.
+        List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
+        to install. Defaults to only the native target. 
       '';
     };
 
@@ -44,6 +79,16 @@ in
       default = "nixpkgs";
       defaultText = lib.literalExpression ''"nixpkgs"'';
       description = "The rustup toolchain to install.";
+    };
+
+    version = lib.mkOption {
+      type = lib.types.str;
+      default = "latest";
+      defaultText = lib.literalExpression ''"latest"'';
+      description = ''
+        Which version of rust to use, this value could be `latest`,`1.81.0`, `2021-01-01`.
+        Only works when languages.rust.channel is NOT nixpkgs.
+      '';
     };
 
     rustflags = lib.mkOption {
@@ -84,6 +129,81 @@ in
       defaultText = lib.literalExpression "nixpkgs";
       description = "Rust component packages. May optionally define additional components, for example `miri`.";
     };
+
+    import = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule ({ name, config, ... }: {
+        options = {
+          root = lib.mkOption {
+            type = lib.types.path;
+            description = "Path to the directory containing Cargo.toml";
+          };
+
+          workspaceMember = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "Workspace member to build. If null, builds the entire workspace";
+          };
+
+          package = lib.mkOption {
+            type = lib.types.package;
+            readOnly = true;
+            description = "The built package or workspace";
+            default =
+              let
+                cargoNixPath = config.root + "/Cargo.nix";
+                cargoTomlPath = config.root + "/Cargo.toml";
+
+                # Check if Cargo.nix exists
+                cargoNixExists = builtins.pathExists cargoNixPath;
+
+                # Check if Cargo.toml exists
+                cargoTomlExists = builtins.pathExists cargoTomlPath;
+
+                # Use the same rust version as configured
+                rustVersion = if cfg.channel != "nixpkgs" then cfg.version else "latest";
+                rustChannel = cfg.channel;
+
+                rustPkgs = pkgs.rustBuilder.makePackageSet {
+                  rustVersion = if rustChannel == "nixpkgs" then "latest" else rustVersion;
+                  rustChannel = if rustChannel == "nixpkgs" then "stable" else rustChannel;
+                  packageFun = import cargoNixPath;
+                };
+              in
+              assert lib.assertMsg cargoTomlExists
+                "Cargo.toml not found at ${toString cargoTomlPath}. Please ensure the 'root' path points to a directory containing Cargo.toml.";
+              if !cargoNixExists then
+                throw "Cargo.nix not found at ${toString cargoNixPath}. Please run 'devenv tasks run cargo2nix:${name}' to generate it."
+              else if config.workspaceMember != null then
+                rustPkgs.workspace.${config.workspaceMember} { }
+              else
+                rustPkgs.workspace;
+          };
+        };
+      }));
+      default = { };
+      description = ''
+        Import Rust projects using cargo2nix for granular builds.
+        
+        Example:
+        ```nix
+        languages.rust.import = {
+          myProject = {
+            root = ./.; # Directory containing Cargo.toml
+          };
+          
+          anotherProject = {
+            root = ./other;
+            workspaceMember = "my-crate";
+          };
+        };
+        
+        # Then use the packages:
+        packages = [ 
+          config.languages.rust.import.myProject.package
+        ];
+        ```
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -100,6 +220,17 @@ in
 
               The nixpkgs channel does not support cross-compiling with targets.
               Use the stable, beta, or nightly channels instead. For example:
+
+              languages.rust.channel = "stable";
+            '';
+          }
+          {
+            assertion = cfg.channel == "nixpkgs" -> (cfg.version == "latest");
+            message = ''
+              Cannot use `languages.rust.channel = "nixpkgs"` with `languages.rust.version`.
+
+              The nixpkgs channel does not contain all versions required, and is
+              therefore not supported to be used together.
 
               languages.rust.channel = "stable";
             '';
@@ -154,24 +285,38 @@ in
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        rustPackages = fenix.packages.${pkgs.stdenv.system};
-        fenixChannel =
-          if cfg.channel == "nightly"
-          then "latest"
-          else cfg.channel;
-        toolchain = rustPackages.${fenixChannel};
+        toolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages)."${cfg.channel}"."${cfg.version}";
+        filteredToolchain = (lib.filterAttrs (n: _: builtins.elem n toolchain._manifest.profiles.complete) toolchain);
       in
       {
         languages.rust.toolchain =
-          (builtins.mapAttrs (_: pkgs.lib.mkDefault) toolchain);
+          (builtins.mapAttrs (_: pkgs.lib.mkDefault) filteredToolchain);
 
         packages = [
-          (rustPackages.combine (
-            (map (c: toolchain.${c}) cfg.components) ++
-            (map (t: rustPackages.targets.${t}.${fenixChannel}.rust-std) cfg.targets)
+          (combine "rust-mixed" (
+            (map (c: cfg.toolchain.${c}) (cfg.components ++ [ "rust-std" ])) ++
+            (map (t: toolchain._components.${t}.rust-std) cfg.targets)
           ))
         ];
       }
     ))
+
+    (lib.mkIf (cfg.import != { }) {
+      # Apply cargo2nix overlay if not already applied
+      overlays = [ cargo2nix.overlays.default ];
+
+      # Create cargo2nix tasks for each import
+      tasks = lib.mapAttrs'
+        (name: importCfg:
+          lib.nameValuePair "cargo2nix:${name}" {
+            exec = ''
+              echo "Generating Cargo.nix for ${name}..."
+              ${cargo2nix.packages.${pkgs.system}.default}/bin/cargo2nix ${toString importCfg.root}
+            '';
+            description = "Generate Cargo.nix for ${name} project";
+          }
+        )
+        cfg.import;
+    })
   ]);
 }
