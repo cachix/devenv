@@ -1,9 +1,10 @@
+use crate::nix_backend::{self, NixBackend};
 use crate::{cli, config};
+use async_trait::async_trait;
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
 use serde::Deserialize;
 use sqlx::SqlitePool;
-use std::cell::{Ref, RefCell};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -11,92 +12,33 @@ use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
 pub struct Nix {
-    pub options: Options,
+    pub options: nix_backend::Options,
     pool: Option<SqlitePool>,
     database_url: String,
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
-    cachix_caches: RefCell<Option<CachixCaches>>,
-    cachix_trusted_keys: PathBuf,
-    devenv_home_gc: PathBuf,
-    devenv_dot_gc: PathBuf,
-    devenv_dotfile: PathBuf,
-    devenv_root: PathBuf,
-}
-
-#[derive(Debug, Clone)]
-pub struct Options {
-    /// Run `exec` to replace the shell with the command.
-    pub replace_shell: bool,
-    /// Error out if the command returns a non-zero status code.
-    pub bail_on_error: bool,
-    /// Cache the output of the command. This is opt-in per command.
-    pub cache_output: bool,
-    /// Force a refresh of the cached output.
-    pub refresh_cached_output: bool,
-    /// Enable logging.
-    pub logging: bool,
-    /// Log the stdout of the command.
-    pub logging_stdout: bool,
-    /// Extra flags to pass to nix commands.
-    pub nix_flags: &'static [&'static str],
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            replace_shell: false,
-            bail_on_error: true,
-            // Individual commands opt into caching
-            cache_output: false,
-            refresh_cached_output: false,
-            logging: true,
-            logging_stdout: false,
-            nix_flags: &[
-                "--show-trace",
-                "--extra-experimental-features",
-                "nix-command",
-                "--extra-experimental-features",
-                "flakes",
-                "--option",
-                "lazy-trees",
-                "true",
-                "--option",
-                "warn-dirty",
-                "false",
-                "--keep-going",
-            ],
-        }
-    }
+    cachix_caches: Arc<Mutex<Option<CachixCaches>>>,
+    paths: nix_backend::DevenvPaths,
 }
 
 impl Nix {
-    pub async fn new<P: AsRef<Path>>(
+    pub async fn new(
         config: config::Config,
         global_options: cli::GlobalOptions,
-        cachix_trusted_keys: P,
-        devenv_home_gc: P,
-        devenv_dotfile: P,
-        devenv_dot_gc: P,
-        devenv_root: P,
+        paths: nix_backend::DevenvPaths,
     ) -> Result<Self> {
-        let cachix_trusted_keys = cachix_trusted_keys.as_ref().to_path_buf();
-        let devenv_home_gc = devenv_home_gc.as_ref().to_path_buf();
-        let devenv_dotfile = devenv_dotfile.as_ref().to_path_buf();
-        let devenv_dot_gc = devenv_dot_gc.as_ref().to_path_buf();
-        let devenv_root = devenv_root.as_ref().to_path_buf();
-
-        let cachix_caches = RefCell::new(None);
-        let options = Options::default();
+        let cachix_caches = Arc::new(Mutex::new(None));
+        let options = nix_backend::Options::default();
 
         let database_url = format!(
             "sqlite:{}/nix-eval-cache.db",
-            devenv_dotfile.to_string_lossy()
+            paths.dotfile.to_string_lossy()
         );
 
         Ok(Self {
@@ -106,11 +48,7 @@ impl Nix {
             config,
             global_options,
             cachix_caches,
-            cachix_trusted_keys,
-            devenv_home_gc,
-            devenv_dot_gc,
-            devenv_dotfile,
-            devenv_root,
+            paths,
         })
     }
 
@@ -140,7 +78,7 @@ impl Nix {
         // This can happen if the store path is forcefully removed: GC'd or the Nix store is
         // tampered with.
         let refresh_cached_output = fs::canonicalize(gc_root).is_err();
-        let options = Options {
+        let options = nix_backend::Options {
             cache_output: true,
             refresh_cached_output,
             ..self.options
@@ -155,7 +93,7 @@ impl Nix {
             .await?;
 
         // Delete any old generations of this profile.
-        let options = Options {
+        let options = nix_backend::Options {
             logging: false,
             ..self.options
         };
@@ -166,7 +104,7 @@ impl Nix {
         let now_ns = get_now_with_nanoseconds();
         let target = format!("{}-shell", now_ns);
         if let Ok(resolved_gc_root) = fs::canonicalize(gc_root) {
-            symlink_force(&resolved_gc_root, &self.devenv_home_gc.join(target))?;
+            symlink_force(&resolved_gc_root, &self.paths.home_gc.join(target))?;
         } else {
             warn!(
                 "Failed to resolve the GC root path to the Nix store: {}. Try running devenv again with --refresh-eval-cache.",
@@ -182,7 +120,7 @@ impl Nix {
             "nix-store",
             &[
                 "--add-root",
-                self.devenv_dot_gc.join(name).to_str().unwrap(),
+                self.paths.dot_gc.join(name).to_str().unwrap(),
                 "-r",
                 path.to_str().unwrap(),
             ],
@@ -190,7 +128,8 @@ impl Nix {
         )
         .await?;
         let link_path = self
-            .devenv_dot_gc
+            .paths
+            .dot_gc
             .join(format!("{}-{}", name, get_now_with_nanoseconds()));
         symlink_force(path, &link_path)?;
         Ok(())
@@ -205,13 +144,13 @@ impl Nix {
     pub async fn build(
         &self,
         attributes: &[&str],
-        options: Option<Options>,
+        options: Option<nix_backend::Options>,
     ) -> Result<Vec<PathBuf>> {
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
 
-        let options = options.unwrap_or(Options {
+        let options = options.unwrap_or(nix_backend::Options {
             cache_output: true,
             ..self.options
         });
@@ -236,7 +175,7 @@ impl Nix {
     }
 
     pub async fn eval(&self, attributes: &[&str]) -> Result<String> {
-        let options = Options {
+        let options = nix_backend::Options {
             cache_output: true,
             ..self.options
         };
@@ -264,7 +203,7 @@ impl Nix {
     }
 
     pub async fn metadata(&self) -> Result<String> {
-        let options = Options {
+        let options = nix_backend::Options {
             cache_output: true,
             ..self.options
         };
@@ -331,7 +270,7 @@ impl Nix {
         &self,
         command: &str,
         args: &[&str],
-        options: &Options,
+        options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
         let cmd = self.prepare_command(command, args, options)?;
         self.run_nix_command(cmd, options).await
@@ -341,7 +280,7 @@ impl Nix {
         &self,
         command: &str,
         args: &[&str],
-        options: &Options,
+        options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
         let cmd = self
             .prepare_command_with_substituters(command, args, options)
@@ -353,7 +292,7 @@ impl Nix {
     async fn run_nix_command(
         &self,
         mut cmd: std::process::Command,
-        options: &Options,
+        options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::Verbosity;
         use devenv_eval_cache::{supports_eval_caching, CachedCommand};
@@ -390,15 +329,15 @@ impl Nix {
         {
             let pool = self.pool.as_ref().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
-            cached_cmd.with_project_root(&self.devenv_root);
+            cached_cmd.with_project_root(&self.paths.root);
 
-            cached_cmd.watch_path(self.devenv_root.join("devenv.yaml"));
-            cached_cmd.watch_path(self.devenv_root.join("devenv.lock"));
-            cached_cmd.watch_path(self.devenv_dotfile.join("flake.json"));
-            cached_cmd.watch_path(self.devenv_dotfile.join("cli-options.nix"));
+            cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
+            cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
+            cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
+            cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
 
             // Ignore anything in .devenv except for the specifically watched files above.
-            cached_cmd.unwatch_path(&self.devenv_dotfile);
+            cached_cmd.unwatch_path(&self.paths.dotfile);
 
             if self.global_options.refresh_eval_cache || options.refresh_cached_output {
                 cached_cmd.force_refresh();
@@ -509,7 +448,7 @@ impl Nix {
         &self,
         command: &str,
         args: &[&str],
-        options: &Options,
+        options: &nix_backend::Options,
     ) -> Result<std::process::Command> {
         let mut final_args = Vec::new();
         let known_keys_str;
@@ -593,11 +532,11 @@ impl Nix {
         Ok(cmd)
     }
 
-    pub fn prepare_command(
+    fn prepare_command(
         &self,
         command: &str,
         args: &[&str],
-        options: &Options,
+        options: &nix_backend::Options,
     ) -> Result<std::process::Command> {
         let mut flags = options.nix_flags.to_vec();
         flags.push("--max-jobs");
@@ -647,13 +586,13 @@ impl Nix {
             cmd.env("NIX_PATH", ":");
         }
         cmd.args(flags);
-        cmd.current_dir(&self.devenv_root);
+        cmd.current_dir(&self.paths.root);
 
         Ok(cmd)
     }
 
     async fn get_nix_config(&self) -> Result<NixConf> {
-        let options = Options {
+        let options = nix_backend::Options {
             logging: false,
             ..self.options
         };
@@ -662,146 +601,148 @@ impl Nix {
         Ok(nix_conf)
     }
 
-    async fn get_cachix_caches(&self) -> Result<Ref<CachixCaches>> {
-        if self.cachix_caches.borrow().is_none() {
-            let no_logging = Options {
-                logging: false,
-                ..self.options
-            };
-            let caches_raw = self.eval(&["devenv.cachix"]).await?;
-            let cachix_config: CachixConfig =
-                serde_json::from_str(&caches_raw)
-                    .into_diagnostic()
-                    .wrap_err("Failed to parse the cachix configuration")?;
-
-            // Return empty caches if the Cachix integration is disabled
-            if !cachix_config.enable {
-                *self.cachix_caches.borrow_mut() = Some(CachixCaches::default());
-                return Ok(Ref::map(self.cachix_caches.borrow(), |option| {
-                    option.as_ref().unwrap()
-                }));
+    async fn get_cachix_caches(&self) -> Result<CachixCaches> {
+        // Check if cache exists
+        {
+            let cache_guard = self.cachix_caches.lock().unwrap();
+            if cache_guard.is_some() {
+                return Ok(cache_guard.as_ref().unwrap().clone());
             }
+        }
 
-            let known_keys: BTreeMap<String, String> =
-                std::fs::read_to_string(self.cachix_trusted_keys.as_path())
-                    .into_diagnostic()
-                    .and_then(|content| serde_json::from_str(&content).into_diagnostic())
-                    .unwrap_or_else(|e| {
-                        if let Some(source) =
-                            e.chain().find_map(|s| s.downcast_ref::<std::io::Error>())
-                        {
-                            if source.kind() != std::io::ErrorKind::NotFound {
-                                error!(
-                                    "Failed to load cachix trusted keys from {}:\n{}.",
-                                    self.cachix_trusted_keys.display(),
-                                    e
-                                );
-                            }
-                        }
-                        BTreeMap::new()
-                    });
+        // Cache doesn't exist, need to populate it
+        let no_logging = nix_backend::Options {
+            logging: false,
+            ..self.options
+        };
+        let caches_raw = self.eval(&["devenv.cachix"]).await?;
+        let cachix_config: CachixConfig = serde_json::from_str(&caches_raw)
+            .into_diagnostic()
+            .wrap_err("Failed to parse the cachix configuration")?;
 
-            let mut caches = CachixCaches {
-                caches: cachix_config.caches,
-                known_keys,
-            };
+        // Return empty caches if the Cachix integration is disabled
+        if !cachix_config.enable {
+            let caches = CachixCaches::default();
+            let mut cache_guard = self.cachix_caches.lock().unwrap();
+            *cache_guard = Some(caches.clone());
+            return Ok(caches);
+        }
 
-            let client = reqwest::Client::builder()
-                .use_preconfigured_tls(http_client_tls::tls_config())
-                .build()
+        let known_keys: BTreeMap<String, String> =
+            std::fs::read_to_string(self.paths.cachix_trusted_keys.as_path())
                 .into_diagnostic()
-                .wrap_err("Failed to create HTTP client to query the Cachix API")?;
-            let mut new_known_keys: BTreeMap<String, String> = BTreeMap::new();
-            for name in caches.caches.pull.iter() {
-                if !caches.known_keys.contains_key(name) {
-                    let mut request =
-                        client.get(format!("https://cachix.org/api/v1/cache/{}", name));
-                    if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
-                        request = request.bearer_auth(ret);
+                .and_then(|content| serde_json::from_str(&content).into_diagnostic())
+                .unwrap_or_else(|e| {
+                    if let Some(source) = e.chain().find_map(|s| s.downcast_ref::<std::io::Error>())
+                    {
+                        if source.kind() != std::io::ErrorKind::NotFound {
+                            error!(
+                                "Failed to load cachix trusted keys from {}:\n{}.",
+                                self.paths.cachix_trusted_keys.display(),
+                                e
+                            );
+                        }
                     }
-                    let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
-                        format!("Failed to fetch information for cache '{}'", name)
-                    })?;
-                    if resp.status().is_client_error() {
-                        error!(
-                            "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
-                            name
-                        );
-                        error!("To create a cache, go to https://app.cachix.org/.");
-                        bail!(
-                            "Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured."
-                        )
-                    } else {
-                        let resp_json: CachixResponse =
-                            resp.json().await.into_diagnostic().wrap_err_with(|| {
-                                format!("Failed to parse Cachix API response for cache '{name}'")
-                            })?;
-                        new_known_keys
-                            .insert(name.clone(), resp_json.public_signing_keys[0].clone());
-                    }
+                    BTreeMap::new()
+                });
+
+        let mut caches = CachixCaches {
+            caches: cachix_config.caches,
+            known_keys,
+        };
+
+        let client = reqwest::Client::builder()
+            .use_preconfigured_tls(http_client_tls::tls_config())
+            .build()
+            .into_diagnostic()
+            .wrap_err("Failed to create HTTP client to query the Cachix API")?;
+        let mut new_known_keys: BTreeMap<String, String> = BTreeMap::new();
+        for name in caches.caches.pull.iter() {
+            if !caches.known_keys.contains_key(name) {
+                let mut request = client.get(format!("https://cachix.org/api/v1/cache/{}", name));
+                if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
+                    request = request.bearer_auth(ret);
+                }
+                let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
+                    format!("Failed to fetch information for cache '{}'", name)
+                })?;
+                if resp.status().is_client_error() {
+                    error!(
+                        "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
+                        name
+                    );
+                    error!("To create a cache, go to https://app.cachix.org/.");
+                    bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
+                } else {
+                    let resp_json: CachixResponse =
+                        resp.json().await.into_diagnostic().wrap_err_with(|| {
+                            format!("Failed to parse Cachix API response for cache '{name}'")
+                        })?;
+                    new_known_keys.insert(name.clone(), resp_json.public_signing_keys[0].clone());
                 }
             }
+        }
 
-            if !caches.caches.pull.is_empty() {
-                let store = self
-                    .run_nix("nix", &["store", "ping", "--json"], &no_logging)
-                    .await?;
-                let store_ping = serde_json::from_slice::<StorePing>(&store.stdout)
-                    .into_diagnostic()
-                    .wrap_err("Failed to query the Nix store")?;
-                let trusted = store_ping.trusted;
-                if trusted.is_none() {
-                    warn!(
+        if !caches.caches.pull.is_empty() {
+            let store = self
+                .run_nix("nix", &["store", "ping", "--json"], &no_logging)
+                .await?;
+            let store_ping = serde_json::from_slice::<StorePing>(&store.stdout)
+                .into_diagnostic()
+                .wrap_err("Failed to query the Nix store")?;
+            let trusted = store_ping.trusted;
+            if trusted.is_none() {
+                warn!(
                         "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
                     );
+            }
+            let restart_command = if cfg!(target_os = "linux") {
+                "sudo systemctl restart nix-daemon"
+            } else {
+                "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
+            };
+
+            info!(
+                devenv.is_user_message = true,
+                "Using Cachix: {}",
+                caches.caches.pull.join(", "),
+            );
+            if !new_known_keys.is_empty() {
+                for (name, pubkey) in new_known_keys.iter() {
+                    info!(
+                        "Trusting {}.cachix.org on first use with the public key {}",
+                        name, pubkey
+                    );
                 }
-                let restart_command = if cfg!(target_os = "linux") {
-                    "sudo systemctl restart nix-daemon"
-                } else {
-                    "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
-                };
+                caches.known_keys.extend(new_known_keys);
+            }
 
-                info!(
-                    devenv.is_user_message = true,
-                    "Using Cachix: {}",
-                    caches.caches.pull.join(", "),
-                );
-                if !new_known_keys.is_empty() {
-                    for (name, pubkey) in new_known_keys.iter() {
-                        info!(
-                            "Trusting {}.cachix.org on first use with the public key {}",
-                            name, pubkey
-                        );
-                    }
-                    caches.known_keys.extend(new_known_keys);
-                }
+            serde_json::to_string(&caches.known_keys)
+                .into_diagnostic()
+                .and_then(|json_content| {
+                    std::fs::write(self.paths.cachix_trusted_keys.as_path(), json_content)
+                        .into_diagnostic()
+                })
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to write cachix trusted keys to {}",
+                        self.paths.cachix_trusted_keys.display()
+                    )
+                })?;
 
-                serde_json::to_string(&caches.known_keys)
-                    .into_diagnostic()
-                    .and_then(|json_content| {
-                        std::fs::write(self.cachix_trusted_keys.as_path(), json_content)
-                            .into_diagnostic()
-                    })
-                    .wrap_err_with(|| {
-                        format!(
-                            "Failed to write cachix trusted keys to {}",
-                            self.cachix_trusted_keys.display()
-                        )
-                    })?;
+            // If the user is not a trusted user, we can't set up the caches for them.
+            // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
+            // If not, suggest actions to remedy the issue.
+            if trusted == Some(0) {
+                let (missing_caches, missing_public_keys) = self
+                    .get_nix_config()
+                    .await
+                    .map(|nix_conf| detect_missing_caches(&caches, nix_conf))
+                    .unwrap_or_default();
 
-                // If the user is not a trusted user, we can't set up the caches for them.
-                // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
-                // If not, suggest actions to remedy the issue.
-                if trusted == Some(0) {
-                    let (missing_caches, missing_public_keys) = self
-                        .get_nix_config()
-                        .await
-                        .map(|nix_conf| detect_missing_caches(&caches, nix_conf))
-                        .unwrap_or_default();
-
-                    if !missing_caches.is_empty() || !missing_public_keys.is_empty() {
-                        if !Path::new("/etc/NIXOS").exists() {
-                            error!("{}", indoc::formatdoc!(
+                if !missing_caches.is_empty() || !missing_public_keys.is_empty() {
+                    if !Path::new("/etc/NIXOS").exists() {
+                        error!("{}", indoc::formatdoc!(
                         "Failed to set up binary caches:
 
                            {}
@@ -834,8 +775,8 @@ impl Nix {
                     , missing_caches.join(" ")
                     , missing_public_keys.join(" ")
                     ));
-                        } else {
-                            error!("{}", indoc::formatdoc!(
+                    } else {
+                        error!("{}", indoc::formatdoc!(
                         "Failed to set up binary caches:
 
                            {}
@@ -878,19 +819,80 @@ impl Nix {
                     , missing_caches.join(" ")
                     , missing_public_keys.join(" ")
                     ));
-                        }
-
-                        bail!("You're not a trusted user of the Nix store.")
                     }
+
+                    bail!("You're not a trusted user of the Nix store.")
                 }
             }
-
-            *self.cachix_caches.borrow_mut() = Some(caches);
         }
 
-        Ok(Ref::map(self.cachix_caches.borrow(), |option| {
-            option.as_ref().unwrap()
-        }))
+        let mut cache_guard = self.cachix_caches.lock().unwrap();
+        *cache_guard = Some(caches.clone());
+        Ok(caches)
+    }
+
+    fn name(&self) -> &'static str {
+        "nix"
+    }
+}
+
+#[async_trait(?Send)]
+impl NixBackend for Nix {
+    async fn assemble(&mut self) -> Result<()> {
+        self.assemble().await
+    }
+
+    async fn dev_env(&self, json: bool, gc_root: &PathBuf) -> Result<devenv_eval_cache::Output> {
+        self.dev_env(json, gc_root).await
+    }
+
+    async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
+        self.add_gc(name, path).await
+    }
+
+    fn repl(&self) -> Result<()> {
+        self.repl()
+    }
+
+    async fn build(
+        &self,
+        attributes: &[&str],
+        options: Option<nix_backend::Options>,
+    ) -> Result<Vec<PathBuf>> {
+        self.build(attributes, options).await
+    }
+
+    async fn eval(&self, attributes: &[&str]) -> Result<String> {
+        self.eval(attributes).await
+    }
+
+    async fn update(&self, input_name: &Option<String>) -> Result<()> {
+        self.update(input_name).await
+    }
+
+    async fn metadata(&self) -> Result<String> {
+        self.metadata().await
+    }
+
+    async fn search(&self, name: &str) -> Result<devenv_eval_cache::Output> {
+        self.search(name).await
+    }
+
+    fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
+        self.gc(paths)
+    }
+
+    fn name(&self) -> &'static str {
+        self.name()
+    }
+
+    async fn run_nix(
+        &self,
+        command: &str,
+        args: &[&str],
+        options: &nix_backend::Options,
+    ) -> Result<devenv_eval_cache::Output> {
+        self.run_nix(command, args, options).await
     }
 }
 

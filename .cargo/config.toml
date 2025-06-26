@@ -1,2 +1,5 @@
 [alias]
 xtask = "run --package xtask --"
+
+[env]
+SNIX_BUILD_SANDBOX_SHELL = "/path/to/sandbox/shell"

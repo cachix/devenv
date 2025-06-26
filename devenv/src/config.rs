@@ -6,6 +6,20 @@ use std::{collections::BTreeMap, fmt, path::Path};
 
 const YAML_CONFIG: &str = "devenv.yaml";
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema, schematic::Schematic)]
+#[serde(rename_all = "lowercase")]
+pub enum NixBackendType {
+    Nix,
+    #[cfg(feature = "snix")]
+    Snix,
+}
+
+impl Default for NixBackendType {
+    fn default() -> Self {
+        NixBackendType::Nix
+    }
+}
+
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[config(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
@@ -142,6 +156,8 @@ pub struct Config {
     pub clean: Option<Clean>,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub impure: bool,
+    #[serde(default)]
+    pub backend: NixBackendType,
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105

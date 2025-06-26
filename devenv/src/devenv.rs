@@ -1,11 +1,11 @@
-use super::{cli, cnix, config, tasks, util};
+use super::{cli, config, nix_backend, tasks, util};
+use ::nix::sys::signal;
+use ::nix::unistd::Pid;
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
 use miette::{bail, Context, IntoDiagnostic, Result};
-use nix::sys::signal;
-use nix::unistd::Pid;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
@@ -66,7 +66,7 @@ pub struct Devenv {
     pub config: config::Config,
     pub global_options: cli::GlobalOptions,
 
-    pub nix: cnix::Nix,
+    pub nix: Box<dyn nix_backend::NixBackend>,
 
     // All kinds of paths
     devenv_root: PathBuf,
@@ -121,17 +121,35 @@ impl Devenv {
         std::fs::create_dir_all(&devenv_home_gc)
             .expect("Failed to create DEVENV_HOME_GC directory");
 
-        let nix = cnix::Nix::new(
-            options.config.clone(),
-            global_options.clone(),
+        // Determine backend type from config
+        let backend_type = options.config.backend.clone();
+
+        // Create DevenvPaths struct
+        let paths = nix_backend::DevenvPaths {
+            root: devenv_root.clone(),
+            dotfile: devenv_dotfile.clone(),
+            dot_gc: devenv_dot_gc.clone(),
+            home_gc: devenv_home_gc.clone(),
             cachix_trusted_keys,
-            devenv_home_gc.clone(),
-            devenv_dotfile.clone(),
-            devenv_dot_gc.clone(),
-            devenv_root.clone(),
-        )
-        .await
-        .expect("Failed to initialize Nix");
+        };
+
+        let nix: Box<dyn nix_backend::NixBackend> = match backend_type {
+            config::NixBackendType::Nix => Box::new(
+                crate::nix::Nix::new(options.config.clone(), global_options.clone(), paths)
+                    .await
+                    .expect("Failed to initialize Nix backend"),
+            ),
+            #[cfg(feature = "snix")]
+            config::NixBackendType::Snix => Box::new(
+                crate::snix_backend::SnixBackend::new(
+                    options.config.clone(),
+                    global_options.clone(),
+                    paths,
+                )
+                .await
+                .expect("Failed to initialize Snix backend"),
+            ),
+        };
 
         Self {
             config: options.config,
@@ -228,10 +246,10 @@ impl Devenv {
 
     // TODO: fetch bash from the module system
     async fn get_bash(&mut self, refresh_cached_output: bool) -> Result<String> {
-        let options = cnix::Options {
+        let options = nix_backend::Options {
             cache_output: true,
             refresh_cached_output,
-            ..self.nix.options
+            ..Default::default()
         };
         let bash_attr = format!(
             "nixpkgs#legacyPackages.{}.bashInteractive.out",
@@ -555,7 +573,7 @@ impl Devenv {
     pub async fn search(&mut self, name: &str) -> Result<()> {
         self.assemble(false).await?;
 
-        let build_options = cnix::Options {
+        let build_options = nix_backend::Options {
             logging: false,
             cache_output: true,
             ..Default::default()
