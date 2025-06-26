@@ -9,6 +9,14 @@
     "allowUnfree": {
       "type": "boolean"
     },
+    "backend": {
+      "default": "nix",
+      "allOf": [
+        {
+          "$ref": "#/definitions/NixBackendType"
+        }
+      ]
+    },
     "clean": {
       "anyOf": [
         {
@@ -101,6 +109,12 @@
           ]
         }
       }
+    },
+    "NixBackendType": {
+      "type": "string",
+      "enum": [
+        "nix"
+      ]
     },
     "Nixpkgs": {
       "type": "object",
