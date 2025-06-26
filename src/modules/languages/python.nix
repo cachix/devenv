@@ -445,6 +445,8 @@ in
       UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
       # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
       UV_PYTHON_DOWNLOADS = "never";
+      # Force uv to always use the correct python interpreter.
+      UV_PYTHON = "${cfg.package.interpreter}";
     }) // (lib.optionalAttrs cfg.poetry.enable {
       # Make poetry use DEVENV_ROOT/.venv
       POETRY_VIRTUALENVS_IN_PROJECT = "true";
