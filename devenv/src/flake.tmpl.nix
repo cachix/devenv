@@ -8,6 +8,7 @@
       pre-commit-hooks.follows = "git-hooks";
       nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
       devenv.url = "github:cachix/devenv?dir=src/modules";
+      self.submodules = true;
       } // (if builtins.pathExists (devenv_dotfile + "/flake.json")
       then builtins.fromJSON (builtins.readFile (devenv_dotfile +  "/flake.json"))
       else { });
