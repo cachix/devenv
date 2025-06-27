@@ -15301,7 +15301,7 @@ string
 
 
 
-List of extra [targets](https://github.com/nix-community/fenix\#supported-platforms-and-targets)
+List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
 to install. Defaults to only the native target.
 
 
@@ -15439,6 +15439,28 @@ null or package
 
 *Default:*
 ` pkgs.rustfmt `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.version
+
+
+
+Which version of rust to use, this value could be ` latest `,` 1.81.0 `, ` 2021-01-01 `.
+Only works when languages.rust.channel is NOT nixpkgs.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "latest" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
