@@ -134,6 +134,11 @@ let
         UV_SYNC_COMMAND+=(--all-extras)
       ''}
 
+      # Add groups if specified
+      ${lib.concatMapStrings (group: ''
+        UV_SYNC_COMMAND+=(--group "${group}")
+      '') cfg.uv.sync.groups}
+
       # Avoid running "uv sync" for every shell.
       # Only run it when the "pyproject.toml" file or Python interpreter has changed.
       local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
@@ -332,6 +337,11 @@ in
           type = lib.types.bool;
           default = false;
           description = "Whether to install all extras. See `--all-extras`.";
+        };
+        groups = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Which dependency groups to install. See `--group`.";
         };
       };
     };

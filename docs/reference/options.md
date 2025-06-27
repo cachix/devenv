@@ -14717,6 +14717,27 @@ list of string
 
 
 
+## languages.python.uv.sync.groups
+
+
+
+Which dependency groups to install. See ` --group `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.venv.enable
 
 
