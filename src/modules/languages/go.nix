@@ -1,11 +1,16 @@
-{ pkgs, config, lib, ... }:
+{ pkgs
+, config
+, lib
+, ...
+}:
 
 let
   cfg = config.languages.go;
 
   # Override the buildGoModule function to use the specified Go package.
   buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
-  buildWithSpecificGo = pkg:
+  buildWithSpecificGo =
+    pkg:
     let
       overrideArgs = lib.functionArgs pkg.override;
     in
@@ -27,6 +32,41 @@ in
       description = "The Go package to use.";
     };
 
+    tools = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Enable Go tools (lsp, debugger & various linter) which 
+          must be built with the same Go `package`.
+        '';
+      };
+
+      # LSP and other tools (and vs-code) should be compiled with the same Go version.
+      # see: https://github.com/golang/vscode-go/blob/72249dc940e5b6ec97b08e6690a5f042644e2bb5/src/goInstallTools.ts#L721
+      # see: https://github.com/golang/tools/blob/master/gopls/README.md
+      packages = lib.mkOption {
+        type = lib.types.listOf lib.types.package;
+        example = lib.literalExpression "[ pkgs.gopls ]";
+        default = [
+          # Debugger, 
+          pkgs.delve
+          # LSP,
+          pkgs.gopls
+          pkgs.gotools
+          pkgs.gomodifytags
+          # pkgs.impl,
+          pkgs.go-tools
+          pkgs.golines
+          pkgs.gotests
+          pkgs.iferr
+        ];
+        description = ''
+          Go packages which need to be built with the chosen Go version.
+        '';
+      };
+    };
+
     enableHardeningWorkaround = lib.mkOption {
       type = lib.types.bool;
       default = false;
@@ -37,21 +77,9 @@ in
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-
-      # Required by vscode-go
-      (buildWithSpecificGo pkgs.delve)
-
-      # vscode-go expects all tool compiled with the same used go version, see: https://github.com/golang/vscode-go/blob/72249dc940e5b6ec97b08e6690a5f042644e2bb5/src/goInstallTools.ts#L721
-      (buildWithSpecificGo pkgs.gotools)
-      (buildWithSpecificGo pkgs.gomodifytags)
-      (buildWithSpecificGo pkgs.impl)
-      (buildWithSpecificGo pkgs.go-tools)
-      (buildWithSpecificGo pkgs.gopls)
-      (buildWithSpecificGo pkgs.gotests)
-
-      # Required by vim-go
-      (buildWithSpecificGo pkgs.iferr)
-    ];
+    ] ++
+    lib.optionals (cfg.tools.enable)
+      (lib.map (p: buildWithSpecificGo p) cfg.tools.packages);
 
     hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
 
