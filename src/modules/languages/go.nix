@@ -62,7 +62,7 @@ in
           pkgs.iferr
         ];
         description = ''
-          Go packages which need to be built with the chosen Go version.
+          Go packages which need to be built with the chosen Go package.
         '';
       };
     };
