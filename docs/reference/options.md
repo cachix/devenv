@@ -12374,6 +12374,66 @@ package
 
 
 
+## languages.go.tools.enable
+
+
+
+Enable Go tools (lsp, debugger \& various linter) which
+must be built with the same Go ` package `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
+## languages.go.tools.packages
+
+
+
+Go packages which need to be built with the chosen Go package.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+
+```
+[
+  <derivation delve-1.24.2>
+  <derivation gopls-0.18.1>
+  <derivation gotools-0.30.0>
+  <derivation gomodifytags-1.17.0>
+  <derivation go-tools-2025.1.1>
+  <derivation golines-0.12.2>
+  <derivation gotests-1.6.0>
+  <derivation iferr-0-unstable-2024-01-22>
+]
+```
+
+
+
+*Example:*
+` [ pkgs.gopls ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
+
+
 ## languages.haskell.enable
 
 
