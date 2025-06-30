@@ -37,7 +37,7 @@ in
         type = lib.types.bool;
         default = true;
         description = ''
-          Enable Go tools (lsp, debugger & various linter) which 
+          Enable Go tools (lsp, debugger & various linter) which
           must be built with the same Go `package`.
         '';
       };
@@ -46,10 +46,20 @@ in
       # see: https://github.com/golang/vscode-go/blob/72249dc940e5b6ec97b08e6690a5f042644e2bb5/src/goInstallTools.ts#L721
       # see: https://github.com/golang/tools/blob/master/gopls/README.md
       packages = lib.mkOption {
+        type = lib.types.nullOr lib.types.listOf lib.types.package;
+        example = lib.literalExpression "[ pkgs.gopls ]";
+        default = null;
+        description = ''
+          Go packages which need to be built with the chosen Go package.
+          If `null`, then `defaultPackages` will be used.
+        '';
+      };
+
+      defaultPackages = lib.mkOption {
         type = lib.types.listOf lib.types.package;
         example = lib.literalExpression "[ pkgs.gopls ]";
         default = [
-          # Debugger, 
+          # Debugger,
           pkgs.delve
           # LSP,
           pkgs.gopls
@@ -75,11 +85,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [
-      cfg.package
-    ] ++
-    lib.optionals (cfg.tools.enable)
-      (lib.map (p: buildWithSpecificGo p) cfg.tools.packages);
+    packages =
+      [
+        cfg.package
+      ]
+      ++ lib.optionals (cfg.tools.enable) (
+        lib.map (p: buildWithSpecificGo p) (cfg.tools.packages or cfg.tools.defaultPackages)
+      );
 
     hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
 
