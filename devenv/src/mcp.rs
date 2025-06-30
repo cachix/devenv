@@ -82,14 +82,14 @@ impl DevenvMcpServer {
             devenv_root: self.devenv_root.clone(),
             ..Default::default()
         };
-        let mut devenv = Devenv::new(devenv_options).await;
+        let devenv = Devenv::new(devenv_options).await;
 
         // Assemble the devenv to create required flake files
         devenv.assemble(true).await?;
 
         // Use broad search term to get a wide set of packages
         // We'll limit results later if needed
-        let search_output = devenv.nix.search(".*").await?;
+        let search_output = devenv.nix.lock().await.search(".*").await?;
 
         // Parse the search results from JSON
         #[derive(Deserialize)]
@@ -136,7 +136,7 @@ impl DevenvMcpServer {
             devenv_root: self.devenv_root.clone(),
             ..Default::default()
         };
-        let mut devenv = Devenv::new(devenv_options).await;
+        let devenv = Devenv::new(devenv_options).await;
 
         // Assemble the devenv to create required flake files
         devenv.assemble(true).await?;
@@ -150,6 +150,8 @@ impl DevenvMcpServer {
 
         let options_paths = devenv
             .nix
+            .lock()
+            .await
             .build(&["optionsJSON"], Some(build_options))
             .await?;
 

@@ -15,9 +15,14 @@ use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
+use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 // templates
@@ -63,10 +68,10 @@ pub struct ProcessOptions<'a> {
 }
 
 pub struct Devenv {
-    pub config: config::Config,
+    pub config: Arc<Mutex<config::Config>>,
     pub global_options: cli::GlobalOptions,
 
-    pub nix: Box<dyn nix_backend::NixBackend>,
+    pub nix: Arc<Mutex<Box<dyn nix_backend::NixBackend>>>,
 
     // All kinds of paths
     devenv_root: PathBuf,
@@ -76,8 +81,11 @@ pub struct Devenv {
     devenv_tmp: String,
     devenv_runtime: PathBuf,
 
-    assembled: bool,
-    has_processes: Option<bool>,
+    assembled: Arc<AtomicBool>,
+    has_processes: Arc<RwLock<Option<bool>>>,
+
+    // Coordination primitives
+    assemble_lock: Arc<Semaphore>,
 
     // TODO: make private.
     // Pass as an arg or have a setter.
@@ -153,7 +161,7 @@ impl Devenv {
         };
 
         Self {
-            config: options.config,
+            config: Arc::new(Mutex::new(options.config)),
             global_options,
             devenv_root,
             devenv_dotfile,
@@ -161,9 +169,10 @@ impl Devenv {
             devenv_home_gc,
             devenv_tmp,
             devenv_runtime,
-            nix,
-            assembled: false,
-            has_processes: None,
+            nix: Arc::new(Mutex::new(nix)),
+            assembled: Arc::new(AtomicBool::new(false)),
+            has_processes: Arc::new(RwLock::new(None)),
+            assemble_lock: Arc::new(Semaphore::new(1)),
             container_name: None,
         }
     }
@@ -230,13 +239,16 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn inputs_add(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
-        self.config.add_input(name, url, follows)?;
-        self.config.write().await?;
+    pub async fn inputs_add(&self, name: &str, url: &str, follows: &[String]) -> Result<()> {
+        {
+            let mut config = self.config.lock().await;
+            config.add_input(name, url, follows)?;
+            config.write().await?;
+        }
         Ok(())
     }
 
-    pub async fn print_dev_env(&mut self, json: bool) -> Result<()> {
+    pub async fn print_dev_env(&self, json: bool) -> Result<()> {
         let env = self.get_dev_environment(json).await?;
         print!(
             "{}",
@@ -246,7 +258,7 @@ impl Devenv {
     }
 
     // TODO: fetch bash from the module system
-    async fn get_bash(&mut self, refresh_cached_output: bool) -> Result<String> {
+    async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
         let options = nix_backend::Options {
             cache_output: true,
             refresh_cached_output,
@@ -258,6 +270,8 @@ impl Devenv {
         );
         String::from_utf8(
             self.nix
+                .lock()
+                .await
                 .run_nix(
                     "nix",
                     &[
@@ -285,7 +299,7 @@ impl Devenv {
 
     #[instrument(skip(self))]
     pub async fn prepare_shell(
-        &mut self,
+        &self,
         cmd: &Option<String>,
         args: &[String],
     ) -> Result<process::Command> {
@@ -345,7 +359,7 @@ impl Devenv {
             .await
             .expect("Failed to set permissions");
 
-        let config_clean = self.config.clean.clone().unwrap_or_default();
+        let config_clean = self.config.lock().await.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
             let keep = match &self.global_options.clean {
                 Some(clean) => clean,
@@ -366,14 +380,14 @@ impl Devenv {
         Ok(shell_cmd)
     }
 
-    pub async fn shell(mut self) -> Result<()> {
+    pub async fn shell(self) -> Result<()> {
         let shell_cmd = self.prepare_shell(&None, &[]).await?;
         let span = info_span!("entering_shell", devenv.user_message = "Entering shell",);
         let _ = shell_cmd.into_std().exec().instrument(span);
         Ok(())
     }
 
-    pub async fn exec_in_shell(&mut self, cmd: String, args: &[String]) -> Result<Output> {
+    pub async fn exec_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
         let span = info_span!(
             "executing_in_shell",
@@ -392,7 +406,7 @@ impl Devenv {
         .await
     }
 
-    pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
+    pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
         self.assemble(false).await?;
 
         let msg = match input_name {
@@ -401,12 +415,17 @@ impl Devenv {
         };
 
         let span = info_span!("update", devenv.user_message = msg);
-        self.nix.update(input_name).instrument(span).await?;
+        self.nix
+            .lock()
+            .await
+            .update(input_name)
+            .instrument(span)
+            .await?;
 
         Ok(())
     }
 
-    pub async fn container_build(&mut self, name: &str) -> Result<String> {
+    pub async fn container_build(&self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
             bail!(
                 "Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430"
@@ -423,6 +442,8 @@ impl Devenv {
 
             let container_store_path = self
                 .nix
+                .lock()
+                .await
                 .build(&[&format!("devenv.containers.{name}.derivation")], None)
                 .await?;
             let container_store_path = container_store_path[0]
@@ -436,7 +457,7 @@ impl Devenv {
     }
 
     pub async fn container_copy(
-        &mut self,
+        &self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
@@ -452,6 +473,8 @@ impl Devenv {
         async move {
             let copy_script = self
                 .nix
+                .lock()
+                .await
                 .build(&[&format!("devenv.containers.{name}.copyScript")], None)
                 .await?;
             let copy_script = &copy_script[0];
@@ -484,7 +507,7 @@ impl Devenv {
     }
 
     pub async fn container_run(
-        &mut self,
+        &self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
@@ -503,6 +526,8 @@ impl Devenv {
         async move {
             let run_script = self
                 .nix
+                .lock()
+                .await
                 .build(&[&format!("devenv.containers.{name}.dockerRun")], None)
                 .await?;
 
@@ -521,12 +546,12 @@ impl Devenv {
         .await
     }
 
-    pub async fn repl(&mut self) -> Result<()> {
+    pub async fn repl(&self) -> Result<()> {
         self.assemble(false).await?;
-        self.nix.repl()
+        self.nix.lock().await.repl()
     }
 
-    pub fn gc(&mut self) -> Result<()> {
+    pub fn gc(&self) -> Result<()> {
         let start = std::time::Instant::now();
 
         let (to_gc, removed_symlinks) = {
@@ -557,7 +582,13 @@ impl Devenv {
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
             );
-            span.in_scope(|| self.nix.gc(to_gc))?;
+            // Use tokio::task::block_in_place for sync-async bridge
+            span.in_scope(|| {
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current()
+                        .block_on(async { self.nix.lock().await.gc(to_gc) })
+                })
+            })?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
@@ -572,7 +603,7 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn search(&mut self, name: &str) -> Result<()> {
+    pub async fn search(&self, name: &str) -> Result<()> {
         self.assemble(false).await?;
 
         let build_options = nix_backend::Options {
@@ -582,6 +613,8 @@ impl Devenv {
         };
         let options = self
             .nix
+            .lock()
+            .await
             .build(&["optionsJSON"], Some(build_options))
             .await?;
         let options_path = options[0]
@@ -608,7 +641,7 @@ impl Devenv {
             .collect::<Vec<_>>();
         let results_options_count = options_results.len();
 
-        let search = self.nix.search(name).await?;
+        let search = self.nix.lock().await.search(name).await?;
         let search_json: PackageResults =
             serde_json::from_slice(&search.stdout).expect("Failed to parse search results");
         let search_results = search_json
@@ -639,16 +672,22 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn has_processes(&mut self) -> Result<bool> {
-        if self.has_processes.is_none() {
-            let processes = self.nix.eval(&["devenv.processes"]).await?;
-            self.has_processes = Some(processes.trim() != "{}");
+    pub async fn has_processes(&self) -> Result<bool> {
+        {
+            let has_processes_guard = self.has_processes.read().await;
+            if has_processes_guard.is_none() {
+                drop(has_processes_guard);
+                let processes = self.nix.lock().await.eval(&["devenv.processes"]).await?;
+                let mut has_processes_write = self.has_processes.write().await;
+                *has_processes_write = Some(processes.trim() != "{}");
+                return Ok(has_processes_write.unwrap());
+            }
+            Ok(has_processes_guard.unwrap())
         }
-        Ok(self.has_processes.unwrap())
     }
 
     pub async fn tasks_run(
-        &mut self,
+        &self,
         roots: Vec<String>,
         run_mode: devenv_tasks::RunMode,
     ) -> Result<()> {
@@ -670,6 +709,8 @@ impl Devenv {
             // TODO: No newline
             let span = info_span!("tasks_run", devenv.user_message = "Evaluating tasks");
             self.nix
+                .lock()
+                .await
                 .build(&["devenv.task.config"], None)
                 .instrument(span)
                 .await?
@@ -714,7 +755,7 @@ impl Devenv {
         Ok(())
     }
 
-    async fn capture_shell_environment(&mut self) -> Result<HashMap<String, String>> {
+    async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
         let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
             .wrap_err("Failed to create temporary directory for environment capture")?;
@@ -769,7 +810,7 @@ impl Devenv {
             }
         }
 
-        let config_clean = self.config.clean.clone().unwrap_or_default();
+        let config_clean = self.config.lock().await.clean.clone().unwrap_or_default();
         let mut envs: HashMap<String, String> = {
             let vars = std::env::vars();
             if self.global_options.clean.is_some() || config_clean.enabled {
@@ -790,7 +831,7 @@ impl Devenv {
         Ok(envs)
     }
 
-    pub async fn test(&mut self) -> Result<()> {
+    pub async fn test(&self) -> Result<()> {
         self.assemble(true).await?;
 
         // collect tests
@@ -852,20 +893,20 @@ impl Devenv {
         }
     }
 
-    pub async fn info(&mut self) -> Result<()> {
+    pub async fn info(&self) -> Result<()> {
         self.assemble(false).await?;
-        let output = self.nix.metadata().await?;
+        let output = self.nix.lock().await.metadata().await?;
         println!("{}", output);
         Ok(())
     }
 
-    pub async fn build(&mut self, attributes: &[String]) -> Result<()> {
+    pub async fn build(&self, attributes: &[String]) -> Result<()> {
         let span = info_span!("build", devenv.user_message = "Building");
         async move {
             self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
                 // construct dotted names of all attributes that we need to build
-                let build_output = self.nix.eval(&["build"]).await?;
+                let build_output = self.nix.lock().await.eval(&["build"]).await?;
                 serde_json::from_str::<serde_json::Value>(&build_output)
                     .map_err(|e| miette::miette!("Failed to parse build output: {}", e))?
                     .as_object()
@@ -894,6 +935,8 @@ impl Devenv {
             };
             let paths = self
                 .nix
+                .lock()
+                .await
                 .build(
                     &attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
                     None,
@@ -909,7 +952,7 @@ impl Devenv {
     }
 
     pub async fn up<'a>(
-        &mut self,
+        &self,
         processes: Vec<String>,
         options: &'a ProcessOptions<'a>,
     ) -> Result<()> {
@@ -924,12 +967,21 @@ impl Devenv {
             devenv.user_message = "Building processes"
         );
         let proc_script_string = async {
-            let proc_script = self.nix.build(&["procfileScript"], None).await?;
+            let proc_script = self
+                .nix
+                .lock()
+                .await
+                .build(&["procfileScript"], None)
+                .await?;
             let proc_script_string = proc_script[0]
                 .to_str()
                 .expect("Failed to get proc script path")
                 .to_string();
-            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
+            self.nix
+                .lock()
+                .await
+                .add_gc("procfilescript", &proc_script[0])
+                .await?;
             Ok::<String, miette::Report>(proc_script_string)
         }
         .instrument(span)
@@ -1037,10 +1089,12 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn assemble(&mut self, is_testing: bool) -> Result<()> {
-        if self.assembled {
+    pub async fn assemble(&self, is_testing: bool) -> Result<()> {
+        if self.assembled.load(Ordering::Acquire) {
             return Ok(());
         }
+
+        let _permit = self.assemble_lock.acquire().await.unwrap();
 
         // Skip devenv.nix existence check if --option is provided
         if self.global_options.option.is_empty() && !self.devenv_root.join("devenv.nix").exists() {
@@ -1056,10 +1110,11 @@ impl Devenv {
         })?;
 
         // Initialise any Nix state
-        self.nix.assemble().await?;
+        self.nix.lock().await.assemble().await?;
 
         let mut flake_inputs = BTreeMap::new();
-        for (input, attrs) in self.config.inputs.iter() {
+        let config = self.config.lock().await;
+        for (input, attrs) in config.inputs.iter() {
             match config::FlakeInput::try_from(attrs) {
                 Ok(flake_input) => {
                     flake_inputs.insert(input.clone(), flake_input);
@@ -1076,13 +1131,13 @@ impl Devenv {
         )?;
         util::write_file_with_lock(
             self.devenv_dotfile.join("devenv.json"),
-            serde_json::to_string(&self.config).unwrap(),
+            serde_json::to_string(&*config).unwrap(),
         )?;
         // TODO: superceded by eval caching.
         // Remove once direnvrc migration is implemented.
         util::write_file_with_lock(
             self.devenv_dotfile.join("imports.txt"),
-            self.config.imports.join("\n"),
+            config.imports.join("\n"),
         )?;
 
         fs::create_dir_all(&self.devenv_runtime)
@@ -1178,17 +1233,23 @@ impl Devenv {
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
         util::write_file_with_lock(&flake_path, &flake)?;
 
-        self.assembled = true;
+        self.assembled.store(true, Ordering::Release);
         Ok(())
     }
 
     #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]
-    pub async fn get_dev_environment(&mut self, json: bool) -> Result<DevEnv> {
+    pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         self.assemble(false).await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::debug_span!("evaluating_dev_env");
-        let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
+        let env = self
+            .nix
+            .lock()
+            .await
+            .dev_env(json, &gc_root)
+            .instrument(span)
+            .await?;
 
         use devenv_eval_cache::command::{FileInputDesc, Input};
         util::write_file_with_lock(

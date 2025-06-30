@@ -128,7 +128,7 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                     ..Default::default()
                 }),
             };
-            let mut devenv = Devenv::new(options).await;
+            let devenv = Devenv::new(options).await;
 
             eprintln!("  Running {}", dir_name);
 
