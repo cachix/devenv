@@ -19,13 +19,13 @@ let
     requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
     makeWrapperArgs =
       [
-        "--prefix"
+        "--suffix"
         "LD_LIBRARY_PATH"
         ":"
         libraries
       ]
       ++ lib.optionals pkgs.stdenv.isDarwin [
-        "--prefix"
+        "--suffix"
         "DYLD_LIBRARY_PATH"
         ":"
         libraries
