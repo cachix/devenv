@@ -66,7 +66,7 @@ impl Default for Options {
 
 /// Trait defining the interface for Nix evaluation backends
 #[async_trait(?Send)]
-pub trait NixBackend {
+pub trait NixBackend: Send + Sync {
     /// Initialize and assemble the backend (e.g., set up database connections)
     async fn assemble(&mut self) -> Result<()>;
 
