@@ -1,6 +1,7 @@
 use crate::nix_backend::{self, NixBackend};
 use crate::{cli, config};
 use async_trait::async_trait;
+use futures::future;
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
 use serde::Deserialize;
@@ -652,28 +653,60 @@ impl Nix {
             .into_diagnostic()
             .wrap_err("Failed to create HTTP client to query the Cachix API")?;
         let mut new_known_keys: BTreeMap<String, String> = BTreeMap::new();
-        for name in caches.caches.pull.iter() {
-            if !caches.known_keys.contains_key(name) {
-                let mut request = client.get(format!("https://cachix.org/api/v1/cache/{}", name));
-                if let Ok(ret) = env::var("CACHIX_AUTH_TOKEN") {
-                    request = request.bearer_auth(ret);
+
+        // Collect caches that need their keys fetched
+        let caches_to_fetch: Vec<&String> = caches
+            .caches
+            .pull
+            .iter()
+            .filter(|name| !caches.known_keys.contains_key(*name))
+            .collect();
+
+        if !caches_to_fetch.is_empty() {
+            // Create futures for all HTTP requests
+            let auth_token = env::var("CACHIX_AUTH_TOKEN").ok();
+            let fetch_futures: Vec<_> = caches_to_fetch.into_iter().map(|name| {
+                let client = &client;
+                let auth_token = auth_token.as_ref();
+                let name = name.clone();
+                async move {
+                    let mut request = client.get(format!("https://cachix.org/api/v1/cache/{}", name));
+                    if let Some(token) = auth_token {
+                        request = request.bearer_auth(token);
+                    }
+                    let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
+                        format!("Failed to fetch information for cache '{}'", name)
+                    })?;
+                    if resp.status().is_client_error() {
+                        error!(
+                            "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
+                            name
+                        );
+                        error!("To create a cache, go to https://app.cachix.org/.");
+                        bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
+                    } else {
+                        let resp_json: CachixResponse =
+                            resp.json().await.into_diagnostic().wrap_err_with(|| {
+                                format!("Failed to parse Cachix API response for cache '{name}'")
+                            })?;
+                        Ok::<(String, String), miette::Report>((name, resp_json.public_signing_keys[0].clone()))
+                    }
                 }
-                let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
-                    format!("Failed to fetch information for cache '{}'", name)
-                })?;
-                if resp.status().is_client_error() {
-                    error!(
-                        "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
-                        name
-                    );
-                    error!("To create a cache, go to https://app.cachix.org/.");
-                    bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
-                } else {
-                    let resp_json: CachixResponse =
-                        resp.json().await.into_diagnostic().wrap_err_with(|| {
-                            format!("Failed to parse Cachix API response for cache '{name}'")
-                        })?;
-                    new_known_keys.insert(name.clone(), resp_json.public_signing_keys[0].clone());
+            }).collect();
+
+            // Execute all requests concurrently
+            let results = future::join_all(fetch_futures).await;
+
+            // Process results and handle any errors
+            for result in results {
+                match result {
+                    Ok((name, key)) => {
+                        new_known_keys.insert(name, key);
+                    }
+                    Err(e) => {
+                        // If any cache fetch fails, propagate the error to maintain existing behavior
+                        return Err(e);
+                    }
                 }
             }
         }
