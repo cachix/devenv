@@ -611,7 +611,15 @@ impl Nix {
             logging: false,
             ..self.options
         };
-        let caches_raw = self.eval(&["devenv.cachix"]).await?;
+
+        // Run Nix evaluation and file I/O concurrently
+        let cachix_eval_future = self.eval(&["devenv.cachix"]);
+        let trusted_keys_path = self.paths.cachix_trusted_keys.clone();
+        let known_keys_future = tokio::fs::read_to_string(&trusted_keys_path);
+
+        let (caches_raw, known_keys_result) = tokio::join!(cachix_eval_future, known_keys_future);
+
+        let caches_raw = caches_raw?;
         let cachix_config: CachixConfig = serde_json::from_str(&caches_raw)
             .into_diagnostic()
             .wrap_err("Failed to parse the cachix configuration")?;
@@ -624,23 +632,21 @@ impl Nix {
             return Ok(caches);
         }
 
-        let known_keys: BTreeMap<String, String> =
-            std::fs::read_to_string(self.paths.cachix_trusted_keys.as_path())
-                .into_diagnostic()
-                .and_then(|content| serde_json::from_str(&content).into_diagnostic())
-                .unwrap_or_else(|e| {
-                    if let Some(source) = e.chain().find_map(|s| s.downcast_ref::<std::io::Error>())
-                    {
-                        if source.kind() != std::io::ErrorKind::NotFound {
-                            error!(
-                                "Failed to load cachix trusted keys from {}:\n{}.",
-                                self.paths.cachix_trusted_keys.display(),
-                                e
-                            );
-                        }
+        let known_keys: BTreeMap<String, String> = known_keys_result
+            .into_diagnostic()
+            .and_then(|content| serde_json::from_str(&content).into_diagnostic())
+            .unwrap_or_else(|e| {
+                if let Some(source) = e.chain().find_map(|s| s.downcast_ref::<std::io::Error>()) {
+                    if source.kind() != std::io::ErrorKind::NotFound {
+                        error!(
+                            "Failed to load cachix trusted keys from {}:\n{}.",
+                            trusted_keys_path.display(),
+                            e
+                        );
                     }
-                    BTreeMap::new()
-                });
+                }
+                BTreeMap::new()
+            });
 
         let mut caches = CachixCaches {
             caches: cachix_config.caches,
@@ -712,9 +718,32 @@ impl Nix {
         }
 
         if !caches.caches.pull.is_empty() {
-            let store = self
-                .run_nix("nix", &["store", "ping", "--json"], &no_logging)
-                .await?;
+            // Run store ping and file write operations concurrently
+            let store_ping_future = self.run_nix("nix", &["store", "ping", "--json"], &no_logging);
+            let trusted_keys_path = self.paths.cachix_trusted_keys.clone();
+            let write_keys_future = async {
+                if !new_known_keys.is_empty() {
+                    caches.known_keys.extend(new_known_keys.clone());
+                    let json_content = serde_json::to_string(&caches.known_keys)
+                        .into_diagnostic()
+                        .wrap_err("Failed to serialize cachix trusted keys")?;
+                    tokio::fs::write(&trusted_keys_path, json_content)
+                        .await
+                        .into_diagnostic()
+                        .wrap_err_with(|| {
+                            format!(
+                                "Failed to write cachix trusted keys to {}",
+                                trusted_keys_path.display()
+                            )
+                        })?;
+                }
+                Ok::<(), miette::Report>(())
+            };
+
+            let (store_result, write_result) = tokio::join!(store_ping_future, write_keys_future);
+            let store = store_result?;
+            write_result?;
+
             let store_ping = serde_json::from_slice::<StorePing>(&store.stdout)
                 .into_diagnostic()
                 .wrap_err("Failed to query the Nix store")?;
@@ -742,21 +771,7 @@ impl Nix {
                         name, pubkey
                     );
                 }
-                caches.known_keys.extend(new_known_keys);
             }
-
-            serde_json::to_string(&caches.known_keys)
-                .into_diagnostic()
-                .and_then(|json_content| {
-                    std::fs::write(self.paths.cachix_trusted_keys.as_path(), json_content)
-                        .into_diagnostic()
-                })
-                .wrap_err_with(|| {
-                    format!(
-                        "Failed to write cachix trusted keys to {}",
-                        self.paths.cachix_trusted_keys.display()
-                    )
-                })?;
 
             // If the user is not a trusted user, we can't set up the caches for them.
             // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
