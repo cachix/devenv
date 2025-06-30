@@ -7,13 +7,13 @@ use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::collections::BTreeMap;
 use std::env;
-use std::fs;
 use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::fs;
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
 pub struct Nix {
@@ -73,7 +73,7 @@ impl Nix {
         // Refresh the cache if the GC root is not a valid path.
         // This can happen if the store path is forcefully removed: GC'd or the Nix store is
         // tampered with.
-        let refresh_cached_output = fs::canonicalize(gc_root).is_err();
+        let refresh_cached_output = fs::canonicalize(gc_root).await.is_err();
         let options = nix_backend::Options {
             cache_output: true,
             refresh_cached_output,
@@ -99,8 +99,8 @@ impl Nix {
         // Save the GC root for this profile.
         let now_ns = get_now_with_nanoseconds();
         let target = format!("{}-shell", now_ns);
-        if let Ok(resolved_gc_root) = fs::canonicalize(gc_root) {
-            symlink_force(&resolved_gc_root, &self.paths.home_gc.join(target))?;
+        if let Ok(resolved_gc_root) = fs::canonicalize(gc_root).await {
+            symlink_force(&resolved_gc_root, &self.paths.home_gc.join(target)).await?;
         } else {
             warn!(
                 "Failed to resolve the GC root path to the Nix store: {}. Try running devenv again with --refresh-eval-cache.",
@@ -127,7 +127,7 @@ impl Nix {
             .paths
             .dot_gc
             .join(format!("{}-{}", name, get_now_with_nanoseconds()));
-        symlink_force(path, &link_path)?;
+        symlink_force(path, &link_path).await?;
         Ok(())
     }
 
@@ -891,7 +891,7 @@ impl NixBackend for Nix {
     }
 }
 
-fn symlink_force(link_path: &Path, target: &Path) -> Result<()> {
+async fn symlink_force(link_path: &Path, target: &Path) -> Result<()> {
     let _lock = dotlock::Dotlock::create(target.with_extension("lock")).unwrap();
 
     debug!(
@@ -902,6 +902,7 @@ fn symlink_force(link_path: &Path, target: &Path) -> Result<()> {
 
     if target.exists() {
         fs::remove_file(target)
+            .await
             .map_err(|e| miette::miette!("Failed to remove {}: {}", target.display(), e))?;
     }
 

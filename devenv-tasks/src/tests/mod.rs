@@ -6,10 +6,11 @@ use crate::types::{Skipped, TaskCompleted, TaskStatus, VerbosityLevel};
 use pretty_assertions::assert_matches;
 use serde_json::json;
 use sqlx::Row;
-use std::fs;
+use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use tempfile::TempDir;
+use tokio::fs::{self, File};
 
 #[tokio::test]
 async fn test_task_name() -> Result<(), Error> {
@@ -394,7 +395,7 @@ async fn test_exec_if_modified() -> Result<(), Error> {
     let test_file_path = test_file.path().to_str().unwrap().to_string();
 
     // Write initial content to ensure file exists
-    std::fs::write(&test_file_path, "initial content")?;
+    fs::write(&test_file_path, "initial content").await?;
 
     // Need to create a unique task name to avoid conflicts
     let task_name = format!(
@@ -503,9 +504,13 @@ echo "Task executed successfully"
     );
 
     // Modify the file and set mtime to ensure detection
-    std::fs::write(&test_file_path, "modified content")?;
+    fs::write(&test_file_path, "modified content").await?;
     let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
-    std::fs::File::open(&test_file_path)?.set_modified(new_time)?;
+    File::open(&test_file_path)
+        .await?
+        .into_std()
+        .await
+        .set_modified(new_time)?;
 
     // Run task third time - should execute because file has changed
     let config3 = Config::try_from(json!({
@@ -680,7 +685,7 @@ echo "Multiple files task executed successfully"
     );
 
     // Modify only the second file
-    std::fs::write(test_file2.path(), "modified content for second file")?;
+    fs::write(test_file2.path(), "modified content for second file").await?;
 
     // Run task again - should execute because one file changed
     let config4 = Config::try_from(json!({
@@ -717,7 +722,7 @@ echo "Multiple files task executed successfully"
     );
 
     // Modify only the first file this time
-    std::fs::write(test_file1.path(), "modified content for first file")?;
+    fs::write(test_file1.path(), "modified content for first file").await?;
 
     // Run task again - should execute because another file changed
     let config5 = Config::try_from(json!({
@@ -776,7 +781,7 @@ async fn test_preserved_output_on_skip() -> Result<(), Error> {
     let test_file_path = test_file.path().to_str().unwrap().to_string();
 
     // Write initial content
-    std::fs::write(&test_file_path, "initial content")?;
+    fs::write(&test_file_path, "initial content").await?;
 
     // Create a command script that writes valid JSON to the outputs file
     let command_script = create_script(
@@ -888,9 +893,13 @@ echo "Task executed successfully"
     }
 
     // Modify the file to trigger a re-run and set mtime to ensure detection
-    std::fs::write(&test_file_path, "modified content")?;
+    fs::write(&test_file_path, "modified content").await?;
     let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
-    std::fs::File::open(&test_file_path)?.set_modified(new_time)?;
+    File::open(&test_file_path)
+        .await?
+        .into_std()
+        .await
+        .set_modified(new_time)?;
 
     // Third run - create a separate scope to ensure DB connection is closed
     {
@@ -960,7 +969,7 @@ async fn test_file_state_updated_after_task() -> Result<(), Error> {
     let test_file_path = test_dir.path().join("test_file.txt");
 
     // Write initial content
-    std::fs::write(&test_file_path, "initial content")?;
+    fs::write(&test_file_path, "initial content").await?;
     let file_path_str = test_file_path.to_str().unwrap().to_string();
 
     // Generate a unique task name
@@ -1010,7 +1019,7 @@ echo "Task completed and modified the file"
     tasks.run().await;
 
     // Check the modified file content
-    let modified_content = std::fs::read_to_string(&test_file_path)?;
+    let modified_content = fs::read_to_string(&test_file_path).await?;
     assert_eq!(
         modified_content.trim(),
         "modified by task",
@@ -1090,7 +1099,7 @@ async fn test_file_state_updated_on_failed_task() -> Result<(), Error> {
     let test_file_path = test_dir.path().join("test_file.txt");
 
     // Write initial content
-    std::fs::write(&test_file_path, "initial content")?;
+    fs::write(&test_file_path, "initial content").await?;
     let file_path_str = test_file_path.to_str().unwrap().to_string();
 
     // Generate a unique task name
@@ -1152,7 +1161,7 @@ exit 1
     }
 
     // Check the modified file content
-    let modified_content = std::fs::read_to_string(&test_file_path)?;
+    let modified_content = fs::read_to_string(&test_file_path).await?;
     assert_eq!(
         modified_content.trim(),
         "modified by failing task",
@@ -1955,7 +1964,7 @@ fn create_script(script: &str) -> std::io::Result<tempfile::TempPath> {
     temp_file.write_all(script.as_bytes())?;
     temp_file
         .as_file_mut()
-        .set_permissions(fs::Permissions::from_mode(0o755))?;
+        .set_permissions(Permissions::from_mode(0o755))?;
     Ok(temp_file.into_temp_path())
 }
 

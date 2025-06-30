@@ -206,19 +206,23 @@ async fn main() -> Result<()> {
         }
         Commands::Processes {
             command: ProcessesCommand::Down {},
-        } => devenv.down(),
+        } => devenv.down().await,
         Commands::Tasks { command } => match command {
             TasksCommand::Run { tasks, mode } => devenv.tasks_run(tasks, mode).await,
         },
         Commands::Inputs { command } => match command {
-            InputsCommand::Add { name, url, follows } => devenv.inputs_add(&name, &url, &follows),
+            InputsCommand::Add { name, url, follows } => {
+                devenv.inputs_add(&name, &url, &follows).await
+            }
         },
 
         // hidden
         Commands::Assemble => devenv.assemble(false).await,
         Commands::PrintDevEnv { json } => devenv.print_dev_env(json).await,
         Commands::GenerateJSONSchema => {
-            config::write_json_schema().wrap_err("Failed to generate JSON schema")?;
+            config::write_json_schema()
+                .await
+                .wrap_err("Failed to generate JSON schema")?;
             Ok(())
         }
         Commands::Mcp {} => devenv::mcp::run_mcp_server(devenv.config).await,
