@@ -606,6 +606,28 @@ impl Devenv {
     pub async fn search(&self, name: &str) -> Result<()> {
         self.assemble(false).await?;
 
+        // Run both searches concurrently
+        let (options_results, package_results) =
+            tokio::try_join!(self.search_options(name), self.search_packages(name))?;
+
+        let results_options_count = options_results.len();
+        let package_results_count = package_results.len();
+
+        if !package_results.is_empty() {
+            print_stderr(package_results.with_title()).expect("Failed to print package results");
+        }
+
+        if !options_results.is_empty() {
+            print_stderr(options_results.with_title()).expect("Failed to print options results");
+        }
+
+        info!(
+            "Found {package_results_count} packages and {results_options_count} options for '{name}'."
+        );
+        Ok(())
+    }
+
+    async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {
         let build_options = nix_backend::Options {
             logging: false,
             cache_output: true,
@@ -639,8 +661,11 @@ impl Devenv {
                 description: value.description,
             })
             .collect::<Vec<_>>();
-        let results_options_count = options_results.len();
 
+        Ok(options_results)
+    }
+
+    async fn search_packages(&self, name: &str) -> Result<Vec<DevenvPackageResult>> {
         let search = self.nix.lock().await.search(name).await?;
         let search_json: PackageResults =
             serde_json::from_slice(&search.stdout).expect("Failed to parse search results");
@@ -656,20 +681,8 @@ impl Devenv {
                 description: value.description.chars().take(80).collect::<String>(),
             })
             .collect::<Vec<_>>();
-        let search_results_count = search_results.len();
 
-        if !search_results.is_empty() {
-            print_stderr(search_results.with_title()).expect("Failed to print search results");
-        }
-
-        if !options_results.is_empty() {
-            print_stderr(options_results.with_title()).expect("Failed to print options results");
-        }
-
-        info!(
-            "Found {search_results_count} packages and {results_options_count} options for '{name}'."
-        );
-        Ok(())
+        Ok(search_results)
     }
 
     pub async fn has_processes(&self) -> Result<bool> {
