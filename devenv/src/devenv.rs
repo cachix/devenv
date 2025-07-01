@@ -670,17 +670,26 @@ impl Devenv {
     }
 
     pub async fn has_processes(&self) -> Result<bool> {
+        // Try to read first (common case - already initialized)
         {
             let has_processes_guard = self.has_processes.read().await;
-            if has_processes_guard.is_none() {
-                drop(has_processes_guard);
-                let processes = self.nix.eval(&["devenv.processes"]).await?;
-                let mut has_processes_write = self.has_processes.write().await;
-                *has_processes_write = Some(processes.trim() != "{}");
-                return Ok(has_processes_write.unwrap());
+            if let Some(value) = *has_processes_guard {
+                return Ok(value);
             }
-            Ok(has_processes_guard.unwrap())
         }
+
+        // Need to initialize - use write lock with double-check
+        let mut has_processes_write = self.has_processes.write().await;
+        // Double-check in case another thread initialized while we waited for write lock
+        if let Some(value) = *has_processes_write {
+            return Ok(value);
+        }
+
+        // Actually initialize
+        let processes = self.nix.eval(&["devenv.processes"]).await?;
+        let value = processes.trim() != "{}";
+        *has_processes_write = Some(value);
+        Ok(value)
     }
 
     pub async fn tasks_run(
