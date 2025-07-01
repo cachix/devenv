@@ -226,7 +226,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Commands::Mcp {} => {
-            let config = devenv.config.lock().await.clone();
+            let config = devenv.config.read().await.clone();
             devenv::mcp::run_mcp_server(config).await
         }
         Commands::Direnvrc => unreachable!(),

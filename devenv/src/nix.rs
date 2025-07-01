@@ -12,19 +12,19 @@ use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
 pub struct Nix {
     pub options: nix_backend::Options,
-    pool: Arc<Mutex<Option<SqlitePool>>>,
+    pool: Arc<OnceLock<SqlitePool>>,
     database_url: String,
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
-    cachix_caches: Arc<Mutex<Option<CachixCaches>>>,
+    cachix_caches: Arc<OnceLock<CachixCaches>>,
     paths: nix_backend::DevenvPaths,
 }
 
@@ -34,7 +34,7 @@ impl Nix {
         global_options: cli::GlobalOptions,
         paths: nix_backend::DevenvPaths,
     ) -> Result<Self> {
-        let cachix_caches = Arc::new(Mutex::new(None));
+        let cachix_caches = Arc::new(OnceLock::new());
         let options = nix_backend::Options::default();
 
         let database_url = format!(
@@ -44,7 +44,7 @@ impl Nix {
 
         Ok(Self {
             options,
-            pool: Arc::new(Mutex::new(None)),
+            pool: Arc::new(OnceLock::new()),
             database_url,
             config,
             global_options,
@@ -55,8 +55,7 @@ impl Nix {
 
     // Defer creating local project state
     pub async fn assemble(&self) -> Result<()> {
-        let mut pool_guard = self.pool.lock().unwrap();
-        if pool_guard.is_none() {
+        if self.pool.get().is_none() {
             // Extract database path from URL
             let path = PathBuf::from(self.database_url.trim_start_matches("sqlite:"));
 
@@ -65,7 +64,8 @@ impl Nix {
                 .await
                 .into_diagnostic()?;
 
-            *pool_guard = Some(db.pool().clone());
+            // This will only succeed for the first thread, others will just get the existing value
+            let _ = self.pool.set(db.pool().clone());
         }
 
         Ok(())
@@ -320,17 +320,12 @@ impl Nix {
             }
         }
 
-        let pool_option = {
-            let pool_guard = self.pool.lock().unwrap();
-            pool_guard.clone()
-        };
-
         let result = if self.global_options.eval_cache
             && options.cache_output
             && supports_eval_caching(&cmd)
-            && pool_option.is_some()
+            && self.pool.get().is_some()
         {
-            let pool = pool_option.as_ref().unwrap();
+            let pool = self.pool.get().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
 
             cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
@@ -605,11 +600,8 @@ impl Nix {
 
     async fn get_cachix_caches(&self) -> Result<CachixCaches> {
         // Check if cache exists
-        {
-            let cache_guard = self.cachix_caches.lock().unwrap();
-            if cache_guard.is_some() {
-                return Ok(cache_guard.as_ref().unwrap().clone());
-            }
+        if let Some(caches) = self.cachix_caches.get() {
+            return Ok(caches.clone());
         }
 
         // Cache doesn't exist, need to populate it
@@ -633,8 +625,7 @@ impl Nix {
         // Return empty caches if the Cachix integration is disabled
         if !cachix_config.enable {
             let caches = CachixCaches::default();
-            let mut cache_guard = self.cachix_caches.lock().unwrap();
-            *cache_guard = Some(caches.clone());
+            let _ = self.cachix_caches.set(caches.clone());
             return Ok(caches);
         }
 
@@ -875,8 +866,7 @@ impl Nix {
             }
         }
 
-        let mut cache_guard = self.cachix_caches.lock().unwrap();
-        *cache_guard = Some(caches.clone());
+        let _ = self.cachix_caches.set(caches.clone());
         Ok(caches)
     }
 

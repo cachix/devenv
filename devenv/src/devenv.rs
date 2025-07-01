@@ -22,7 +22,7 @@ use std::sync::{
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
-use tokio::sync::{Mutex, RwLock, Semaphore};
+use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 // templates
@@ -68,7 +68,7 @@ pub struct ProcessOptions<'a> {
 }
 
 pub struct Devenv {
-    pub config: Arc<Mutex<config::Config>>,
+    pub config: Arc<RwLock<config::Config>>,
     pub global_options: cli::GlobalOptions,
 
     pub nix: Arc<Box<dyn nix_backend::NixBackend>>,
@@ -161,7 +161,7 @@ impl Devenv {
         };
 
         Self {
-            config: Arc::new(Mutex::new(options.config)),
+            config: Arc::new(RwLock::new(options.config)),
             global_options,
             devenv_root,
             devenv_dotfile,
@@ -241,7 +241,7 @@ impl Devenv {
 
     pub async fn inputs_add(&self, name: &str, url: &str, follows: &[String]) -> Result<()> {
         {
-            let mut config = self.config.lock().await;
+            let mut config = self.config.write().await;
             config.add_input(name, url, follows)?;
             config.write().await?;
         }
@@ -357,7 +357,7 @@ impl Devenv {
             .await
             .expect("Failed to set permissions");
 
-        let config_clean = self.config.lock().await.clean.clone().unwrap_or_default();
+        let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
             let keep = match &self.global_options.clean {
                 Some(clean) => clean,
@@ -805,7 +805,7 @@ impl Devenv {
             }
         }
 
-        let config_clean = self.config.lock().await.clean.clone().unwrap_or_default();
+        let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         let mut envs: HashMap<String, String> = {
             let vars = std::env::vars();
             if self.global_options.clean.is_some() || config_clean.enabled {
@@ -1097,7 +1097,7 @@ impl Devenv {
         self.nix.assemble().await?;
 
         let mut flake_inputs = BTreeMap::new();
-        let config = self.config.lock().await;
+        let config = self.config.read().await;
         for (input, attrs) in config.inputs.iter() {
             match config::FlakeInput::try_from(attrs) {
                 Ok(flake_input) => {

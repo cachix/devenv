@@ -19,7 +19,7 @@ use snix_store::nar::{NarCalculationService, SimpleRenderer};
 use snix_store::pathinfoservice::from_addr as pathinfo_from_addr;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, OnceLock};
 use tracing::{debug, info, warn};
 
 pub struct SnixBackend {
@@ -30,10 +30,8 @@ pub struct SnixBackend {
     #[allow(dead_code)] // Will be used when more functionality is implemented
     paths: DevenvPaths,
     eval_builder: Arc<
-        Mutex<
-            Option<
-                snix_eval::EvaluationBuilder<'static, 'static, 'static, Box<dyn snix_eval::EvalIO>>,
-            >,
+        OnceLock<
+            snix_eval::EvaluationBuilder<'static, 'static, 'static, Box<dyn snix_eval::EvalIO>>,
         >,
     >,
 }
@@ -50,14 +48,13 @@ impl SnixBackend {
             config,
             global_options,
             paths,
-            eval_builder: Arc::new(Mutex::new(None)),
+            eval_builder: Arc::new(OnceLock::new()),
         })
     }
 
     /// Initialize the Snix evaluator
     async fn init_evaluator(&self) -> Result<()> {
-        let mut eval_builder_guard = self.eval_builder.lock().unwrap();
-        if eval_builder_guard.is_some() {
+        if self.eval_builder.get().is_some() {
             return Ok(());
         }
 
@@ -111,7 +108,7 @@ impl SnixBackend {
             eval_builder = eval_builder.nix_path(Some(nix_path));
         }
 
-        *eval_builder_guard = Some(eval_builder);
+        let _ = self.eval_builder.set(eval_builder);
         Ok(())
     }
 }
