@@ -12,6 +12,7 @@ use tracing::{
 use tracing_core::{span, Subscriber};
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
+    field::RecordFields,
     fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
     layer,
     prelude::*,
@@ -92,14 +93,16 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
     match log_format {
         LogFormat::Cli => {
             use indicatif::ProgressStyle;
-            // Use {msg} in template - IndicatifLayer will use span name by default
-            let style = ProgressStyle::with_template("{spinner:.blue} {msg}")
+            // Use {span_fields} to show our devenv.user_message field
+            let style = ProgressStyle::with_template("{spinner:.blue} {span_fields}")
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
-            let indicatif_layer = IndicatifLayer::new().with_progress_style(style);
+            let indicatif_layer = IndicatifLayer::new()
+                .with_progress_style(style)
+                .with_span_field_formatter(DevenvFieldFormatter);
             let filtered_layer = DevenvIndicatifFilter::new(indicatif_layer);
             registry.with(filtered_layer).with(devenv_layer).init();
-        },
+        }
         _ => {
             registry.with(devenv_layer).init();
         }
@@ -214,36 +217,75 @@ macro_rules! with_event_from_span {
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// A filter layer that wraps IndicatifLayer and only shows progress bars for spans with `devenv.user_message`
-pub struct DevenvIndicatifFilter<S> {
-    inner: IndicatifLayer<S>,
-    user_message_spans: Mutex<HashSet<span::Id>>,
-}
+/// Custom field formatter that extracts just the devenv.user_message value
+struct DevenvFieldFormatter;
 
-impl<S> DevenvIndicatifFilter<S> {
-    pub fn new(inner: IndicatifLayer<S>) -> Self {
-        Self {
-            inner,
-            user_message_spans: Mutex::new(HashSet::new()),
+impl<'a> FormatFields<'a> for DevenvFieldFormatter {
+    fn format_fields<R>(&self, mut writer: Writer<'a>, fields: R) -> fmt::Result
+    where
+        R: tracing_subscriber::field::RecordFields,
+    {
+        // Extract just the user message value, not the field name
+        #[derive(Default)]
+        struct UserMessageExtractor {
+            user_message: Option<String>,
+        }
+
+        impl Visit for UserMessageExtractor {
+            fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                if field.name() == "devenv.user_message" {
+                    self.user_message = Some(value.to_string());
+                }
+            }
+        }
+
+        let mut extractor = UserMessageExtractor::default();
+        fields.record(&mut extractor);
+
+        if let Some(msg) = extractor.user_message {
+            write!(writer, "{}", msg)
+        } else {
+            // Fallback - show nothing for spans without user messages
+            Ok(())
         }
     }
 }
 
-impl<S> Layer<S> for DevenvIndicatifFilter<S>
+/// A filter layer that wraps IndicatifLayer and only shows progress bars for spans with `devenv.user_message`
+pub struct DevenvIndicatifFilter<S, F> {
+    inner: IndicatifLayer<S, F>,
+    user_message_spans: Mutex<HashSet<span::Id>>,
+    span_mapping: Mutex<std::collections::HashMap<span::Id, span::Id>>, // original -> synthetic
+}
+
+impl<S, F> DevenvIndicatifFilter<S, F> {
+    pub fn new(inner: IndicatifLayer<S, F>) -> Self {
+        Self {
+            inner,
+            user_message_spans: Mutex::new(HashSet::new()),
+            span_mapping: Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+}
+
+impl<S, F> Layer<S> for DevenvIndicatifFilter<S, F>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
+    F: for<'writer> FormatFields<'writer> + 'static,
 {
     fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: layer::Context<'_, S>) {
-        // Check if this span has devenv.user_message field
+        // Check if this span has devenv.user_message field and extract the message
         #[derive(Default)]
-        struct UserMessageVisitor(bool);
+        struct UserMessageVisitor(Option<String>);
 
         impl Visit for UserMessageVisitor {
             fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
 
             fn record_str(&mut self, field: &Field, value: &str) {
                 if field.name() == "devenv.user_message" {
-                    self.0 = true;
+                    self.0 = Some(value.to_string());
                 }
             }
         }
@@ -251,12 +293,13 @@ where
         let mut visitor = UserMessageVisitor::default();
         attrs.record(&mut visitor);
 
-        if visitor.0 {
+        if let Some(_user_message) = visitor.0 {
             // This span has a user message, so it should get a progress bar
             if let Ok(mut spans) = self.user_message_spans.lock() {
                 spans.insert(id.clone());
             }
-            // Forward to the inner layer
+
+            // Forward the span to IndicatifLayer - it will show devenv.user_message in {span_fields}
             self.inner.on_new_span(attrs, id, ctx);
         }
     }
