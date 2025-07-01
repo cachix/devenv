@@ -1,6 +1,8 @@
 use console::style;
+use std::collections::HashSet;
 use std::fmt;
 use std::io::{self, IsTerminal};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
@@ -8,6 +10,7 @@ use tracing::{
     Event,
 };
 use tracing_core::{span, Subscriber};
+use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
     fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
     layer,
@@ -81,11 +84,26 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
             .boxed(),
     };
 
-    tracing_subscriber::registry()
+    let registry = tracing_subscriber::registry()
         .with(filter)
-        .with(stderr_layer)
-        .with(devenv_layer) // The order is crucial
-        .init();
+        .with(stderr_layer);
+
+    // Add custom indicatif filter for CLI format only
+    match log_format {
+        LogFormat::Cli => {
+            use indicatif::ProgressStyle;
+            // Use {msg} in template - IndicatifLayer will use span name by default
+            let style = ProgressStyle::with_template("{spinner:.blue} {msg}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
+            let indicatif_layer = IndicatifLayer::new().with_progress_style(style);
+            let filtered_layer = DevenvIndicatifFilter::new(indicatif_layer);
+            registry.with(filtered_layer).with(devenv_layer).init();
+        },
+        _ => {
+            registry.with(devenv_layer).init();
+        }
+    }
 }
 
 /// A structure to capture span timings, similar to what is available internally in tracing_subscriber.
@@ -196,6 +214,107 @@ macro_rules! with_event_from_span {
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// A filter layer that wraps IndicatifLayer and only shows progress bars for spans with `devenv.user_message`
+pub struct DevenvIndicatifFilter<S> {
+    inner: IndicatifLayer<S>,
+    user_message_spans: Mutex<HashSet<span::Id>>,
+}
+
+impl<S> DevenvIndicatifFilter<S> {
+    pub fn new(inner: IndicatifLayer<S>) -> Self {
+        Self {
+            inner,
+            user_message_spans: Mutex::new(HashSet::new()),
+        }
+    }
+}
+
+impl<S> Layer<S> for DevenvIndicatifFilter<S>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: layer::Context<'_, S>) {
+        // Check if this span has devenv.user_message field
+        #[derive(Default)]
+        struct UserMessageVisitor(bool);
+
+        impl Visit for UserMessageVisitor {
+            fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                if field.name() == "devenv.user_message" {
+                    self.0 = true;
+                }
+            }
+        }
+
+        let mut visitor = UserMessageVisitor::default();
+        attrs.record(&mut visitor);
+
+        if visitor.0 {
+            // This span has a user message, so it should get a progress bar
+            if let Ok(mut spans) = self.user_message_spans.lock() {
+                spans.insert(id.clone());
+            }
+            // Forward to the inner layer
+            self.inner.on_new_span(attrs, id, ctx);
+        }
+    }
+
+    fn on_enter(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
+        // Only forward if this is a user message span
+        if let Ok(spans) = self.user_message_spans.lock() {
+            if spans.contains(id) {
+                self.inner.on_enter(id, ctx);
+            }
+        }
+    }
+
+    fn on_exit(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
+        // Only forward if this is a user message span
+        if let Ok(spans) = self.user_message_spans.lock() {
+            if spans.contains(id) {
+                self.inner.on_exit(id, ctx);
+            }
+        }
+    }
+
+    fn on_close(&self, id: span::Id, ctx: layer::Context<'_, S>) {
+        // Only forward if this is a user message span
+        let should_forward = if let Ok(mut spans) = self.user_message_spans.lock() {
+            let contained = spans.contains(&id);
+            spans.remove(&id); // Clean up
+            contained
+        } else {
+            false
+        };
+
+        if should_forward {
+            self.inner.on_close(id, ctx);
+        }
+    }
+
+    fn on_event(&self, event: &Event<'_>, ctx: layer::Context<'_, S>) {
+        // Only forward events that are related to user message spans
+        let should_forward = if let Some(current_span) = ctx.lookup_current() {
+            // Check if the current span is a user message span
+            if let Ok(spans) = self.user_message_spans.lock() {
+                spans.contains(&current_span.id())
+            } else {
+                false
+            }
+        } else {
+            // No current span context, don't forward to avoid disrupting progress bars
+            false
+        };
+
+        if should_forward {
+            self.inner.on_event(event, ctx);
+        }
+        // If not forwarding, the event will be handled by other layers (like DevenvFormat)
+    }
+}
+
 #[derive(Default)]
 pub struct DevenvLayer {
     /// Whether the span has an error event.
@@ -241,19 +360,6 @@ where
                 has_error: false,
                 timings: SpanTimings::new(),
             });
-
-            with_event_from_span!(
-                id,
-                span,
-                "message" = msg,
-                "devenv.is_user_message" = true,
-                "devenv.span_event_kind" = SpanKind::Start as u8,
-                |event| {
-                    drop(ext);
-                    drop(span);
-                    ctx.event(&event);
-                }
-            );
         }
     }
 
@@ -288,6 +394,7 @@ where
             let msg = span_ctx.msg.clone();
             let time_total = format!("{}", span_ctx.timings.total_duration());
 
+            // Emit the final message event
             with_event_from_span!(
                 id,
                 span,
@@ -376,8 +483,9 @@ where
                         let msg = &span_ctx.msg;
                         match span_kind {
                             SpanKind::Start => {
-                                let prefix = style("•").blue();
-                                return writeln!(writer, "{} {} ...", prefix, msg);
+                                // IndicatifLayer will handle the spinner, but we still need to
+                                // return early to avoid duplicate output in our format layer
+                                return Ok(());
                             }
 
                             SpanKind::End => {
