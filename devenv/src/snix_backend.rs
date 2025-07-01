@@ -118,7 +118,7 @@ impl SnixBackend {
 
 #[async_trait(?Send)]
 impl NixBackend for SnixBackend {
-    async fn assemble(&mut self) -> Result<()> {
+    async fn assemble(&self) -> Result<()> {
         // Initialize the evaluator on first use
         self.init_evaluator().await?;
         Ok(())

@@ -89,7 +89,7 @@ impl DevenvMcpServer {
 
         // Use broad search term to get a wide set of packages
         // We'll limit results later if needed
-        let search_output = devenv.nix.lock().await.search(".*").await?;
+        let search_output = devenv.nix.search(".*").await?;
 
         // Parse the search results from JSON
         #[derive(Deserialize)]
@@ -150,8 +150,6 @@ impl DevenvMcpServer {
 
         let options_paths = devenv
             .nix
-            .lock()
-            .await
             .build(&["optionsJSON"], Some(build_options))
             .await?;
 

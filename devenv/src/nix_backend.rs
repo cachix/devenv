@@ -68,7 +68,7 @@ impl Default for Options {
 #[async_trait(?Send)]
 pub trait NixBackend: Send + Sync {
     /// Initialize and assemble the backend (e.g., set up database connections)
-    async fn assemble(&mut self) -> Result<()>;
+    async fn assemble(&self) -> Result<()>;
 
     /// Get the development environment
     async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<Output>;

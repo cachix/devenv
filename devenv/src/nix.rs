@@ -19,7 +19,7 @@ use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
 pub struct Nix {
     pub options: nix_backend::Options,
-    pool: Option<SqlitePool>,
+    pool: Arc<Mutex<Option<SqlitePool>>>,
     database_url: String,
     // TODO: all these shouldn't be here
     config: config::Config,
@@ -44,7 +44,7 @@ impl Nix {
 
         Ok(Self {
             options,
-            pool: None,
+            pool: Arc::new(Mutex::new(None)),
             database_url,
             config,
             global_options,
@@ -54,8 +54,9 @@ impl Nix {
     }
 
     // Defer creating local project state
-    pub async fn assemble(&mut self) -> Result<()> {
-        if self.pool.is_none() {
+    pub async fn assemble(&self) -> Result<()> {
+        let mut pool_guard = self.pool.lock().unwrap();
+        if pool_guard.is_none() {
             // Extract database path from URL
             let path = PathBuf::from(self.database_url.trim_start_matches("sqlite:"));
 
@@ -64,7 +65,7 @@ impl Nix {
                 .await
                 .into_diagnostic()?;
 
-            self.pool = Some(db.pool().clone());
+            *pool_guard = Some(db.pool().clone());
         }
 
         Ok(())
@@ -319,12 +320,17 @@ impl Nix {
             }
         }
 
+        let pool_option = {
+            let pool_guard = self.pool.lock().unwrap();
+            pool_guard.clone()
+        };
+
         let result = if self.global_options.eval_cache
             && options.cache_output
             && supports_eval_caching(&cmd)
-            && self.pool.is_some()
+            && pool_option.is_some()
         {
-            let pool = self.pool.as_ref().unwrap();
+            let pool = pool_option.as_ref().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
 
             cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
@@ -881,7 +887,7 @@ impl Nix {
 
 #[async_trait(?Send)]
 impl NixBackend for Nix {
-    async fn assemble(&mut self) -> Result<()> {
+    async fn assemble(&self) -> Result<()> {
         self.assemble().await
     }
 
