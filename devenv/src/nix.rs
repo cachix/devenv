@@ -133,7 +133,7 @@ impl Nix {
         Ok(())
     }
 
-    pub fn repl(&self) -> Result<()> {
+    pub async fn repl(&self) -> Result<()> {
         let mut cmd = self.prepare_command("nix", &["repl", "."], &self.options)?;
         let _ = cmd.exec();
         Ok(())
@@ -888,8 +888,8 @@ impl NixBackend for Nix {
         self.add_gc(name, path).await
     }
 
-    fn repl(&self) -> Result<()> {
-        self.repl()
+    async fn repl(&self) -> Result<()> {
+        self.repl().await
     }
 
     async fn build(

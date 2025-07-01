@@ -77,7 +77,7 @@ pub trait NixBackend: Send + Sync {
     async fn add_gc(&self, name: &str, path: &Path) -> Result<()>;
 
     /// Open a Nix REPL
-    fn repl(&self) -> Result<()>;
+    async fn repl(&self) -> Result<()>;
 
     /// Build the specified attributes
     async fn build(&self, attributes: &[&str], options: Option<Options>) -> Result<Vec<PathBuf>>;

@@ -535,7 +535,7 @@ impl Devenv {
 
     pub async fn repl(&self) -> Result<()> {
         self.assemble(false).await?;
-        self.nix.repl()
+        self.nix.repl().await
     }
 
     pub async fn gc(&self) -> Result<()> {
