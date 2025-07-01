@@ -84,6 +84,30 @@ boolean
 
 
 Go packages which need to be built with the chosen Go package\.
+If ` null `, then ` defaultPackages ` will be used\.
+
+
+
+*Type:*
+null or (list of package)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` [ pkgs.gopls ] `
+
+
+
+## languages\.go\.tools\.packagesDefault
+
+
+
+Packages which are used for the ` packages ` option if its ` null `\.
 
 
 
@@ -100,6 +124,7 @@ list of package
   <derivation gopls-0.18.1>
   <derivation gotools-0.30.0>
   <derivation gomodifytags-1.17.0>
+  <derivation impl-1.4.0>
   <derivation go-tools-2025.1.1>
   <derivation golines-0.12.2>
   <derivation gotests-1.6.0>
