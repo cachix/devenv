@@ -12,7 +12,6 @@ use tracing::{
 use tracing_core::{span, Subscriber};
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
-    field::RecordFields,
     fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
     layer,
     prelude::*,
@@ -68,43 +67,57 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
 
-    let stderr_layer = match log_format {
-        LogFormat::TracingFull => tracing_subscriber::fmt::layer()
-            .with_writer(stderr)
-            .with_ansi(ansi)
-            .boxed(),
-        LogFormat::TracingPretty => tracing_subscriber::fmt::layer()
-            .with_writer(stderr)
-            .with_ansi(ansi)
-            .pretty()
-            .boxed(),
-        LogFormat::Cli => tracing_subscriber::fmt::layer()
-            .event_format(DevenvFormat::default())
-            .with_writer(stderr)
-            .with_ansi(ansi)
-            .boxed(),
-    };
-
-    let registry = tracing_subscriber::registry()
-        .with(filter)
-        .with(stderr_layer);
-
-    // Add custom indicatif filter for CLI format only
     match log_format {
+        LogFormat::TracingFull => {
+            let stderr_layer = tracing_subscriber::fmt::layer()
+                .with_writer(stderr)
+                .with_ansi(ansi)
+                .boxed();
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stderr_layer)
+                .with(devenv_layer)
+                .init();
+        }
+        LogFormat::TracingPretty => {
+            let stderr_layer = tracing_subscriber::fmt::layer()
+                .with_writer(stderr)
+                .with_ansi(ansi)
+                .pretty()
+                .boxed();
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stderr_layer)
+                .with(devenv_layer)
+                .init();
+        }
         LogFormat::Cli => {
             use indicatif::ProgressStyle;
-            // Use {span_fields} to show our devenv.user_message field
+            // For CLI mode, use IndicatifLayer to coordinate ALL output with progress bars
             let style = ProgressStyle::with_template("{spinner:.blue} {span_fields}")
                 .unwrap()
                 .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
             let indicatif_layer = IndicatifLayer::new()
                 .with_progress_style(style)
                 .with_span_field_formatter(DevenvFieldFormatter);
+
+            // Get the managed writer before moving indicatif_layer into filter
+            let indicatif_writer = indicatif_layer.get_stderr_writer();
             let filtered_layer = DevenvIndicatifFilter::new(indicatif_layer);
-            registry.with(filtered_layer).with(devenv_layer).init();
-        }
-        _ => {
-            registry.with(devenv_layer).init();
+
+            // Use indicatif's managed writer for the fmt layer so all output is coordinated
+            let stderr_layer = tracing_subscriber::fmt::layer()
+                .event_format(DevenvFormat::default())
+                .with_writer(indicatif_writer)
+                .with_ansi(ansi)
+                .boxed();
+
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stderr_layer)
+                .with(devenv_layer)
+                .with(filtered_layer)
+                .init();
         }
     }
 }
@@ -257,7 +270,6 @@ impl<'a> FormatFields<'a> for DevenvFieldFormatter {
 pub struct DevenvIndicatifFilter<S, F> {
     inner: IndicatifLayer<S, F>,
     user_message_spans: Mutex<HashSet<span::Id>>,
-    span_mapping: Mutex<std::collections::HashMap<span::Id, span::Id>>, // original -> synthetic
 }
 
 impl<S, F> DevenvIndicatifFilter<S, F> {
@@ -265,7 +277,6 @@ impl<S, F> DevenvIndicatifFilter<S, F> {
         Self {
             inner,
             user_message_spans: Mutex::new(HashSet::new()),
-            span_mapping: Mutex::new(std::collections::HashMap::new()),
         }
     }
 }
@@ -338,23 +349,8 @@ where
     }
 
     fn on_event(&self, event: &Event<'_>, ctx: layer::Context<'_, S>) {
-        // Only forward events that are related to user message spans
-        let should_forward = if let Some(current_span) = ctx.lookup_current() {
-            // Check if the current span is a user message span
-            if let Ok(spans) = self.user_message_spans.lock() {
-                spans.contains(&current_span.id())
-            } else {
-                false
-            }
-        } else {
-            // No current span context, don't forward to avoid disrupting progress bars
-            false
-        };
-
-        if should_forward {
-            self.inner.on_event(event, ctx);
-        }
-        // If not forwarding, the event will be handled by other layers (like DevenvFormat)
+        // Forward all events to IndicatifLayer so they appear above progress bars without interruption
+        self.inner.on_event(event, ctx);
     }
 }
 
