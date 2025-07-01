@@ -46,7 +46,7 @@ in
       # see: https://github.com/golang/vscode-go/blob/72249dc940e5b6ec97b08e6690a5f042644e2bb5/src/goInstallTools.ts#L721
       # see: https://github.com/golang/tools/blob/master/gopls/README.md
       packages = lib.mkOption {
-        type = lib.types.nullOr lib.types.listOf lib.types.package;
+        type = lib.types.nullOr (lib.types.listOf lib.types.package);
         example = lib.literalExpression "[ pkgs.gopls ]";
         default = null;
         description = ''
@@ -55,7 +55,7 @@ in
         '';
       };
 
-      defaultPackages = lib.mkOption {
+      packagesDefault = lib.mkOption {
         type = lib.types.listOf lib.types.package;
         example = lib.literalExpression "[ pkgs.gopls ]";
         default = [
@@ -65,14 +65,14 @@ in
           pkgs.gopls
           pkgs.gotools
           pkgs.gomodifytags
-          # pkgs.impl,
+          pkgs.impl
           pkgs.go-tools
           pkgs.golines
           pkgs.gotests
           pkgs.iferr
         ];
         description = ''
-          Go packages which need to be built with the chosen Go package.
+          Packages which are used for the `packages` option if its `null`.
         '';
       };
     };
@@ -90,7 +90,7 @@ in
         cfg.package
       ]
       ++ lib.optionals (cfg.tools.enable) (
-        lib.map (p: buildWithSpecificGo p) (cfg.tools.packages or cfg.tools.defaultPackages)
+        lib.map (p: buildWithSpecificGo p) (cfg.tools.packages or cfg.tools.packagesDefault)
       );
 
     hardeningDisable = lib.optional (cfg.enableHardeningWorkaround) "fortify";
