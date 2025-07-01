@@ -231,7 +231,12 @@ impl Nix {
         ))
     }
 
-    pub async fn search(&self, name: &str) -> Result<devenv_eval_cache::Output> {
+    pub async fn search(
+        &self,
+        name: &str,
+        options: Option<nix_backend::Options>,
+    ) -> Result<devenv_eval_cache::Output> {
+        let opts = options.as_ref().unwrap_or(&self.options);
         self.run_nix_with_substituters(
             "nix",
             &[
@@ -246,7 +251,7 @@ impl Nix {
                 "nixpkgs",
                 name,
             ],
-            &self.options,
+            opts,
         )
         .await
     }
@@ -916,8 +921,12 @@ impl NixBackend for Nix {
         self.metadata().await
     }
 
-    async fn search(&self, name: &str) -> Result<devenv_eval_cache::Output> {
-        self.search(name).await
+    async fn search(
+        &self,
+        name: &str,
+        options: Option<nix_backend::Options>,
+    ) -> Result<devenv_eval_cache::Output> {
+        self.search(name, options).await
     }
 
     async fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {

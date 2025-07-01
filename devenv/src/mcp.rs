@@ -89,7 +89,7 @@ impl DevenvMcpServer {
 
         // Use broad search term to get a wide set of packages
         // We'll limit results later if needed
-        let search_output = devenv.nix.search(".*").await?;
+        let search_output = devenv.nix.search(".*", None).await?;
 
         // Parse the search results from JSON
         #[derive(Deserialize)]
