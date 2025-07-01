@@ -95,7 +95,7 @@ pub trait NixBackend: Send + Sync {
     async fn search(&self, name: &str) -> Result<Output>;
 
     /// Garbage collect the specified paths
-    fn gc(&self, paths: Vec<PathBuf>) -> Result<()>;
+    async fn gc(&self, paths: Vec<PathBuf>) -> Result<()>;
 
     /// Get the backend name (for debugging/logging)
     fn name(&self) -> &'static str;

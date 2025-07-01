@@ -538,7 +538,7 @@ impl Devenv {
         self.nix.repl()
     }
 
-    pub fn gc(&self) -> Result<()> {
+    pub async fn gc(&self) -> Result<()> {
         let start = std::time::Instant::now();
 
         let (to_gc, removed_symlinks) = {
@@ -569,12 +569,7 @@ impl Devenv {
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
             );
-            // Use tokio::task::block_in_place for sync-async bridge
-            span.in_scope(|| {
-                tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(async { self.nix.gc(to_gc) })
-                })
-            })?;
+            self.nix.gc(to_gc).instrument(span).await?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);

@@ -188,7 +188,7 @@ async fn main() -> Result<()> {
             }
         },
         Commands::Search { name } => devenv.search(&name).await,
-        Commands::Gc {} => devenv.gc(),
+        Commands::Gc {} => devenv.gc().await,
         Commands::Info {} => devenv.info().await,
         Commands::Repl {} => devenv.repl().await,
         Commands::Build { attributes } => devenv.build(&attributes).await,

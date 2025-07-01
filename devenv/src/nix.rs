@@ -248,7 +248,7 @@ impl Nix {
         .await
     }
 
-    pub fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
+    pub async fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
         let paths: std::collections::HashSet<&str> = paths
             .iter()
             .filter_map(|path_buf| path_buf.to_str())
@@ -256,9 +256,8 @@ impl Nix {
         for path in paths {
             info!("Deleting {}...", path);
             let args: Vec<&str> = ["store", "delete", path].to_vec();
-            let cmd = self.prepare_command("nix", &args, &self.options);
             // we ignore if this command fails, because root might be in use
-            let _ = cmd?.output();
+            let _ = self.run_nix("nix", &args, &self.options).await;
         }
         Ok(())
     }
@@ -917,8 +916,8 @@ impl NixBackend for Nix {
         self.search(name).await
     }
 
-    fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
-        self.gc(paths)
+    async fn gc(&self, paths: Vec<PathBuf>) -> Result<()> {
+        self.gc(paths).await
     }
 
     fn name(&self) -> &'static str {
