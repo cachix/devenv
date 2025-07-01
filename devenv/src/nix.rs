@@ -672,26 +672,33 @@ impl Nix {
                 let auth_token = auth_token.as_ref();
                 let name = name.clone();
                 async move {
-                    let mut request = client.get(format!("https://cachix.org/api/v1/cache/{}", name));
-                    if let Some(token) = auth_token {
-                        request = request.bearer_auth(token);
-                    }
-                    let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
-                        format!("Failed to fetch information for cache '{}'", name)
-                    })?;
-                    if resp.status().is_client_error() {
-                        error!(
-                            "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
-                            name
-                        );
-                        error!("To create a cache, go to https://app.cachix.org/.");
-                        bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
-                    } else {
-                        let resp_json: CachixResponse =
-                            resp.json().await.into_diagnostic().wrap_err_with(|| {
-                                format!("Failed to parse Cachix API response for cache '{name}'")
-                            })?;
-                        Ok::<(String, String), miette::Report>((name, resp_json.public_signing_keys[0].clone()))
+                    let result = async {
+                        let mut request = client.get(format!("https://cachix.org/api/v1/cache/{}", name));
+                        if let Some(token) = auth_token {
+                            request = request.bearer_auth(token);
+                        }
+                        let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
+                            format!("Failed to fetch information for cache '{}'", name)
+                        })?;
+                        if resp.status().is_client_error() {
+                            error!(
+                                "Cache {} does not exist or you don't have a CACHIX_AUTH_TOKEN configured.",
+                                name
+                            );
+                            error!("To create a cache, go to https://app.cachix.org/.");
+                            bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
+                        } else {
+                            let resp_json: CachixResponse =
+                                resp.json().await.into_diagnostic().wrap_err_with(|| {
+                                    format!("Failed to parse Cachix API response for cache '{name}'")
+                                })?;
+                            Ok::<String, miette::Report>(resp_json.public_signing_keys[0].clone())
+                        }
+                    }.await;
+
+                    match result {
+                        Ok(key) => Ok((name.clone(), key)),
+                        Err(e) => Err(e.wrap_err(format!("Failed to fetch cache '{}'", name)))
                     }
                 }
             }).collect();
@@ -699,15 +706,13 @@ impl Nix {
             // Execute all requests concurrently
             let results = future::join_all(fetch_futures).await;
 
-            // Process results and handle any errors
             for result in results {
                 match result {
                     Ok((name, key)) => {
                         new_known_keys.insert(name, key);
                     }
                     Err(e) => {
-                        // If any cache fetch fails, propagate the error to maintain existing behavior
-                        return Err(e);
+                        error!("{}", e);
                     }
                 }
             }
