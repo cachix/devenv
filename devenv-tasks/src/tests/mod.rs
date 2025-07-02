@@ -1230,7 +1230,7 @@ async fn test_nonexistent_script() -> Result<(), Error> {
                     error
                 }
             ))
-        )] if error == "No such file or directory (os error 2)" && task_1 == "myapp:task_1"
+        )] if error == "Failed to spawn command for /path/to/nonexistent/script.sh: No such file or directory (os error 2)" && task_1 == "myapp:task_1"
     );
 
     Ok(())

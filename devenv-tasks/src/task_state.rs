@@ -240,13 +240,13 @@ impl TaskState {
 
             let mut child = match result {
                 Ok(c) => c,
-                Err(e) => {
+                Err(err) => {
                     return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
-                            error: e.to_string(),
+                            error: format!("{:#}", err),
                         },
                     ));
                 }
