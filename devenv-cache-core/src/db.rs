@@ -6,7 +6,7 @@ use sqlx::sqlite::{
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::{error, trace};
 
 /// Database connection manager
 #[derive(Debug, Clone)]
@@ -32,7 +32,7 @@ impl Database {
         let db = Self { pool, path };
 
         // Run migrations
-        debug!("Running migrations");
+        trace!("Running migrations");
 
         if let Err(err) = migrator.run(&db.pool).await {
             error!(error = %err, "Failed to migrate the database. Attempting to recreate the database.");

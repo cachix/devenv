@@ -764,7 +764,7 @@ impl Nix {
 
             info!(
                 devenv.is_user_message = true,
-                "Using Cachix: {}",
+                "Using Cachix caches: {}",
                 caches.caches.pull.join(", "),
             );
             if !new_known_keys.is_empty() {
