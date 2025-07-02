@@ -234,7 +234,9 @@ impl TaskState {
                 .prepare_command(cmd, outputs)
                 .wrap_err("Failed to prepare task command")?;
 
-            let result = command.spawn();
+            let result = command
+                .spawn()
+                .wrap_err_with(|| format!("Failed to spawn command for {}", cmd));
 
             let mut child = match result {
                 Ok(c) => c,
