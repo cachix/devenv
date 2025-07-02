@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-uv-sync-groups"
+version = "0.1.0"
+description = "Test project for uv sync with dependency groups"
+authors = [{ name = "Claude", email = "claude@anthropic.com" }]
+dependencies = ["requests"]
+
+[dependency-groups]
+test = ["pytest", "pytest-cov"]
+docs = ["sphinx", "sphinx-rtd-theme"]
