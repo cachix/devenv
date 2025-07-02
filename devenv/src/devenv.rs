@@ -378,11 +378,13 @@ impl Devenv {
         Ok(shell_cmd)
     }
 
+    /// Exec into the shell.
+    /// This method does not return after calling `exec`.
     pub async fn shell(self) -> Result<()> {
         let shell_cmd = self.prepare_shell(&None, &[]).await?;
-        let span = info_span!("entering_shell", devenv.user_message = "Entering shell",);
-        let _ = shell_cmd.into_std().exec().instrument(span);
-        Ok(())
+        info!(devenv.is_user_message = true, "Entering shell");
+        let err = shell_cmd.into_std().exec();
+        bail!("Failed to execute shell: {}", err);
     }
 
     pub async fn exec_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
@@ -391,17 +393,17 @@ impl Devenv {
             "executing_in_shell",
             devenv.user_message = "Executing in shell"
         );
-        async move {
-            shell_cmd
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .output()
-                .await
-                .into_diagnostic()
-        }
-        .instrument(span)
-        .await
+        // Note that tokio's `output()` always configures stdout/stderr as pipes.
+        // Use `spawn` + `wait_with_output` instead.
+        let proc = shell_cmd
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .into_diagnostic()?;
+        async move { proc.wait_with_output().await.into_diagnostic() }
+            .instrument(span)
+            .await
     }
 
     pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
