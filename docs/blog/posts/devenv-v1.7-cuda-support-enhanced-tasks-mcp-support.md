@@ -18,7 +18,7 @@ draft: false
 
 We've started work on supporting multiple Nix implementations in devenv. The codebase now includes a backend abstraction layer that will allow users to choose between different Nix implementations.
 
-This architectural change paves the way for integrating [Snix](https://github.com/cachix/snix), our development fork. While the Snix backend isn't functional yet, the groundwork is in place for building out this Rust-based alternative to the C++ Nix implementation. See [PR #1950](https://github.com/cachix/devenv/pull/1950) for implementation details.
+This architectural change paves the way for integrating [Snix (our development fork)](https://github.com/cachix/snix). While the Snix backend isn't functional yet, the groundwork is in place for building out this Rust-based reimplementation to the C++ Nix implementation. See [PR #1950](https://github.com/cachix/devenv/pull/1950) for implementation details.
 
 
 ## Platform-Specific Configuration
