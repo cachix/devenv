@@ -1,6 +1,8 @@
 use console::style;
+use std::collections::HashSet;
 use std::fmt;
 use std::io::{self, IsTerminal};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
@@ -8,6 +10,7 @@ use tracing::{
     Event,
 };
 use tracing_core::{span, Subscriber};
+use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
     fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
     layer,
@@ -64,28 +67,59 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
 
-    let stderr_layer = match log_format {
-        LogFormat::TracingFull => tracing_subscriber::fmt::layer()
-            .with_writer(stderr)
-            .with_ansi(ansi)
-            .boxed(),
-        LogFormat::TracingPretty => tracing_subscriber::fmt::layer()
-            .with_writer(stderr)
-            .with_ansi(ansi)
-            .pretty()
-            .boxed(),
-        LogFormat::Cli => tracing_subscriber::fmt::layer()
-            .event_format(DevenvFormat::default())
-            .with_writer(stderr)
-            .with_ansi(ansi)
-            .boxed(),
-    };
+    match log_format {
+        LogFormat::TracingFull => {
+            let stderr_layer = tracing_subscriber::fmt::layer()
+                .with_writer(stderr)
+                .with_ansi(ansi)
+                .boxed();
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stderr_layer)
+                .with(devenv_layer)
+                .init();
+        }
+        LogFormat::TracingPretty => {
+            let stderr_layer = tracing_subscriber::fmt::layer()
+                .with_writer(stderr)
+                .with_ansi(ansi)
+                .pretty()
+                .boxed();
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stderr_layer)
+                .with(devenv_layer)
+                .init();
+        }
+        LogFormat::Cli => {
+            use indicatif::ProgressStyle;
+            // For CLI mode, use IndicatifLayer to coordinate ALL output with progress bars
+            let style = ProgressStyle::with_template("{spinner:.blue} {span_fields}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]);
+            let indicatif_layer = IndicatifLayer::new()
+                .with_progress_style(style)
+                .with_span_field_formatter(DevenvFieldFormatter);
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(stderr_layer)
-        .with(devenv_layer) // The order is crucial
-        .init();
+            // Get the managed writer before moving indicatif_layer into filter
+            let indicatif_writer = indicatif_layer.get_stderr_writer();
+            let filtered_layer = DevenvIndicatifFilter::new(indicatif_layer);
+
+            // Use indicatif's managed writer for the fmt layer so all output is coordinated
+            let stderr_layer = tracing_subscriber::fmt::layer()
+                .event_format(DevenvFormat::default())
+                .with_writer(indicatif_writer)
+                .with_ansi(ansi)
+                .boxed();
+
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stderr_layer)
+                .with(devenv_layer)
+                .with(filtered_layer)
+                .init();
+        }
+    }
 }
 
 /// A structure to capture span timings, similar to what is available internally in tracing_subscriber.
@@ -196,6 +230,130 @@ macro_rules! with_event_from_span {
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+/// Custom field formatter that extracts just the devenv.user_message value
+struct DevenvFieldFormatter;
+
+impl<'a> FormatFields<'a> for DevenvFieldFormatter {
+    fn format_fields<R>(&self, mut writer: Writer<'a>, fields: R) -> fmt::Result
+    where
+        R: tracing_subscriber::field::RecordFields,
+    {
+        // Extract just the user message value, not the field name
+        #[derive(Default)]
+        struct UserMessageExtractor {
+            user_message: Option<String>,
+        }
+
+        impl Visit for UserMessageExtractor {
+            fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                if field.name() == "devenv.user_message" {
+                    self.user_message = Some(value.to_string());
+                }
+            }
+        }
+
+        let mut extractor = UserMessageExtractor::default();
+        fields.record(&mut extractor);
+
+        if let Some(msg) = extractor.user_message {
+            write!(writer, "{}", msg)
+        } else {
+            // Fallback - show nothing for spans without user messages
+            Ok(())
+        }
+    }
+}
+
+/// A filter layer that wraps IndicatifLayer and only shows progress bars for spans with `devenv.user_message`
+pub struct DevenvIndicatifFilter<S, F> {
+    inner: IndicatifLayer<S, F>,
+    user_message_spans: Mutex<HashSet<span::Id>>,
+}
+
+impl<S, F> DevenvIndicatifFilter<S, F> {
+    pub fn new(inner: IndicatifLayer<S, F>) -> Self {
+        Self {
+            inner,
+            user_message_spans: Mutex::new(HashSet::new()),
+        }
+    }
+}
+
+impl<S, F> Layer<S> for DevenvIndicatifFilter<S, F>
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    F: for<'writer> FormatFields<'writer> + 'static,
+{
+    fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: layer::Context<'_, S>) {
+        // Check if this span has devenv.user_message field and extract the message
+        #[derive(Default)]
+        struct UserMessageVisitor(Option<String>);
+
+        impl Visit for UserMessageVisitor {
+            fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                if field.name() == "devenv.user_message" {
+                    self.0 = Some(value.to_string());
+                }
+            }
+        }
+
+        let mut visitor = UserMessageVisitor::default();
+        attrs.record(&mut visitor);
+
+        if let Some(_user_message) = visitor.0 {
+            // This span has a user message, so it should get a progress bar
+            if let Ok(mut spans) = self.user_message_spans.lock() {
+                spans.insert(id.clone());
+            }
+
+            // Forward the span to IndicatifLayer - it will show devenv.user_message in {span_fields}
+            self.inner.on_new_span(attrs, id, ctx);
+        }
+    }
+
+    fn on_enter(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
+        // Only forward if this is a user message span
+        if let Ok(spans) = self.user_message_spans.lock() {
+            if spans.contains(id) {
+                self.inner.on_enter(id, ctx);
+            }
+        }
+    }
+
+    fn on_exit(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
+        // Only forward if this is a user message span
+        if let Ok(spans) = self.user_message_spans.lock() {
+            if spans.contains(id) {
+                self.inner.on_exit(id, ctx);
+            }
+        }
+    }
+
+    fn on_close(&self, id: span::Id, ctx: layer::Context<'_, S>) {
+        // Only forward if this is a user message span
+        let should_forward = if let Ok(mut spans) = self.user_message_spans.lock() {
+            let contained = spans.contains(&id);
+            spans.remove(&id); // Clean up
+            contained
+        } else {
+            false
+        };
+
+        if should_forward {
+            self.inner.on_close(id, ctx);
+        }
+    }
+
+    fn on_event(&self, event: &Event<'_>, ctx: layer::Context<'_, S>) {
+        // Forward all events to IndicatifLayer so they appear above progress bars without interruption
+        self.inner.on_event(event, ctx);
+    }
+}
+
 #[derive(Default)]
 pub struct DevenvLayer {
     /// Whether the span has an error event.
@@ -241,19 +399,6 @@ where
                 has_error: false,
                 timings: SpanTimings::new(),
             });
-
-            with_event_from_span!(
-                id,
-                span,
-                "message" = msg,
-                "devenv.is_user_message" = true,
-                "devenv.span_event_kind" = SpanKind::Start as u8,
-                |event| {
-                    drop(ext);
-                    drop(span);
-                    ctx.event(&event);
-                }
-            );
         }
     }
 
@@ -288,6 +433,7 @@ where
             let msg = span_ctx.msg.clone();
             let time_total = format!("{}", span_ctx.timings.total_duration());
 
+            // Emit the final message event
             with_event_from_span!(
                 id,
                 span,
@@ -376,8 +522,9 @@ where
                         let msg = &span_ctx.msg;
                         match span_kind {
                             SpanKind::Start => {
-                                let prefix = style("•").blue();
-                                return writeln!(writer, "{} {} ...", prefix, msg);
+                                // IndicatifLayer will handle the spinner, but we still need to
+                                // return early to avoid duplicate output in our format layer
+                                return Ok(());
                             }
 
                             SpanKind::End => {

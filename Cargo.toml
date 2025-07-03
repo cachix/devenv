@@ -72,6 +72,8 @@ thiserror = "2.0.12"
 tracing = "0.1.40"
 tracing-core = "0.1.32"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-indicatif = "0.3"
+indicatif = "0.17"
 tokio = { version = "1.39.3", features = [
     "process",
     "fs",

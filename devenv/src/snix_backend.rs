@@ -171,7 +171,7 @@ impl NixBackend for SnixBackend {
         bail!("Flake metadata is not yet implemented for Snix backend")
     }
 
-    async fn search(&self, _name: &str) -> Result<Output> {
+    async fn search(&self, _name: &str, _options: Option<Options>) -> Result<Output> {
         // TODO: Implement package search functionality
         bail!("Package search is not yet implemented for Snix backend")
     }
