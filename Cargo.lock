@@ -1000,6 +1000,7 @@ dependencies = [
  "dialoguer",
  "dotlock",
  "fd-lock",
+ "futures",
  "hex",
  "http-client-tls",
  "include_dir",

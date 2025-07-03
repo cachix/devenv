@@ -272,9 +272,9 @@ impl TaskCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
-    use std::io::Write;
     use tempfile::TempDir;
+    use tokio::fs::File;
+    use tokio::io::AsyncWriteExt;
 
     #[sqlx::test]
     async fn test_task_cache_initialization() {
@@ -300,8 +300,8 @@ mod tests {
 
         // Create a test file
         {
-            let mut file = File::create(&file_path).unwrap();
-            file.write_all(b"initial content").unwrap();
+            let mut file = File::create(&file_path).await.unwrap();
+            file.write_all(b"initial content").await.unwrap();
         }
 
         let task_name = "test_task";
@@ -326,13 +326,15 @@ mod tests {
 
         // Modify file content and set mtime to ensure detection
         {
-            let mut file = File::create(&file_path).unwrap();
-            file.write_all(b"modified content with more text").unwrap();
-            file.sync_all().unwrap(); // Force flush to filesystem
+            let mut file = File::create(&file_path).await.unwrap();
+            file.write_all(b"modified content with more text")
+                .await
+                .unwrap();
+            file.sync_all().await.unwrap(); // Force flush to filesystem
 
             // Set mtime to ensure it's different from original
             let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
-            file.set_modified(new_time).unwrap();
+            file.into_std().await.set_modified(new_time).unwrap();
         }
 
         // Check should detect the modification
@@ -356,7 +358,7 @@ mod tests {
         let cache = TaskCache::with_db_path(db_path).await.unwrap();
         let test_temp_dir = TempDir::new().unwrap();
         let dir_path = test_temp_dir.path().join("test_dir");
-        std::fs::create_dir(&dir_path).unwrap();
+        tokio::fs::create_dir(&dir_path).await.unwrap();
 
         let task_name = "test_task_dir";
         let dir_path_str = dir_path.to_str().unwrap().to_string();
@@ -376,13 +378,13 @@ mod tests {
         // Add a new file in the directory
         let file_path = dir_path.join("test_file.txt");
         {
-            let mut file = File::create(&file_path).unwrap();
-            file.write_all(b"new file content").unwrap();
-            file.sync_all().unwrap();
+            let mut file = File::create(&file_path).await.unwrap();
+            file.write_all(b"new file content").await.unwrap();
+            file.sync_all().await.unwrap();
 
             // Set mtime to ensure directory modification is detected
             let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
-            file.set_modified(new_time).unwrap();
+            file.into_std().await.set_modified(new_time).unwrap();
         }
 
         // Check should detect the directory modification
@@ -399,13 +401,13 @@ mod tests {
 
         // Modify an existing file
         {
-            let mut file = File::create(&file_path).unwrap();
-            file.write_all(b"modified file content").unwrap();
-            file.sync_all().unwrap();
+            let mut file = File::create(&file_path).await.unwrap();
+            file.write_all(b"modified file content").await.unwrap();
+            file.sync_all().await.unwrap();
 
             // Set mtime to ensure directory modification is detected
             let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(2);
-            file.set_modified(new_time).unwrap();
+            file.into_std().await.set_modified(new_time).unwrap();
         }
 
         // Check should detect the directory modification
@@ -416,12 +418,15 @@ mod tests {
 
         // Create a subdirectory and set its mtime
         let subdir_path = dir_path.join("subdir");
-        std::fs::create_dir(&subdir_path).unwrap();
+        tokio::fs::create_dir(&subdir_path).await.unwrap();
 
         // Set subdirectory mtime to ensure detection
         let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(3);
-        std::fs::File::open(&subdir_path)
+        File::open(&subdir_path)
+            .await
             .unwrap()
+            .into_std()
+            .await
             .set_modified(new_time)
             .unwrap();
 
@@ -434,13 +439,13 @@ mod tests {
         // Add a file in the subdirectory
         let subdir_file_path = subdir_path.join("nested_file.txt");
         {
-            let mut file = File::create(&subdir_file_path).unwrap();
-            file.write_all(b"nested file content").unwrap();
-            file.sync_all().unwrap();
+            let mut file = File::create(&subdir_file_path).await.unwrap();
+            file.write_all(b"nested file content").await.unwrap();
+            file.sync_all().await.unwrap();
 
             // Set mtime to ensure directory modification is detected
             let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(4);
-            file.set_modified(new_time).unwrap();
+            file.into_std().await.set_modified(new_time).unwrap();
         }
 
         // Check should detect the directory modification
@@ -457,11 +462,11 @@ mod tests {
 
         // Create a deeply nested directory structure
         let deep_dir1 = subdir_path.join("level1");
-        std::fs::create_dir(&deep_dir1).unwrap();
+        tokio::fs::create_dir(&deep_dir1).await.unwrap();
         let deep_dir2 = deep_dir1.join("level2");
-        std::fs::create_dir(&deep_dir2).unwrap();
+        tokio::fs::create_dir(&deep_dir2).await.unwrap();
         let deep_dir3 = deep_dir2.join("level3");
-        std::fs::create_dir(&deep_dir3).unwrap();
+        tokio::fs::create_dir(&deep_dir3).await.unwrap();
 
         // Check should detect the deep directory modification
         assert!(cache
@@ -478,13 +483,13 @@ mod tests {
         // Add a file deep in the nested structure
         let deep_file_path = deep_dir3.join("deep_file.txt");
         {
-            let mut file = File::create(&deep_file_path).unwrap();
-            file.write_all(b"deep nested file content").unwrap();
-            file.sync_all().unwrap();
+            let mut file = File::create(&deep_file_path).await.unwrap();
+            file.write_all(b"deep nested file content").await.unwrap();
+            file.sync_all().await.unwrap();
 
             // Set mtime to ensure directory modification is detected
             let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
-            file.set_modified(new_time).unwrap();
+            file.into_std().await.set_modified(new_time).unwrap();
         }
 
         // Check should detect the deep file modification
@@ -495,16 +500,17 @@ mod tests {
 
         // Update the deep file
         {
-            let mut file = std::fs::OpenOptions::new()
+            let mut file = tokio::fs::OpenOptions::new()
                 .append(true)
                 .open(&deep_file_path)
+                .await
                 .unwrap();
-            file.write_all(b" with additional content").unwrap();
-            file.sync_all().unwrap();
+            file.write_all(b" with additional content").await.unwrap();
+            file.sync_all().await.unwrap();
 
             // Set mtime to ensure directory modification is detected
             let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(6);
-            file.set_modified(new_time).unwrap();
+            file.into_std().await.set_modified(new_time).unwrap();
         }
 
         // Check should detect the deep file update
@@ -514,7 +520,7 @@ mod tests {
             .unwrap());
 
         // Remove a deep file
-        std::fs::remove_file(&deep_file_path).unwrap();
+        tokio::fs::remove_file(&deep_file_path).await.unwrap();
 
         // Check should detect the removal
         assert!(cache
@@ -523,7 +529,7 @@ mod tests {
             .unwrap());
 
         // Remove a deep directory
-        std::fs::remove_dir(&deep_dir3).unwrap();
+        tokio::fs::remove_dir(&deep_dir3).await.unwrap();
 
         // Check should detect the directory removal
         assert!(cache
