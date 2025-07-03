@@ -101,10 +101,12 @@ All language modules will support the same configuration pattern ([PR #1974](htt
 
 ```nix
 {
-  languages.rust.dev.lsp.enable = false;
-  languages.rust.dev.debugger.enable = false;
-  languages.rust.dev.linter.enable = false;
-  languages.rust.dev.formatter.enable = false;
+  languages.rust.dev = {
+    lsp.enable = false;
+    debugger.enable = false;
+    linter.enable = false;
+    formatter.enable = false;
+  };
 }
 ```
 
