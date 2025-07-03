@@ -23,8 +23,6 @@ This architectural change paves the way for integrating [Snix](https://github.co
 
 ## Platform-Specific Configuration
 
-### Configuring CUDA Support
-
 Here's how to enable CUDA support only on Linux systems while keeping your environment working smoothly on macOS:
 
 * CUDA-enabled packages are built with GPU support on Linux
@@ -109,6 +107,24 @@ All language modules will support the same configuration pattern ([PR #1974](htt
   languages.rust.dev.formatter.enable = false;
 }
 ```
+
+### Rust Import Functionality
+
+Import Rust projects and their dependencies as Nix packages with the new `languages.rust.import` configuration ([PR #1946](https://github.com/cachix/devenv/pull/1946)):
+
+```nix
+{
+  languages.rust.enable = true;
+  languages.rust.import = {
+    mypackage = {
+      root = ./.;
+    };
+  };
+  packages = languages.rust.import.mypackage.packages;
+}
+```
+
+That allows us to bridge the gap between developer environments and fully packaged Rust applications using Nix.
 
 ### Async Core
 
