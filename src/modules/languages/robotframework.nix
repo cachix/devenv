@@ -14,6 +14,28 @@ in
       description = "The Python package to use.";
     };
 
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Robot Framework development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Robot Framework language server.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.python3Packages.robotframework-lsp;
+          defaultText = lib.literalExpression "pkgs.python3Packages.robotframework-lsp";
+          description = "The robotframework-lsp package to use.";
+        };
+      };
+    };
+
   };
 
   config = lib.mkIf cfg.enable {
@@ -21,6 +43,8 @@ in
       (cfg.python.withPackages (ps: [
         ps.robotframework
       ]))
-    ];
+    ] ++ lib.optionals cfg.dev.enable (
+      lib.optional cfg.dev.lsp.enable cfg.dev.lsp.package
+    );
   };
 }

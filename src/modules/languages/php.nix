@@ -230,6 +230,67 @@ in
       '';
     };
 
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable PHP development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable PHP language server (phpactor).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.phpactor;
+          defaultText = lib.literalExpression "pkgs.phpactor";
+          description = ''
+            The PHP language server package to use.
+            
+            Available options:
+            - pkgs.phpactor: Open source LSP with good refactoring support (default)
+            - pkgs.php-language-server: Felix Becker's PHP language server
+            - pkgs.intelephense: Proprietary but very popular, requires license for full features
+            
+            Note: Intelephense is proprietary software but is widely considered the most
+            feature-complete PHP LSP. It requires a license for advanced features.
+            Phpactor is a good open-source alternative with strong refactoring capabilities.
+          '';
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable PHP formatter (php-cs-fixer).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.packages.php-cs-fixer;
+          defaultText = lib.literalExpression "cfg.package.packages.php-cs-fixer";
+          description = "The php-cs-fixer package to use.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable PHP linter (psalm).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.packages.psalm;
+          defaultText = lib.literalExpression "cfg.package.packages.psalm";
+          description = "The psalm package to use.";
+        };
+      };
+    };
+
     fpm = {
       settings = mkOption {
         type = with types; attrsOf (oneOf [ str int bool ]);
@@ -332,7 +393,12 @@ in
 
       packages = with pkgs; [
         cfg.package
-      ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
+      ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer
+      ++ lib.optionals cfg.dev.enable (
+        lib.optional cfg.dev.lsp.enable cfg.dev.lsp.package ++
+          lib.optional cfg.dev.formatter.enable cfg.dev.formatter.package ++
+          lib.optional cfg.dev.linter.enable cfg.dev.linter.package
+      );
 
       env.PHPFPMDIR = runtimeDir;
 

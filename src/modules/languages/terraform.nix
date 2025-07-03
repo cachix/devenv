@@ -29,6 +29,42 @@ in
       '';
       example = "1.5.0 or 1.6.2";
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Terraform development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Terraform language server (terraform-ls).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.terraform-ls;
+          defaultText = lib.literalExpression "pkgs.terraform-ls";
+          description = "The terraform-ls package to use.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable tfsec linter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.tfsec;
+          defaultText = lib.literalExpression "pkgs.tfsec";
+          description = "The tfsec package to use.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -36,10 +72,11 @@ in
       (lib.mkIf (cfg.version != null) (nixpkgs-terraform.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")))
     ];
 
-    packages = with pkgs; [
+    packages = [
       cfg.package
-      terraform-ls
-      tfsec
-    ];
+    ] ++ lib.optionals cfg.dev.enable (
+      lib.optional (cfg.dev.lsp.enable) cfg.dev.lsp.package ++
+        lib.optional (cfg.dev.linter.enable) cfg.dev.linter.package
+    );
   };
 }

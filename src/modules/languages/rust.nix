@@ -49,11 +49,12 @@ in
 
     components = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
-      defaultText = lib.literalExpression ''[ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ]'';
+      default = [ "rustc" "cargo" ];
+      defaultText = lib.literalExpression ''[ "rustc" "cargo" ]'';
       description = ''
         List of [Rustup components](https://rust-lang.github.io/rustup/concepts/components.html)
-        to install. Defaults to those available in `nixpkgs`.
+        to install. Defaults to core components only. Development tools like clippy, rustfmt,
+        and rust-analyzer are controlled by the dev options.
       '';
     };
 
@@ -121,6 +122,56 @@ in
       default = { };
       defaultText = lib.literalExpression "nixpkgs";
       description = "Rust component packages. May optionally define additional components, for example `miri`.";
+    };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Rust development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable rust-analyzer language server.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.toolchain.rust-analyzer or pkgs.rust-analyzer;
+          defaultText = lib.literalExpression "cfg.toolchain.rust-analyzer or pkgs.rust-analyzer";
+          description = "The rust-analyzer package to use.";
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable rustfmt formatter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.toolchain.rustfmt or pkgs.rustfmt;
+          defaultText = lib.literalExpression "cfg.toolchain.rustfmt or pkgs.rustfmt";
+          description = "The rustfmt package to use.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable clippy linter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.toolchain.clippy or pkgs.clippy;
+          defaultText = lib.literalExpression "cfg.toolchain.clippy or pkgs.clippy";
+          description = "The clippy package to use.";
+        };
+      };
     };
   };
 
@@ -192,13 +243,19 @@ in
           };
 
         git-hooks.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
-        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
-        git-hooks.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
+        git-hooks.tools.rustfmt = mkOverrideTools (if cfg.dev.enable && cfg.dev.formatter.enable then cfg.dev.formatter.package else null);
+        git-hooks.tools.clippy = mkOverrideTools (if cfg.dev.enable && cfg.dev.linter.enable then cfg.dev.linter.package else null);
       }
     )
 
     (lib.mkIf (cfg.channel == "nixpkgs") {
-      packages = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
+      packages =
+        (builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components)
+        ++ lib.optionals cfg.dev.enable (
+          lib.optional (cfg.dev.lsp.enable) cfg.dev.lsp.package ++
+          lib.optional (cfg.dev.formatter.enable) cfg.dev.formatter.package ++
+          lib.optional (cfg.dev.linter.enable) cfg.dev.linter.package
+        );
     })
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
@@ -212,7 +269,14 @@ in
 
         packages = [
           (combine "rust-mixed" (
-            (map (c: cfg.toolchain.${c}) (cfg.components ++ [ "rust-std" ])) ++
+            (map (c: cfg.toolchain.${c}) (
+              cfg.components ++ [ "rust-std" ] ++
+              lib.optionals cfg.dev.enable (
+                lib.optional (cfg.dev.lsp.enable) "rust-analyzer" ++
+                lib.optional (cfg.dev.formatter.enable) "rustfmt" ++
+                lib.optional (cfg.dev.linter.enable) "clippy"
+              )
+            )) ++
             (map (t: toolchain._components.${t}.rust-std) cfg.targets)
           ))
         ];

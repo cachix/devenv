@@ -14,17 +14,40 @@ in
       description = "The odin package to use.";
     };
 
-    debugger = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
-      default =
-        if lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.gdb
-        then pkgs.gdb
-        else null;
-      defaultText = lib.literalExpression "pkgs.gdb";
-      description = ''
-        An optional debugger package to use with odin.
-        The default is `gdb`, if supported on the current system.
-      '';
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Odin development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Odin language server (ols).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.ols;
+          defaultText = lib.literalExpression "pkgs.ols";
+          description = "The ols package to use.";
+        };
+      };
+
+      debugger = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable gdb debugger.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.gdb;
+          defaultText = lib.literalExpression "pkgs.gdb";
+          description = "The gdb package to use.";
+        };
+      };
     };
   };
 
@@ -34,7 +57,9 @@ in
       clang
       gnumake
       cfg.package
-    ] ++ lib.optional (cfg.debugger != null) cfg.debugger
-    ++ lib.optional (lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.ols) pkgs.ols;
+    ] ++ lib.optionals cfg.dev.enable (
+      lib.optional (cfg.dev.lsp.enable && lib.meta.availableOn pkgs.stdenv.hostPlatform cfg.dev.lsp.package) cfg.dev.lsp.package ++
+        lib.optional (cfg.dev.debugger.enable && lib.meta.availableOn pkgs.stdenv.hostPlatform cfg.dev.debugger.package) cfg.dev.debugger.package
+    );
   };
 }

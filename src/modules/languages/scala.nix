@@ -36,6 +36,42 @@ in
         default = "mill";
       };
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Scala development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Metals language server (the standard LSP for Scala).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.metals.override { jre = java.jdk.package; };
+          defaultText = lib.literalExpression "pkgs.metals.override { jre = java.jdk.package; }";
+          description = "The Metals package to use. Metals is the standard LSP implementation for Scala by Scalameta.";
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable scalafmt formatter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.scalafmt.override { jre = java.jdk.package; };
+          defaultText = lib.literalExpression "pkgs.scalafmt.override { jre = java.jdk.package; }";
+          description = "The scalafmt package to use.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -43,9 +79,7 @@ in
       with pkgs;
       [
         (cfg.package.override { jre = java.jdk.package; })
-        (metals.override { jre = java.jdk.package; })
         (coursier.override { jre = java.jdk.package; })
-        (scalafmt.override { jre = java.jdk.package; })
       ]
       ++ lib.optionals cfg.sbt.enable [
         (sbt.override (
@@ -63,7 +97,11 @@ in
       ]
       ++ lib.optionals (lib.versionAtLeast java.jdk.package.version "17") [
         (scala-cli.override { jre = java.jdk.package; })
-      ];
+      ]
+      ++ lib.optionals cfg.dev.enable (
+        lib.optional cfg.dev.lsp.enable cfg.dev.lsp.package ++
+        lib.optional cfg.dev.formatter.enable cfg.dev.formatter.package
+      );
 
     languages.java.enable = true;
   };

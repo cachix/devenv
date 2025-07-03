@@ -13,6 +13,17 @@ in
       default = pkgs.unison-ucm;
       defaultText = lib.literalExpression "pkgs.unison-ucm";
     };
+
+    lsp = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Enable Unison language server support.
+          The language server is included with the main Unison package.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {

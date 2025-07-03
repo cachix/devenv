@@ -18,18 +18,6 @@ in
       '';
     };
 
-    languageServer = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
-      default = pkgs.haskell-language-server.override
-        {
-          supportedGhcVersions = [ ghcVersion ];
-        };
-      defaultText = lib.literalExpression "pkgs.haskell-language-server";
-      description = ''
-        Haskell language server to use.
-      '';
-    };
-
     stack = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
       default = pkgs.stack;
@@ -37,6 +25,65 @@ in
       description = ''
         Haskell stack to use.
       '';
+    };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Haskell development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable haskell-language-server language server.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.haskell-language-server.override
+            {
+              supportedGhcVersions = [ ghcVersion ];
+            };
+          defaultText = lib.literalExpression ''
+            pkgs.haskell-language-server.override {
+              supportedGhcVersions = [ ghcVersion ];
+            }
+          '';
+          description = ''
+            The haskell-language-server package to use.
+          '';
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable ormolu formatter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.haskellPackages.ormolu;
+          defaultText = lib.literalExpression "pkgs.haskellPackages.ormolu";
+          description = "The ormolu package to use.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable hlint linter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.haskellPackages.hlint;
+          defaultText = lib.literalExpression "pkgs.haskellPackages.hlint";
+          description = "The hlint package to use.";
+        };
+      };
     };
   };
 
@@ -47,7 +94,11 @@ in
       zlib
       hpack
     ]
-    ++ (lib.optional (cfg.languageServer != null) cfg.languageServer)
-    ++ (lib.optional (cfg.stack != null) cfg.stack);
+    ++ (lib.optional (cfg.stack != null) cfg.stack)
+    ++ lib.optionals cfg.dev.enable (
+      lib.optional cfg.dev.lsp.enable cfg.dev.lsp.package ++
+        lib.optional cfg.dev.formatter.enable cfg.dev.formatter.package ++
+        lib.optional cfg.dev.linter.enable cfg.dev.linter.package
+    );
   };
 }

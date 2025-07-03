@@ -13,6 +13,17 @@ in {
         The lean4 package to use.
       '';
     };
+
+    lsp = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Enable Lean 4 language server support.
+          The language server is included with the main Lean 4 package.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {

@@ -12,6 +12,38 @@ in
       default = pkgs.deno;
       defaultText = lib.literalExpression "pkgs.deno";
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Deno development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable deno language server.";
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable deno formatter.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable deno linter.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {

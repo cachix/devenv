@@ -14,11 +14,22 @@ in {
       '';
       example = lib.literalExpression "pkgs.idris";
     };
+
+    lsp = {
+      enable = lib.mkEnableOption "Idris language server";
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.idris2Packages.idris2Lsp;
+        defaultText = lib.literalExpression "pkgs.idris2Packages.idris2Lsp";
+        description = "Idris language server package to use.";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = [
       cfg.package
-    ];
+    ] ++ lib.optional cfg.lsp.enable cfg.lsp.package;
   };
 }

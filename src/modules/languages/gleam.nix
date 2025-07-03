@@ -13,6 +13,30 @@ in
       description = "The Gleam package to use.";
       defaultText = lib.literalExpression "pkgs.gleam";
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Gleam development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable gleam language server.";
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable gleam formatter.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {

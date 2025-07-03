@@ -31,6 +31,27 @@ in
         defaultText = lib.literalExpression "foundry.defaultPackage.$${pkgs.stdenv.system}";
       };
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Solidity development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Enable Solidity language server. Note: No stable Solidity LSP is currently available in nixpkgs.";
+        };
+        # Solidity LSP servers exist but are not yet stable or available in nixpkgs:
+        # - solidity-language-server (juanfranblanco/vscode-solidity) - VS Code extension with LSP
+        # - solc-language-server (protofire/solc-language-server) - Alternative implementation
+        # - hardhat-solidity (NomicFoundation/hardhat-vscode) - Hardhat-based LSP
+        # Once a stable LSP becomes available in nixpkgs, add package option here
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {

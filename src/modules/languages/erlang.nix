@@ -16,14 +16,37 @@ in
       default = pkgs.erlang_27;
       defaultText = lib.literalExpression "pkgs.erlang";
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Erlang development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable erlang-ls language server.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.erlang-ls;
+          defaultText = lib.literalExpression "pkgs.erlang-ls";
+          description = "The erlang-ls package to use.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable
     {
       packages = [
         cfg.package
-        pkgs.erlang-ls
         rebar3
-      ];
+      ] ++ lib.optionals cfg.dev.enable (
+        lib.optional (cfg.dev.lsp.enable) cfg.dev.lsp.package
+      );
     };
 }
