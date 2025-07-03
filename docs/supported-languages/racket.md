@@ -5,6 +5,8 @@
 
 ## languages\.racket\.enable
 
+
+
 Whether to enable tools for Racket development\.
 
 
@@ -39,3 +41,37 @@ package
 
 *Default:*
 ` pkgs.racket-minimal `
+
+
+
+## languages\.racket\.dev\.enable
+
+Enable Racket development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.racket\.dev\.lsp\.enable
+
+
+
+Enable Racket language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `

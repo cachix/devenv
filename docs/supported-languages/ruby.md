@@ -83,6 +83,143 @@ package
 
 
 
+## languages\.ruby\.dev\.enable
+
+
+
+Enable Ruby development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ruby\.dev\.formatter\.enable
+
+
+
+Enable Ruby formatter (rubocop)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ruby\.dev\.formatter\.package
+
+
+
+The rubocop package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rubyPackages.rubocop `
+
+
+
+## languages\.ruby\.dev\.linter\.enable
+
+
+
+Enable Ruby linter (rubocop)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ruby\.dev\.linter\.package
+
+
+
+The rubocop package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rubyPackages.rubocop `
+
+
+
+## languages\.ruby\.dev\.lsp\.enable
+
+
+
+Enable Ruby language server (solargraph)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ruby\.dev\.lsp\.package
+
+
+
+The Ruby language server package to use\.
+
+Available options:
+
+ - ` pkgs.rubyPackages.solargraph ` (default): Mature, feature-rich LSP by Fred Snyder
+ - ` pkgs.rubyPackages.ruby-lsp `: Newer LSP by Shopify, actively developed
+
+To switch to ruby-lsp, use:
+
+```nix
+languages.ruby.dev.lsp.package = pkgs.rubyPackages.ruby-lsp;
+```
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rubyPackages.solargraph `
+
+
+
 ## languages\.ruby\.version
 
 

@@ -5,6 +5,8 @@
 
 ## languages\.haskell\.enable
 
+
+
 Whether to enable tools for Haskell development\.
 
 
@@ -42,21 +44,133 @@ package
 
 
 
-## languages\.haskell\.languageServer
+## languages\.haskell\.dev\.enable
 
-
-
-Haskell language server to use\.
+Enable Haskell development tools\.
 
 
 
 *Type:*
-null or package
+boolean
 
 
 
 *Default:*
-` pkgs.haskell-language-server `
+` true `
+
+
+
+## languages\.haskell\.dev\.formatter\.enable
+
+
+
+Enable ormolu formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.haskell\.dev\.formatter\.package
+
+
+
+The ormolu package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.haskellPackages.ormolu `
+
+
+
+## languages\.haskell\.dev\.linter\.enable
+
+
+
+Enable hlint linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.haskell\.dev\.linter\.package
+
+
+
+The hlint package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.haskellPackages.hlint `
+
+
+
+## languages\.haskell\.dev\.lsp\.enable
+
+
+
+Enable haskell-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.haskell\.dev\.lsp\.package
+
+
+
+The haskell-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+
+```
+pkgs.haskell-language-server.override {
+  supportedGhcVersions = [ ghcVersion ];
+}
+
+```
 
 
 

@@ -5,6 +5,8 @@
 
 ## languages\.lua\.enable
 
+
+
 Whether to enable tools for Lua development\.
 
 
@@ -39,3 +41,98 @@ package
 
 *Default:*
 ` pkgs.lua `
+
+
+
+## languages\.lua\.dev\.enable
+
+Enable Lua development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.lua\.dev\.formatter\.enable
+
+
+
+Enable Lua formatter (stylua)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.lua\.dev\.formatter\.package
+
+
+
+The stylua package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.stylua `
+
+
+
+## languages\.lua\.dev\.lsp\.enable
+
+
+
+Enable Lua language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.lua\.dev\.lsp\.package
+
+
+
+The lua-language-server package to use\.
+
+lua-language-server (LuaLS) is the most popular and actively maintained LSP for Lua\.
+
+Alternative LSPs available in nixpkgs:
+
+ - lua-lsp: Earlier implementation by Alloyed
+ - EmmyLua-LanguageServer: IntelliJ-based LSP (not available in nixpkgs)
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.lua-language-server `

@@ -5,6 +5,8 @@
 
 ## languages\.robotframework\.enable
 
+
+
 Whether to enable tools for Robot Framework development\.
 
 
@@ -21,6 +23,58 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.robotframework\.dev\.enable
+
+Enable Robot Framework development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.robotframework\.dev\.lsp\.enable
+
+
+
+Enable Robot Framework language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.robotframework\.dev\.lsp\.package
+
+
+
+The robotframework-lsp package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.python3Packages.robotframework-lsp `
 
 
 

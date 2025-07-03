@@ -5,6 +5,8 @@
 
 ## languages\.shell\.enable
 
+
+
 Whether to enable tools for shell development\.
 
 
@@ -21,3 +23,163 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.shell\.dev\.enable
+
+Enable Shell development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.shell\.dev\.formatter\.enable
+
+
+
+Enable shfmt formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.shell\.dev\.formatter\.package
+
+
+
+The shfmt package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.shfmt `
+
+
+
+## languages\.shell\.dev\.linter\.enable
+
+
+
+Enable shellcheck linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.shell\.dev\.linter\.package
+
+
+
+The shellcheck package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.shellcheck `
+
+
+
+## languages\.shell\.dev\.lsp\.enable
+
+
+
+Enable bash language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.shell\.dev\.lsp\.package
+
+
+
+The bash-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.bash-language-server `
+
+
+
+## languages\.shell\.dev\.testRunner\.enable
+
+
+
+Enable bats test runner\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.shell\.dev\.testRunner\.package
+
+
+
+The bats package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.bats.withLibraries (p: [ p.bats-assert p.bats-file p.bats-support ]) `

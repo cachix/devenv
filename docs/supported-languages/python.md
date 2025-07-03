@@ -44,7 +44,241 @@ package
 
 
 
+## languages\.python\.dev\.enable
+
+
+
+Enable Python development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.python\.dev\.debugger\.enable
+
+Enable debugpy debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.python\.dev\.debugger\.package
+
+
+
+The debugpy package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.pkgs.debugpy `
+
+
+
+## languages\.python\.dev\.formatter\.enable
+
+
+
+Enable black formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.python\.dev\.formatter\.package
+
+
+
+The black package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.pkgs.black `
+
+
+
+## languages\.python\.dev\.linter\.enable
+
+
+
+Enable Ruff linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.python\.dev\.linter\.package
+
+
+
+The ruff package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.pkgs.ruff `
+
+
+
+## languages\.python\.dev\.lsp\.enable
+
+
+
+Enable python-lsp-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.python\.dev\.lsp\.package
+
+
+
+The Python LSP package to use\. Can be changed to pyright, jedi-language-server, or other LSP implementations\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.pkgs.python-lsp-server `
+
+
+
+## languages\.python\.dev\.testRunner\.enable
+
+
+
+Enable pytest test runner\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.python\.dev\.testRunner\.package
+
+
+
+The pytest package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.pkgs.pytest `
+
+
+
+## languages\.python\.dev\.typeChecker\.enable
+
+
+
+Enable mypy type checker\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.python\.dev\.typeChecker\.package
+
+
+
+The mypy package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.pkgs.mypy `
+
+
+
 ## languages\.python\.directory
+
+
 
 The Python project’s root directory\. Defaults to the root of the devenv project\.
 Can be an absolute path or one relative to the root of the devenv project\.

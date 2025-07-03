@@ -5,6 +5,8 @@
 
 ## languages\.zig\.enable
 
+
+
 Whether to enable tools for Zig development\.
 
 
@@ -42,7 +44,59 @@ package
 
 
 
-## languages\.zig\.zls\.package
+## languages\.zig\.dev\.enable
+
+Enable Zig development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.zig\.dev\.formatter\.enable
+
+
+
+Enable zig formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.zig\.dev\.lsp\.enable
+
+
+
+Enable Zig language server (zls)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.zig\.dev\.lsp\.package
 
 
 

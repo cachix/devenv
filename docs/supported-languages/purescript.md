@@ -5,6 +5,8 @@
 
 ## languages\.purescript\.enable
 
+
+
 Whether to enable tools for PureScript development\.
 
 
@@ -39,3 +41,127 @@ package
 
 *Default:*
 ` pkgs.purescript `
+
+
+
+## languages\.purescript\.dev\.enable
+
+Enable PureScript development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.purescript\.dev\.formatter\.enable
+
+
+
+Enable purs-tidy formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.purescript\.dev\.formatter\.package
+
+
+
+The purs-tidy package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.purs-tidy `
+
+
+
+## languages\.purescript\.dev\.lsp\.enable
+
+
+
+Enable PureScript language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.purescript\.dev\.lsp\.package
+
+
+
+The purescript-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.purescript-language-server `
+
+
+
+## languages\.purescript\.dev\.tools\.psa\.enable
+
+
+
+Enable PureScript Assistant (psa)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.purescript\.dev\.tools\.psa\.package
+
+
+
+The purescript-psa package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.purescript-psa `

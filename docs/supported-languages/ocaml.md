@@ -5,6 +5,8 @@
 
 ## languages\.ocaml\.enable
 
+
+
 Whether to enable tools for OCaml development\.
 
 
@@ -39,3 +41,235 @@ attribute set
 
 *Default:*
 ` pkgs.ocaml-ng.ocamlPackages_4_12 `
+
+
+
+## languages\.ocaml\.dev\.enable
+
+Enable OCaml development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ocaml\.dev\.formatter\.enable
+
+
+
+Enable OCaml formatter (ocamlformat)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ocaml\.dev\.formatter\.package
+
+
+
+The ocamlformat package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ocamlformat `
+
+
+
+## languages\.ocaml\.dev\.lsp\.enable
+
+
+
+Enable OCaml language server (ocaml-lsp)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ocaml\.dev\.lsp\.package
+
+
+
+The ocaml-lsp package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.packages.ocaml-lsp `
+
+
+
+## languages\.ocaml\.dev\.tools\.merlin\.enable
+
+
+
+Enable Merlin editor service\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ocaml\.dev\.tools\.merlin\.package
+
+
+
+The merlin package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.packages.merlin `
+
+
+
+## languages\.ocaml\.dev\.tools\.ocp-indent\.enable
+
+
+
+Enable ocp-indent indenter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ocaml\.dev\.tools\.ocp-indent\.package
+
+
+
+The ocp-indent package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.packages.ocp-indent `
+
+
+
+## languages\.ocaml\.dev\.tools\.odoc\.enable
+
+
+
+Enable odoc documentation generator\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ocaml\.dev\.tools\.odoc\.package
+
+
+
+The odoc package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.packages.odoc `
+
+
+
+## languages\.ocaml\.dev\.tools\.utop\.enable
+
+
+
+Enable UTop REPL\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ocaml\.dev\.tools\.utop\.package
+
+
+
+The utop package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.packages.utop `

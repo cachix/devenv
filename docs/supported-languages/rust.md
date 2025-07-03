@@ -47,7 +47,8 @@ one of “nixpkgs”, “stable”, “beta”, “nightly”
 
 
 List of [Rustup components](https://rust-lang\.github\.io/rustup/concepts/components\.html)
-to install\. Defaults to those available in ` nixpkgs `\.
+to install\. Defaults to core components only\. Development tools like clippy, rustfmt,
+and rust-analyzer are controlled by the dev options\.
 
 
 
@@ -57,7 +58,133 @@ list of string
 
 
 *Default:*
-` [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ] `
+` [ "rustc" "cargo" ] `
+
+
+
+## languages\.rust\.dev\.enable
+
+
+
+Enable Rust development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.rust\.dev\.formatter\.enable
+
+
+
+Enable rustfmt formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.rust\.dev\.formatter\.package
+
+
+
+The rustfmt package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.toolchain.rustfmt or pkgs.rustfmt `
+
+
+
+## languages\.rust\.dev\.linter\.enable
+
+
+
+Enable clippy linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.rust\.dev\.linter\.package
+
+
+
+The clippy package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.toolchain.clippy or pkgs.clippy `
+
+
+
+## languages\.rust\.dev\.lsp\.enable
+
+
+
+Enable rust-analyzer language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.rust\.dev\.lsp\.package
+
+
+
+The rust-analyzer package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.toolchain.rust-analyzer or pkgs.rust-analyzer `
 
 
 

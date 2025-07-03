@@ -5,6 +5,8 @@
 
 ## languages\.standardml\.enable
 
+
+
 Whether to enable tools for Standard ML development\.
 
 
@@ -39,3 +41,91 @@ package
 
 *Default:*
 ` pkgs.mlton `
+
+
+
+## languages\.standardml\.dev\.enable
+
+Enable Standard ML development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.standardml\.dev\.formatter\.enable
+
+
+
+Enable Standard ML formatter (smlfmt)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.standardml\.dev\.formatter\.package
+
+
+
+The smlfmt package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.smlfmt `
+
+
+
+## languages\.standardml\.dev\.lsp\.enable
+
+
+
+Enable Standard ML language server (millet)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.standardml\.dev\.lsp\.package
+
+
+
+The millet package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.millet `

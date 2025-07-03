@@ -5,6 +5,8 @@
 
 ## languages\.fortran\.enable
 
+
+
 Whether to enable tools for Fortran Development…
 
 
@@ -39,3 +41,91 @@ package
 
 *Default:*
 ` pkgs.gfortran `
+
+
+
+## languages\.fortran\.dev\.enable
+
+Enable Fortran development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.fortran\.dev\.fpm\.enable
+
+
+
+Enable fortran-fpm package manager\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.fortran\.dev\.fpm\.package
+
+
+
+The fortran-fpm package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.fortran-fpm `
+
+
+
+## languages\.fortran\.dev\.lsp\.enable
+
+
+
+Enable fortran-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.fortran\.dev\.lsp\.package
+
+
+
+The fortran-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.fortran-language-server `

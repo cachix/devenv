@@ -5,6 +5,8 @@
 
 ## languages\.typescript\.enable
 
+
+
 Whether to enable tools for TypeScript development\.
 
 
@@ -21,3 +23,127 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.typescript\.dev\.enable
+
+Enable TypeScript development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.typescript\.dev\.formatter\.enable
+
+
+
+Enable prettier formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.typescript\.dev\.formatter\.package
+
+
+
+The prettier package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.prettier `
+
+
+
+## languages\.typescript\.dev\.linter\.enable
+
+
+
+Enable eslint linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.typescript\.dev\.linter\.package
+
+
+
+The eslint package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.eslint `
+
+
+
+## languages\.typescript\.dev\.lsp\.enable
+
+
+
+Enable typescript-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.typescript\.dev\.lsp\.package
+
+
+
+The typescript-language-server package to use\. This wraps Microsoft’s tsserver and provides LSP support for both JavaScript and TypeScript\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.typescript-language-server `

@@ -5,6 +5,8 @@
 
 ## languages\.typst\.enable
 
+
+
 Whether to enable tools for Typst development\.
 
 
@@ -39,6 +41,94 @@ package
 
 *Default:*
 ` pkgs.typst `
+
+
+
+## languages\.typst\.dev\.enable
+
+Enable Typst development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.typst\.dev\.formatter\.enable
+
+
+
+Enable Typst formatter (typstyle)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.typst\.dev\.formatter\.package
+
+
+
+The typstyle package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typstyle `
+
+
+
+## languages\.typst\.dev\.lsp\.enable
+
+
+
+Enable Typst language server (tinymist)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.typst\.dev\.lsp\.package
+
+
+
+The tinymist package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.tinymist `
 
 
 

@@ -5,6 +5,8 @@
 
 ## languages\.nim\.enable
 
+
+
 Whether to enable tools for Nim development\.
 
 
@@ -39,3 +41,73 @@ package
 
 *Default:*
 ` pkgs.nim `
+
+
+
+## languages\.nim\.dev\.enable
+
+Enable Nim development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nim\.dev\.formatter\.enable
+
+
+
+Enable nimpretty formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nim\.dev\.lsp\.enable
+
+
+
+Enable Nim language server (nimlangserver)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nim\.dev\.lsp\.package
+
+
+
+The nimlangserver package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nimlangserver `

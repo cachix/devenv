@@ -5,6 +5,8 @@
 
 ## languages\.kotlin\.enable
 
+
+
 Whether to enable tools for Kotlin development\.
 
 
@@ -21,3 +23,91 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.kotlin\.dev\.enable
+
+Enable Kotlin development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.kotlin\.dev\.formatter\.enable
+
+
+
+Enable ktlint formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.kotlin\.dev\.formatter\.package
+
+
+
+The ktlint package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ktlint `
+
+
+
+## languages\.kotlin\.dev\.lsp\.enable
+
+
+
+Enable Kotlin language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.kotlin\.dev\.lsp\.package
+
+
+
+The kotlin-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.kotlin-language-server `

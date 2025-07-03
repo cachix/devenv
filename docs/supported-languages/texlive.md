@@ -73,3 +73,44 @@ unspecified value
 
 *Example:*
 ` pkgs.texliveBasic `
+
+
+
+## languages\.texlive\.lsp\.enable
+
+
+
+Whether to enable LaTeX language server (texlab)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## languages\.texlive\.lsp\.package
+
+
+
+LaTeX language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.texlab `

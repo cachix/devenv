@@ -5,6 +5,8 @@
 
 ## languages\.clojure\.enable
 
+
+
 Whether to enable tools for Clojure development\.
 
 
@@ -21,3 +23,127 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.clojure\.dev\.enable
+
+Enable Clojure development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.clojure\.dev\.formatter\.enable
+
+
+
+Enable cljfmt formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.clojure\.dev\.formatter\.package
+
+
+
+The cljfmt package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clojure-lsp `
+
+
+
+## languages\.clojure\.dev\.linter\.enable
+
+
+
+Enable clj-kondo linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.clojure\.dev\.linter\.package
+
+
+
+The clj-kondo package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clj-kondo `
+
+
+
+## languages\.clojure\.dev\.lsp\.enable
+
+
+
+Enable clojure-lsp language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.clojure\.dev\.lsp\.package
+
+
+
+The clojure-lsp package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clojure-lsp `

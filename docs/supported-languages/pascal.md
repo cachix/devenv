@@ -5,6 +5,8 @@
 
 ## languages\.pascal\.enable
 
+
+
 Whether to enable tools for Pascal development\.
 
 
@@ -21,6 +23,40 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.pascal\.dev\.enable
+
+Enable Pascal development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.pascal\.dev\.lsp\.enable
+
+
+
+Enable Pascal language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
 
 
 

@@ -5,6 +5,8 @@
 
 ## languages\.gawk\.enable
 
+
+
 Whether to enable tools for GNU Awk development\.
 
 
@@ -21,3 +23,55 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.gawk\.dev\.enable
+
+Enable GNU Awk development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.gawk\.dev\.lsp\.enable
+
+
+
+Enable awk-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.gawk\.dev\.lsp\.package
+
+
+
+The awk-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.awk-language-server `

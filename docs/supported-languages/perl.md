@@ -5,6 +5,8 @@
 
 ## languages\.perl\.enable
 
+
+
 Whether to enable tools for Perl development\.
 
 
@@ -49,3 +51,91 @@ list of string
   "Mojolicious"
 ]
 ```
+
+
+
+## languages\.perl\.dev\.enable
+
+Enable Perl development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.perl\.dev\.formatter\.enable
+
+
+
+Enable Perl formatter (perltidy)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.perl\.dev\.formatter\.package
+
+
+
+The perltidy package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.perlPackages.PerlTidy `
+
+
+
+## languages\.perl\.dev\.lsp\.enable
+
+
+
+Enable Perl language server (PerlLanguageServer)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.perl\.dev\.lsp\.package
+
+
+
+The PerlLanguageServer package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.perlPackages.PerlLanguageServer `

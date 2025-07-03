@@ -5,6 +5,8 @@
 
 ## languages\.terraform\.enable
 
+
+
 Whether to enable tools for Terraform development\.
 
 
@@ -39,6 +41,94 @@ package
 
 *Default:*
 ` pkgs.terraform `
+
+
+
+## languages\.terraform\.dev\.enable
+
+Enable Terraform development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.terraform\.dev\.linter\.enable
+
+
+
+Enable tfsec linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.terraform\.dev\.linter\.package
+
+
+
+The tfsec package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.tfsec `
+
+
+
+## languages\.terraform\.dev\.lsp\.enable
+
+
+
+Enable Terraform language server (terraform-ls)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.terraform\.dev\.lsp\.package
+
+
+
+The terraform-ls package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.terraform-ls `
 
 
 

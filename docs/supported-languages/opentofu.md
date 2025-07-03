@@ -39,3 +39,44 @@ package
 
 *Default:*
 ` pkgs.opentofu `
+
+
+
+## languages\.opentofu\.lsp\.enable
+
+
+
+Whether to enable Terraform/OpenTofu language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## languages\.opentofu\.lsp\.package
+
+
+
+Terraform/OpenTofu language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.terraform-lsp `

@@ -5,6 +5,8 @@
 
 ## languages\.vala\.enable
 
+
+
 Whether to enable tools for Vala development\.
 
 
@@ -44,3 +46,55 @@ package
 
 *Example:*
 ` pkgs.vala_0_54 `
+
+
+
+## languages\.vala\.dev\.enable
+
+Enable Vala development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.vala\.dev\.lsp\.enable
+
+
+
+Enable Vala language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.vala\.dev\.lsp\.package
+
+
+
+The vala-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.vala-language-server `

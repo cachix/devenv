@@ -5,6 +5,8 @@
 
 ## languages\.ansible\.enable
 
+
+
 Whether to enable tools for Ansible development\.
 
 
@@ -39,3 +41,91 @@ package
 
 *Default:*
 ` pkgs.ansible `
+
+
+
+## languages\.ansible\.dev\.enable
+
+Enable Ansible development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ansible\.dev\.linter\.enable
+
+
+
+Enable ansible-lint linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ansible\.dev\.linter\.package
+
+
+
+The ansible-lint package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ansible-lint `
+
+
+
+## languages\.ansible\.dev\.lsp\.enable
+
+
+
+Enable ansible-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.ansible\.dev\.lsp\.package
+
+
+
+The ansible-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ansible-language-server `

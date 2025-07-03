@@ -5,6 +5,8 @@
 
 ## languages\.java\.enable
 
+
+
 Whether to enable tools for Java development\.
 
 
@@ -21,6 +23,140 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.java\.dev\.enable
+
+
+
+Enable Java development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.java\.dev\.debugger\.enable
+
+Enable java-debug debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.java\.dev\.debugger\.package
+
+
+
+The java-debug package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.java-debug `
+
+
+
+## languages\.java\.dev\.formatter\.enable
+
+
+
+Enable google-java-format formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.java\.dev\.formatter\.package
+
+
+
+The google-java-format package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.google-java-format `
+
+
+
+## languages\.java\.dev\.lsp\.enable
+
+
+
+Enable jdt-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.java\.dev\.lsp\.package
+
+
+
+The jdt-language-server package to use\.
+
+By default, this uses Eclipse JDT Language Server, which is the most popular
+and feature-rich Java LSP implementation\.
+
+Alternative LSP servers available in nixpkgs:
+
+ - vscode-extensions\.redhat\.java (Red Hat’s Java extension which includes JDT LS)
+ - metals (for Scala/Java projects)
+
+Note: vscode-javac and Apache NetBeans Java LSP are not currently packaged in nixpkgs\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.jdt-language-server `
 
 
 

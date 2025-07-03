@@ -5,6 +5,8 @@
 
 ## languages\.nix\.enable
 
+
+
 Whether to enable tools for Nix development\.
 
 
@@ -24,11 +26,117 @@ boolean
 
 
 
-## languages\.nix\.lsp\.package
+## languages\.nix\.dev\.enable
+
+Enable Nix development tools\.
 
 
 
-The LSP package to use
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nix\.dev\.formatter\.enable
+
+
+
+Enable nixpkgs-fmt formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nix\.dev\.formatter\.package
+
+
+
+The nixpkgs-fmt package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nixpkgs-fmt `
+
+
+
+## languages\.nix\.dev\.linter\.enable
+
+
+
+Enable statix linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nix\.dev\.linter\.package
+
+
+
+The statix package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.statix `
+
+
+
+## languages\.nix\.dev\.lsp\.enable
+
+
+
+Enable Nix language server (nil)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nix\.dev\.lsp\.package
+
+
+
+The nil package to use\.
 
 
 
@@ -39,3 +147,75 @@ package
 
 *Default:*
 ` pkgs.nil `
+
+
+
+## languages\.nix\.dev\.tools\.deadnix\.enable
+
+
+
+Enable deadnix\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nix\.dev\.tools\.deadnix\.package
+
+
+
+The deadnix package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.deadnix `
+
+
+
+## languages\.nix\.dev\.tools\.vulnix\.enable
+
+
+
+Enable vulnix\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.nix\.dev\.tools\.vulnix\.package
+
+
+
+The vulnix package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` vulnix `

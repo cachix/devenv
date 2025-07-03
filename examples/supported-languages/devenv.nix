@@ -3,9 +3,12 @@
 { pkgs, ... }: {
 
   # Enable all languages tooling!
+  languages.ada.enable = true;
   languages.ansible.enable = true;
+  languages.assembly.enable = true;
   languages.c.enable = true;
   languages.clojure.enable = true;
+  languages.cobol.enable = true;
   languages.cplusplus.enable = true;
   languages.crystal.enable = true;
   languages.cue.enable = true;
@@ -28,6 +31,7 @@
   languages.kotlin.enable = true;
   languages.lean4.enable = true;
   languages.lua.enable = true;
+  languages.matlab.enable = true;
   languages.nim.enable = true;
   languages.nix.enable = true;
   languages.ocaml.enable = true;
@@ -47,6 +51,7 @@
   languages.scala.enable = true;
   languages.shell.enable = true;
   languages.solidity.enable = true;
+  languages.sql.enable = true;
   languages.standardml.enable = true;
   languages.swift.enable = true;
   languages.terraform.enable = true;

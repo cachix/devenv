@@ -5,6 +5,8 @@
 
 ## languages\.solidity\.enable
 
+
+
 Whether to enable tools for Solidity development\.
 
 
@@ -39,6 +41,40 @@ package
 
 *Default:*
 ` pkgs.solc `
+
+
+
+## languages\.solidity\.dev\.enable
+
+Enable Solidity development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.solidity\.dev\.lsp\.enable
+
+
+
+Enable Solidity language server\. Note: No stable Solidity LSP is currently available in nixpkgs\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
 
 
 
