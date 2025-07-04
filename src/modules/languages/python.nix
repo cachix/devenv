@@ -139,6 +139,11 @@ let
         UV_SYNC_COMMAND+=(--group "${group}")
       '') cfg.uv.sync.groups}
 
+      # Add all-groups flag if enabled
+      ${lib.optionalString cfg.uv.sync.allGroups ''
+        UV_SYNC_COMMAND+=(--all-groups)
+      ''}
+
       # Avoid running "uv sync" for every shell.
       # Only run it when the "pyproject.toml" file or Python interpreter has changed.
       local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
@@ -343,6 +348,11 @@ in
           default = [ ];
           description = "Which dependency groups to install. See `--group`.";
         };
+        allGroups = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether to install all groups. See `--all-groups`.";
+        };
       };
     };
 
@@ -391,6 +401,11 @@ in
           default = [ ];
           description = "Which dependency groups to exclusively install. See `--only`.";
         };
+        allGroups = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Whether to install all groups. See `--all-groups`.";
+        };
         extras = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [ ];
@@ -431,6 +446,7 @@ in
       lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"'' ] ++
       lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [ "--without" ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"'' ] ++
       lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [ "--only" ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"'' ] ++
+      lib.optional cfg.poetry.install.allGroups "--all-groups" ++
       lib.optionals (cfg.poetry.install.extras != [ ]) [ "--extras" ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"'' ] ++
       lib.optional cfg.poetry.install.allExtras "--all-extras" ++
       lib.optional (cfg.poetry.install.verbosity == "little") "-v" ++
