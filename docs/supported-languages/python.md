@@ -212,6 +212,24 @@ boolean
 
 
 
+## languages\.python\.poetry\.install\.allGroups
+
+
+
+Whether to install all groups\. See ` --all-groups `\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
 ## languages\.python\.poetry\.install\.compile
 
 
@@ -443,6 +461,24 @@ boolean
 
 
 Whether to install all extras\. See ` --all-extras `\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+## languages\.python\.uv\.sync\.allGroups
+
+
+
+Whether to install all groups\. See ` --all-groups `\.
 
 
 
