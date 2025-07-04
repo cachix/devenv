@@ -182,6 +182,8 @@ async fn main() -> Result<()> {
                     devenv-generate was not found in PATH
 
                     It was moved to a separate binary due to https://github.com/cachix/devenv/issues/1733
+
+                    For now, use the web version at https://devenv.new
                 "})
             }
         },
