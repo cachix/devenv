@@ -652,6 +652,16 @@ impl Devenv {
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
+
+        // Capture the shell environment to ensure tasks run with proper devenv setup
+        let envs = self.capture_shell_environment().await?;
+
+        // Set environment variables in the current process
+        // This ensures that tasks have access to all devenv environment variables
+        for (key, value) in &envs {
+            std::env::set_var(key, value);
+        }
+
         let tasks_json_file = {
             // TODO: No newline
             let span = info_span!("tasks_run", devenv.user_message = "Evaluating tasks");
@@ -699,27 +709,10 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn test(&mut self) -> Result<()> {
-        self.assemble(true).await?;
-
-        // collect tests
-        let test_script = {
-            let span = info_span!("test", devenv.user_message = "Building tests");
-            self.nix
-                .build(&["devenv.test"], None)
-                .instrument(span)
-                .await?
-        };
-        let test_script_path = &test_script[0];
-
-        // Add GC root for test script to prevent garbage collection
-        self.nix.add_gc("test", test_script_path).await?;
-
-        let test_script = test_script_path.to_string_lossy().to_string();
-
-        let temp_dir = tempfile::TempDir::with_prefix("devenv-test")
+    async fn capture_shell_environment(&mut self) -> Result<HashMap<String, String>> {
+        let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
-            .wrap_err("Failed to create temporary directory for test")?;
+            .wrap_err("Failed to create temporary directory for environment capture")?;
 
         let script_path = temp_dir.path().join("script");
         let env_path = temp_dir.path().join("env");
@@ -785,6 +778,29 @@ impl Devenv {
         for (key, value) in shell_envs {
             envs.insert(key, value);
         }
+
+        Ok(envs)
+    }
+
+    pub async fn test(&mut self) -> Result<()> {
+        self.assemble(true).await?;
+
+        // collect tests
+        let test_script = {
+            let span = info_span!("test", devenv.user_message = "Building tests");
+            self.nix
+                .build(&["devenv.test"], None)
+                .instrument(span)
+                .await?
+        };
+        let test_script_path = &test_script[0];
+
+        // Add GC root for test script to prevent garbage collection
+        self.nix.add_gc("test", test_script_path).await?;
+
+        let test_script = test_script_path.to_string_lossy().to_string();
+
+        let envs = self.capture_shell_environment().await?;
 
         if self.has_processes().await? {
             let options = ProcessOptions {
