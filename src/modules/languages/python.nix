@@ -87,7 +87,7 @@ let
               echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
               ${if cfg.uv.enable then ''
                 echo "Requirements changed, running uv pip install -r ${requirements}..."
-                ${cfg.uv.package}/bin/uv pip install -r ${requirements}
+                ${cfg.uv.package}/bin/uv pip install --python "$VENV_PATH/bin/python" -r ${requirements}
               ''
               else ''
                   echo "Requirements changed, running pip install -r ${requirements}..."
