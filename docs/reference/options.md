@@ -9272,6 +9272,8 @@ boolean
 
 ## git-hooks.hooks.pylint.description
 
+
+
 Description of the hook. Used for metadata purposes only.
 
 
@@ -11389,6 +11391,8 @@ string
 
 
 ## git-hooks.hooks.yamllint.settings.format
+
+
 
 Format for parsing output.
 
@@ -18575,6 +18579,8 @@ signed integer
 
 ## services.elasticsearch.single_node
 
+
+
 Start a single-node cluster
 
 
@@ -23562,6 +23568,8 @@ package
 
 
 ## services.tideways.environment
+
+
 
 Sets the Environment for Tideways Daemon.
 
