@@ -9272,8 +9272,6 @@ boolean
 
 ## git-hooks.hooks.pylint.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -11391,8 +11389,6 @@ string
 
 
 ## git-hooks.hooks.yamllint.settings.format
-
-
 
 Format for parsing output.
 
@@ -14413,6 +14409,27 @@ boolean
 
 
 
+## languages.python.poetry.install.allGroups
+
+
+
+Whether to install all groups. See ` --all-groups `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.poetry.install.compile
 
 
@@ -14680,6 +14697,27 @@ boolean
 
 
 Whether to install all extras. See ` --all-extras `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.uv.sync.allGroups
+
+
+
+Whether to install all groups. See ` --all-groups `.
 
 
 
@@ -18536,8 +18574,6 @@ signed integer
 
 
 ## services.elasticsearch.single_node
-
-
 
 Start a single-node cluster
 
@@ -23526,8 +23562,6 @@ package
 
 
 ## services.tideways.environment
-
-
 
 Sets the Environment for Tideways Daemon.
 
