@@ -81,11 +81,13 @@ pub struct Devenv {
     devenv_tmp: String,
     devenv_runtime: PathBuf,
 
+    // Whether assemble has been run.
+    // Assemble creates critical runtime directories and files.
     assembled: Arc<AtomicBool>,
-    has_processes: Arc<RwLock<Option<bool>>>,
-
-    // Coordination primitives
+    // Semaphore to prevent multiple concurrent assembles
     assemble_lock: Arc<Semaphore>,
+
+    has_processes: Arc<RwLock<Option<bool>>>,
 
     // TODO: make private.
     // Pass as an arg or have a setter.
@@ -171,8 +173,8 @@ impl Devenv {
             devenv_runtime,
             nix: Arc::new(nix),
             assembled: Arc::new(AtomicBool::new(false)),
-            has_processes: Arc::new(RwLock::new(None)),
             assemble_lock: Arc::new(Semaphore::new(1)),
+            has_processes: Arc::new(RwLock::new(None)),
             container_name: None,
         }
     }
