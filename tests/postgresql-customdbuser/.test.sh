@@ -1,5 +1,6 @@
 set -e
 
+wait_for_processes
 wait_for_port 2345
 pg_isready -d template1
 
@@ -23,7 +24,7 @@ psql \
 	--file=- <<'EOF'
 \dt
 SELECT * FROM supermasters;
-INSERT INTO 
+INSERT INTO
     supermasters (ip,nameserver,account)
     VALUES ('10.100.9.99','dns.example.org','exampleaccount');
 SELECT * FROM supermasters;
