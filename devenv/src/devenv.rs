@@ -22,7 +22,7 @@ use std::sync::{
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 // templates
@@ -87,7 +87,7 @@ pub struct Devenv {
     // Semaphore to prevent multiple concurrent assembles
     assemble_lock: Arc<Semaphore>,
 
-    has_processes: Arc<RwLock<Option<bool>>>,
+    has_processes: Arc<OnceCell<bool>>,
 
     // TODO: make private.
     // Pass as an arg or have a setter.
@@ -174,7 +174,7 @@ impl Devenv {
             nix: Arc::new(nix),
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
-            has_processes: Arc::new(RwLock::new(None)),
+            has_processes: Arc::new(OnceCell::new()),
             container_name: None,
         }
     }
@@ -669,26 +669,14 @@ impl Devenv {
     }
 
     pub async fn has_processes(&self) -> Result<bool> {
-        // Try to read first (common case - already initialized)
-        {
-            let has_processes_guard = self.has_processes.read().await;
-            if let Some(value) = *has_processes_guard {
-                return Ok(value);
-            }
-        }
-
-        // Need to initialize - use write lock with double-check
-        let mut has_processes_write = self.has_processes.write().await;
-        // Double-check in case another thread initialized while we waited for write lock
-        if let Some(value) = *has_processes_write {
-            return Ok(value);
-        }
-
-        // Actually initialize
-        let processes = self.nix.eval(&["devenv.processes"]).await?;
-        let value = processes.trim() != "{}";
-        *has_processes_write = Some(value);
-        Ok(value)
+        let value = self
+            .has_processes
+            .get_or_try_init(|| async {
+                let processes = self.nix.eval(&["devenv.processes"]).await?;
+                Ok::<bool, miette::Report>(processes.trim() != "{}")
+            })
+            .await?;
+        Ok(*value)
     }
 
     pub async fn tasks_run(

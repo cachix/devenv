@@ -12,19 +12,20 @@ use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
+use tokio::sync::OnceCell;
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 
 pub struct Nix {
     pub options: nix_backend::Options,
-    pool: Arc<OnceLock<SqlitePool>>,
+    pool: Arc<OnceCell<SqlitePool>>,
     database_url: String,
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
-    cachix_caches: Arc<OnceLock<CachixCaches>>,
+    cachix_caches: Arc<OnceCell<CachixCaches>>,
     paths: nix_backend::DevenvPaths,
 }
 
@@ -34,7 +35,7 @@ impl Nix {
         global_options: cli::GlobalOptions,
         paths: nix_backend::DevenvPaths,
     ) -> Result<Self> {
-        let cachix_caches = Arc::new(OnceLock::new());
+        let cachix_caches = Arc::new(OnceCell::new());
         let options = nix_backend::Options::default();
 
         let database_url = format!(
@@ -44,7 +45,7 @@ impl Nix {
 
         Ok(Self {
             options,
-            pool: Arc::new(OnceLock::new()),
+            pool: Arc::new(OnceCell::new()),
             database_url,
             config,
             global_options,
@@ -55,18 +56,20 @@ impl Nix {
 
     // Defer creating local project state
     pub async fn assemble(&self) -> Result<()> {
-        if self.pool.get().is_none() {
-            // Extract database path from URL
-            let path = PathBuf::from(self.database_url.trim_start_matches("sqlite:"));
+        self.pool
+            .get_or_try_init(|| async {
+                // Extract database path from URL
+                let path = PathBuf::from(self.database_url.trim_start_matches("sqlite:"));
 
-            // Connect to database and run migrations in one step
-            let db = devenv_cache_core::db::Database::new(path, &devenv_eval_cache::db::MIGRATIONS)
-                .await
-                .into_diagnostic()?;
+                // Connect to database and run migrations in one step
+                let db =
+                    devenv_cache_core::db::Database::new(path, &devenv_eval_cache::db::MIGRATIONS)
+                        .await
+                        .map_err(|e| miette::miette!("Failed to initialize database: {}", e))?;
 
-            // This will only succeed for the first thread, others will just get the existing value
-            let _ = self.pool.set(db.pool().clone());
-        }
+                Ok::<_, miette::Report>(db.pool().clone())
+            })
+            .await?;
 
         Ok(())
     }
@@ -598,12 +601,8 @@ impl Nix {
     }
 
     async fn get_cachix_caches(&self) -> Result<CachixCaches> {
-        // Check if cache exists
-        if let Some(caches) = self.cachix_caches.get() {
-            return Ok(caches.clone());
-        }
-
-        // Cache doesn't exist, need to populate it
+        self.cachix_caches
+            .get_or_try_init(|| async {
         let no_logging = nix_backend::Options {
             logging: false,
             ..self.options
@@ -621,12 +620,10 @@ impl Nix {
             .into_diagnostic()
             .wrap_err("Failed to parse the cachix configuration")?;
 
-        // Return empty caches if the Cachix integration is disabled
-        if !cachix_config.enable {
-            let caches = CachixCaches::default();
-            let _ = self.cachix_caches.set(caches.clone());
-            return Ok(caches);
-        }
+                // Return empty caches if the Cachix integration is disabled
+                if !cachix_config.enable {
+                    return Ok(CachixCaches::default());
+                }
 
         let known_keys: BTreeMap<String, String> = known_keys_result
             .into_diagnostic()
@@ -870,8 +867,10 @@ impl Nix {
             }
         }
 
-        let _ = self.cachix_caches.set(caches.clone());
-        Ok(caches)
+                Ok::<_, miette::Report>(caches)
+            })
+            .await
+            .map(|c| c.clone())
     }
 
     fn name(&self) -> &'static str {
