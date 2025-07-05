@@ -13,6 +13,30 @@ in
       defaultText = lib.literalExpression "pkgs.dart";
       description = "The Dart package to use.";
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Dart development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable dart language server.";
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable dart formatter.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {

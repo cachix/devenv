@@ -5,6 +5,8 @@
 
 ## languages\.elm\.enable
 
+
+
 Whether to enable tools for Elm development\.
 
 
@@ -21,3 +23,145 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.elm\.package
+
+
+
+The Elm compiler package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elmPackages.elm `
+
+
+
+## languages\.elm\.dev\.enable
+
+Enable Elm development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elm\.dev\.formatter\.enable
+
+
+
+Enable elm-format formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elm\.dev\.formatter\.package
+
+
+
+The elm-format package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elmPackages.elm-format `
+
+
+
+## languages\.elm\.dev\.lsp\.enable
+
+
+
+Enable elm-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elm\.dev\.lsp\.package
+
+
+
+The elm-language-server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elmPackages.elm-language-server `
+
+
+
+## languages\.elm\.dev\.test\.enable
+
+
+
+Enable elm-test test runner\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elm\.dev\.test\.package
+
+
+
+The elm-test package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elmPackages.elm-test `

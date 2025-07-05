@@ -96,7 +96,143 @@ null or package
 
 
 
+## languages\.php\.dev\.enable
+
+Enable PHP development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.php\.dev\.formatter\.enable
+
+
+
+Enable PHP formatter (php-cs-fixer)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.php\.dev\.formatter\.package
+
+
+
+The php-cs-fixer package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.packages.php-cs-fixer `
+
+
+
+## languages\.php\.dev\.linter\.enable
+
+
+
+Enable PHP linter (psalm)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.php\.dev\.linter\.package
+
+
+
+The psalm package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` cfg.package.packages.psalm `
+
+
+
+## languages\.php\.dev\.lsp\.enable
+
+
+
+Enable PHP language server (phpactor)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.php\.dev\.lsp\.package
+
+
+
+The PHP language server package to use\.
+
+Available options:
+
+ - pkgs\.phpactor: Open source LSP with good refactoring support (default)
+ - pkgs\.php-language-server: Felix Becker’s PHP language server
+ - pkgs\.intelephense: Proprietary but very popular, requires license for full features
+
+Note: Intelephense is proprietary software but is widely considered the most
+feature-complete PHP LSP\. It requires a license for advanced features\.
+Phpactor is a good open-source alternative with strong refactoring capabilities\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.phpactor `
+
+
+
 ## languages\.php\.disableExtensions
+
+
 
 PHP extensions to disable\.
 

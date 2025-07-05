@@ -5,6 +5,8 @@
 
 ## languages\.dart\.enable
 
+
+
 Whether to enable tools for Dart development\.
 
 
@@ -39,3 +41,55 @@ package
 
 *Default:*
 ` pkgs.dart `
+
+
+
+## languages\.dart\.dev\.enable
+
+Enable Dart development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.dart\.dev\.formatter\.enable
+
+
+
+Enable dart formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.dart\.dev\.lsp\.enable
+
+
+
+Enable dart language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `

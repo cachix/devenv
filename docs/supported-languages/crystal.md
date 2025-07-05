@@ -5,6 +5,8 @@
 
 ## languages\.crystal\.enable
 
+
+
 Whether to enable Enable tools for Crystal development…
 
 
@@ -21,3 +23,73 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.crystal\.dev\.enable
+
+Enable Crystal development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.crystal\.dev\.formatter\.enable
+
+
+
+Enable crystal formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.crystal\.dev\.lsp\.enable
+
+
+
+Enable crystalline language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.crystal\.dev\.lsp\.package
+
+
+
+The crystalline package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.crystalline `

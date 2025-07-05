@@ -21,3 +21,44 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.jsonnet\.lsp\.enable
+
+
+
+Whether to enable Jsonnet language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## languages\.jsonnet\.lsp\.package
+
+
+
+Jsonnet language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.jsonnet-language-server `

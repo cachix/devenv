@@ -21,6 +21,26 @@ in
         description = "The radian package to use.";
       };
     };
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Enable R development tools.
+          
+          Note: R development tools like languageserver (LSP), styler (formatter),
+          and lintr (linter) are typically installed via R's package manager.
+          
+          To install these tools, run R and execute:
+          install.packages(c("languageserver", "styler", "lintr"))
+          
+          For more tools, consider:
+          - dev: for package development
+          - testthat: for unit testing
+          - roxygen2: for documentation generation
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {

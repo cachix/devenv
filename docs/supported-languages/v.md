@@ -5,6 +5,8 @@
 
 ## languages\.v\.enable
 
+
+
 Whether to enable tools for V development\.
 
 
@@ -39,3 +41,73 @@ package
 
 *Default:*
 ` pkgs.vlang `
+
+
+
+## languages\.v\.dev\.enable
+
+Enable V development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.v\.dev\.formatter\.enable
+
+
+
+Enable V formatter (v fmt built into V compiler)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.v\.dev\.lsp\.enable
+
+
+
+Enable V language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.v\.dev\.lsp\.package
+
+
+
+The V package to use (includes v-ls language server)\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` config.languages.v.package `

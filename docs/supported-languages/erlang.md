@@ -5,6 +5,8 @@
 
 ## languages\.erlang\.enable
 
+
+
 Whether to enable tools for Erlang development\.
 
 
@@ -39,3 +41,55 @@ package
 
 *Default:*
 ` pkgs.erlang `
+
+
+
+## languages\.erlang\.dev\.enable
+
+Enable Erlang development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.erlang\.dev\.lsp\.enable
+
+
+
+Enable erlang-ls language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.erlang\.dev\.lsp\.package
+
+
+
+The erlang-ls package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.erlang-ls `

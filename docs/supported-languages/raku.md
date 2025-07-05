@@ -5,6 +5,8 @@
 
 ## languages\.raku\.enable
 
+
+
 Whether to enable tools for Raku development\.
 
 
@@ -21,3 +23,37 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.raku\.dev\.enable
+
+Enable Raku development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.raku\.dev\.lsp\.enable
+
+
+
+Enable Raku language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `

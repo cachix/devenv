@@ -39,3 +39,22 @@ package
 
 *Default:*
 ` pkgs.lean4 `
+
+
+
+## languages\.lean4\.lsp\.enable
+
+
+
+Enable Lean 4 language server support\.
+The language server is included with the main Lean 4 package\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `

@@ -45,6 +45,8 @@ devenv:
 
 Language integration happens in stages. We welcome even the most basic support for getting started.
 
+For detailed information about the language module structure, development tools pattern, and guidelines for adding new languages, see [`src/modules/languages/README.md`](https://github.com/cachix/devenv/blob/main/src/modules/languages/README.md).
+
 The most basic language support starts with the `languages.*.enable` flag, which turns on basic tooling.
 For an example, see `src/modules/languages/elm.nix`.
 

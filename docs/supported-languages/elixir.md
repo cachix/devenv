@@ -5,6 +5,8 @@
 
 ## languages\.elixir\.enable
 
+
+
 Whether to enable tools for Elixir development\.
 
 
@@ -39,3 +41,127 @@ package
 
 *Default:*
 ` pkgs.elixir `
+
+
+
+## languages\.elixir\.dev\.enable
+
+
+
+Enable Elixir development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elixir\.dev\.dialyzer\.enable
+
+Enable dialyxir static analyzer\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elixir\.dev\.dialyzer\.package
+
+
+
+The dialyxir package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.beamPackages.dialyxir `
+
+
+
+## languages\.elixir\.dev\.linter\.enable
+
+
+
+Enable credo linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elixir\.dev\.linter\.package
+
+
+
+The credo package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.beamPackages.credo `
+
+
+
+## languages\.elixir\.dev\.lsp\.enable
+
+
+
+Enable elixir-ls language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.elixir\.dev\.lsp\.package
+
+
+
+The elixir-ls package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elixir_ls `

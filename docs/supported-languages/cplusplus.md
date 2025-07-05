@@ -5,6 +5,8 @@
 
 ## languages\.cplusplus\.enable
 
+
+
 Whether to enable tools for C++ development\.
 
 
@@ -21,3 +23,154 @@ boolean
 
 *Example:*
 ` true `
+
+
+
+## languages\.cplusplus\.package
+
+
+
+The C++ compiler package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clang `
+
+
+
+## languages\.cplusplus\.dev\.enable
+
+
+
+Enable C++ development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.cplusplus\.dev\.debugger\.enable
+
+Enable gdb debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.cplusplus\.dev\.debugger\.package
+
+
+
+The debugger package to use\. Defaults to gdb if available, otherwise lldb\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gdb or pkgs.lldb `
+
+
+
+## languages\.cplusplus\.dev\.formatter\.enable
+
+
+
+Enable clang-format formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.cplusplus\.dev\.formatter\.package
+
+
+
+The clang-format package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clang-tools `
+
+
+
+## languages\.cplusplus\.dev\.lsp\.enable
+
+
+
+Enable ccls language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.cplusplus\.dev\.lsp\.package
+
+
+
+The ccls package to use\.
+
+Note: clangd (available in pkgs\.clang-tools) is the most popular C/C++ LSP,
+actively maintained by the LLVM team\. You can switch to it by setting:
+languages\.cplusplus\.dev\.lsp\.package = pkgs\.clang-tools;
+
+Other LSPs:
+
+ - ccls: Good alternative, currently the default
+ - cquery: Deprecated/unmaintained, do not use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ccls `

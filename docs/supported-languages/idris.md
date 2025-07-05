@@ -44,3 +44,44 @@ package
 
 *Example:*
 ` pkgs.idris `
+
+
+
+## languages\.idris\.lsp\.enable
+
+
+
+Whether to enable Idris language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+
+
+## languages\.idris\.lsp\.package
+
+
+
+Idris language server package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.idris2Packages.idris2Lsp `

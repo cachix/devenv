@@ -57,6 +57,67 @@ in
         description = "The bundler package to use.";
       };
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Ruby development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Ruby language server (solargraph).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.rubyPackages.solargraph;
+          defaultText = lib.literalExpression "pkgs.rubyPackages.solargraph";
+          description = ''
+            The Ruby language server package to use.
+            
+            Available options:
+            - `pkgs.rubyPackages.solargraph` (default): Mature, feature-rich LSP by Fred Snyder
+            - `pkgs.rubyPackages.ruby-lsp`: Newer LSP by Shopify, actively developed
+            
+            To switch to ruby-lsp, use:
+            ```nix
+            languages.ruby.dev.lsp.package = pkgs.rubyPackages.ruby-lsp;
+            ```
+          '';
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Ruby formatter (rubocop).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.rubyPackages.rubocop;
+          defaultText = lib.literalExpression "pkgs.rubyPackages.rubocop";
+          description = "The rubocop package to use.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Ruby linter (rubocop).";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.rubyPackages.rubocop;
+          defaultText = lib.literalExpression "pkgs.rubyPackages.rubocop";
+          description = "The rubocop package to use.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -92,9 +153,14 @@ in
         packageFromVersionFile
       ];
 
-    packages = lib.optional cfg.bundler.enable cfg.bundler.package ++ [
+    packages = [
       cfg.package
-    ];
+    ] ++ lib.optional cfg.bundler.enable cfg.bundler.package
+    ++ lib.optionals cfg.dev.enable (
+      lib.optional cfg.dev.lsp.enable cfg.dev.lsp.package ++
+        lib.optional cfg.dev.formatter.enable cfg.dev.formatter.package ++
+        lib.optional cfg.dev.linter.enable cfg.dev.linter.package
+    );
 
     env.BUNDLE_PATH = config.env.DEVENV_STATE + "/.bundle";
 

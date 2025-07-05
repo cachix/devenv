@@ -129,6 +129,132 @@ boolean
 
 
 
+## languages\.javascript\.dev\.enable
+
+
+
+Enable JavaScript development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.javascript\.dev\.formatter\.enable
+
+
+
+Enable prettier formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.javascript\.dev\.formatter\.package
+
+
+
+The Prettier package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.prettier `
+
+
+
+## languages\.javascript\.dev\.linter\.enable
+
+
+
+Enable eslint linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.javascript\.dev\.linter\.package
+
+
+
+The ESLint package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.eslint `
+
+
+
+## languages\.javascript\.dev\.lsp\.enable
+
+
+
+Enable typescript-language-server language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.javascript\.dev\.lsp\.package
+
+
+
+The TypeScript language server package to use\. This wraps Microsoft’s tsserver and provides LSP support for both JavaScript and TypeScript\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.typescript-language-server `
+
+
+
 ## languages\.javascript\.directory
 
 

@@ -5,6 +5,8 @@
 
 ## languages\.scala\.enable
 
+
+
 Whether to enable tools for Scala development\.
 
 
@@ -39,6 +41,94 @@ package
 
 *Default:*
 ` pkgs.scala_3 `
+
+
+
+## languages\.scala\.dev\.enable
+
+Enable Scala development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.scala\.dev\.formatter\.enable
+
+
+
+Enable scalafmt formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.scala\.dev\.formatter\.package
+
+
+
+The scalafmt package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.scalafmt.override { jre = java.jdk.package; } `
+
+
+
+## languages\.scala\.dev\.lsp\.enable
+
+
+
+Enable Metals language server (the standard LSP for Scala)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.scala\.dev\.lsp\.package
+
+
+
+The Metals package to use\. Metals is the standard LSP implementation for Scala by Scalameta\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.metals.override { jre = java.jdk.package; } `
 
 
 

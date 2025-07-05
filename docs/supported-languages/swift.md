@@ -5,6 +5,8 @@
 
 ## languages\.swift\.enable
 
+
+
 Whether to enable tools for Swift development\.
 
 
@@ -39,3 +41,73 @@ package
 
 *Default:*
 ` pkgs.swift `
+
+
+
+## languages\.swift\.dev\.enable
+
+Enable Swift development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.swift\.dev\.formatter\.enable
+
+
+
+Enable swift-format formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.swift\.dev\.formatter\.package
+
+
+
+The swift-format package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.swift-format `
+
+
+
+## languages\.swift\.dev\.lsp\.enable
+
+
+
+Enable sourcekit-lsp language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `

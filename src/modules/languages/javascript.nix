@@ -216,6 +216,56 @@ in
       };
       install.enable = lib.mkEnableOption "bun install during devenv initialisation";
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable JavaScript development tools.";
+      };
+
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable typescript-language-server language server.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.nodePackages.typescript-language-server;
+          defaultText = lib.literalExpression "pkgs.nodePackages.typescript-language-server";
+          description = "The TypeScript language server package to use. This wraps Microsoft's tsserver and provides LSP support for both JavaScript and TypeScript.";
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable prettier formatter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.nodePackages.prettier;
+          defaultText = lib.literalExpression "pkgs.nodePackages.prettier";
+          description = "The Prettier package to use.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable eslint linter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.nodePackages.eslint;
+          defaultText = lib.literalExpression "pkgs.nodePackages.eslint";
+          description = "The ESLint package to use.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -229,7 +279,12 @@ in
       ++ lib.optional cfg.corepack.enable (pkgs.runCommand "corepack-enable" { } ''
       mkdir -p $out/bin
       ${cfg.package}/bin/corepack enable --install-directory $out/bin
-    '');
+    '')
+      ++ lib.optionals cfg.dev.enable (
+      lib.optional cfg.dev.lsp.enable cfg.dev.lsp.package ++
+        lib.optional cfg.dev.formatter.enable cfg.dev.formatter.package ++
+        lib.optional cfg.dev.linter.enable cfg.dev.linter.package
+    );
 
     enterShell = lib.concatStringsSep "\n" (
       (lib.optional cfg.npm.install.enable ''

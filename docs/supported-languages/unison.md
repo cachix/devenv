@@ -39,3 +39,22 @@ package
 
 *Default:*
 ` pkgs.unison-ucm `
+
+
+
+## languages\.unison\.lsp\.enable
+
+
+
+Enable Unison language server support\.
+The language server is included with the main Unison package\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `

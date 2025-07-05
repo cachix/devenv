@@ -5,6 +5,8 @@
 
 ## languages\.go\.enable
 
+
+
 Whether to enable tools for Go development\.
 
 
@@ -57,3 +59,307 @@ package
 
 *Default:*
 ` pkgs.go `
+
+
+
+## languages\.go\.dev\.enable
+
+
+
+Enable Go development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.debugger\.enable
+
+Enable delve debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.debugger\.package
+
+
+
+The delve package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.delve `
+
+
+
+## languages\.go\.dev\.go-tools\.enable
+
+
+
+Enable go-tools static analysis tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.go-tools\.package
+
+
+
+The go-tools package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.go-tools `
+
+
+
+## languages\.go\.dev\.gomodifytags\.enable
+
+
+
+Enable gomodifytags struct tag tool\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.gomodifytags\.package
+
+
+
+The gomodifytags package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.gomodifytags `
+
+
+
+## languages\.go\.dev\.gotests\.enable
+
+
+
+Enable gotests test generator\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.gotests\.package
+
+
+
+The gotests package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.gotests `
+
+
+
+## languages\.go\.dev\.gotools\.enable
+
+
+
+Enable gotools development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.gotools\.package
+
+
+
+The gotools package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.gotools `
+
+
+
+## languages\.go\.dev\.iferr\.enable
+
+
+
+Enable iferr error handling generator\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.iferr\.package
+
+
+
+The iferr package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.iferr `
+
+
+
+## languages\.go\.dev\.impl\.enable
+
+
+
+Enable impl interface implementation generator\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.impl\.package
+
+
+
+The impl package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.impl `
+
+
+
+## languages\.go\.dev\.lsp\.enable
+
+
+
+Enable gopls language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.go\.dev\.lsp\.package
+
+
+
+The gopls package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` buildWithSpecificGo pkgs.gopls `

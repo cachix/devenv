@@ -44,17 +44,88 @@ package
 
 
 
-## languages\.odin\.debugger
+## languages\.odin\.dev\.enable
 
-An optional debugger package to use with odin\.
-The default is ` gdb `, if supported on the current system\.
+
+
+Enable Odin development tools\.
 
 
 
 *Type:*
-null or package
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.odin\.dev\.debugger\.enable
+
+Enable gdb debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.odin\.dev\.debugger\.package
+
+
+
+The gdb package to use\.
+
+
+
+*Type:*
+package
 
 
 
 *Default:*
 ` pkgs.gdb `
+
+
+
+## languages\.odin\.dev\.lsp\.enable
+
+
+
+Enable Odin language server (ols)\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.odin\.dev\.lsp\.package
+
+
+
+The ols package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ols `

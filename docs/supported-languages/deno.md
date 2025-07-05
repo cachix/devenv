@@ -5,6 +5,8 @@
 
 ## languages\.deno\.enable
 
+
+
 Whether to enable tools for Deno development\.
 
 
@@ -39,3 +41,73 @@ package
 
 *Default:*
 ` pkgs.deno `
+
+
+
+## languages\.deno\.dev\.enable
+
+Enable Deno development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.deno\.dev\.formatter\.enable
+
+
+
+Enable deno formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.deno\.dev\.linter\.enable
+
+
+
+Enable deno linter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.deno\.dev\.lsp\.enable
+
+
+
+Enable deno language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `

@@ -5,6 +5,8 @@
 
 ## languages\.julia\.enable
 
+
+
 Whether to enable tools for Julia development\.
 
 
@@ -39,3 +41,32 @@ package
 
 *Default:*
 ` pkgs.julia-bin `
+
+
+
+## languages\.julia\.dev\.enable
+
+Enable Julia development tools\.
+
+Note: Julia development tools like LanguageServer\.jl and JuliaFormatter\.jl
+are typically installed via Julia’s package manager (Pkg), not through nixpkgs\.
+
+To install these tools, run the following in a Julia REPL:
+
+```julia
+using Pkg
+Pkg.add("LanguageServer")
+Pkg.add("JuliaFormatter")
+```
+
+For VS Code users, the Julia extension will automatically install the language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `

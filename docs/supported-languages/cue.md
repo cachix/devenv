@@ -5,6 +5,8 @@
 
 ## languages\.cue\.enable
 
+
+
 Whether to enable tools for Cue development\.
 
 
@@ -39,3 +41,55 @@ package
 
 *Default:*
 ` pkgs.cue `
+
+
+
+## languages\.cue\.dev\.enable
+
+Enable CUE development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.cue\.dev\.lsp\.enable
+
+
+
+Enable cuelsp language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.cue\.dev\.lsp\.package
+
+
+
+The cuelsp package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cuelsp `

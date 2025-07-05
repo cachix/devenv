@@ -434,6 +434,109 @@ in
         description = "The Poetry package to use.";
       };
     };
+
+    dev = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = "Enable Python development tools.";
+      };
+
+      # Python Language Server Protocol (LSP) options
+      # Alternative LSP servers available:
+      # - pyright: Microsoft's Python LSP, very popular with excellent type checking
+      #   To use: languages.python.dev.lsp.package = pkgs.pyright;
+      # - python-lsp-server: Community-maintained LSP (default), extensible with plugins
+      # - jedi-language-server: Lightweight LSP based on Jedi
+      #   To use: languages.python.dev.lsp.package = cfg.package.pkgs.jedi-language-server;
+      # - basedpyright: Community fork of pyright with additional features
+      #   To use: languages.python.dev.lsp.package = pkgs.basedpyright;
+      # - pylsp-mypy: Plugin for python-lsp-server that adds mypy type checking
+      #   Already included when using python-lsp-server
+      lsp = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable python-lsp-server language server.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.pkgs.python-lsp-server;
+          defaultText = lib.literalExpression "cfg.package.pkgs.python-lsp-server";
+          description = "The Python LSP package to use. Can be changed to pyright, jedi-language-server, or other LSP implementations.";
+        };
+      };
+
+      formatter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable black formatter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.pkgs.black;
+          defaultText = lib.literalExpression "cfg.package.pkgs.black";
+          description = "The black package to use.";
+        };
+      };
+
+      linter = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable Ruff linter.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.pkgs.ruff;
+          defaultText = lib.literalExpression "cfg.package.pkgs.ruff";
+          description = "The ruff package to use.";
+        };
+      };
+
+      typeChecker = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable mypy type checker.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.pkgs.mypy;
+          defaultText = lib.literalExpression "cfg.package.pkgs.mypy";
+          description = "The mypy package to use.";
+        };
+      };
+
+      testRunner = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable pytest test runner.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.pkgs.pytest;
+          defaultText = lib.literalExpression "cfg.package.pkgs.pytest";
+          description = "The pytest package to use.";
+        };
+      };
+
+      debugger = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = "Enable debugpy debugger.";
+        };
+        package = lib.mkOption {
+          type = lib.types.package;
+          default = cfg.package.pkgs.debugpy;
+          defaultText = lib.literalExpression "cfg.package.pkgs.debugpy";
+          description = "The debugpy package to use.";
+        };
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -464,7 +567,15 @@ in
 
     packages = [ package ]
       ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
-      ++ (lib.optional cfg.uv.enable cfg.uv.package);
+      ++ (lib.optional cfg.uv.enable cfg.uv.package)
+      ++ lib.optionals cfg.dev.enable (
+      lib.optional cfg.dev.lsp.enable cfg.dev.lsp.package ++
+        lib.optional cfg.dev.formatter.enable cfg.dev.formatter.package ++
+        lib.optional cfg.dev.linter.enable cfg.dev.linter.package ++
+        lib.optional cfg.dev.typeChecker.enable cfg.dev.typeChecker.package ++
+        lib.optional cfg.dev.testRunner.enable cfg.dev.testRunner.package ++
+        lib.optional cfg.dev.debugger.enable cfg.dev.debugger.package
+    );
 
     env = (lib.optionalAttrs cfg.uv.enable {
       # ummmmm how does this work? Can I even know the path to the devenv/state at this point?

@@ -5,6 +5,8 @@
 
 ## languages\.dotnet\.enable
 
+
+
 Whether to enable tools for \.NET development\.
 
 
@@ -39,3 +41,127 @@ package
 
 *Default:*
 ` pkgs.dotnet-sdk `
+
+
+
+## languages\.dotnet\.dev\.enable
+
+
+
+Enable \.NET development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.dotnet\.dev\.debugger\.enable
+
+Enable netcoredbg debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.dotnet\.dev\.debugger\.package
+
+
+
+The netcoredbg package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.netcoredbg `
+
+
+
+## languages\.dotnet\.dev\.formatter\.enable
+
+
+
+Enable dotnet formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.dotnet\.dev\.formatter\.package
+
+
+
+The dotnet-format package to use\.
+
+
+
+*Type:*
+null or package
+
+
+
+*Default:*
+` null `
+
+
+
+## languages\.dotnet\.dev\.lsp\.enable
+
+
+
+Enable omnisharp-roslyn language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.dotnet\.dev\.lsp\.package
+
+
+
+The omnisharp-roslyn package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.omnisharp-roslyn `

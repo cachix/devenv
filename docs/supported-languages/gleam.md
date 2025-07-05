@@ -5,6 +5,8 @@
 
 ## languages\.gleam\.enable
 
+
+
 Whether to enable tools for Gleam development\.
 
 
@@ -39,3 +41,55 @@ package
 
 *Default:*
 ` pkgs.gleam `
+
+
+
+## languages\.gleam\.dev\.enable
+
+Enable Gleam development tools\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.gleam\.dev\.formatter\.enable
+
+
+
+Enable gleam formatter\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.gleam\.dev\.lsp\.enable
+
+
+
+Enable gleam language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `

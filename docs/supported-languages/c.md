@@ -26,17 +26,133 @@ boolean
 
 
 
-## languages\.c\.debugger
+## languages\.c\.dev\.enable
 
-An optional debugger package to use with c\.
-The default is ` gdb `, if supported on the current system\.
+
+
+Enable C development tools\.
 
 
 
 *Type:*
-null or package
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.c\.dev\.debugger\.enable
+
+Enable gdb debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.c\.dev\.debugger\.package
+
+
+
+The gdb package to use\.
+
+
+
+*Type:*
+package
 
 
 
 *Default:*
 ` pkgs.gdb `
+
+
+
+## languages\.c\.dev\.lsp\.enable
+
+
+
+Enable ccls language server\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+## languages\.c\.dev\.lsp\.package
+
+
+
+The ccls package to use\.
+
+Note: clangd (available in pkgs\.clang-tools) is the most popular C/C++ LSP,
+actively maintained by the LLVM team\. You can switch to it by setting:
+languages\.c\.dev\.lsp\.package = pkgs\.clang-tools;
+
+Other LSPs:
+
+ - ccls: Good alternative, currently the default
+ - cquery: Deprecated/unmaintained, do not use
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ccls `
+
+
+
+## languages\.c\.dev\.valgrind\.enable
+
+
+
+Enable valgrind memory debugger\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.valgrind && !pkgs.valgrind.meta.broken `
+
+
+
+## languages\.c\.dev\.valgrind\.package
+
+
+
+The valgrind package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.valgrind `
