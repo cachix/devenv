@@ -9,35 +9,6 @@ let
     attribute = "languages.rust.input";
     follows = [ "nixpkgs" ];
   };
-
-  # https://github.com/nix-community/fenix/blob/cdfd7bf3e3edaf9e3f6d1e397d3ee601e513613c/lib/combine.nix
-  combine = name: paths:
-    pkgs.symlinkJoin {
-      inherit name paths;
-      postBuild = ''
-        for file in $(find $out/bin -xtype f -maxdepth 1); do
-          install -m755 $(realpath "$file") $out/bin
-
-          if [[ $file =~ /rustfmt$ ]]; then
-            continue
-          fi
-
-          ${lib.optionalString pkgs.stdenv.isLinux ''
-            if isELF "$file"; then
-              patchelf --set-rpath $out/lib "$file" || true
-            fi
-          ''}
-
-          ${lib.optionalString pkgs.stdenv.isDarwin ''
-            install_name_tool -add_rpath $out/lib "$file" || true
-          ''}
-        done
-
-        for file in $(find $out/lib -name "librustc_driver-*"); do
-          install $(realpath "$file") "$file"
-        done
-      '';
-    };
 in
 {
   imports = [
@@ -63,24 +34,33 @@ in
       defaultText = lib.literalExpression ''[ ]'';
       description = ''
         List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
-        to install. Defaults to only the native target. 
+        to install. Defaults to the native target.
       '';
     };
 
     channel = lib.mkOption {
       type = lib.types.enum [ "nixpkgs" "stable" "beta" "nightly" ];
       default = "nixpkgs";
-      defaultText = lib.literalExpression ''"nixpkgs"'';
       description = "The rustup toolchain to install.";
     };
 
     version = lib.mkOption {
       type = lib.types.str;
       default = "latest";
-      defaultText = lib.literalExpression ''"latest"'';
       description = ''
         Which version of rust to use, this value could be `latest`,`1.81.0`, `2021-01-01`.
-        Only works when languages.rust.channel is NOT nixpkgs.
+
+        Only used when languages.rust.channel is NOT nixpkgs.
+      '';
+    };
+
+    profile = lib.mkOption {
+      type = lib.types.enum [ "default" "minimal" "complete" ];
+      default = "default";
+      description = ''
+        The rustup toolchain [profile](https://rust-lang.github.io/rustup/concepts/profiles.html) to use.
+
+        Only used when languages.rust.channel is NOT nixpkgs.
       '';
     };
 
@@ -103,7 +83,7 @@ in
     };
 
     toolchain = lib.mkOption {
-      type = lib.types.submodule ({
+      type = lib.types.either lib.types.package (lib.types.submodule ({
         freeformType = lib.types.attrsOf lib.types.package;
 
         options =
@@ -117,7 +97,7 @@ in
             };
           in
           lib.genAttrs documented-components mkComponentOption;
-      });
+      }));
       default = { };
       defaultText = lib.literalExpression "nixpkgs";
       description = "Rust component packages. May optionally define additional components, for example `miri`.";
@@ -203,19 +183,12 @@ in
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        toolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages)."${cfg.channel}"."${cfg.version}";
-        filteredToolchain = (lib.filterAttrs (n: _: builtins.elem n toolchain._manifest.profiles.complete) toolchain);
+        baseToolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages).${cfg.channel}.${cfg.version}.${cfg.profile};
+        toolchain = baseToolchain.override { extensions = cfg.components; targets = cfg.targets; };
       in
       {
-        languages.rust.toolchain =
-          (builtins.mapAttrs (_: pkgs.lib.mkDefault) filteredToolchain);
-
-        packages = [
-          (combine "rust-mixed" (
-            (map (c: cfg.toolchain.${c}) (cfg.components ++ [ "rust-std" ])) ++
-            (map (t: toolchain._components.${t}.rust-std) cfg.targets)
-          ))
-        ];
+        languages.rust.toolchain = toolchain;
+        packages = [ cfg.toolchain ];
       }
     ))
   ]);
