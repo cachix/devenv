@@ -99,7 +99,6 @@ in
           lib.genAttrs documented-components mkComponentOption;
       }));
       default = { };
-      defaultText = lib.literalExpression "nixpkgs";
       description = "Rust component packages. May optionally define additional components, for example `miri`.";
     };
   };
@@ -183,11 +182,29 @@ in
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        baseToolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages).${cfg.channel}.${cfg.version}.${cfg.profile};
-        toolchain = baseToolchain.override { extensions = cfg.components; targets = cfg.targets; };
+        rustBin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+
+        # Get the pre-made toolchain for the channel and version
+        baseToolchain = rustBin.${cfg.channel}.${cfg.version};
+
+        # Get the combined toolchain for the specified profile with overrides
+        combinedToolchain = baseToolchain.${cfg.profile}.override {
+          extensions = cfg.components;
+          targets = cfg.targets;
+        };
+
+        # Create a toolchain with the individual components accessible
+        #
+        # We technically don't need this.
+        # We can use the combinedToolchain even for overriding individual git-hook packages.
+        toolchainWithComponents = combinedToolchain // (
+          lib.genAttrs cfg.components (component:
+            baseToolchain.${component} or combinedToolchain
+          )
+        );
       in
       {
-        languages.rust.toolchain = toolchain;
+        languages.rust.toolchain = toolchainWithComponents;
         packages = [ cfg.toolchain ];
       }
     ))
