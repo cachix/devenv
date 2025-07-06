@@ -286,7 +286,7 @@ string
 
 
 *Default:*
-` "/home/sandydoo/code/cachix/devenv/.devenv/state/kafka/connect/connect.offsets" `
+` "/home/runner/work/devenv/devenv/.devenv/state/kafka/connect/connect.offsets" `
 
 
 
