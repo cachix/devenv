@@ -83,6 +83,26 @@ boolean
 
 
 
+### languages\.rust\.profile
+
+
+
+The rustup toolchain [profile](https://rust-lang\.github\.io/rustup/concepts/profiles\.html) to use\.
+
+Only used when languages\.rust\.channel is NOT nixpkgs\.
+
+
+
+*Type:*
+one of “default”, “minimal”, “complete”
+
+
+
+*Default:*
+` "default" `
+
+
+
 ### languages\.rust\.rustflags
 
 
@@ -106,7 +126,7 @@ string
 
 
 List of extra [targets](https://doc\.rust-lang\.org/nightly/rustc/platform-support\.html)
-to install\. Defaults to only the native target\.
+to install\. Defaults to the native target\.
 
 
 
@@ -129,7 +149,7 @@ Rust component packages\. May optionally define additional components, for examp
 
 
 *Type:*
-attribute set of package
+package or (attribute set of package)
 
 
 
@@ -138,102 +158,13 @@ attribute set of package
 
 
 
-### languages\.rust\.toolchain\.cargo
-
-
-
-cargo package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.cargo `
-
-
-
-### languages\.rust\.toolchain\.clippy
-
-
-
-clippy package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.clippy `
-
-
-
-### languages\.rust\.toolchain\.rust-analyzer
-
-
-
-rust-analyzer package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.rust-analyzer `
-
-
-
-### languages\.rust\.toolchain\.rustc
-
-
-
-rustc package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.rustc `
-
-
-
-### languages\.rust\.toolchain\.rustfmt
-
-
-
-rustfmt package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.rustfmt `
-
-
-
 ### languages\.rust\.version
 
 
 
 Which version of rust to use, this value could be ` latest `,` 1.81.0 `, ` 2021-01-01 `\.
-Only works when languages\.rust\.channel is NOT nixpkgs\.
+
+Only used when languages\.rust\.channel is NOT nixpkgs\.
 
 
 
