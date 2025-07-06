@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.haskell\.enable
+## Options
+
+### languages\.haskell\.enable
 
 Whether to enable tools for Haskell development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.haskell\.package
+### languages\.haskell\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## languages\.haskell\.languageServer
+### languages\.haskell\.languageServer
 
 
 
@@ -60,7 +62,7 @@ null or package
 
 
 
-## languages\.haskell\.stack
+### languages\.haskell\.stack
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.ruby\.enable
+## Options
+
+### languages\.ruby\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## languages\.ruby\.package
+### languages\.ruby\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## languages\.ruby\.bundler\.enable
+### languages\.ruby\.bundler\.enable
 
 Whether to enable bundler\.
 
@@ -65,7 +67,7 @@ boolean
 
 
 
-## languages\.ruby\.bundler\.package
+### languages\.ruby\.bundler\.package
 
 
 
@@ -83,7 +85,7 @@ package
 
 
 
-## languages\.ruby\.version
+### languages\.ruby\.version
 
 
 
@@ -107,7 +109,7 @@ null or string
 
 
 
-## languages\.ruby\.versionFile
+### languages\.ruby\.versionFile
 
 
 

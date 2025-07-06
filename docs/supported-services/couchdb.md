@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.couchdb\.enable
+## Options
+
+### services\.couchdb\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.couchdb\.package
+### services\.couchdb\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.couchdb\.baseDir
+### services\.couchdb\.baseDir
 
 The directory where CouchDB will store its data\.
 
@@ -60,7 +62,7 @@ string *(read only)*
 
 
 
-## services\.couchdb\.settings
+### services\.couchdb\.settings
 
 
 
@@ -105,7 +107,7 @@ attribute set of section of an INI file (attrs of INI atom (null, bool, int, flo
 
 
 
-## services\.couchdb\.settings\.chttpd\.bind_address
+### services\.couchdb\.settings\.chttpd\.bind_address
 
 
 
@@ -123,7 +125,7 @@ string
 
 
 
-## services\.couchdb\.settings\.chttpd\.port
+### services\.couchdb\.settings\.chttpd\.port
 
 
 
@@ -141,7 +143,7 @@ Defined the port number to listen\.
 
 
 
-## services\.couchdb\.settings\.couchdb\.database_dir
+### services\.couchdb\.settings\.couchdb\.database_dir
 
 
 
@@ -161,7 +163,7 @@ absolute path
 
 
 
-## services\.couchdb\.settings\.couchdb\.single_node
+### services\.couchdb\.settings\.couchdb\.single_node
 
 
 
@@ -181,7 +183,7 @@ boolean
 
 
 
-## services\.couchdb\.settings\.couchdb\.uri_file
+### services\.couchdb\.settings\.couchdb\.uri_file
 
 
 
@@ -203,7 +205,7 @@ absolute path
 
 
 
-## services\.couchdb\.settings\.couchdb\.view_index_dir
+### services\.couchdb\.settings\.couchdb\.view_index_dir
 
 
 

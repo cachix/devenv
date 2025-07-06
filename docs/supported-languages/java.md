@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.java\.enable
+## Options
+
+### languages\.java\.enable
 
 Whether to enable tools for Java development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.java\.gradle\.enable
+### languages\.java\.gradle\.enable
 
 
 
@@ -47,7 +49,7 @@ boolean
 
 
 
-## languages\.java\.gradle\.package
+### languages\.java\.gradle\.package
 
 
 
@@ -66,7 +68,7 @@ package
 
 
 
-## languages\.java\.jdk\.package
+### languages\.java\.jdk\.package
 
 
 
@@ -90,7 +92,7 @@ package
 
 
 
-## languages\.java\.maven\.enable
+### languages\.java\.maven\.enable
 
 
 
@@ -113,7 +115,7 @@ boolean
 
 
 
-## languages\.java\.maven\.package
+### languages\.java\.maven\.package
 
 
 

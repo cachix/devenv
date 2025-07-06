@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.trafficserver\.enable
+## Options
+
+### services\.trafficserver\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.trafficserver\.package
+### services\.trafficserver\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.trafficserver\.cache
+### services\.trafficserver\.cache
 
 Caching rules that overrule the origin’s caching policy\.
 
@@ -68,7 +70,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.trafficserver\.hosting
+### services\.trafficserver\.hosting
 
 
 
@@ -94,7 +96,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.trafficserver\.ipAllow
+### services\.trafficserver\.ipAllow
 
 
 
@@ -132,7 +134,7 @@ upstream defaults
 
 
 
-## services\.trafficserver\.logging
+### services\.trafficserver\.logging
 
 
 
@@ -158,7 +160,7 @@ upstream defaults
 
 
 
-## services\.trafficserver\.parent
+### services\.trafficserver\.parent
 
 
 
@@ -189,7 +191,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.trafficserver\.plugins
+### services\.trafficserver\.plugins
 
 
 
@@ -211,7 +213,7 @@ list of (submodule)
 
 
 
-## services\.trafficserver\.plugins\.\*\.arg
+### services\.trafficserver\.plugins\.\*\.arg
 
 
 
@@ -234,7 +236,7 @@ string
 
 
 
-## services\.trafficserver\.plugins\.\*\.path
+### services\.trafficserver\.plugins\.\*\.path
 
 
 
@@ -253,7 +255,7 @@ string
 
 
 
-## services\.trafficserver\.records
+### services\.trafficserver\.records
 
 
 
@@ -297,7 +299,7 @@ Traffic Server records value
 
 
 
-## services\.trafficserver\.remap
+### services\.trafficserver\.remap
 
 
 
@@ -323,7 +325,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.trafficserver\.runroot
+### services\.trafficserver\.runroot
 
 
 
@@ -336,7 +338,7 @@ unspecified value *(read only)*
 
 
 
-## services\.trafficserver\.sni
+### services\.trafficserver\.sni
 
 
 
@@ -372,7 +374,7 @@ null or YAML value
 
 
 
-## services\.trafficserver\.splitDns
+### services\.trafficserver\.splitDns
 
 
 
@@ -405,7 +407,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.trafficserver\.sslMulticert
+### services\.trafficserver\.sslMulticert
 
 
 
@@ -431,7 +433,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.trafficserver\.storage
+### services\.trafficserver\.storage
 
 
 
@@ -457,7 +459,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.trafficserver\.strategies
+### services\.trafficserver\.strategies
 
 
 
@@ -479,7 +481,7 @@ null or YAML value
 
 
 
-## services\.trafficserver\.volume
+### services\.trafficserver\.volume
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## process\.managers\.process-compose\.package
+## Options
+
+### process\.managers\.process-compose\.package
 
 The process-compose package to use\.
 
@@ -19,7 +21,7 @@ package
 
 
 
-## process\.managers\.process-compose\.port
+### process\.managers\.process-compose\.port
 
 
 
@@ -39,7 +41,7 @@ signed integer
 
 
 
-## process\.managers\.process-compose\.settings
+### process\.managers\.process-compose\.settings
 
 
 
@@ -81,7 +83,7 @@ YAML value
 
 
 
-## process\.managers\.process-compose\.tui\.enable
+### process\.managers\.process-compose\.tui\.enable
 
 
 
@@ -99,7 +101,7 @@ boolean
 
 
 
-## process\.managers\.process-compose\.unixSocket\.enable
+### process\.managers\.process-compose\.unixSocket\.enable
 
 
 
@@ -122,7 +124,7 @@ boolean
 
 
 
-## process\.managers\.process-compose\.unixSocket\.path
+### process\.managers\.process-compose\.unixSocket\.path
 
 
 

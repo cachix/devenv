@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.wiremock\.enable
+## Options
+
+### services\.wiremock\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.wiremock\.package
+### services\.wiremock\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.wiremock\.disableBanner
+### services\.wiremock\.disableBanner
 
 Whether to disable print banner logo\.
 
@@ -60,7 +62,7 @@ boolean
 
 
 
-## services\.wiremock\.mappings
+### services\.wiremock\.mappings
 
 
 
@@ -113,7 +115,7 @@ JSON value
 
 
 
-## services\.wiremock\.port
+### services\.wiremock\.port
 
 
 
@@ -131,7 +133,7 @@ signed integer
 
 
 
-## services\.wiremock\.verbose
+### services\.wiremock\.verbose
 
 
 

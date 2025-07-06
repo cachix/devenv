@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.sqld\.enable
+## Options
+
+### services\.sqld\.enable
 
 Whether to enable sqld\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.sqld\.extraArgs
+### services\.sqld\.extraArgs
 
 
 
@@ -42,7 +44,7 @@ list of string
 
 
 
-## services\.sqld\.port
+### services\.sqld\.port
 
 
 

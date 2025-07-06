@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## process\.managers\.overmind\.package
+## Options
+
+### process\.managers\.overmind\.package
 
 The overmind package to use\.
 

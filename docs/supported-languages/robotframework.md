@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.robotframework\.enable
+## Options
+
+### languages\.robotframework\.enable
 
 Whether to enable tools for Robot Framework development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.robotframework\.python
+### languages\.robotframework\.python
 
 
 

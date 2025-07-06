@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## process\.managers\.hivemind\.package
+## Options
+
+### process\.managers\.hivemind\.package
 
 The hivemind package to use\.
 

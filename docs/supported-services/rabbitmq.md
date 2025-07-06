@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.rabbitmq\.enable
+## Options
+
+### services\.rabbitmq\.enable
 
 
 
@@ -22,7 +24,7 @@ boolean
 
 
 
-## services\.rabbitmq\.package
+### services\.rabbitmq\.package
 
 
 
@@ -40,7 +42,7 @@ package
 
 
 
-## services\.rabbitmq\.configItems
+### services\.rabbitmq\.configItems
 
 Configuration options in RabbitMQ’s new config file format,
 which is a simple key-value format that can not express nested
@@ -78,7 +80,7 @@ attribute set of string
 
 
 
-## services\.rabbitmq\.cookie
+### services\.rabbitmq\.cookie
 
 
 
@@ -98,7 +100,7 @@ string
 
 
 
-## services\.rabbitmq\.listenAddress
+### services\.rabbitmq\.listenAddress
 
 
 
@@ -129,7 +131,7 @@ string
 
 
 
-## services\.rabbitmq\.managementPlugin\.enable
+### services\.rabbitmq\.managementPlugin\.enable
 
 
 
@@ -152,7 +154,7 @@ boolean
 
 
 
-## services\.rabbitmq\.managementPlugin\.port
+### services\.rabbitmq\.managementPlugin\.port
 
 
 
@@ -170,7 +172,7 @@ On which port to run the management plugin
 
 
 
-## services\.rabbitmq\.nodeName
+### services\.rabbitmq\.nodeName
 
 
 
@@ -193,7 +195,7 @@ string
 
 
 
-## services\.rabbitmq\.pluginDirs
+### services\.rabbitmq\.pluginDirs
 
 
 
@@ -211,7 +213,7 @@ list of absolute path
 
 
 
-## services\.rabbitmq\.plugins
+### services\.rabbitmq\.plugins
 
 
 
@@ -229,7 +231,7 @@ list of string
 
 
 
-## services\.rabbitmq\.port
+### services\.rabbitmq\.port
 
 
 

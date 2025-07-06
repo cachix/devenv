@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.blackfire\.enable
+## Options
+
+### services\.blackfire\.enable
 
 
 
@@ -29,7 +31,7 @@ boolean
 
 
 
-## services\.blackfire\.enableApm
+### services\.blackfire\.enableApm
 
 
 
@@ -53,7 +55,7 @@ boolean
 
 
 
-## services\.blackfire\.package
+### services\.blackfire\.package
 
 
 
@@ -71,7 +73,7 @@ package
 
 
 
-## services\.blackfire\.client-id
+### services\.blackfire\.client-id
 
 Sets the client id used to authenticate with Blackfire\.
 You can find your personal client-id at [https://blackfire\.io/my/settings/credentials](https://blackfire\.io/my/settings/credentials)\.
@@ -88,7 +90,7 @@ string
 
 
 
-## services\.blackfire\.client-token
+### services\.blackfire\.client-token
 
 
 
@@ -107,7 +109,7 @@ string
 
 
 
-## services\.blackfire\.server-id
+### services\.blackfire\.server-id
 
 
 
@@ -126,7 +128,7 @@ string
 
 
 
-## services\.blackfire\.server-token
+### services\.blackfire\.server-token
 
 
 
@@ -145,7 +147,7 @@ string
 
 
 
-## services\.blackfire\.socket
+### services\.blackfire\.socket
 
 
 

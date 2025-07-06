@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.dynamodb-local\.enable
+## Options
+
+### services\.dynamodb-local\.enable
 
 Whether to enable DynamoDB Local\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.dynamodb-local\.package
+### services\.dynamodb-local\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## services\.dynamodb-local\.port
+### services\.dynamodb-local\.port
 
 
 

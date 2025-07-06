@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.meilisearch\.enable
+## Options
+
+### services\.meilisearch\.enable
 
 Whether to enable Meilisearch\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.meilisearch\.package
+### services\.meilisearch\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## services\.meilisearch\.environment
+### services\.meilisearch\.environment
 
 
 
@@ -60,7 +62,7 @@ one of “development”, “production”
 
 
 
-## services\.meilisearch\.listenAddress
+### services\.meilisearch\.listenAddress
 
 
 
@@ -78,7 +80,7 @@ string
 
 
 
-## services\.meilisearch\.listenPort
+### services\.meilisearch\.listenPort
 
 
 
@@ -96,7 +98,7 @@ Meilisearch port to listen on\.
 
 
 
-## services\.meilisearch\.logLevel
+### services\.meilisearch\.logLevel
 
 
 
@@ -121,7 +123,7 @@ string
 
 
 
-## services\.meilisearch\.maxIndexSize
+### services\.meilisearch\.maxIndexSize
 
 
 
@@ -142,7 +144,7 @@ string
 
 
 
-## services\.meilisearch\.noAnalytics
+### services\.meilisearch\.noAnalytics
 
 
 

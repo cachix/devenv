@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.dotnet\.enable
+## Options
+
+### languages\.dotnet\.enable
 
 Whether to enable tools for \.NET development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.dotnet\.package
+### languages\.dotnet\.package
 
 
 

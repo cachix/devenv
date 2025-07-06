@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.mysql\.enable
+## Options
+
+### services\.mysql\.enable
 
 Whether to enable MySQL process and expose utilities\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.mysql\.package
+### services\.mysql\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## services\.mysql\.ensureUsers
+### services\.mysql\.ensureUsers
 
 
 
@@ -81,7 +83,7 @@ list of (submodule)
 
 
 
-## services\.mysql\.ensureUsers\.\*\.ensurePermissions
+### services\.mysql\.ensureUsers\.\*\.ensurePermissions
 
 
 
@@ -119,7 +121,7 @@ attribute set of string
 
 
 
-## services\.mysql\.ensureUsers\.\*\.name
+### services\.mysql\.ensureUsers\.\*\.name
 
 
 
@@ -132,7 +134,7 @@ string
 
 
 
-## services\.mysql\.ensureUsers\.\*\.password
+### services\.mysql\.ensureUsers\.\*\.password
 
 
 
@@ -150,7 +152,7 @@ null or string
 
 
 
-## services\.mysql\.importTimeZones
+### services\.mysql\.importTimeZones
 
 
 
@@ -168,7 +170,7 @@ null or boolean
 
 
 
-## services\.mysql\.initialDatabases
+### services\.mysql\.initialDatabases
 
 
 
@@ -199,7 +201,7 @@ list of (submodule)
 
 
 
-## services\.mysql\.initialDatabases\.\*\.name
+### services\.mysql\.initialDatabases\.\*\.name
 
 
 
@@ -212,7 +214,7 @@ string
 
 
 
-## services\.mysql\.initialDatabases\.\*\.schema
+### services\.mysql\.initialDatabases\.\*\.schema
 
 
 
@@ -231,7 +233,7 @@ null or absolute path
 
 
 
-## services\.mysql\.settings
+### services\.mysql\.settings
 
 
 
@@ -269,7 +271,7 @@ lazy attribute set of lazy attribute set of anything
 
 
 
-## services\.mysql\.useDefaultsExtraFile
+### services\.mysql\.useDefaultsExtraFile
 
 
 

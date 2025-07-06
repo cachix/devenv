@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.lua\.enable
+## Options
+
+### languages\.lua\.enable
 
 Whether to enable tools for Lua development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.lua\.package
+### languages\.lua\.package
 
 
 

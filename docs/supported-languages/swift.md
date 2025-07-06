@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.swift\.enable
+## Options
+
+### languages\.swift\.enable
 
 Whether to enable tools for Swift development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.swift\.package
+### languages\.swift\.package
 
 
 

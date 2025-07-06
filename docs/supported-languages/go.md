@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.go\.enable
+## Options
+
+### languages\.go\.enable
 
 Whether to enable tools for Go development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.go\.enableHardeningWorkaround
+### languages\.go\.enableHardeningWorkaround
 
 
 
@@ -42,7 +44,7 @@ boolean
 
 
 
-## languages\.go\.package
+### languages\.go\.package
 
 
 

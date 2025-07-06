@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.tideways\.enable
+## Options
+
+### services\.tideways\.enable
 
 
 
@@ -29,7 +31,7 @@ boolean
 
 
 
-## services\.tideways\.apiKey
+### services\.tideways\.apiKey
 
 Sets the API-Key for the Tideways Daemon\.
 
@@ -45,7 +47,7 @@ string
 
 
 
-## services\.tideways\.cliPackage
+### services\.tideways\.cliPackage
 
 
 
@@ -63,7 +65,7 @@ package
 
 
 
-## services\.tideways\.daemonPackage
+### services\.tideways\.daemonPackage
 
 
 
@@ -81,7 +83,7 @@ package
 
 
 
-## services\.tideways\.environment
+### services\.tideways\.environment
 
 
 
@@ -99,7 +101,7 @@ string
 
 
 
-## services\.tideways\.profilingSpace
+### services\.tideways\.profilingSpace
 
 
 
@@ -117,7 +119,7 @@ boolean
 
 
 
-## services\.tideways\.service
+### services\.tideways\.service
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.caddy\.enable
+## Options
+
+### services\.caddy\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.caddy\.package
+### services\.caddy\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.caddy\.adapter
+### services\.caddy\.adapter
 
 Name of the config adapter to use\.
 See [https://caddyserver\.com/docs/config-adapters](https://caddyserver\.com/docs/config-adapters) for the full list\.
@@ -66,7 +68,7 @@ string
 
 
 
-## services\.caddy\.ca
+### services\.caddy\.ca
 
 
 
@@ -92,7 +94,7 @@ null or string
 
 
 
-## services\.caddy\.config
+### services\.caddy\.config
 
 
 
@@ -135,7 +137,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.caddy\.dataDir
+### services\.caddy\.dataDir
 
 
 
@@ -157,7 +159,7 @@ absolute path
 
 
 
-## services\.caddy\.email
+### services\.caddy\.email
 
 
 
@@ -175,7 +177,7 @@ string
 
 
 
-## services\.caddy\.resume
+### services\.caddy\.resume
 
 
 
@@ -193,7 +195,7 @@ boolean
 
 
 
-## services\.caddy\.virtualHosts
+### services\.caddy\.virtualHosts
 
 
 
@@ -229,7 +231,7 @@ attribute set of (submodule)
 
 
 
-## services\.caddy\.virtualHosts\.\<name>\.extraConfig
+### services\.caddy\.virtualHosts\.\<name>\.extraConfig
 
 
 
@@ -247,7 +249,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.caddy\.virtualHosts\.\<name>\.serverAliases
+### services\.caddy\.virtualHosts\.\<name>\.serverAliases
 
 
 

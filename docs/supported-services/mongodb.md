@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.mongodb\.enable
+## Options
+
+### services\.mongodb\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.mongodb\.package
+### services\.mongodb\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.mongodb\.additionalArgs
+### services\.mongodb\.additionalArgs
 
 Additional arguments passed to ` mongod `\.
 
@@ -77,7 +79,7 @@ list of strings concatenated with “\\n”
 
 
 
-## services\.mongodb\.initDatabasePassword
+### services\.mongodb\.initDatabasePassword
 
 
 
@@ -100,7 +102,7 @@ string
 
 
 
-## services\.mongodb\.initDatabaseUsername
+### services\.mongodb\.initDatabaseUsername
 
 
 

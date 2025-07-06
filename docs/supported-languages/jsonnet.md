@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.jsonnet\.enable
+## Options
+
+### languages\.jsonnet\.enable
 
 Whether to enable tools for jsonnet development\.
 

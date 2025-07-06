@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.idris\.enable
+## Options
+
+### languages\.idris\.enable
 
 Whether to enable tools for Idris development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.idris\.package
+### languages\.idris\.package
 
 
 

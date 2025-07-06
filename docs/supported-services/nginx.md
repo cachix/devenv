@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.nginx\.enable
+## Options
+
+### services\.nginx\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.nginx\.package
+### services\.nginx\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.nginx\.defaultMimeTypes
+### services\.nginx\.defaultMimeTypes
 
 Default MIME types for NGINX, as MIME types definitions from NGINX are very incomplete,
 we use by default the ones bundled in the mailcap package, used by most of the other
@@ -67,7 +69,7 @@ absolute path
 
 
 
-## services\.nginx\.eventsConfig
+### services\.nginx\.eventsConfig
 
 
 
@@ -85,7 +87,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.nginx\.httpConfig
+### services\.nginx\.httpConfig
 
 
 

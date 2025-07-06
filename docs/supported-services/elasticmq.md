@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.elasticmq\.enable
+## Options
+
+### services\.elasticmq\.enable
 
 Whether to enable elasticmq-server\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.elasticmq\.package
+### services\.elasticmq\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## services\.elasticmq\.settings
+### services\.elasticmq\.settings
 
 
 

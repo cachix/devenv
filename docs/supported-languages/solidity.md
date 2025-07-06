@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.solidity\.enable
+## Options
+
+### languages\.solidity\.enable
 
 Whether to enable tools for Solidity development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.solidity\.package
+### languages\.solidity\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## languages\.solidity\.foundry\.enable
+### languages\.solidity\.foundry\.enable
 
 
 
@@ -65,7 +67,7 @@ boolean
 
 
 
-## languages\.solidity\.foundry\.package
+### languages\.solidity\.foundry\.package
 
 
 

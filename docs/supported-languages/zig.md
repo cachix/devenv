@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.zig\.enable
+## Options
+
+### languages\.zig\.enable
 
 Whether to enable tools for Zig development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.zig\.package
+### languages\.zig\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## languages\.zig\.zls\.package
+### languages\.zig\.zls\.package
 
 
 

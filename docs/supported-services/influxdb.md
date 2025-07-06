@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.influxdb\.enable
+## Options
+
+### services\.influxdb\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.influxdb\.package
+### services\.influxdb\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.influxdb\.config
+### services\.influxdb\.config
 
 Configuration for InfluxDB-server
 

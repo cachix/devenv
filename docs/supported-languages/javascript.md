@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.javascript\.enable
+## Options
+
+### languages\.javascript\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## languages\.javascript\.package
+### languages\.javascript\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## languages\.javascript\.bun\.enable
+### languages\.javascript\.bun\.enable
 
 Whether to enable install bun\.
 
@@ -65,7 +67,7 @@ boolean
 
 
 
-## languages\.javascript\.bun\.package
+### languages\.javascript\.bun\.package
 
 
 
@@ -83,7 +85,7 @@ package
 
 
 
-## languages\.javascript\.bun\.install\.enable
+### languages\.javascript\.bun\.install\.enable
 
 
 
@@ -106,7 +108,7 @@ boolean
 
 
 
-## languages\.javascript\.corepack\.enable
+### languages\.javascript\.corepack\.enable
 
 
 
@@ -129,7 +131,7 @@ boolean
 
 
 
-## languages\.javascript\.directory
+### languages\.javascript\.directory
 
 
 
@@ -153,7 +155,7 @@ string
 
 
 
-## languages\.javascript\.npm\.enable
+### languages\.javascript\.npm\.enable
 
 
 
@@ -176,7 +178,7 @@ boolean
 
 
 
-## languages\.javascript\.npm\.package
+### languages\.javascript\.npm\.package
 
 
 
@@ -194,7 +196,7 @@ package
 
 
 
-## languages\.javascript\.npm\.install\.enable
+### languages\.javascript\.npm\.install\.enable
 
 
 
@@ -217,7 +219,7 @@ boolean
 
 
 
-## languages\.javascript\.pnpm\.enable
+### languages\.javascript\.pnpm\.enable
 
 
 
@@ -240,7 +242,7 @@ boolean
 
 
 
-## languages\.javascript\.pnpm\.package
+### languages\.javascript\.pnpm\.package
 
 
 
@@ -258,7 +260,7 @@ package
 
 
 
-## languages\.javascript\.pnpm\.install\.enable
+### languages\.javascript\.pnpm\.install\.enable
 
 
 
@@ -281,7 +283,7 @@ boolean
 
 
 
-## languages\.javascript\.yarn\.enable
+### languages\.javascript\.yarn\.enable
 
 
 
@@ -304,7 +306,7 @@ boolean
 
 
 
-## languages\.javascript\.yarn\.package
+### languages\.javascript\.yarn\.package
 
 
 
@@ -322,7 +324,7 @@ package
 
 
 
-## languages\.javascript\.yarn\.install\.enable
+### languages\.javascript\.yarn\.install\.enable
 
 
 

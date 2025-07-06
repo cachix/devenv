@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.v\.enable
+## Options
+
+### languages\.v\.enable
 
 Whether to enable tools for V development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.v\.package
+### languages\.v\.package
 
 
 

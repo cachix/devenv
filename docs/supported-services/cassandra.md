@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.cassandra\.enable
+## Options
+
+### services\.cassandra\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.cassandra\.package
+### services\.cassandra\.package
 
 
 
@@ -49,7 +51,7 @@ package
 
 
 
-## services\.cassandra\.allowClients
+### services\.cassandra\.allowClients
 
 Enables or disables the native transport server (CQL binary protocol)
 
@@ -65,7 +67,7 @@ boolean
 
 
 
-## services\.cassandra\.clusterName
+### services\.cassandra\.clusterName
 
 
 
@@ -83,7 +85,7 @@ string
 
 
 
-## services\.cassandra\.extraConfig
+### services\.cassandra\.extraConfig
 
 
 
@@ -111,7 +113,7 @@ attribute set
 
 
 
-## services\.cassandra\.jvmOpts
+### services\.cassandra\.jvmOpts
 
 
 
@@ -129,7 +131,7 @@ list of string
 
 
 
-## services\.cassandra\.listenAddress
+### services\.cassandra\.listenAddress
 
 
 
@@ -152,7 +154,7 @@ string
 
 
 
-## services\.cassandra\.seedAddresses
+### services\.cassandra\.seedAddresses
 
 
 

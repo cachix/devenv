@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.erlang\.enable
+## Options
+
+### languages\.erlang\.enable
 
 Whether to enable tools for Erlang development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.erlang\.package
+### languages\.erlang\.package
 
 
 

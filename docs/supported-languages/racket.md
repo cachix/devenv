@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.racket\.enable
+## Options
+
+### languages\.racket\.enable
 
 Whether to enable tools for Racket development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.racket\.package
+### languages\.racket\.package
 
 
 

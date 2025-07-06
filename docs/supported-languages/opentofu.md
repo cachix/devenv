@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.opentofu\.enable
+## Options
+
+### languages\.opentofu\.enable
 
 Whether to enable tools for OpenTofu development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.opentofu\.package
+### languages\.opentofu\.package
 
 
 

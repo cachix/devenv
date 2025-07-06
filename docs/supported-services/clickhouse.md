@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.clickhouse\.enable
+## Options
+
+### services\.clickhouse\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.clickhouse\.package
+### services\.clickhouse\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.clickhouse\.config
+### services\.clickhouse\.config
 
 ClickHouse configuration in YAML\.
 
@@ -55,7 +57,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.clickhouse\.httpPort
+### services\.clickhouse\.httpPort
 
 
 
@@ -73,7 +75,7 @@ signed integer
 
 
 
-## services\.clickhouse\.port
+### services\.clickhouse\.port
 
 
 

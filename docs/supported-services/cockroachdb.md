@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.cockroachdb\.enable
+## Options
+
+### services\.cockroachdb\.enable
 
 Whether to enable Add CockroachDB process\.
 \.
@@ -25,7 +27,7 @@ boolean
 
 
 
-## services\.cockroachdb\.package
+### services\.cockroachdb\.package
 
 
 
@@ -43,7 +45,7 @@ unspecified value
 
 
 
-## services\.cockroachdb\.http_addr
+### services\.cockroachdb\.http_addr
 
 
 
@@ -61,7 +63,7 @@ string
 
 
 
-## services\.cockroachdb\.listen_addr
+### services\.cockroachdb\.listen_addr
 
 
 

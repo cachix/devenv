@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.minio\.enable
+## Options
+
+### services\.minio\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.minio\.package
+### services\.minio\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.minio\.accessKey
+### services\.minio\.accessKey
 
 Access key of 5 to 20 characters in length that clients use to access the server\.
 
@@ -60,7 +62,7 @@ string
 
 
 
-## services\.minio\.afterStart
+### services\.minio\.afterStart
 
 
 
@@ -88,7 +90,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.minio\.browser
+### services\.minio\.browser
 
 
 
@@ -106,7 +108,7 @@ boolean
 
 
 
-## services\.minio\.buckets
+### services\.minio\.buckets
 
 
 
@@ -124,7 +126,7 @@ list of string
 
 
 
-## services\.minio\.clientConfig
+### services\.minio\.clientConfig
 
 
 
@@ -140,7 +142,7 @@ null or JSON value
 
 
 
-## services\.minio\.clientPackage
+### services\.minio\.clientPackage
 
 
 
@@ -158,7 +160,7 @@ package
 
 
 
-## services\.minio\.consoleAddress
+### services\.minio\.consoleAddress
 
 
 
@@ -176,7 +178,7 @@ string
 
 
 
-## services\.minio\.listenAddress
+### services\.minio\.listenAddress
 
 
 
@@ -194,7 +196,7 @@ string
 
 
 
-## services\.minio\.region
+### services\.minio\.region
 
 
 
@@ -212,7 +214,7 @@ string
 
 
 
-## services\.minio\.secretKey
+### services\.minio\.secretKey
 
 
 

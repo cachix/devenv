@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.pascal\.enable
+## Options
+
+### languages\.pascal\.enable
 
 Whether to enable tools for Pascal development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.pascal\.lazarus\.enable
+### languages\.pascal\.lazarus\.enable
 
 
 

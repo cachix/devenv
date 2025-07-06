@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.cue\.enable
+## Options
+
+### languages\.cue\.enable
 
 Whether to enable tools for Cue development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.cue\.package
+### languages\.cue\.package
 
 
 

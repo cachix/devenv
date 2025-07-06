@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.unison\.enable
+## Options
+
+### languages\.unison\.enable
 
 Whether to enable tools for Unison development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.unison\.package
+### languages\.unison\.package
 
 
 

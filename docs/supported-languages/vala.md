@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.vala\.enable
+## Options
+
+### languages\.vala\.enable
 
 Whether to enable tools for Vala development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.vala\.package
+### languages\.vala\.package
 
 
 

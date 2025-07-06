@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## process\.managers\.mprocs\.package
+## Options
+
+### process\.managers\.mprocs\.package
 
 The mprocs package to use\.
 
@@ -19,7 +21,7 @@ package
 
 
 
-## process\.managers\.mprocs\.settings
+### process\.managers\.mprocs\.settings
 
 
 

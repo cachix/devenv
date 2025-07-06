@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.php\.enable
+## Options
+
+### languages\.php\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## languages\.php\.package
+### languages\.php\.package
 
 
 
@@ -60,7 +62,7 @@ pkgs.php.buildEnv {
 
 
 
-## languages\.php\.packages
+### languages\.php\.packages
 
 
 
@@ -78,7 +80,7 @@ submodule
 
 
 
-## languages\.php\.packages\.composer
+### languages\.php\.packages\.composer
 
 
 
@@ -96,7 +98,7 @@ null or package
 
 
 
-## languages\.php\.disableExtensions
+### languages\.php\.disableExtensions
 
 PHP extensions to disable\.
 
@@ -112,7 +114,7 @@ list of string
 
 
 
-## languages\.php\.extensions
+### languages\.php\.extensions
 
 
 
@@ -130,7 +132,7 @@ list of string
 
 
 
-## languages\.php\.fpm\.extraConfig
+### languages\.php\.fpm\.extraConfig
 
 
 
@@ -151,7 +153,7 @@ null or strings concatenated with “\\n”
 
 
 
-## languages\.php\.fpm\.phpOptions
+### languages\.php\.fpm\.phpOptions
 
 
 
@@ -179,7 +181,7 @@ strings concatenated with “\\n”
 
 
 
-## languages\.php\.fpm\.pools
+### languages\.php\.fpm\.pools
 
 
 
@@ -220,7 +222,7 @@ attribute set of (submodule)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.extraConfig
+### languages\.php\.fpm\.pools\.\<name>\.extraConfig
 
 
 
@@ -240,7 +242,7 @@ null or strings concatenated with “\\n”
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.listen
+### languages\.php\.fpm\.pools\.\<name>\.listen
 
 
 
@@ -263,7 +265,7 @@ string
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.phpEnv
+### languages\.php\.fpm\.pools\.\<name>\.phpEnv
 
 
 
@@ -295,7 +297,7 @@ attribute set of string
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.phpOptions
+### languages\.php\.fpm\.pools\.\<name>\.phpOptions
 
 
 
@@ -308,7 +310,7 @@ strings concatenated with “\\n”
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.phpPackage
+### languages\.php\.fpm\.pools\.\<name>\.phpPackage
 
 
 
@@ -326,7 +328,7 @@ package
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.settings
+### languages\.php\.fpm\.pools\.\<name>\.settings
 
 
 
@@ -364,7 +366,7 @@ attribute set of (string or signed integer or boolean)
 
 
 
-## languages\.php\.fpm\.pools\.\<name>\.socket
+### languages\.php\.fpm\.pools\.\<name>\.socket
 
 
 
@@ -384,7 +386,7 @@ string *(read only)*
 
 
 
-## languages\.php\.fpm\.settings
+### languages\.php\.fpm\.settings
 
 
 
@@ -418,7 +420,7 @@ attribute set of (string or signed integer or boolean)
 
 
 
-## languages\.php\.ini
+### languages\.php\.ini
 
 
 
@@ -436,7 +438,7 @@ null or strings concatenated with “\\n”
 
 
 
-## languages\.php\.version
+### languages\.php\.version
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.varnish\.enable
+## Options
+
+### services\.varnish\.enable
 
 Whether to enable Varnish process and expose utilities\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.varnish\.package
+### services\.varnish\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## services\.varnish\.extraModules
+### services\.varnish\.extraModules
 
 
 
@@ -65,7 +67,7 @@ list of package
 
 
 
-## services\.varnish\.listen
+### services\.varnish\.listen
 
 
 
@@ -83,7 +85,7 @@ string
 
 
 
-## services\.varnish\.memorySize
+### services\.varnish\.memorySize
 
 
 
@@ -101,7 +103,7 @@ string
 
 
 
-## services\.varnish\.vcl
+### services\.varnish\.vcl
 
 
 

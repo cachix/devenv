@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.scala\.enable
+## Options
+
+### languages\.scala\.enable
 
 Whether to enable tools for Scala development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.scala\.package
+### languages\.scala\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## languages\.scala\.mill\.enable
+### languages\.scala\.mill\.enable
 
 
 
@@ -65,7 +67,7 @@ boolean
 
 
 
-## languages\.scala\.mill\.package
+### languages\.scala\.mill\.package
 
 
 
@@ -83,7 +85,7 @@ package
 
 
 
-## languages\.scala\.sbt\.enable
+### languages\.scala\.sbt\.enable
 
 
 
@@ -106,7 +108,7 @@ boolean
 
 
 
-## languages\.scala\.sbt\.package
+### languages\.scala\.sbt\.package
 
 
 

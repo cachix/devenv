@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.prometheus\.enable
+## Options
+
+### services\.prometheus\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.prometheus\.package
+### services\.prometheus\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.prometheus\.advanced\.storage
+### services\.prometheus\.advanced\.storage
 
 Storage configuration
 
@@ -60,7 +62,7 @@ attribute set
 
 
 
-## services\.prometheus\.advanced\.tsdb
+### services\.prometheus\.advanced\.tsdb
 
 
 
@@ -78,7 +80,7 @@ attribute set
 
 
 
-## services\.prometheus\.alerting
+### services\.prometheus\.alerting
 
 
 
@@ -96,7 +98,7 @@ null or (attribute set)
 
 
 
-## services\.prometheus\.experimentalFeatures\.enableExemplars
+### services\.prometheus\.experimentalFeatures\.enableExemplars
 
 
 
@@ -114,7 +116,7 @@ boolean
 
 
 
-## services\.prometheus\.experimentalFeatures\.enableOTLP
+### services\.prometheus\.experimentalFeatures\.enableOTLP
 
 
 
@@ -132,7 +134,7 @@ boolean
 
 
 
-## services\.prometheus\.experimentalFeatures\.enableTracing
+### services\.prometheus\.experimentalFeatures\.enableTracing
 
 
 
@@ -150,7 +152,7 @@ boolean
 
 
 
-## services\.prometheus\.extraArgs
+### services\.prometheus\.extraArgs
 
 
 
@@ -168,7 +170,7 @@ string
 
 
 
-## services\.prometheus\.globalConfig
+### services\.prometheus\.globalConfig
 
 
 
@@ -193,7 +195,7 @@ attribute set
 
 
 
-## services\.prometheus\.port
+### services\.prometheus\.port
 
 
 
@@ -211,7 +213,7 @@ Port for Prometheus web interface
 
 
 
-## services\.prometheus\.remoteRead
+### services\.prometheus\.remoteRead
 
 
 
@@ -229,7 +231,7 @@ list of (attribute set)
 
 
 
-## services\.prometheus\.remoteWrite
+### services\.prometheus\.remoteWrite
 
 
 
@@ -247,7 +249,7 @@ list of (attribute set)
 
 
 
-## services\.prometheus\.ruleFiles
+### services\.prometheus\.ruleFiles
 
 
 
@@ -265,7 +267,7 @@ list of string
 
 
 
-## services\.prometheus\.scrapeConfigs
+### services\.prometheus\.scrapeConfigs
 
 
 
@@ -283,7 +285,7 @@ list of (attribute set)
 
 
 
-## services\.prometheus\.storage\.path
+### services\.prometheus\.storage\.path
 
 
 
@@ -301,7 +303,7 @@ string
 
 
 
-## services\.prometheus\.storage\.retentionTime
+### services\.prometheus\.storage\.retentionTime
 
 
 

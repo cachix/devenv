@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.nix\.enable
+## Options
+
+### languages\.nix\.enable
 
 Whether to enable tools for Nix development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.nix\.lsp\.package
+### languages\.nix\.lsp\.package
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.fortran\.enable
+## Options
+
+### languages\.fortran\.enable
 
 Whether to enable tools for Fortran Development…
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.fortran\.package
+### languages\.fortran\.package
 
 
 

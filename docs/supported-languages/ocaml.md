@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.ocaml\.enable
+## Options
+
+### languages\.ocaml\.enable
 
 Whether to enable tools for OCaml development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.ocaml\.packages
+### languages\.ocaml\.packages
 
 
 

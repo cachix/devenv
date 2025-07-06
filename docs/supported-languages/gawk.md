@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.gawk\.enable
+## Options
+
+### languages\.gawk\.enable
 
 Whether to enable tools for GNU Awk development\.
 

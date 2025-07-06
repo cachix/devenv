@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.temporal\.enable
+## Options
+
+### services\.temporal\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.temporal\.package
+### services\.temporal\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.temporal\.dynamicConfig
+### services\.temporal\.dynamicConfig
 
 Dynamic configuration for the Temporal server\.
 
@@ -71,7 +73,7 @@ attribute set of string
 
 
 
-## services\.temporal\.ip
+### services\.temporal\.ip
 
 
 
@@ -89,7 +91,7 @@ string
 
 
 
-## services\.temporal\.namespaces
+### services\.temporal\.namespaces
 
 
 
@@ -118,7 +120,7 @@ list of string
 
 
 
-## services\.temporal\.port
+### services\.temporal\.port
 
 
 
@@ -136,7 +138,7 @@ Port for the frontend gRPC service\.
 
 
 
-## services\.temporal\.state
+### services\.temporal\.state
 
 
 
@@ -154,7 +156,7 @@ submodule
 
 
 
-## services\.temporal\.state\.ephemeral
+### services\.temporal\.state\.ephemeral
 
 
 
@@ -172,7 +174,7 @@ boolean
 
 
 
-## services\.temporal\.state\.sqlite-pragma
+### services\.temporal\.state\.sqlite-pragma
 
 
 
@@ -201,7 +203,7 @@ attribute set of string
 
 
 
-## services\.temporal\.ui
+### services\.temporal\.ui
 
 
 
@@ -219,7 +221,7 @@ submodule
 
 
 
-## services\.temporal\.ui\.enable
+### services\.temporal\.ui\.enable
 
 
 
@@ -237,7 +239,7 @@ boolean
 
 
 
-## services\.temporal\.ui\.ip
+### services\.temporal\.ui\.ip
 
 
 
@@ -255,7 +257,7 @@ string
 
 
 
-## services\.temporal\.ui\.port
+### services\.temporal\.ui\.port
 
 
 

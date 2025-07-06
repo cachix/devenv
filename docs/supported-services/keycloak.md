@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.keycloak\.enable
+## Options
+
+### services\.keycloak\.enable
 
 
 
@@ -27,7 +29,7 @@ boolean
 
 
 
-## services\.keycloak\.package
+### services\.keycloak\.package
 
 
 
@@ -45,7 +47,7 @@ package
 
 
 
-## services\.keycloak\.database\.type
+### services\.keycloak\.database\.type
 
 The type of database Keycloak should connect to\.
 If you use ` dev-mem `, the realm export over script
@@ -68,7 +70,7 @@ one of “dev-mem”, “dev-file”
 
 
 
-## services\.keycloak\.initialAdminPassword
+### services\.keycloak\.initialAdminPassword
 
 
 
@@ -90,7 +92,7 @@ string
 
 
 
-## services\.keycloak\.plugins
+### services\.keycloak\.plugins
 
 
 
@@ -110,7 +112,7 @@ list of absolute path
 
 
 
-## services\.keycloak\.processes\.exportRealms
+### services\.keycloak\.processes\.exportRealms
 
 
 
@@ -129,7 +131,7 @@ boolean
 
 
 
-## services\.keycloak\.realms
+### services\.keycloak\.realms
 
 
 
@@ -163,7 +165,7 @@ attribute set of (submodule)
 
 
 
-## services\.keycloak\.realms\.\<name>\.export
+### services\.keycloak\.realms\.\<name>\.export
 
 
 
@@ -186,7 +188,7 @@ boolean
 
 
 
-## services\.keycloak\.realms\.\<name>\.import
+### services\.keycloak\.realms\.\<name>\.import
 
 
 
@@ -209,7 +211,7 @@ boolean
 
 
 
-## services\.keycloak\.realms\.\<name>\.path
+### services\.keycloak\.realms\.\<name>\.path
 
 
 
@@ -234,7 +236,7 @@ null or relative path not in the Nix store
 
 
 
-## services\.keycloak\.scripts\.exportRealm
+### services\.keycloak\.scripts\.exportRealm
 
 
 
@@ -253,7 +255,7 @@ boolean
 
 
 
-## services\.keycloak\.settings
+### services\.keycloak\.settings
 
 
 
@@ -292,7 +294,7 @@ attribute set of (null or string or signed integer or boolean or attribute set o
 
 
 
-## services\.keycloak\.settings\.hostname
+### services\.keycloak\.settings\.hostname
 
 
 
@@ -319,7 +321,7 @@ string
 
 
 
-## services\.keycloak\.settings\.http-host
+### services\.keycloak\.settings\.http-host
 
 
 
@@ -342,7 +344,7 @@ string
 
 
 
-## services\.keycloak\.settings\.http-port
+### services\.keycloak\.settings\.http-port
 
 
 
@@ -365,7 +367,7 @@ On which port Keycloak should listen for new HTTP connections\.
 
 
 
-## services\.keycloak\.settings\.http-relative-path
+### services\.keycloak\.settings\.http-relative-path
 
 
 
@@ -399,7 +401,7 @@ string
 
 
 
-## services\.keycloak\.settings\.https-port
+### services\.keycloak\.settings\.https-port
 
 
 
@@ -423,7 +425,7 @@ If its not set, its disabled\.
 
 
 
-## services\.keycloak\.sslCertificate
+### services\.keycloak\.sslCertificate
 
 
 
@@ -447,7 +449,7 @@ null or relative path not in the Nix store
 
 
 
-## services\.keycloak\.sslCertificateKey
+### services\.keycloak\.sslCertificateKey
 
 
 

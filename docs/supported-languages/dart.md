@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.dart\.enable
+## Options
+
+### languages\.dart\.enable
 
 Whether to enable tools for Dart development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.dart\.package
+### languages\.dart\.package
 
 
 

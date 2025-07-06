@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.c\.enable
+## Options
+
+### languages\.c\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## languages\.c\.debugger
+### languages\.c\.debugger
 
 An optional debugger package to use with c\.
 The default is ` gdb `, if supported on the current system\.

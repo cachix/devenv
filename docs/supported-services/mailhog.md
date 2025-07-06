@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.mailhog\.enable
+## Options
+
+### services\.mailhog\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.mailhog\.package
+### services\.mailhog\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.mailhog\.additionalArgs
+### services\.mailhog\.additionalArgs
 
 Additional arguments passed to ` mailhog `\.
 
@@ -70,7 +72,7 @@ list of strings concatenated with “\\n”
 
 
 
-## services\.mailhog\.apiListenAddress
+### services\.mailhog\.apiListenAddress
 
 
 
@@ -88,7 +90,7 @@ string
 
 
 
-## services\.mailhog\.smtpListenAddress
+### services\.mailhog\.smtpListenAddress
 
 
 
@@ -106,7 +108,7 @@ string
 
 
 
-## services\.mailhog\.uiListenAddress
+### services\.mailhog\.uiListenAddress
 
 
 

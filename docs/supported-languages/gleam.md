@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.gleam\.enable
+## Options
+
+### languages\.gleam\.enable
 
 Whether to enable tools for Gleam development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.gleam\.package
+### languages\.gleam\.package
 
 
 

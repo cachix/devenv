@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.lean4\.enable
+## Options
+
+### languages\.lean4\.enable
 
 Whether to enable tools for lean4 development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.lean4\.package
+### languages\.lean4\.package
 
 
 

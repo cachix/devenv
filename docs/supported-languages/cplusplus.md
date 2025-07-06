@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.cplusplus\.enable
+## Options
+
+### languages\.cplusplus\.enable
 
 Whether to enable tools for C++ development\.
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.redis\.enable
+## Options
+
+### services\.redis\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.redis\.package
+### services\.redis\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.redis\.bind
+### services\.redis\.bind
 
 The IP interface to bind to\.
 ` null ` means “all interfaces”\.
@@ -66,7 +68,7 @@ null or string
 
 
 
-## services\.redis\.extraConfig
+### services\.redis\.extraConfig
 
 
 
@@ -84,7 +86,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.redis\.port
+### services\.redis\.port
 
 
 

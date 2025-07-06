@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.texlive\.enable
+## Options
+
+### languages\.texlive\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## languages\.texlive\.packages
+### languages\.texlive\.packages
 
 
 
@@ -55,7 +57,7 @@ list of string
 
 
 
-## languages\.texlive\.base
+### languages\.texlive\.base
 
 TeX Live package set to use
 

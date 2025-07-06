@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.kafka\.enable
+## Options
+
+### services\.kafka\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.kafka\.package
+### services\.kafka\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.kafka\.configFiles\.log4jProperties
+### services\.kafka\.configFiles\.log4jProperties
 
 Kafka log4j property configuration file path
 
@@ -60,7 +62,7 @@ absolute path
 
 
 
-## services\.kafka\.configFiles\.serverProperties
+### services\.kafka\.configFiles\.serverProperties
 
 
 
@@ -74,7 +76,7 @@ absolute path
 
 
 
-## services\.kafka\.connect\.enable
+### services\.kafka\.connect\.enable
 
 
 
@@ -97,7 +99,7 @@ boolean
 
 
 
-## services\.kafka\.connect\.initialConnectors
+### services\.kafka\.connect\.initialConnectors
 
 
 
@@ -115,7 +117,7 @@ list of (lazy attribute set of (null or boolean or signed integer or string or l
 
 
 
-## services\.kafka\.connect\.initialConnectors\.\*\.config
+### services\.kafka\.connect\.initialConnectors\.\*\.config
 
 
 
@@ -128,7 +130,7 @@ attribute set
 
 
 
-## services\.kafka\.connect\.initialConnectors\.\*\.name
+### services\.kafka\.connect\.initialConnectors\.\*\.name
 
 
 
@@ -141,7 +143,7 @@ string
 
 
 
-## services\.kafka\.connect\.settings
+### services\.kafka\.connect\.settings
 
 
 
@@ -164,7 +166,7 @@ lazy attribute set of (null or boolean or signed integer or string or list of (b
 
 
 
-## services\.kafka\.connect\.settings\."bootstrap\.servers"
+### services\.kafka\.connect\.settings\."bootstrap\.servers"
 
 
 
@@ -187,7 +189,7 @@ list of string
 
 
 
-## services\.kafka\.connect\.settings\."key\.converter"
+### services\.kafka\.connect\.settings\."key\.converter"
 
 
 
@@ -205,7 +207,7 @@ string
 
 
 
-## services\.kafka\.connect\.settings\."key\.converter\.schemas\.enable"
+### services\.kafka\.connect\.settings\."key\.converter\.schemas\.enable"
 
 
 
@@ -223,7 +225,7 @@ boolean
 
 
 
-## services\.kafka\.connect\.settings\.listeners
+### services\.kafka\.connect\.settings\.listeners
 
 
 
@@ -252,7 +254,7 @@ null or (list of string)
 
 
 
-## services\.kafka\.connect\.settings\."offset\.flush\.interval\.ms"
+### services\.kafka\.connect\.settings\."offset\.flush\.interval\.ms"
 
 
 
@@ -270,7 +272,7 @@ signed integer
 
 
 
-## services\.kafka\.connect\.settings\."offset\.storage\.file\.filename"
+### services\.kafka\.connect\.settings\."offset\.storage\.file\.filename"
 
 
 
@@ -284,11 +286,11 @@ string
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/kafka/connect/connect.offsets" `
+` "/home/sandydoo/code/cachix/devenv/.devenv/state/kafka/connect/connect.offsets" `
 
 
 
-## services\.kafka\.connect\.settings\."plugin\.path"
+### services\.kafka\.connect\.settings\."plugin\.path"
 
 
 
@@ -310,7 +312,7 @@ null or (list of (string or absolute path))
 
 
 
-## services\.kafka\.connect\.settings\."value\.converter"
+### services\.kafka\.connect\.settings\."value\.converter"
 
 
 
@@ -328,7 +330,7 @@ string
 
 
 
-## services\.kafka\.connect\.settings\."value\.converter\.schemas\.enable"
+### services\.kafka\.connect\.settings\."value\.converter\.schemas\.enable"
 
 
 
@@ -346,7 +348,7 @@ boolean
 
 
 
-## services\.kafka\.defaultMode
+### services\.kafka\.defaultMode
 
 
 
@@ -367,7 +369,7 @@ one of “zookeeper”, “kraft”
 
 
 
-## services\.kafka\.formatLogDirs
+### services\.kafka\.formatLogDirs
 
 
 
@@ -386,7 +388,7 @@ boolean
 
 
 
-## services\.kafka\.formatLogDirsIgnoreFormatted
+### services\.kafka\.formatLogDirsIgnoreFormatted
 
 
 
@@ -405,7 +407,7 @@ boolean
 
 
 
-## services\.kafka\.jre
+### services\.kafka\.jre
 
 
 
@@ -423,7 +425,7 @@ package
 
 
 
-## services\.kafka\.jvmOptions
+### services\.kafka\.jvmOptions
 
 
 
@@ -453,7 +455,7 @@ list of string
 
 
 
-## services\.kafka\.log4jProperties
+### services\.kafka\.log4jProperties
 
 
 
@@ -480,7 +482,7 @@ strings concatenated with “\\n”
 
 
 
-## services\.kafka\.settings
+### services\.kafka\.settings
 
 
 
@@ -504,7 +506,7 @@ lazy attribute set of (null or boolean or signed integer or string or list of (b
 
 
 
-## services\.kafka\.settings\."broker\.id"
+### services\.kafka\.settings\."broker\.id"
 
 
 
@@ -522,7 +524,7 @@ null or signed integer
 
 
 
-## services\.kafka\.settings\.listeners
+### services\.kafka\.settings\.listeners
 
 
 
@@ -547,7 +549,7 @@ list of string
 
 
 
-## services\.kafka\.settings\."log\.dirs"
+### services\.kafka\.settings\."log\.dirs"
 
 
 

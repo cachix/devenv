@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.r\.enable
+## Options
+
+### languages\.r\.enable
 
 Whether to enable tools for R development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.r\.package
+### languages\.r\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## languages\.r\.radian\.enable
+### languages\.r\.radian\.enable
 
 
 
@@ -65,7 +67,7 @@ boolean
 
 
 
-## languages\.r\.radian\.package
+### languages\.r\.radian\.package
 
 
 

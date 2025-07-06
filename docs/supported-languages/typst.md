@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.typst\.enable
+## Options
+
+### languages\.typst\.enable
 
 Whether to enable tools for Typst development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.typst\.package
+### languages\.typst\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## languages\.typst\.fontPaths
+### languages\.typst\.fontPaths
 
 
 

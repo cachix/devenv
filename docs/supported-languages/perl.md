@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.perl\.enable
+## Options
+
+### languages\.perl\.enable
 
 Whether to enable tools for Perl development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.perl\.packages
+### languages\.perl\.packages
 
 
 

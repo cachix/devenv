@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.odin\.enable
+## Options
+
+### languages\.odin\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## languages\.odin\.package
+### languages\.odin\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## languages\.odin\.debugger
+### languages\.odin\.debugger
 
 An optional debugger package to use with odin\.
 The default is ` gdb `, if supported on the current system\.

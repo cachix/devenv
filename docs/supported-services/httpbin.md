@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.httpbin\.enable
+## Options
+
+### services\.httpbin\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.httpbin\.bind
+### services\.httpbin\.bind
 
 Addresses for httpbin to listen on\.
 
@@ -47,7 +49,7 @@ list of string
 
 
 
-## services\.httpbin\.extraArgs
+### services\.httpbin\.extraArgs
 
 
 

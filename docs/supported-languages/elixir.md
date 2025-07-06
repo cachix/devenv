@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.elixir\.enable
+## Options
+
+### languages\.elixir\.enable
 
 Whether to enable tools for Elixir development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.elixir\.package
+### languages\.elixir\.package
 
 
 

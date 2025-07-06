@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.nim\.enable
+## Options
+
+### languages\.nim\.enable
 
 Whether to enable tools for Nim development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.nim\.package
+### languages\.nim\.package
 
 
 

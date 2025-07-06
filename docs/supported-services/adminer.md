@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.adminer\.enable
+## Options
+
+### services\.adminer\.enable
 
 Whether to enable Adminer process\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.adminer\.package
+### services\.adminer\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## services\.adminer\.listen
+### services\.adminer\.listen
 
 
 

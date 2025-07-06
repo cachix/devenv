@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.purescript\.enable
+## Options
+
+### languages\.purescript\.enable
 
 Whether to enable tools for PureScript development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.purescript\.package
+### languages\.purescript\.package
 
 
 

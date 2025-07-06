@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.opentelemetry-collector\.enable
+## Options
+
+### services\.opentelemetry-collector\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.opentelemetry-collector\.package
+### services\.opentelemetry-collector\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.opentelemetry-collector\.configFile
+### services\.opentelemetry-collector\.configFile
 
 Override the configuration file used by OpenTelemetry Collector\.
 By default, a configuration is generated from ` services.opentelemetry-collector.settings `\.
@@ -73,7 +75,7 @@ pkgs.writeTextFile { name = "otel-config.yaml"; text = "..."; }
 
 
 
-## services\.opentelemetry-collector\.settings
+### services\.opentelemetry-collector\.settings
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## process\.managers\.honcho\.package
+## Options
+
+### process\.managers\.honcho\.package
 
 The honcho package to use\.
 

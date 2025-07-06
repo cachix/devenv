@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.postgres\.enable
+## Options
+
+### services\.postgres\.enable
 
 
 
@@ -27,7 +29,7 @@ boolean
 
 
 
-## services\.postgres\.package
+### services\.postgres\.package
 
 
 
@@ -54,7 +56,7 @@ pkgs.postgresql_15
 
 
 
-## services\.postgres\.createDatabase
+### services\.postgres\.createDatabase
 
 Create a database named like current user on startup\. Only applies when initialDatabases is an empty list\.
 
@@ -70,7 +72,7 @@ boolean
 
 
 
-## services\.postgres\.extensions
+### services\.postgres\.extensions
 
 
 
@@ -170,7 +172,7 @@ extensions: [
 
 
 
-## services\.postgres\.hbaConf
+### services\.postgres\.hbaConf
 
 
 
@@ -198,7 +200,7 @@ builtins.readFile ./my-custom/directory/to/pg_hba.conf
 
 
 
-## services\.postgres\.initdbArgs
+### services\.postgres\.initdbArgs
 
 
 
@@ -234,7 +236,7 @@ list of strings concatenated with “\\n”
 
 
 
-## services\.postgres\.initialDatabases
+### services\.postgres\.initialDatabases
 
 
 
@@ -268,7 +270,7 @@ list of (submodule)
 
 
 
-## services\.postgres\.initialDatabases\.\*\.initialSQL
+### services\.postgres\.initialDatabases\.\*\.initialSQL
 
 
 
@@ -298,7 +300,7 @@ CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
 
 
 
-## services\.postgres\.initialDatabases\.\*\.name
+### services\.postgres\.initialDatabases\.\*\.name
 
 
 
@@ -311,7 +313,7 @@ string
 
 
 
-## services\.postgres\.initialDatabases\.\*\.pass
+### services\.postgres\.initialDatabases\.\*\.pass
 
 
 
@@ -329,7 +331,7 @@ null or string
 
 
 
-## services\.postgres\.initialDatabases\.\*\.schema
+### services\.postgres\.initialDatabases\.\*\.schema
 
 
 
@@ -348,7 +350,7 @@ null or absolute path
 
 
 
-## services\.postgres\.initialDatabases\.\*\.user
+### services\.postgres\.initialDatabases\.\*\.user
 
 
 
@@ -366,7 +368,7 @@ null or string
 
 
 
-## services\.postgres\.initialScript
+### services\.postgres\.initialScript
 
 
 
@@ -398,7 +400,7 @@ CREATE ROLE bar;
 
 
 
-## services\.postgres\.listen_addresses
+### services\.postgres\.listen_addresses
 
 
 
@@ -433,7 +435,7 @@ string
 
 
 
-## services\.postgres\.port
+### services\.postgres\.port
 
 
 
@@ -451,7 +453,7 @@ The TCP port to accept connections\.
 
 
 
-## services\.postgres\.settings
+### services\.postgres\.settings
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.deno\.enable
+## Options
+
+### languages\.deno\.enable
 
 Whether to enable tools for Deno development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.deno\.package
+### languages\.deno\.package
 
 
 

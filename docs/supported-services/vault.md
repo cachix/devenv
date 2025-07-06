@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.vault\.enable
+## Options
+
+### services\.vault\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.vault\.package
+### services\.vault\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.vault\.address
+### services\.vault\.address
 
 Specifies the address to bind to for listening
 
@@ -60,7 +62,7 @@ string
 
 
 
-## services\.vault\.disableClustering
+### services\.vault\.disableClustering
 
 
 
@@ -78,7 +80,7 @@ boolean
 
 
 
-## services\.vault\.disableMlock
+### services\.vault\.disableMlock
 
 
 
@@ -96,7 +98,7 @@ boolean
 
 
 
-## services\.vault\.ui
+### services\.vault\.ui
 
 
 

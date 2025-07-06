@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.terraform\.enable
+## Options
+
+### languages\.terraform\.enable
 
 Whether to enable tools for Terraform development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.terraform\.package
+### languages\.terraform\.package
 
 
 
@@ -42,7 +44,7 @@ package
 
 
 
-## languages\.terraform\.version
+### languages\.terraform\.version
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.typesense\.enable
+## Options
+
+### services\.typesense\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.typesense\.package
+### services\.typesense\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.typesense\.additionalArgs
+### services\.typesense\.additionalArgs
 
 Additional arguments passed to ` typesense `\.
 
@@ -65,7 +67,7 @@ list of strings concatenated with “\\n”
 
 
 
-## services\.typesense\.apiKey
+### services\.typesense\.apiKey
 
 
 
@@ -83,7 +85,7 @@ string
 
 
 
-## services\.typesense\.host
+### services\.typesense\.host
 
 
 
@@ -101,7 +103,7 @@ string
 
 
 
-## services\.typesense\.port
+### services\.typesense\.port
 
 
 
@@ -119,7 +121,7 @@ The HTTP port to accept connections\.
 
 
 
-## services\.typesense\.searchOnlyKey
+### services\.typesense\.searchOnlyKey
 
 
 

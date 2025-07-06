@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.tailscale\.funnel\.enable
+## Options
+
+### services\.tailscale\.funnel\.enable
 
 Whether to enable Tailscale funnel\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## services\.tailscale\.funnel\.target
+### services\.tailscale\.funnel\.target
 
 
 

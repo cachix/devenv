@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.standardml\.enable
+## Options
+
+### languages\.standardml\.enable
 
 Whether to enable tools for Standard ML development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.standardml\.package
+### languages\.standardml\.package
 
 
 

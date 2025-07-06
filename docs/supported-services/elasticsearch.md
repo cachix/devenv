@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.elasticsearch\.enable
+## Options
+
+### services\.elasticsearch\.enable
 
 
 
@@ -21,7 +23,7 @@ boolean
 
 
 
-## services\.elasticsearch\.package
+### services\.elasticsearch\.package
 
 
 
@@ -39,7 +41,7 @@ package
 
 
 
-## services\.elasticsearch\.cluster_name
+### services\.elasticsearch\.cluster_name
 
 Elasticsearch name that identifies your cluster for auto-discovery\.
 
@@ -55,7 +57,7 @@ string
 
 
 
-## services\.elasticsearch\.extraCmdLineOptions
+### services\.elasticsearch\.extraCmdLineOptions
 
 
 
@@ -73,7 +75,7 @@ list of string
 
 
 
-## services\.elasticsearch\.extraConf
+### services\.elasticsearch\.extraConf
 
 
 
@@ -103,7 +105,7 @@ string
 
 
 
-## services\.elasticsearch\.extraJavaOptions
+### services\.elasticsearch\.extraJavaOptions
 
 
 
@@ -131,7 +133,7 @@ list of string
 
 
 
-## services\.elasticsearch\.listenAddress
+### services\.elasticsearch\.listenAddress
 
 
 
@@ -149,7 +151,7 @@ string
 
 
 
-## services\.elasticsearch\.logging
+### services\.elasticsearch\.logging
 
 
 
@@ -179,7 +181,7 @@ string
 
 
 
-## services\.elasticsearch\.plugins
+### services\.elasticsearch\.plugins
 
 
 
@@ -202,7 +204,7 @@ list of package
 
 
 
-## services\.elasticsearch\.port
+### services\.elasticsearch\.port
 
 
 
@@ -220,7 +222,7 @@ signed integer
 
 
 
-## services\.elasticsearch\.single_node
+### services\.elasticsearch\.single_node
 
 
 
@@ -238,7 +240,7 @@ boolean
 
 
 
-## services\.elasticsearch\.tcp_port
+### services\.elasticsearch\.tcp_port
 
 
 

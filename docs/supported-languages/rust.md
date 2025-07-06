@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.rust\.enable
+## Options
+
+### languages\.rust\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## languages\.rust\.channel
+### languages\.rust\.channel
 
 The rustup toolchain to install\.
 
@@ -42,7 +44,7 @@ one of “nixpkgs”, “stable”, “beta”, “nightly”
 
 
 
-## languages\.rust\.components
+### languages\.rust\.components
 
 
 
@@ -61,7 +63,7 @@ list of string
 
 
 
-## languages\.rust\.mold\.enable
+### languages\.rust\.mold\.enable
 
 
 
@@ -81,7 +83,7 @@ boolean
 
 
 
-## languages\.rust\.rustflags
+### languages\.rust\.rustflags
 
 
 
@@ -99,7 +101,7 @@ string
 
 
 
-## languages\.rust\.targets
+### languages\.rust\.targets
 
 
 
@@ -118,7 +120,7 @@ list of string
 
 
 
-## languages\.rust\.toolchain
+### languages\.rust\.toolchain
 
 
 
@@ -136,7 +138,7 @@ attribute set of package
 
 
 
-## languages\.rust\.toolchain\.cargo
+### languages\.rust\.toolchain\.cargo
 
 
 
@@ -154,7 +156,7 @@ null or package
 
 
 
-## languages\.rust\.toolchain\.clippy
+### languages\.rust\.toolchain\.clippy
 
 
 
@@ -172,7 +174,7 @@ null or package
 
 
 
-## languages\.rust\.toolchain\.rust-analyzer
+### languages\.rust\.toolchain\.rust-analyzer
 
 
 
@@ -190,7 +192,7 @@ null or package
 
 
 
-## languages\.rust\.toolchain\.rustc
+### languages\.rust\.toolchain\.rustc
 
 
 
@@ -208,7 +210,7 @@ null or package
 
 
 
-## languages\.rust\.toolchain\.rustfmt
+### languages\.rust\.toolchain\.rustfmt
 
 
 
@@ -226,7 +228,7 @@ null or package
 
 
 
-## languages\.rust\.version
+### languages\.rust\.version
 
 
 

@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## languages\.ansible\.enable
+## Options
+
+### languages\.ansible\.enable
 
 Whether to enable tools for Ansible development\.
 
@@ -24,7 +26,7 @@ boolean
 
 
 
-## languages\.ansible\.package
+### languages\.ansible\.package
 
 
 

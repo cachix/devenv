@@ -3,7 +3,9 @@
 
 [comment]: # (Please add your documentation on top of this line)
 
-## services\.mailpit\.enable
+## Options
+
+### services\.mailpit\.enable
 
 
 
@@ -26,7 +28,7 @@ boolean
 
 
 
-## services\.mailpit\.package
+### services\.mailpit\.package
 
 
 
@@ -44,7 +46,7 @@ package
 
 
 
-## services\.mailpit\.additionalArgs
+### services\.mailpit\.additionalArgs
 
 Additional arguments passed to ` mailpit `\.
 
@@ -70,7 +72,7 @@ list of strings concatenated with “\\n”
 
 
 
-## services\.mailpit\.smtpListenAddress
+### services\.mailpit\.smtpListenAddress
 
 
 
@@ -88,7 +90,7 @@ string
 
 
 
-## services\.mailpit\.uiListenAddress
+### services\.mailpit\.uiListenAddress
 
 
 
