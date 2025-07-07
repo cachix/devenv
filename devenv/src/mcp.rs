@@ -12,21 +12,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 #[derive(Clone)]
 struct DevenvMcpServer {
     config: Config,
-    cache: Arc<RwLock<McpCache>>,
     devenv_root: Option<PathBuf>,
-}
-
-#[derive(Default)]
-struct McpCache {
-    packages: Option<Vec<PackageInfo>>,
-    options: Option<Vec<OptionInfo>>,
 }
 
 impl DevenvMcpServer {
@@ -37,49 +28,18 @@ impl DevenvMcpServer {
     fn new_with_root(config: Config, devenv_root: Option<PathBuf>) -> Self {
         Self {
             config,
-            cache: Arc::new(RwLock::new(McpCache::default())),
             devenv_root,
         }
     }
 
-    async fn initialize(&self) -> Result<()> {
-        info!("Initializing MCP server cache...");
 
-        // Fetch and cache packages
-        match self.fetch_packages().await {
-            Ok(packages) => {
-                let mut cache = self.cache.write().await;
-                cache.packages = Some(packages);
-                info!("Successfully cached packages");
-            }
-            Err(e) => {
-                warn!("Failed to fetch packages during initialization: {}", e);
-            }
-        }
+    async fn fetch_packages_for_root(&self, root_path: Option<PathBuf>) -> Result<Vec<PackageInfo>> {
+        info!("Fetching packages for root: {:?}", root_path);
 
-        // Fetch and cache options
-        match self.fetch_options().await {
-            Ok(options) => {
-                let mut cache = self.cache.write().await;
-                cache.options = Some(options);
-                info!("Successfully cached options");
-            }
-            Err(e) => {
-                warn!("Failed to fetch options during initialization: {}", e);
-            }
-        }
-
-        info!("MCP server initialization completed successfully");
-        Ok(())
-    }
-
-    async fn fetch_packages(&self) -> Result<Vec<PackageInfo>> {
-        info!("Fetching available packages from nixpkgs...");
-
-        // Create a Devenv instance to access nix functionality
+        // Create a Devenv instance with the specified root
         let devenv_options = DevenvOptions {
             config: self.config.clone(),
-            devenv_root: self.devenv_root.clone(),
+            devenv_root: root_path,
             ..Default::default()
         };
         let devenv = Devenv::new(devenv_options).await;
@@ -88,7 +48,6 @@ impl DevenvMcpServer {
         devenv.assemble(true).await?;
 
         // Use broad search term to get a wide set of packages
-        // We'll limit results later if needed
         let search_output = devenv.nix.search(".*").await?;
 
         // Parse the search results from JSON
@@ -127,13 +86,13 @@ impl DevenvMcpServer {
         Ok(packages)
     }
 
-    async fn fetch_options(&self) -> Result<Vec<OptionInfo>> {
-        info!("Fetching available configuration options...");
+    async fn fetch_options_for_root(&self, root_path: Option<PathBuf>) -> Result<Vec<OptionInfo>> {
+        info!("Fetching options for root: {:?}", root_path);
 
-        // Create a Devenv instance to access nix functionality
+        // Create a Devenv instance with the specified root
         let devenv_options = DevenvOptions {
             config: self.config.clone(),
-            devenv_root: self.devenv_root.clone(),
+            devenv_root: root_path,
             ..Default::default()
         };
         let devenv = Devenv::new(devenv_options).await;
@@ -141,7 +100,7 @@ impl DevenvMcpServer {
         // Assemble the devenv to create required flake files
         devenv.assemble(true).await?;
 
-        // Build the optionsJSON attribute like in devenv.rs search function
+        // Build the optionsJSON attribute
         let build_options = nix_backend::Options {
             logging: false,
             cache_output: true,
@@ -255,6 +214,8 @@ struct OptionInfo {
 struct ListPackagesRequest {
     #[schemars(description = "Optional search term to filter packages")]
     search: Option<String>,
+    #[schemars(description = "Optional path to the devenv root directory. If not provided, uses current working directory or server default")]
+    root_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -263,12 +224,14 @@ struct ListOptionsRequest {
         description = "Optional search string to filter options by name or description (e.g., 'python' or 'languages.python')"
     )]
     prefix: Option<String>,
+    #[schemars(description = "Optional path to the devenv root directory. If not provided, uses current working directory or server default")]
+    root_path: Option<String>,
 }
 
 impl ServerHandler for DevenvMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
-            instructions: Some("Devenv MCP server - provides access to devenv packages and configuration options. Process-compose logs are available in $DEVENV_STATE/process-compose/process-compose.log".into()),
+            instructions: Some("Devenv MCP server - provides stateless access to devenv packages and configuration options. You can specify a root_path parameter in tool calls to get information for any devenv project directory. If no root_path is provided, uses the current working directory. Process-compose logs are available in $DEVENV_STATE/process-compose/process-compose.log".into()),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
@@ -281,12 +244,19 @@ impl DevenvMcpServer {
     async fn list_packages(&self, params: Parameters<ListPackagesRequest>) -> String {
         let request = params.0;
 
-        // Always use cached data
-        let cache = self.cache.read().await;
-        let packages = cache.packages.as_ref().cloned().unwrap_or_else(|| {
-            warn!("No cached packages available");
-            vec![]
-        });
+        // Determine which root directory to use
+        let root_path = request.root_path.map(PathBuf::from)
+            .or_else(|| self.devenv_root.clone())
+            .or_else(|| std::env::current_dir().ok());
+
+        // Fetch packages for the specified directory
+        let packages = match self.fetch_packages_for_root(root_path).await {
+            Ok(packages) => packages,
+            Err(e) => {
+                warn!("Failed to fetch packages: {}", e);
+                vec![]
+            }
+        };
 
         // Filter packages based on search term
         let filtered_packages: Vec<PackageInfo> = if let Some(ref search_term) = request.search {
@@ -310,12 +280,19 @@ impl DevenvMcpServer {
     async fn list_options(&self, params: Parameters<ListOptionsRequest>) -> String {
         let request = params.0;
 
-        // Always use cached data
-        let cache = self.cache.read().await;
-        let options = cache.options.as_ref().cloned().unwrap_or_else(|| {
-            warn!("No cached options available");
-            vec![]
-        });
+        // Determine which root directory to use
+        let root_path = request.root_path.map(PathBuf::from)
+            .or_else(|| self.devenv_root.clone())
+            .or_else(|| std::env::current_dir().ok());
+
+        // Fetch options for the specified directory
+        let options = match self.fetch_options_for_root(root_path).await {
+            Ok(options) => options,
+            Err(e) => {
+                warn!("Failed to fetch options: {}", e);
+                vec![]
+            }
+        };
 
         // Filter options based on search string (searches in both name and description)
         let filtered_options: Vec<OptionInfo> = if let Some(ref search_str) = request.prefix {
@@ -338,12 +315,12 @@ impl DevenvMcpServer {
 }
 
 pub async fn run_mcp_server(config: Config) -> Result<()> {
-    info!("Starting devenv MCP server");
+    info!("Starting devenv MCP server in stateless mode");
 
     let server = DevenvMcpServer::new(config);
 
-    // Initialize cache before starting the server
-    server.initialize().await?;
+    // No longer need global initialization - fetch data per-request
+    info!("MCP server is now stateless and will fetch data per-request");
 
     let service = server
         .serve(rmcp::transport::stdio())
@@ -428,21 +405,25 @@ mod tests {
     #[tokio::test]
     async fn test_list_packages_request_deserialization() {
         let json = json!({
-            "search": "python"
+            "search": "python",
+            "root_path": "/path/to/devenv"
         });
 
         let request: ListPackagesRequest = serde_json::from_value(json).unwrap();
         assert_eq!(request.search, Some("python".to_string()));
+        assert_eq!(request.root_path, Some("/path/to/devenv".to_string()));
     }
 
     #[tokio::test]
     async fn test_list_options_request_deserialization() {
         let json = json!({
-            "prefix": "languages"
+            "prefix": "languages",
+            "root_path": "/path/to/devenv"
         });
 
         let request: ListOptionsRequest = serde_json::from_value(json).unwrap();
         assert_eq!(request.prefix, Some("languages".to_string()));
+        assert_eq!(request.root_path, Some("/path/to/devenv".to_string()));
     }
 
     // Integration tests that use live Nix data
@@ -460,7 +441,7 @@ mod tests {
         let config = Config::default();
         let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
 
-        let packages = server.fetch_packages().await;
+        let packages = server.fetch_packages_for_root(Some(temp_dir.path().to_path_buf())).await;
 
         // Should be able to fetch packages without error
         assert!(packages.is_ok(), "Failed to fetch packages: {:?}", packages);
@@ -523,7 +504,7 @@ mod tests {
         let config = Config::default();
         let server = DevenvMcpServer::new_with_root(config, Some(temp_dir.path().to_path_buf()));
 
-        let options = server.fetch_options().await;
+        let options = server.fetch_options_for_root(Some(temp_dir.path().to_path_buf())).await;
 
         match options {
             Ok(options) => {
