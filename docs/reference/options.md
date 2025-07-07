@@ -15279,6 +15279,9 @@ boolean
 
 The rustup toolchain to install.
 
+` nixpkgs ` is a special channel.
+It will use whichever version is currently available in nixpkgs.
+
 
 
 *Type:*
@@ -15345,7 +15348,7 @@ boolean
 
 The rustup toolchain [profile](https://rust-lang.github.io/rustup/concepts/profiles.html) to use.
 
-Only used when languages.rust.channel is NOT nixpkgs.
+Only used when languages.rust.channel is NOT set to ` nixpkgs `.
 
 
 
@@ -15356,6 +15359,29 @@ one of “default”, “minimal”, “complete”
 
 *Default:*
 ` "default" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.rustBin
+
+
+
+Initialized rust-overlay library.
+
+Only available when ` channel ` is not set to ` nixpkgs `.
+
+
+
+*Type:*
+null or anything *(read only)*
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -15409,17 +15435,16 @@ list of string
 
 
 
-Rust component packages. May optionally define additional components, for example ` miri `.
+The Rust toolchain to use.
+
+When the channel is set to ` nixpkgs `, the toolchain is created by symlinking the individual components from ` languages.rust.components `.
+
+For other channels, the toolchain is created using rust-overlay with the specified version, profile, and components.
 
 
 
 *Type:*
-package or (attribute set of package)
-
-
-
-*Default:*
-` nixpkgs `
+package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -15430,9 +15455,11 @@ package or (attribute set of package)
 
 
 
-Which version of rust to use, this value could be ` latest `,` 1.81.0 `, ` 2021-01-01 `.
+The version of rust to use.
 
-Only used when languages.rust.channel is NOT nixpkgs.
+Examples: ` latest `,` 1.81.0 `, ` 2021-01-01 `.
+
+Only used when languages.rust.channel is NOT set to ` nixpkgs `.
 
 
 
