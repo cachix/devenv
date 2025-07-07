@@ -67,9 +67,10 @@ list of string
 
 
 
-Enable mold as the linker\.
+Use [mold](https://github\.com/rui314/mold) as the linker\.
 
-Enabled by default on x86_64 Linux machines when no cross-compilation targets are specified\.
+mold is a faster drop-in replacement for existing Unix linkers\.
+It is several times quicker than the LLVM lld linker\.
 
 
 
@@ -79,7 +80,7 @@ boolean
 
 
 *Default:*
-` pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64 && languages.rust.targets == [ ] `
+` false `
 
 
 
