@@ -1,8 +1,9 @@
-{ inputs
-, pkgs
-, lib
-, config
-, ...
+{
+  inputs,
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 {
   env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix-cli;
@@ -250,7 +251,7 @@
   };
 
   git-hooks.hooks = {
-    nixpkgs-fmt.enable = true;
+    nixfmt-rfc-style.enable = true;
     rustfmt.enable = true;
     markdownlint.settings.configuration = {
       MD013 = {
