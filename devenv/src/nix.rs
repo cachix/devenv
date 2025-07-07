@@ -874,8 +874,7 @@ impl Nix {
 
                 Ok::<_, miette::Report>(caches)
             })
-            .await
-            .map(|c| c.clone())
+            .await.cloned()
     }
 
     fn name(&self) -> &'static str {

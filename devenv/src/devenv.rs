@@ -594,7 +594,7 @@ impl Devenv {
             devenv.user_message = "Searching options and packages",
         )
     )]
-    pub async fn search(& self, name: &str) -> Result<()> {
+    pub async fn search(&self, name: &str) -> Result<()> {
         self.assemble(false).await?;
 
         // Run both searches concurrently
