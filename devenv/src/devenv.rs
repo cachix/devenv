@@ -5,19 +5,24 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, Context, IntoDiagnostic, Result};
+use miette::{bail, miette, Context, IntoDiagnostic, Result};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, HashMap};
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
-use std::{
-    fs::{self, File},
-    path::{Path, PathBuf},
-    process,
+use std::path::{Path, PathBuf};
+use std::process::{Output, Stdio};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
+use tokio::fs::{self, File};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process;
+use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
 // templates
@@ -63,10 +68,10 @@ pub struct ProcessOptions<'a> {
 }
 
 pub struct Devenv {
-    pub config: config::Config,
+    pub config: Arc<RwLock<config::Config>>,
     pub global_options: cli::GlobalOptions,
 
-    pub nix: Box<dyn nix_backend::NixBackend>,
+    pub nix: Arc<Box<dyn nix_backend::NixBackend>>,
 
     // All kinds of paths
     devenv_root: PathBuf,
@@ -76,8 +81,13 @@ pub struct Devenv {
     devenv_tmp: String,
     devenv_runtime: PathBuf,
 
-    assembled: bool,
-    has_processes: Option<bool>,
+    // Whether assemble has been run.
+    // Assemble creates critical runtime directories and files.
+    assembled: Arc<AtomicBool>,
+    // Semaphore to prevent multiple concurrent assembles
+    assemble_lock: Arc<Semaphore>,
+
+    has_processes: Arc<OnceCell<bool>>,
 
     // TODO: make private.
     // Pass as an arg or have a setter.
@@ -118,7 +128,8 @@ impl Devenv {
         xdg_dirs
             .create_data_directory(Path::new("devenv"))
             .expect("Failed to create DEVENV_HOME directory");
-        std::fs::create_dir_all(&devenv_home_gc)
+        tokio::fs::create_dir_all(&devenv_home_gc)
+            .await
             .expect("Failed to create DEVENV_HOME_GC directory");
 
         // Determine backend type from config
@@ -152,7 +163,7 @@ impl Devenv {
         };
 
         Self {
-            config: options.config,
+            config: Arc::new(RwLock::new(options.config)),
             global_options,
             devenv_root,
             devenv_dotfile,
@@ -160,9 +171,10 @@ impl Devenv {
             devenv_home_gc,
             devenv_tmp,
             devenv_runtime,
-            nix,
-            assembled: false,
-            has_processes: None,
+            nix: Arc::new(nix),
+            assembled: Arc::new(AtomicBool::new(false)),
+            assemble_lock: Arc::new(Semaphore::new(1)),
+            has_processes: Arc::new(OnceCell::new()),
             container_name: None,
         }
     }
@@ -176,9 +188,9 @@ impl Devenv {
     }
 
     pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
-        let target = target
-            .clone()
-            .unwrap_or_else(|| fs::canonicalize(".").expect("Failed to get current directory"));
+        let target = target.clone().unwrap_or_else(|| {
+            std::fs::canonicalize(".").expect("Failed to get current directory")
+        });
 
         // create directory target if not exists
         if !target.exists() {
@@ -222,20 +234,23 @@ impl Devenv {
         };
 
         // run direnv allow
-        let _ = std::process::Command::new(direnv)
+        let _ = process::Command::new(direnv)
             .arg("allow")
             .current_dir(&target)
-            .exec();
+            .spawn();
         Ok(())
     }
 
-    pub fn inputs_add(&mut self, name: &str, url: &str, follows: &[String]) -> Result<()> {
-        self.config.add_input(name, url, follows)?;
-        self.config.write()?;
+    pub async fn inputs_add(&self, name: &str, url: &str, follows: &[String]) -> Result<()> {
+        {
+            let mut config = self.config.write().await;
+            config.add_input(name, url, follows)?;
+            config.write().await?;
+        }
         Ok(())
     }
 
-    pub async fn print_dev_env(&mut self, json: bool) -> Result<()> {
+    pub async fn print_dev_env(&self, json: bool) -> Result<()> {
         let env = self.get_dev_environment(json).await?;
         print!(
             "{}",
@@ -245,7 +260,7 @@ impl Devenv {
     }
 
     // TODO: fetch bash from the module system
-    async fn get_bash(&mut self, refresh_cached_output: bool) -> Result<String> {
+    async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
         let options = nix_backend::Options {
             cache_output: true,
             refresh_cached_output,
@@ -284,10 +299,10 @@ impl Devenv {
 
     #[instrument(skip(self))]
     pub async fn prepare_shell(
-        &mut self,
+        &self,
         cmd: &Option<String>,
         args: &[String],
-    ) -> Result<std::process::Command> {
+    ) -> Result<process::Command> {
         let DevEnv { output, .. } = self.get_dev_environment(false).await?;
 
         let bash = match self.get_bash(false).await {
@@ -298,7 +313,7 @@ impl Devenv {
             Ok(bash) => bash,
         };
 
-        let mut shell_cmd = std::process::Command::new(&bash);
+        let mut shell_cmd = process::Command::new(&bash);
         let path = self.devenv_runtime.join("shell");
 
         // Load the user's bashrc if it exists and if we're in an interactive shell.
@@ -344,7 +359,7 @@ impl Devenv {
             .await
             .expect("Failed to set permissions");
 
-        let config_clean = self.config.clean.clone().unwrap_or_default();
+        let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         if self.global_options.clean.is_some() || config_clean.enabled {
             let keep = match &self.global_options.clean {
                 Some(clean) => clean,
@@ -365,34 +380,35 @@ impl Devenv {
         Ok(shell_cmd)
     }
 
-    pub async fn shell(mut self) -> Result<()> {
-        let mut shell_cmd = self.prepare_shell(&None, &[]).await?;
-        let span = info_span!("entering_shell", devenv.user_message = "Entering shell",);
-        let _ = shell_cmd.exec().instrument(span);
-        Ok(())
+    /// Exec into the shell.
+    /// This method does not return after calling `exec`.
+    pub async fn shell(self) -> Result<()> {
+        let shell_cmd = self.prepare_shell(&None, &[]).await?;
+        info!(devenv.is_user_message = true, "Entering shell");
+        let err = shell_cmd.into_std().exec();
+        bail!("Failed to execute shell: {}", err);
     }
 
-    pub async fn exec_in_shell(
-        &mut self,
-        cmd: String,
-        args: &[String],
-    ) -> Result<std::process::Output> {
+    pub async fn exec_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
         let span = info_span!(
             "executing_in_shell",
             devenv.user_message = "Executing in shell"
         );
-        span.in_scope(|| {
-            shell_cmd
-                .stdin(std::process::Stdio::inherit())
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
-                .output()
-                .into_diagnostic()
-        })
+        // Note that tokio's `output()` always configures stdout/stderr as pipes.
+        // Use `spawn` + `wait_with_output` instead.
+        let proc = shell_cmd
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .into_diagnostic()?;
+        async move { proc.wait_with_output().await.into_diagnostic() }
+            .instrument(span)
+            .await
     }
 
-    pub async fn update(&mut self, input_name: &Option<String>) -> Result<()> {
+    pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
         self.assemble(false).await?;
 
         let msg = match input_name {
@@ -406,7 +422,7 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn container_build(&mut self, name: &str) -> Result<String> {
+    pub async fn container_build(&self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
             bail!(
                 "Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430"
@@ -436,7 +452,7 @@ impl Devenv {
     }
 
     pub async fn container_copy(
-        &mut self,
+        &self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
@@ -465,11 +481,12 @@ impl Devenv {
 
             info!("Running {copy_script_string} {}", command_args.join(" "));
 
-            let status = std::process::Command::new(copy_script)
+            let status = process::Command::new(copy_script)
                 .args(command_args)
-                .stdout(std::process::Stdio::inherit())
-                .stderr(std::process::Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
                 .status()
+                .await
                 .expect("Failed to run copy script");
 
             if !status.success() {
@@ -483,7 +500,7 @@ impl Devenv {
     }
 
     pub async fn container_run(
-        &mut self,
+        &self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
@@ -505,8 +522,9 @@ impl Devenv {
                 .build(&[&format!("devenv.containers.{name}.dockerRun")], None)
                 .await?;
 
-            let status = std::process::Command::new(&run_script[0])
+            let status = process::Command::new(&run_script[0])
                 .status()
+                .await
                 .expect("Failed to run container script");
 
             if !status.success() {
@@ -519,12 +537,12 @@ impl Devenv {
         .await
     }
 
-    pub async fn repl(&mut self) -> Result<()> {
+    pub async fn repl(&self) -> Result<()> {
         self.assemble(false).await?;
-        self.nix.repl()
+        self.nix.repl().await
     }
 
-    pub fn gc(&mut self) -> Result<()> {
+    pub async fn gc(&self) -> Result<()> {
         let start = std::time::Instant::now();
 
         let (to_gc, removed_symlinks) = {
@@ -555,7 +573,7 @@ impl Devenv {
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
             );
-            span.in_scope(|| self.nix.gc(to_gc))?;
+            self.nix.gc(to_gc).instrument(span).await?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
@@ -570,9 +588,31 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn search(&mut self, name: &str) -> Result<()> {
+    pub async fn search(&self, name: &str) -> Result<()> {
         self.assemble(false).await?;
 
+        // Run both searches concurrently
+        let (options_results, package_results) =
+            tokio::try_join!(self.search_options(name), self.search_packages(name))?;
+
+        let results_options_count = options_results.len();
+        let package_results_count = package_results.len();
+
+        if !package_results.is_empty() {
+            print_stderr(package_results.with_title()).expect("Failed to print package results");
+        }
+
+        if !options_results.is_empty() {
+            print_stderr(options_results.with_title()).expect("Failed to print options results");
+        }
+
+        info!(
+            "Found {package_results_count} packages and {results_options_count} options for '{name}'."
+        );
+        Ok(())
+    }
+
+    async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {
         let build_options = nix_backend::Options {
             logging: false,
             cache_output: true,
@@ -587,7 +627,9 @@ impl Devenv {
             .join("doc")
             .join("nixos")
             .join("options.json");
-        let options_contents = fs::read(options_path).expect("Failed to read options.json");
+        let options_contents = fs::read(options_path)
+            .await
+            .expect("Failed to read options.json");
         let options_json: OptionResults =
             serde_json::from_slice(&options_contents).expect("Failed to parse options.json");
 
@@ -602,8 +644,11 @@ impl Devenv {
                 description: value.description,
             })
             .collect::<Vec<_>>();
-        let results_options_count = options_results.len();
 
+        Ok(options_results)
+    }
+
+    async fn search_packages(&self, name: &str) -> Result<Vec<DevenvPackageResult>> {
         let search = self.nix.search(name).await?;
         let search_json: PackageResults =
             serde_json::from_slice(&search.stdout).expect("Failed to parse search results");
@@ -619,32 +664,23 @@ impl Devenv {
                 description: value.description.chars().take(80).collect::<String>(),
             })
             .collect::<Vec<_>>();
-        let search_results_count = search_results.len();
 
-        if !search_results.is_empty() {
-            print_stderr(search_results.with_title()).expect("Failed to print search results");
-        }
-
-        if !options_results.is_empty() {
-            print_stderr(options_results.with_title()).expect("Failed to print options results");
-        }
-
-        info!(
-            "Found {search_results_count} packages and {results_options_count} options for '{name}'."
-        );
-        Ok(())
+        Ok(search_results)
     }
 
-    pub async fn has_processes(&mut self) -> Result<bool> {
-        if self.has_processes.is_none() {
-            let processes = self.nix.eval(&["devenv.processes"]).await?;
-            self.has_processes = Some(processes.trim() != "{}");
-        }
-        Ok(self.has_processes.unwrap())
+    pub async fn has_processes(&self) -> Result<bool> {
+        let value = self
+            .has_processes
+            .get_or_try_init(|| async {
+                let processes = self.nix.eval(&["devenv.processes"]).await?;
+                Ok::<bool, miette::Report>(processes.trim() != "{}")
+            })
+            .await?;
+        Ok(*value)
     }
 
     pub async fn tasks_run(
-        &mut self,
+        &self,
         roots: Vec<String>,
         run_mode: devenv_tasks::RunMode,
     ) -> Result<()> {
@@ -671,8 +707,9 @@ impl Devenv {
                 .await?
         };
         // parse tasks config
-        let tasks_json =
-            std::fs::read_to_string(&tasks_json_file[0]).expect("Failed to read config file");
+        let tasks_json = fs::read_to_string(&tasks_json_file[0])
+            .await
+            .expect("Failed to read config file");
         let tasks: Vec<tasks::TaskConfig> =
             serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
         // run tasks
@@ -709,7 +746,7 @@ impl Devenv {
         Ok(())
     }
 
-    async fn capture_shell_environment(&mut self) -> Result<HashMap<String, String>> {
+    async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
         let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
             .wrap_err("Failed to create temporary directory for environment capture")?;
@@ -719,12 +756,14 @@ impl Devenv {
 
         let script = format!("env > {}", env_path.to_string_lossy());
         fs::write(&script_path, script)
+            .await
             .into_diagnostic()
             .wrap_err(format!(
                 "Failed to write script to {}",
                 script_path.display()
             ))?;
-        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+        fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
+            .await
             .into_diagnostic()
             .wrap_err(format!(
                 "Failed to set execute permissions on {}",
@@ -734,34 +773,35 @@ impl Devenv {
         // Run script and capture its environment exports
         self.prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
-            .stderr(process::Stdio::inherit())
-            .stdout(process::Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::inherit())
             .spawn()
             .into_diagnostic()
             .wrap_err("Failed to execute environment capture script")?
             .wait()
+            .await
             .into_diagnostic()
             .wrap_err("Failed to wait for environment capture script to complete")?;
 
         // Parse the environment variables
-        let file = File::open(&env_path).into_diagnostic().wrap_err(format!(
-            "Failed to open environment file at {}",
-            env_path.display()
-        ))?;
+        let file = File::open(&env_path)
+            .await
+            .into_diagnostic()
+            .wrap_err(format!(
+                "Failed to open environment file at {}",
+                env_path.display()
+            ))?;
         let reader = BufReader::new(file);
-        let shell_envs = reader
-            .lines()
-            .map_while(Result::ok)
-            .filter_map(|line| {
-                let mut parts = line.splitn(2, '=');
-                match (parts.next(), parts.next()) {
-                    (Some(key), Some(value)) => Some((key.to_string(), value.to_string())),
-                    _ => None,
-                }
-            })
-            .collect::<Vec<_>>();
+        let mut shell_envs = Vec::new();
+        let mut lines = reader.lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let mut parts = line.splitn(2, '=');
+            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                shell_envs.push((key.to_string(), value.to_string()));
+            }
+        }
 
-        let config_clean = self.config.clean.clone().unwrap_or_default();
+        let config_clean = self.config.read().await.clean.clone().unwrap_or_default();
         let mut envs: HashMap<String, String> = {
             let vars = std::env::vars();
             if self.global_options.clean.is_some() || config_clean.enabled {
@@ -782,7 +822,7 @@ impl Devenv {
         Ok(envs)
     }
 
-    pub async fn test(&mut self) -> Result<()> {
+    pub async fn test(&self) -> Result<()> {
         self.assemble(true).await?;
 
         // collect tests
@@ -824,6 +864,7 @@ impl Devenv {
                     test_script
                 ))?
                 .wait_with_output()
+                .await
                 .into_diagnostic()
                 .wrap_err("Failed to get output from test process")
         }
@@ -831,7 +872,7 @@ impl Devenv {
         .await?;
 
         if self.has_processes().await? {
-            self.down()?;
+            self.down().await?;
         }
 
         if !result.status.success() {
@@ -843,14 +884,14 @@ impl Devenv {
         }
     }
 
-    pub async fn info(&mut self) -> Result<()> {
+    pub async fn info(&self) -> Result<()> {
         self.assemble(false).await?;
         let output = self.nix.metadata().await?;
         println!("{}", output);
         Ok(())
     }
 
-    pub async fn build(&mut self, attributes: &[String]) -> Result<()> {
+    pub async fn build(&self, attributes: &[String]) -> Result<()> {
         let span = info_span!("build", devenv.user_message = "Building");
         async move {
             self.assemble(false).await?;
@@ -900,7 +941,7 @@ impl Devenv {
     }
 
     pub async fn up<'a>(
-        &mut self,
+        &self,
         processes: Vec<String>,
         options: &'a ProcessOptions<'a>,
     ) -> Result<()> {
@@ -945,9 +986,11 @@ impl Devenv {
                 exec {proc_script_string} {processes}
             "},
             )
+            .await
             .expect("Failed to write PROCESSES_SCRIPT");
 
-            fs::set_permissions(&processes_script, fs::Permissions::from_mode(0o755))
+            fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
+                .await
                 .expect("Failed to set permissions");
 
             let mut cmd = if let Some(envs) = options.envs {
@@ -962,29 +1005,33 @@ impl Devenv {
             };
 
             if options.detach {
-                let log_file =
-                    fs::File::create(self.processes_log()).expect("Failed to create PROCESSES_LOG");
                 let process = if !options.log_to_file {
-                    cmd.stdout(process::Stdio::inherit())
-                        .stderr(process::Stdio::inherit())
+                    cmd.stdout(Stdio::inherit())
+                        .stderr(Stdio::inherit())
                         .spawn()
                         .expect("Failed to spawn process")
                 } else {
+                    let log_file = std::fs::File::create(self.processes_log())
+                        .expect("Failed to create PROCESSES_LOG");
                     cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
                         .stderr(log_file)
                         .spawn()
                         .expect("Failed to spawn process")
                 };
 
-                fs::write(self.processes_pid(), process.id().to_string())
+                let pid = process
+                    .id()
+                    .ok_or_else(|| miette!("Failed to get process ID"))?;
+                fs::write(self.processes_pid(), pid.to_string())
+                    .await
                     .expect("Failed to write PROCESSES_PID");
-                info!("PID is {}", process.id());
+                info!("PID is {}", pid);
                 if options.log_to_file {
                     info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
                 info!("Stop:      $ devenv processes stop");
             } else {
-                let err = cmd.exec();
+                let err = cmd.into_std().exec();
                 bail!(err);
             }
             Ok(())
@@ -993,13 +1040,14 @@ impl Devenv {
         .await
     }
 
-    pub fn down(&self) -> Result<()> {
+    pub async fn down(&self) -> Result<()> {
         if !PathBuf::from(&self.processes_pid()).exists() {
             error!("No processes running.");
             bail!("No processes running");
         }
 
         let pid = fs::read_to_string(self.processes_pid())
+            .await
             .expect("Failed to read PROCESSES_PID")
             .parse::<i32>()
             .expect("Failed to parse PROCESSES_PID");
@@ -1015,14 +1063,18 @@ impl Devenv {
             }
         }
 
-        fs::remove_file(self.processes_pid()).expect("Failed to remove PROCESSES_PID");
+        fs::remove_file(self.processes_pid())
+            .await
+            .expect("Failed to remove PROCESSES_PID");
         Ok(())
     }
 
-    pub async fn assemble(&mut self, is_testing: bool) -> Result<()> {
-        if self.assembled {
+    pub async fn assemble(&self, is_testing: bool) -> Result<()> {
+        if self.assembled.load(Ordering::Acquire) {
             return Ok(());
         }
+
+        let _permit = self.assemble_lock.acquire().await.unwrap();
 
         // Skip devenv.nix existence check if --option is provided
         if self.global_options.option.is_empty() && !self.devenv_root.join("devenv.nix").exists() {
@@ -1033,7 +1085,7 @@ impl Devenv {
             "});
         }
 
-        fs::create_dir_all(&self.devenv_dot_gc).map_err(|e| {
+        fs::create_dir_all(&self.devenv_dot_gc).await.map_err(|e| {
             miette::miette!("Failed to create {}: {}", self.devenv_dot_gc.display(), e)
         })?;
 
@@ -1041,7 +1093,8 @@ impl Devenv {
         self.nix.assemble().await?;
 
         let mut flake_inputs = BTreeMap::new();
-        for (input, attrs) in self.config.inputs.iter() {
+        let config = self.config.read().await;
+        for (input, attrs) in config.inputs.iter() {
             match config::FlakeInput::try_from(attrs) {
                 Ok(flake_input) => {
                     flake_inputs.insert(input.clone(), flake_input);
@@ -1058,18 +1111,20 @@ impl Devenv {
         )?;
         util::write_file_with_lock(
             self.devenv_dotfile.join("devenv.json"),
-            serde_json::to_string(&self.config).unwrap(),
+            serde_json::to_string(&*config).unwrap(),
         )?;
         // TODO: superceded by eval caching.
         // Remove once direnvrc migration is implemented.
         util::write_file_with_lock(
             self.devenv_dotfile.join("imports.txt"),
-            self.config.imports.join("\n"),
+            config.imports.join("\n"),
         )?;
 
-        fs::create_dir_all(&self.devenv_runtime).map_err(|e| {
-            miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
-        })?;
+        fs::create_dir_all(&self.devenv_runtime)
+            .await
+            .map_err(|e| {
+                miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
+            })?;
 
         // Create cli-options.nix if there are CLI options
         if !self.global_options.option.is_empty() {
@@ -1123,7 +1178,9 @@ impl Devenv {
             // Remove the file if it exists but there are no CLI options
             let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
             if cli_options_path.exists() {
-                fs::remove_file(&cli_options_path).expect("Failed to remove cli-options.nix");
+                fs::remove_file(&cli_options_path)
+                    .await
+                    .expect("Failed to remove cli-options.nix");
             }
         }
 
@@ -1158,12 +1215,12 @@ impl Devenv {
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
         util::write_file_with_lock(&flake_path, &flake)?;
 
-        self.assembled = true;
+        self.assembled.store(true, Ordering::Release);
         Ok(())
     }
 
     #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]
-    pub async fn get_dev_environment(&mut self, json: bool) -> Result<DevEnv> {
+    pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
         self.assemble(false).await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");
@@ -1284,14 +1341,14 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
         std::fs::create_dir_all(root).expect("Failed to create gc directory");
     }
 
-    for entry in fs::read_dir(root).expect("Failed to read directory") {
+    for entry in std::fs::read_dir(root).expect("Failed to read directory") {
         let entry = entry.expect("Failed to read entry");
         let path = entry.path();
         if path.is_symlink() {
             if !path.exists() {
                 removed_symlinks.push(path.clone());
             } else {
-                let target = fs::canonicalize(&path).expect("Failed to read link");
+                let target = std::fs::canonicalize(&path).expect("Failed to read link");
                 to_gc.push(target);
             }
         }

@@ -82,7 +82,7 @@ impl DevenvMcpServer {
             devenv_root: self.devenv_root.clone(),
             ..Default::default()
         };
-        let mut devenv = Devenv::new(devenv_options).await;
+        let devenv = Devenv::new(devenv_options).await;
 
         // Assemble the devenv to create required flake files
         devenv.assemble(true).await?;
@@ -136,7 +136,7 @@ impl DevenvMcpServer {
             devenv_root: self.devenv_root.clone(),
             ..Default::default()
         };
-        let mut devenv = Devenv::new(devenv_options).await;
+        let devenv = Devenv::new(devenv_options).await;
 
         // Assemble the devenv to create required flake files
         devenv.assemble(true).await?;

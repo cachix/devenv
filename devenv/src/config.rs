@@ -157,13 +157,14 @@ pub struct Config {
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105
-pub fn write_json_schema() -> Result<()> {
+pub async fn write_json_schema() -> Result<()> {
     let schema = schema_for!(Config);
     let schema = serde_json::to_string_pretty(&schema)
         .into_diagnostic()
         .wrap_err("Failed to serialize JSON schema")?;
     let path = Path::new("docs/devenv.schema.json");
-    std::fs::write(path, &schema)
+    tokio::fs::write(path, &schema)
+        .await
         .into_diagnostic()
         .wrap_err_with(|| format!("Failed to write json schema to {}", path.display()))?;
     Ok(())
@@ -185,11 +186,12 @@ impl Config {
         Ok(result?.config)
     }
 
-    pub fn write(&self) -> Result<()> {
+    pub async fn write(&self) -> Result<()> {
         let yaml = serde_yaml::to_string(&self)
             .into_diagnostic()
             .wrap_err("Failed to serialize config to YAML")?;
-        std::fs::write(YAML_CONFIG, yaml)
+        tokio::fs::write(YAML_CONFIG, yaml)
+            .await
             .into_diagnostic()
             .wrap_err("Failed to write devenv.yaml")?;
         Ok(())
