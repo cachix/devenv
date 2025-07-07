@@ -1113,7 +1113,13 @@ impl Devenv {
                     ),
                 };
 
-                cli_options.push_str(&format!("  {} = {};\n", path, value));
+                // Use lib.mkForce for all types except pkgs
+                let final_value = if type_name == "pkgs" {
+                    value
+                } else {
+                    format!("lib.mkForce {}", value)
+                };
+                cli_options.push_str(&format!("  {} = {};\n", path, final_value));
             }
 
             cli_options.push_str("}\n");
