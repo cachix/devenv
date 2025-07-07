@@ -134,7 +134,7 @@ impl TaskCache {
     ) -> CacheResult<()> {
         let path_str = tracked_file.path.to_str().unwrap_or("");
         let is_directory = tracked_file.is_directory;
-        let content_hash = tracked_file.content_hash.clone().unwrap_or_default();
+        let content_hash = tracked_file.content_hash.clone();
         let modified_time = time::system_time_to_unix_seconds(tracked_file.modified_at);
 
         sqlx::query(
@@ -223,21 +223,20 @@ impl TaskCache {
                 // Get current values
                 let current_modified_time =
                     time::system_time_to_unix_seconds(current_file.modified_at);
-                let current_hash = current_file.content_hash.clone().unwrap_or_default();
-                let stored_hash_str = stored_hash.clone().unwrap_or_default();
+                let current_hash = current_file.content_hash.clone();
 
                 debug!(
-                    "File '{}' for task '{}': stored_hash={:?}, current_hash={}, stored_time={}, current_time={}, is_dir={}",
+                    "File '{}' for task '{}': stored_hash={:?}, current_hash={:?}, stored_time={}, current_time={}, is_dir={}",
                     path, task_name, stored_hash, current_hash, stored_modified_time, current_modified_time, is_directory
                 );
 
                 // Combine checking for file type and hash changes
                 let content_changed =
-                    current_file.is_directory != is_directory || current_hash != stored_hash_str;
+                    current_file.is_directory != is_directory || current_hash != stored_hash;
 
                 if content_changed {
                     debug!(
-                        "File {} changed for task {}: type or content changed (is_dir: {} -> {}, hash: {:?} -> {})",
+                        "File {} changed for task {}: type or content changed (is_dir: {} -> {}, hash: {:?} -> {:?})",
                         path, task_name, is_directory, current_file.is_directory, stored_hash, current_hash
                     );
                     // Update the file state using the already loaded instance
@@ -302,6 +301,7 @@ mod tests {
         {
             let mut file = File::create(&file_path).unwrap();
             file.write_all(b"initial content").unwrap();
+            file.sync_all().unwrap(); // Ensure file is fully written to disk
         }
 
         let task_name = "test_task";
