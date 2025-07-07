@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 with lib;
 
@@ -15,9 +20,7 @@ let
   startScript = pkgs.writeShellScriptBin "start-mongodb" ''
     set -euo pipefail
     ${setupScript}/bin/setup-mongodb
-    exec ${cfg.package}/bin/mongod ${
-      lib.concatStringsSep " " cfg.additionalArgs
-    } -dbpath "$MONGODBDATA"
+    exec ${cfg.package}/bin/mongod ${lib.concatStringsSep " " cfg.additionalArgs} -dbpath "$MONGODBDATA"
   '';
 
   configureScript = pkgs.writeShellScriptBin "configure-mongodb" ''
@@ -60,11 +63,14 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "mongodb" "enable" ] [
-      "services"
-      "mongodb"
-      "enable"
-    ])
+    (lib.mkRenamedOptionModule
+      [ "mongodb" "enable" ]
+      [
+        "services"
+        "mongodb"
+        "enable"
+      ]
+    )
   ];
 
   options.services.mongodb = {
@@ -80,7 +86,11 @@ in
     additionalArgs = lib.mkOption {
       type = types.listOf types.lines;
       default = [ "--noauth" ];
-      example = [ "--port" "27017" "--noauth" ];
+      example = [
+        "--port"
+        "27017"
+        "--noauth"
+      ];
       description = ''
         Additional arguments passed to `mongod`.
       '';
@@ -106,12 +116,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [ cfg.package pkgs.mongodb-tools pkgs.mongosh ];
+    packages = [
+      cfg.package
+      pkgs.mongodb-tools
+      pkgs.mongosh
+    ];
 
     env.MONGODBDATA = config.env.DEVENV_STATE + "/mongodb";
 
     processes.mongodb.exec = "${startScript}/bin/start-mongodb";
-    processes.mongodb-configure.exec =
-      "${configureScript}/bin/configure-mongodb";
+    processes.mongodb-configure.exec = "${configureScript}/bin/configure-mongodb";
   };
 }

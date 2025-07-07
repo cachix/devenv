@@ -1,7 +1,14 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
-let cfg = config.languages.idris;
-in {
+let
+  cfg = config.languages.idris;
+in
+{
   options.languages.idris = {
     enable = lib.mkEnableOption "tools for Idris development";
 

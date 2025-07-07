@@ -1,4 +1,10 @@
-{ pkgs, lib, config, ... }: {
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
+{
   options = {
     outputs = lib.mkOption {
       type = config.lib.types.outputOf lib.types.attrs;
@@ -23,17 +29,21 @@
       description = "output";
       descriptionClass = "output";
     };
-    outputOf = t: lib.types.mkOptionType {
-      name = "outputOf";
-      description = "outputOf ${lib.types.optionDescriptionPhrase (class: class == "noun" || class == "conjunction") t}";
-      descriptionClass = "outputOf";
-      check = t.check;
-      merge = t.merge;
-      emptyValue = t.emptyValue;
-      getSubOptions = t.getSubOptions;
-      getSubModules = t.getSubModules;
-      substSubModules = t.substSubModules;
-      nestedTypes.elemType = t;
-    };
+    outputOf =
+      t:
+      lib.types.mkOptionType {
+        name = "outputOf";
+        description = "outputOf ${
+          lib.types.optionDescriptionPhrase (class: class == "noun" || class == "conjunction") t
+        }";
+        descriptionClass = "outputOf";
+        check = t.check;
+        merge = t.merge;
+        emptyValue = t.emptyValue;
+        getSubOptions = t.getSubOptions;
+        getSubModules = t.getSubModules;
+        substSubModules = t.substSubModules;
+        nestedTypes.elemType = t;
+      };
   };
 }

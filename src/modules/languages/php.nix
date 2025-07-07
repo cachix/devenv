@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 with lib;
 
@@ -14,11 +19,19 @@ let
     follows = [ "nixpkgs" ];
   };
 
-  filterDefaultExtensions = ext: builtins.length (builtins.filter (inner: inner == ext.extensionName) cfg.disableExtensions) == 0;
+  filterDefaultExtensions =
+    ext:
+    builtins.length (builtins.filter (inner: inner == ext.extensionName) cfg.disableExtensions) == 0;
 
-  configurePackage = package:
+  configurePackage =
+    package:
     package.buildEnv {
-      extensions = { all, enabled }: with all; (builtins.filter filterDefaultExtensions (enabled ++ attrValues (getAttrs cfg.extensions package.extensions)));
+      extensions =
+        { all, enabled }:
+        with all;
+        (builtins.filter filterDefaultExtensions (
+          enabled ++ attrValues (getAttrs cfg.extensions package.extensions)
+        ));
       extraConfig = cfg.ini;
     };
 
@@ -26,20 +39,26 @@ let
 
   runtimeDir = config.env.DEVENV_STATE + "/php-fpm";
 
-  toStr = value:
-    if true == value then "yes"
-    else if false == value then "no"
-    else toString value;
+  toStr =
+    value:
+    if true == value then
+      "yes"
+    else if false == value then
+      "no"
+    else
+      toString value;
 
-  fpmCfgFile = pool: poolOpts: pkgs.writeText "phpfpm-${pool}.conf" ''
-    [global]
-    ${concatStringsSep "\n" (mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.fpm.settings)}
-    ${optionalString (cfg.fpm.extraConfig != null) cfg.fpm.extraConfig}
-    [${pool}]
-    ${concatStringsSep "\n" (mapAttrsToList (n: v: "${n} = ${toStr v}") poolOpts.settings)}
-    ${concatStringsSep "\n" (mapAttrsToList (n: v: "env[${n}] = ${toStr v}") poolOpts.phpEnv)}
-    ${optionalString (poolOpts.extraConfig != null) poolOpts.extraConfig}
-  '';
+  fpmCfgFile =
+    pool: poolOpts:
+    pkgs.writeText "phpfpm-${pool}.conf" ''
+      [global]
+      ${concatStringsSep "\n" (mapAttrsToList (n: v: "${n} = ${toStr v}") cfg.fpm.settings)}
+      ${optionalString (cfg.fpm.extraConfig != null) cfg.fpm.extraConfig}
+      [${pool}]
+      ${concatStringsSep "\n" (mapAttrsToList (n: v: "${n} = ${toStr v}") poolOpts.settings)}
+      ${concatStringsSep "\n" (mapAttrsToList (n: v: "env[${n}] = ${toStr v}") poolOpts.phpEnv)}
+      ${optionalString (poolOpts.extraConfig != null) poolOpts.extraConfig}
+    '';
 
   startScript = pool: poolOpts: ''
     set -euo pipefail
@@ -51,16 +70,20 @@ let
     exec ${poolOpts.phpPackage}/bin/php-fpm -F -y ${fpmCfgFile pool poolOpts} -c ${phpIni poolOpts}
   '';
 
-  phpIni = poolOpts: pkgs.runCommand "php.ini"
-    {
-      inherit (poolOpts) phpPackage phpOptions;
-      preferLocalBuild = true;
-      passAsFile = [ "phpOptions" ];
-    } ''
-    cat ${poolOpts.phpPackage}/etc/php.ini $phpOptionsPath > $out
-  '';
+  phpIni =
+    poolOpts:
+    pkgs.runCommand "php.ini"
+      {
+        inherit (poolOpts) phpPackage phpOptions;
+        preferLocalBuild = true;
+        passAsFile = [ "phpOptions" ];
+      }
+      ''
+        cat ${poolOpts.phpPackage}/etc/php.ini $phpOptionsPath > $out
+      '';
 
-  poolOpts = { name, ... }:
+  poolOpts =
+    { name, ... }:
     let
       poolOpts = cfg.fpm.pools.${name};
     in
@@ -119,7 +142,13 @@ let
         };
 
         settings = mkOption {
-          type = with types; attrsOf (oneOf [ str int bool ]);
+          type =
+            with types;
+            attrsOf (oneOf [
+              str
+              int
+              bool
+            ]);
           default = { };
           description = ''
             PHP-FPM pool directives. Refer to the "List of pool directives" section of
@@ -232,7 +261,13 @@ in
 
     fpm = {
       settings = mkOption {
-        type = with types; attrsOf (oneOf [ str int bool ]);
+        type =
+          with types;
+          attrsOf (oneOf [
+            str
+            int
+            bool
+          ]);
         default = {
           error_log = config.env.DEVENV_STATE + "/php-fpm/php-fpm.log";
         };
@@ -270,10 +305,9 @@ in
       phpOptions = mkOption {
         type = types.lines;
         default = "";
-        example =
-          ''
-            date.timezone = "CET"
-          '';
+        example = ''
+          date.timezone = "CET"
+        '';
         description = ''
           Options appended to the PHP configuration file `php.ini`.
         '';
@@ -308,40 +342,51 @@ in
 
   config =
     let
-      phpsPackage = phps.packages.${pkgs.stdenv.system}."php${version}" or (throw "PHP version ${cfg.version} is not available");
+      phpsPackage =
+        phps.packages.${pkgs.stdenv.system}."php${version}"
+          or (throw "PHP version ${cfg.version} is not available");
       nixpkgsPackageExists = (builtins.tryEval (toString pkgs."php${version}")).success;
-      customPhpPackage = if ((builtins.hasAttr "php${version}" pkgs) && nixpkgsPackageExists) then pkgs."php${version}" else phpsPackage;
+      customPhpPackage =
+        if ((builtins.hasAttr "php${version}" pkgs) && nixpkgsPackageExists) then
+          pkgs."php${version}"
+        else
+          phpsPackage;
     in
     lib.mkIf cfg.enable {
-      languages.php.package = lib.mkIf (cfg.version != "") (lib.mkForce (configurePackage customPhpPackage));
+      languages.php.package = lib.mkIf (cfg.version != "") (
+        lib.mkForce (configurePackage customPhpPackage)
+      );
 
-      languages.php.extensions = lib.optionals config.services.rabbitmq.enable [ "amqp" ]
+      languages.php.extensions =
+        lib.optionals config.services.rabbitmq.enable [ "amqp" ]
         ++ lib.optionals config.services.redis.enable [ "redis" ]
         ++ lib.optionals config.services.blackfire.enable [ "blackfire" ]
         ++ lib.optionals config.services.tideways.enable [ "tideways" ];
 
       languages.php.ini = ''
         ${lib.optionalString config.services.mysql.enable ''
-        pdo_mysql.default_socket = ''${MYSQL_UNIX_PORT}
-        mysqli.default_socket = ''${MYSQL_UNIX_PORT}
+          pdo_mysql.default_socket = ''${MYSQL_UNIX_PORT}
+          mysqli.default_socket = ''${MYSQL_UNIX_PORT}
         ''}
         ${lib.optionalString config.services.blackfire.enable ''
-        blackfire.agent_socket = "${config.services.blackfire.socket}";
+          blackfire.agent_socket = "${config.services.blackfire.socket}";
         ''}
       '';
 
-      packages = with pkgs; [
-        cfg.package
-      ] ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
+      packages =
+        with pkgs;
+        [
+          cfg.package
+        ]
+        ++ lib.optional (cfg.packages.composer != null) cfg.packages.composer;
 
       env.PHPFPMDIR = runtimeDir;
 
-      processes = mapAttrs'
-        (pool: poolOpts:
-          nameValuePair "phpfpm-${pool}" {
-            exec = startScript pool poolOpts;
-          }
-        )
-        cfg.fpm.pools;
+      processes = mapAttrs' (
+        pool: poolOpts:
+        nameValuePair "phpfpm-${pool}" {
+          exec = startScript pool poolOpts;
+        }
+      ) cfg.fpm.pools;
     };
 }

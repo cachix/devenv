@@ -20,7 +20,7 @@
     initialScript = ''
       CREATE ROLE postgres WITH LOGIN PASSWORD 'postgres' SUPERUSER;
     '';
-    initialDatabases = [{ name = "hello_dev"; }];
+    initialDatabases = [ { name = "hello_dev"; } ];
   };
 
   processes.phoenix.exec = "cd hello && mix phx.server";

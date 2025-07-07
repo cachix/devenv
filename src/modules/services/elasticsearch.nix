@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -106,8 +111,7 @@ in
     };
 
     cluster_name = mkOption {
-      description =
-        "Elasticsearch name that identifies your cluster for auto-discovery.";
+      description = "Elasticsearch name that identifies your cluster for auto-discovery.";
       default = "elasticsearch";
       type = types.str;
     };
@@ -145,8 +149,7 @@ in
     };
 
     extraCmdLineOptions = mkOption {
-      description =
-        "Extra command line options for the elasticsearch launcher.";
+      description = "Extra command line options for the elasticsearch launcher.";
       default = [ ];
       type = types.listOf types.str;
     };
@@ -162,8 +165,7 @@ in
       description = "Extra elasticsearch plugins";
       default = [ ];
       type = types.listOf types.package;
-      example =
-        lib.literalExpression "[ pkgs.elasticsearchPlugins.discovery-ec2 ]";
+      example = lib.literalExpression "[ pkgs.elasticsearchPlugins.discovery-ec2 ]";
     };
   };
 

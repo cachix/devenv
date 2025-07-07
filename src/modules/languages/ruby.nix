@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.ruby;
@@ -38,7 +43,7 @@ in
         The .ruby-version file path to extract the Ruby version from.
         This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
         When the `.ruby-version` file exists in the same directory as the devenv configuration, you can use:
-        
+
         ```nix
         languages.ruby.versionFile = ./.ruby-version;
         ```
@@ -101,7 +106,8 @@ in
     env.GEM_HOME = "${config.env.BUNDLE_PATH}/${cfg.package.rubyEngine}/${cfg.package.version.libDir}";
 
     enterShell =
-      let libdir = cfg.package.version.libDir;
+      let
+        libdir = cfg.package.version.libDir;
       in
       ''
         export RUBYLIB="$DEVENV_PROFILE/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}:$DEVENV_PROFILE/lib/ruby/site_ruby/${libdir}/${pkgs.stdenv.system}:''${RUBYLIB:-}"

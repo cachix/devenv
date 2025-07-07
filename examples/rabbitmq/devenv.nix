@@ -3,6 +3,8 @@
 {
   services.rabbitmq = {
     enable = true;
-    managementPlugin = { enable = true; };
+    managementPlugin = {
+      enable = true;
+    };
   };
 }

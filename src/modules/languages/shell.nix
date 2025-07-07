@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.shell;
@@ -10,7 +15,11 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
-      (pkgs.bats.withLibraries (p: [ p.bats-assert p.bats-file p.bats-support ]))
+      (pkgs.bats.withLibraries (p: [
+        p.bats-assert
+        p.bats-file
+        p.bats-support
+      ]))
       nodePackages.bash-language-server
       shellcheck
       shfmt

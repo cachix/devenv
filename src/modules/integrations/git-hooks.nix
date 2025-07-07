@@ -1,11 +1,17 @@
-{ pkgs, self, lib, config, inputs, ... }:
+{
+  pkgs,
+  self,
+  lib,
+  config,
+  inputs,
+  ...
+}:
 
 let
   cfg = config.git-hooks;
 
   git-hooks-module =
-    inputs.git-hooks
-      or inputs.pre-commit-hooks
+    inputs.git-hooks or inputs.pre-commit-hooks
       or (throw "git-hooks or pre-commit-hooks input required");
 
   # `propagatedBuildInputs` in Python apps are leaked into the environment.

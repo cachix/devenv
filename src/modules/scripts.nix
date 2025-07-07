@@ -1,7 +1,8 @@
-{ lib
-, config
-, pkgs
-, ...
+{
+  lib,
+  config,
+  pkgs,
+  ...
 }:
 
 let
@@ -39,9 +40,10 @@ let
       config.scriptPackage =
         let
           binary =
-            if config.binary != null
-            then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
-            else pkgs.lib.getExe config.package;
+            if config.binary != null then
+              "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+            else
+              pkgs.lib.getExe config.package;
         in
         lib.hiPrioSet (
           pkgs.writeScriptBin name ''
@@ -52,8 +54,11 @@ let
     }
   );
 
-  renderInfoSection = name: script:
-    "${name}${lib.optionalString (script.description != "") ": ${script.description}"} ${script.scriptPackage}";
+  renderInfoSection =
+    name: script:
+    "${name}${
+      lib.optionalString (script.description != "") ": ${script.description}"
+    } ${script.scriptPackage}";
 in
 {
   options = {

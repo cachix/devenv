@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -13,7 +18,6 @@ let
     name = loggingConfigFilename;
     text = cfg.logging;
   };
-
 
   startScript = pkgs.writeShellScript "opensearch-startup" ''
     set -e
@@ -144,8 +148,7 @@ in
     };
 
     extraCmdLineOptions = mkOption {
-      description =
-        "Extra command line options for the OpenSearch launcher.";
+      description = "Extra command line options for the OpenSearch launcher.";
       default = [ ];
       type = types.listOf types.str;
     };
@@ -166,7 +169,9 @@ in
 
       process-compose = {
         readiness_probe = {
-          exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.settings."network.host"}:${toString cfg.settings."http.port"}";
+          exec.command = "${pkgs.curl}/bin/curl -f -k http://${cfg.settings."network.host"}:${
+            toString cfg.settings."http.port"
+          }";
           initial_delay_seconds = 2;
           period_seconds = 10;
           timeout_seconds = 2;

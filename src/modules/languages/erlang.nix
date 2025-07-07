@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.erlang;
@@ -18,12 +23,11 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable
-    {
-      packages = [
-        cfg.package
-        pkgs.erlang-ls
-        rebar3
-      ];
-    };
+  config = lib.mkIf cfg.enable {
+    packages = [
+      cfg.package
+      pkgs.erlang-ls
+      rebar3
+    ];
+  };
 }

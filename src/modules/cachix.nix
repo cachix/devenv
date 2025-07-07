@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 let
   cfg = config.cachix;
 in
@@ -30,14 +35,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    cachix.pull = [ "devenv" ]
-      ++ (lib.optional (cfg.push != null) config.cachix.push);
+    cachix.pull = [ "devenv" ] ++ (lib.optional (cfg.push != null) config.cachix.push);
 
-    warnings = lib.optionals (!config.devenv.flakesIntegration && lib.versionOlder config.devenv.cliVersion "1.0") [
-      ''
-        For cachix.push and cachix.pull attributes to have an effect,
-        upgrade to devenv 1.0 or later.
-      ''
-    ];
+    warnings =
+      lib.optionals (!config.devenv.flakesIntegration && lib.versionOlder config.devenv.cliVersion "1.0")
+        [
+          ''
+            For cachix.push and cachix.pull attributes to have an effect,
+            upgrade to devenv 1.0 or later.
+          ''
+        ];
   };
 }

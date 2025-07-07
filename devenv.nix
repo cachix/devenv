@@ -251,7 +251,10 @@
   };
 
   git-hooks.hooks = {
-    nixfmt-rfc-style.enable = true;
+    nixfmt-rfc-style = {
+      enable = true;
+      excludes = [ "flake.tmpl.nix" ];
+    };
     rustfmt.enable = true;
     markdownlint.settings.configuration = {
       MD013 = {

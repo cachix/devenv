@@ -1,11 +1,17 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.go;
 
   # Override the buildGoModule function to use the specified Go package.
   buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
-  buildWithSpecificGo = pkg:
+  buildWithSpecificGo =
+    pkg:
     let
       overrideArgs = lib.functionArgs pkg.override;
     in

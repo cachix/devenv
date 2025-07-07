@@ -41,11 +41,12 @@
   };
 
   outputs =
-    { self
-    , nixpkgs
-    , git-hooks
-    , nix
-    , ...
+    {
+      self,
+      nixpkgs,
+      git-hooks,
+      nix,
+      ...
     }@inputs:
     let
       systems = [
@@ -58,12 +59,10 @@
       forAllSystems =
         f:
         builtins.listToAttrs (
-          map
-            (name: {
-              inherit name;
-              value = f name;
-            })
-            systems
+          map (name: {
+            inherit name;
+            value = f name;
+          }) systems
         );
       mkPackage =
         pkgs: attrs:
@@ -116,23 +115,23 @@
             path: opt:
             # Test if path starts with "git-hooks.hooks"
             if lib.lists.hasPrefix [ "git-hooks" "hooks" ] path then
-            # Document the generic submodule options: git-hooks.hooks.<name>.<option>
+              # Document the generic submodule options: git-hooks.hooks.<name>.<option>
               if builtins.elemAt path 2 == "_freeformOptions" then
                 true
               else
               # For pre-configured hooks, document certain values, like the settings and description.
               # Importantly, don't document the generic submodule options to avoid cluttering the docs.
-                if
-                  builtins.elem (builtins.elemAt path 3) [
-                    "enable"
-                    "description"
-                    "packageOverrides"
-                    "settings"
-                  ]
-                then
-                  true
-                else
-                  false
+              if
+                builtins.elem (builtins.elemAt path 3) [
+                  "enable"
+                  "description"
+                  "packageOverrides"
+                  "settings"
+                ]
+              then
+                true
+              else
+                false
             else
               true;
 
@@ -313,17 +312,17 @@
 
       lib = {
         mkConfig =
-          args@{ pkgs
-          , inputs
-          , modules
-          ,
+          args@{
+            pkgs,
+            inputs,
+            modules,
           }:
           (self.lib.mkEval args).config;
         mkEval =
-          { pkgs
-          , inputs
-          , modules
-          ,
+          {
+            pkgs,
+            inputs,
+            modules,
           }:
           let
             moduleInputs = {

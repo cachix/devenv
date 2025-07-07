@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.terraform;
@@ -33,7 +38,10 @@ in
 
   config = lib.mkIf cfg.enable {
     languages.terraform.package = lib.mkMerge [
-      (lib.mkIf (cfg.version != null) (nixpkgs-terraform.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")))
+      (lib.mkIf (cfg.version != null) (
+        nixpkgs-terraform.packages.${pkgs.stdenv.system}.${cfg.version}
+          or (throw "Unsupported Terraform version, update the nixpkgs-terraform input or go to https://github.com/stackbuilders/nixpkgs-terraform/blob/main/versions.json for the full list of supported versions.")
+      ))
     ];
 
     packages = with pkgs; [

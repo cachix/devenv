@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   cfg = config.languages.texlive;
 
@@ -17,7 +22,10 @@ in
     packages = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
-      example = [ "algorithms" "latexmk" ];
+      example = [
+        "algorithms"
+        "latexmk"
+      ];
       description = "Extra packages to add to the base TeX Live set";
     };
   };

@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.nix;
@@ -23,11 +28,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      statix
-      deadnix
-      cfg.lsp.package
-      vulnix
-    ] ++ (lib.optional config.cachix.enable cachix);
+    packages =
+      with pkgs;
+      [
+        statix
+        deadnix
+        cfg.lsp.package
+        vulnix
+      ]
+      ++ (lib.optional config.cachix.enable cachix);
   };
 }

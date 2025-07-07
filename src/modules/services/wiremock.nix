@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 with lib;
 let
   cfg = config.services.wiremock;
@@ -82,12 +87,13 @@ in
   config = mkIf cfg.enable {
     processes.wiremock.exec =
       let
-        arguments = [
-          "--port ${toString cfg.port}"
-          "--root-dir ${rootDir}"
-        ]
-        ++ lib.optional cfg.disableBanner "--disable-banner"
-        ++ lib.optional cfg.verbose "--verbose";
+        arguments =
+          [
+            "--port ${toString cfg.port}"
+            "--root-dir ${rootDir}"
+          ]
+          ++ lib.optional cfg.disableBanner "--disable-banner"
+          ++ lib.optional cfg.verbose "--verbose";
       in
       ''
         ${cfg.package}/bin/wiremock ${lib.concatStringsSep " " arguments} "$@"

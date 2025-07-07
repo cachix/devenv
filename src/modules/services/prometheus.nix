@@ -1,36 +1,51 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.prometheus;
 
-  configFile = pkgs.writeText "prometheus.yml" (lib.generators.toYAML { } (
-    {
-      global = cfg.globalConfig;
-      scrape_configs = cfg.scrapeConfigs;
-    } // lib.optionalAttrs (cfg.ruleFiles != [ ]) {
-      rule_files = cfg.ruleFiles;
-    } // lib.optionalAttrs (cfg.alerting != null) {
-      alerting = cfg.alerting;
-    } // lib.optionalAttrs (cfg.remoteWrite != [ ]) {
-      remote_write = cfg.remoteWrite;
-    } // lib.optionalAttrs (cfg.remoteRead != [ ]) {
-      remote_read = cfg.remoteRead;
-    } // lib.optionalAttrs (cfg.advanced.storage != { }) {
-      storage = cfg.advanced.storage;
-    } // lib.optionalAttrs (cfg.advanced.tsdb != { }) {
-      tsdb = cfg.advanced.tsdb;
-    }
-  ));
-  prometheusArgs = lib.concatStringsSep " " ([
-    "--config.file=${cfg.configFile}"
-    "--storage.tsdb.path=${cfg.storage.path}"
-    "--storage.tsdb.retention.time=${cfg.storage.retentionTime}"
-    "--web.listen-address=:${toString cfg.port}"
-  ]
-  ++ lib.optional cfg.experimentalFeatures.enableExemplars "--enable-feature=exemplar-storage"
-  ++ lib.optional cfg.experimentalFeatures.enableTracing "--enable-feature=tracing"
-  ++ lib.optional cfg.experimentalFeatures.enableOTLP "--enable-feature=otlp-write-receiver"
-  ++ lib.optional (cfg.extraArgs != "") cfg.extraArgs);
+  configFile = pkgs.writeText "prometheus.yml" (
+    lib.generators.toYAML { } (
+      {
+        global = cfg.globalConfig;
+        scrape_configs = cfg.scrapeConfigs;
+      }
+      // lib.optionalAttrs (cfg.ruleFiles != [ ]) {
+        rule_files = cfg.ruleFiles;
+      }
+      // lib.optionalAttrs (cfg.alerting != null) {
+        alerting = cfg.alerting;
+      }
+      // lib.optionalAttrs (cfg.remoteWrite != [ ]) {
+        remote_write = cfg.remoteWrite;
+      }
+      // lib.optionalAttrs (cfg.remoteRead != [ ]) {
+        remote_read = cfg.remoteRead;
+      }
+      // lib.optionalAttrs (cfg.advanced.storage != { }) {
+        storage = cfg.advanced.storage;
+      }
+      // lib.optionalAttrs (cfg.advanced.tsdb != { }) {
+        tsdb = cfg.advanced.tsdb;
+      }
+    )
+  );
+  prometheusArgs = lib.concatStringsSep " " (
+    [
+      "--config.file=${cfg.configFile}"
+      "--storage.tsdb.path=${cfg.storage.path}"
+      "--storage.tsdb.retention.time=${cfg.storage.retentionTime}"
+      "--web.listen-address=:${toString cfg.port}"
+    ]
+    ++ lib.optional cfg.experimentalFeatures.enableExemplars "--enable-feature=exemplar-storage"
+    ++ lib.optional cfg.experimentalFeatures.enableTracing "--enable-feature=tracing"
+    ++ lib.optional cfg.experimentalFeatures.enableOTLP "--enable-feature=otlp-write-receiver"
+    ++ lib.optional (cfg.extraArgs != "") cfg.extraArgs
+  );
 in
 {
   options.services.prometheus = {

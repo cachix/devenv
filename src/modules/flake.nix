@@ -1,7 +1,9 @@
 {
-  outputs = { ... }: {
-    modules = ./.;
-    isTmpDir = true;
-    hasIsTesting = true;
-  };
+  outputs =
+    { ... }:
+    {
+      modules = ./.;
+      isTmpDir = true;
+      hasIsTesting = true;
+    };
 }

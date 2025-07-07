@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.meilisearch;
@@ -31,7 +36,10 @@ in
     environment = lib.mkOption {
       description = "Defines the running environment of Meilisearch.";
       default = "development";
-      type = types.enum [ "development" "production" ];
+      type = types.enum [
+        "development"
+        "production"
+      ];
     };
 
     noAnalytics = lib.mkOption {

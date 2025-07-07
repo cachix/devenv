@@ -1,13 +1,34 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
-  reducerFn = (prev: curr: prev ++ (if builtins.typeOf curr.ip == "string" then [ curr ] else builtins.map (ip: { inherit ip; hostname = curr.hostname; }) curr.ip));
+  reducerFn = (
+    prev: curr:
+    prev
+    ++ (
+      if builtins.typeOf curr.ip == "string" then
+        [ curr ]
+      else
+        builtins.map (ip: {
+          inherit ip;
+          hostname = curr.hostname;
+        }) curr.ip
+    )
+  );
   reducer = lib.lists.foldl reducerFn [ ];
   entries = lib.mapAttrsToList (hostname: ip: { inherit hostname ip; }) config.hosts;
   separateEntriesWithIps = reducer entries;
   entriesByIp = builtins.groupBy ({ ip, ... }: ip) separateEntriesWithIps;
-  hostnamesByIp = builtins.mapAttrs (hostname: entries: builtins.map ({ hostname, ... }: hostname) entries) entriesByIp;
-  lines = lib.mapAttrsToList (ip: hostnames: "${ip} ${lib.concatStringsSep " " hostnames}") hostnamesByIp;
+  hostnamesByIp = builtins.mapAttrs (
+    hostname: entries: builtins.map ({ hostname, ... }: hostname) entries
+  ) entriesByIp;
+  lines = lib.mapAttrsToList (
+    ip: hostnames: "${ip} ${lib.concatStringsSep " " hostnames}"
+  ) hostnamesByIp;
   hostContent = lib.concatStringsSep "\n" lines;
   hostHash = builtins.hashString "sha256" hostContent;
   file = pkgs.writeText "hosts" ''
@@ -30,7 +51,10 @@ in
       description = "List of hosts entries.";
       example = {
         "example.com" = "127.0.0.1";
-        "another-example.com" = [ "::1" "127.0.0.1" ];
+        "another-example.com" = [
+          "::1"
+          "127.0.0.1"
+        ];
       };
     };
   };

@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 {
   options.starship = {
@@ -27,9 +32,7 @@
     ];
 
     enterShell = ''
-      ${lib.optionalString config.starship.config.enable
-        "export STARSHIP_CONFIG=${config.starship.config.path}"
-      }
+      ${lib.optionalString config.starship.config.enable "export STARSHIP_CONFIG=${config.starship.config.path}"}
 
       # Identify the user's terminal to call the appropiate 'starship init' command
       eval "$(starship init $(echo $0))"

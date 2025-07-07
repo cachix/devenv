@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.pascal;
@@ -13,8 +18,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      fpc
-    ] ++ lib.optional (cfg.lazarus.enable && pkgs.stdenv.isLinux) pkgs.lazarus;
+    packages =
+      with pkgs;
+      [
+        fpc
+      ]
+      ++ lib.optional (cfg.lazarus.enable && pkgs.stdenv.isLinux) pkgs.lazarus;
   };
 }

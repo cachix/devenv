@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
@@ -16,11 +21,14 @@ let
 in
 {
   imports = [
-    (lib.mkRenamedOptionModule [ "rabbitmq" "enable" ] [
-      "services"
-      "rabbitmq"
-      "enable"
-    ])
+    (lib.mkRenamedOptionModule
+      [ "rabbitmq" "enable" ]
+      [
+        "services"
+        "rabbitmq"
+        "enable"
+      ]
+    )
   ];
 
   options.services.rabbitmq = {
@@ -141,16 +149,17 @@ in
   config = mkIf cfg.enable {
     packages = [ cfg.package ];
 
-    services.rabbitmq.configItems = {
-      "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString cfg.port}";
-      "distribution.listener.interface" = mkDefault cfg.listenAddress;
-    } // optionalAttrs cfg.managementPlugin.enable {
-      "management.tcp.port" = toString cfg.managementPlugin.port;
-      "management.tcp.ip" = cfg.listenAddress;
-    };
+    services.rabbitmq.configItems =
+      {
+        "listeners.tcp.1" = mkDefault "${cfg.listenAddress}:${toString cfg.port}";
+        "distribution.listener.interface" = mkDefault cfg.listenAddress;
+      }
+      // optionalAttrs cfg.managementPlugin.enable {
+        "management.tcp.port" = toString cfg.managementPlugin.port;
+        "management.tcp.ip" = cfg.listenAddress;
+      };
 
-    services.rabbitmq.plugins =
-      optional cfg.managementPlugin.enable "rabbitmq_management";
+    services.rabbitmq.plugins = optional cfg.managementPlugin.enable "rabbitmq_management";
 
     env.RABBITMQ_DATA_DIR = config.env.DEVENV_STATE + "/rabbitmq";
     env.RABBITMQ_MNESIA_BASE = config.env.RABBITMQ_DATA_DIR + "/mnesia";

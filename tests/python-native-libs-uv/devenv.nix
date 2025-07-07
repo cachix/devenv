@@ -1,4 +1,5 @@
-{ pkgs, lib, ... }: {
+{ pkgs, lib, ... }:
+{
   packages = [ pkgs.cairo ];
 
   languages.python = {

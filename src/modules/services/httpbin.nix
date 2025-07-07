@@ -1,12 +1,26 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.httpbin;
 
   qs = lib.escapeShellArgs;
 
-  python = pkgs.python3.withPackages (ps: with ps; [ httpbin gunicorn gevent ]);
-  binds = lib.concatMap (addr: [ "-b" addr ]) cfg.bind;
+  python = pkgs.python3.withPackages (
+    ps: with ps; [
+      httpbin
+      gunicorn
+      gevent
+    ]
+  );
+  binds = lib.concatMap (addr: [
+    "-b"
+    addr
+  ]) cfg.bind;
 in
 {
   options.services.httpbin = {
@@ -31,4 +45,3 @@ in
     '';
   };
 }
-

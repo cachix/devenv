@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.minio;
@@ -17,24 +22,31 @@ let
     config.env.MINIO_DATA_DIR
   ];
 
-  startScript = ''
-    mkdir -p "$MINIO_DATA_DIR" "$MINIO_CONFIG_DIR"
-    for bucket in ${lib.escapeShellArgs cfg.buckets}; do
-      mkdir -p "$MINIO_DATA_DIR/$bucket"
-    done
-  '' + (if cfg.afterStart != "" then ''
-    ${serverCommand} &
+  startScript =
+    ''
+      mkdir -p "$MINIO_DATA_DIR" "$MINIO_CONFIG_DIR"
+      for bucket in ${lib.escapeShellArgs cfg.buckets}; do
+        mkdir -p "$MINIO_DATA_DIR/$bucket"
+      done
+    ''
+    + (
+      if cfg.afterStart != "" then
+        ''
+          ${serverCommand} &
 
-    while ! mc admin info local >& /dev/null; do
-      sleep 1
-    done
+          while ! mc admin info local >& /dev/null; do
+            sleep 1
+          done
 
-    ${cfg.afterStart}
+          ${cfg.afterStart}
 
-    wait
-  '' else ''
-    exec ${serverCommand}
-  '');
+          wait
+        ''
+      else
+        ''
+          exec ${serverCommand}
+        ''
+    );
 
   clientWrapper = pkgs.writeShellScriptBin "mc" ''
     mkdir -p "$MINIO_CLIENT_CONFIG_DIR"
@@ -159,7 +171,9 @@ in
     services.minio.clientConfig = lib.mkBefore {
       version = "10";
       aliases.local = {
-        url = "http://${if lib.hasPrefix ":" cfg.listenAddress then "localhost:${cfg.listenAddress}" else cfg.listenAddress}";
+        url = "http://${
+          if lib.hasPrefix ":" cfg.listenAddress then "localhost:${cfg.listenAddress}" else cfg.listenAddress
+        }";
         inherit (cfg) accessKey secretKey;
         api = "S3v4";
         path = "auto";

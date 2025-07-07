@@ -7,9 +7,11 @@
     scrapeConfigs = [
       {
         job_name = "prometheus";
-        static_configs = [{
-          targets = [ "localhost:9090" ];
-        }];
+        static_configs = [
+          {
+            targets = [ "localhost:9090" ];
+          }
+        ];
       }
     ];
     globalConfig = {

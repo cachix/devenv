@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }@inputs:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}@inputs:
 let
   types = lib.types;
   devenv-tasks = pkgs.callPackage ./../../package.nix {
@@ -6,108 +11,113 @@ let
     cachix = null;
     inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
   };
-  taskType = types.submodule
-    ({ name, config, ... }:
-      let
-        mkCommand = command: isStatus:
-          if builtins.isNull command
-          then null
-          else
-            let
-              binary =
-                if config.binary != null
-                then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
-                else pkgs.lib.getExe config.package;
-            in
-            pkgs.writeScript name ''
-              #!${binary}
-              ${lib.optionalString (!isStatus) "set -e"}
-              ${command}
-              ${lib.optionalString (config.exports != [] && !isStatus) "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
-            '';
-      in
-      {
-        options = {
-          exec = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Command to execute the task.";
-          };
-          binary = lib.mkOption {
-            type = types.nullOr types.str;
-            description = "Override the binary name from the default `package.meta.mainProgram`.";
-            default = null;
-          };
-          package = lib.mkOption {
-            type = types.package;
-            default = pkgs.bash;
-            defaultText = lib.literalExpression "pkgs.bash";
-            description = "Package to install for this task.";
-          };
-          command = lib.mkOption {
-            type = types.nullOr types.package;
-            internal = true;
-            default = mkCommand config.exec false;
-            description = "Path to the script to run.";
-          };
-          status = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Check if the command should be ran";
-          };
-          statusCommand = lib.mkOption {
-            type = types.nullOr types.package;
-            internal = true;
-            default = mkCommand config.status true;
-            description = "Path to the script to run.";
-          };
-          execIfModified = lib.mkOption {
-            type = types.listOf types.str;
-            default = [ ];
-            description = "Paths to files that should trigger a task execution if modified.";
-          };
-          config = lib.mkOption {
-            type = types.attrsOf types.anything;
-            internal = true;
-            default = {
-              name = name;
-              description = config.description;
-              status = config.statusCommand;
-              after = config.after;
-              before = config.before;
-              command = config.command;
-              input = config.input;
-              exec_if_modified = config.execIfModified;
-            };
-            description = "Internal configuration for the task.";
-          };
-          exports = lib.mkOption {
-            type = types.listOf types.str;
-            default = [ ];
-            description = "List of environment variables to export.";
-          };
-          description = lib.mkOption {
-            type = types.str;
-            default = "";
-            description = "Description of the task.";
-          };
-          after = lib.mkOption {
-            type = types.listOf types.str;
-            description = "List of tasks to run after this task.";
-            default = [ ];
-          };
-          before = lib.mkOption {
-            type = types.listOf types.str;
-            description = "List of tasks to run before this task.";
-            default = [ ];
-          };
-          input = lib.mkOption {
-            type = types.attrsOf types.anything;
-            default = { };
-            description = "Input values for the task, encoded as JSON.";
-          };
+  taskType = types.submodule (
+    { name, config, ... }:
+    let
+      mkCommand =
+        command: isStatus:
+        if builtins.isNull command then
+          null
+        else
+          let
+            binary =
+              if config.binary != null then
+                "${pkgs.lib.getBin config.package}/bin/${config.binary}"
+              else
+                pkgs.lib.getExe config.package;
+          in
+          pkgs.writeScript name ''
+            #!${binary}
+            ${lib.optionalString (!isStatus) "set -e"}
+            ${command}
+            ${lib.optionalString (config.exports != [ ] && !isStatus)
+              "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"
+            }
+          '';
+    in
+    {
+      options = {
+        exec = lib.mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Command to execute the task.";
         };
-      });
+        binary = lib.mkOption {
+          type = types.nullOr types.str;
+          description = "Override the binary name from the default `package.meta.mainProgram`.";
+          default = null;
+        };
+        package = lib.mkOption {
+          type = types.package;
+          default = pkgs.bash;
+          defaultText = lib.literalExpression "pkgs.bash";
+          description = "Package to install for this task.";
+        };
+        command = lib.mkOption {
+          type = types.nullOr types.package;
+          internal = true;
+          default = mkCommand config.exec false;
+          description = "Path to the script to run.";
+        };
+        status = lib.mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "Check if the command should be ran";
+        };
+        statusCommand = lib.mkOption {
+          type = types.nullOr types.package;
+          internal = true;
+          default = mkCommand config.status true;
+          description = "Path to the script to run.";
+        };
+        execIfModified = lib.mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          description = "Paths to files that should trigger a task execution if modified.";
+        };
+        config = lib.mkOption {
+          type = types.attrsOf types.anything;
+          internal = true;
+          default = {
+            name = name;
+            description = config.description;
+            status = config.statusCommand;
+            after = config.after;
+            before = config.before;
+            command = config.command;
+            input = config.input;
+            exec_if_modified = config.execIfModified;
+          };
+          description = "Internal configuration for the task.";
+        };
+        exports = lib.mkOption {
+          type = types.listOf types.str;
+          default = [ ];
+          description = "List of environment variables to export.";
+        };
+        description = lib.mkOption {
+          type = types.str;
+          default = "";
+          description = "Description of the task.";
+        };
+        after = lib.mkOption {
+          type = types.listOf types.str;
+          description = "List of tasks to run after this task.";
+          default = [ ];
+        };
+        before = lib.mkOption {
+          type = types.listOf types.str;
+          description = "List of tasks to run before this task.";
+          default = [ ];
+        };
+        input = lib.mkOption {
+          type = types.attrsOf types.anything;
+          default = { };
+          description = "Input values for the task, encoded as JSON.";
+        };
+      };
+    }
+  );
   tasksJSON = (lib.mapAttrsToList (name: value: { inherit name; } // value.config) config.tasks);
 in
 {
@@ -134,19 +144,23 @@ in
 
     assertions = [
       {
-        assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
+        assertion = lib.all (
+          task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]
+        ) (lib.attrValues config.tasks);
         message = "The 'exports' option for a task can only be set when 'package' is a bash package.";
       }
       {
-        assertion = lib.all (task: task.status == null || task.execIfModified == [ ]) (lib.attrValues config.tasks);
+        assertion = lib.all (task: task.status == null || task.execIfModified == [ ]) (
+          lib.attrValues config.tasks
+        );
         message = "The 'status' and 'execIfModified' options cannot be used together. Use only one of them to determine whether a task should run.";
       }
     ];
 
-    infoSections."tasks" =
-      lib.mapAttrsToList
-        (name: task: "${name}: ${task.description} (${if task.command == null then "no command" else task.command})")
-        config.tasks;
+    infoSections."tasks" = lib.mapAttrsToList (
+      name: task:
+      "${name}: ${task.description} (${if task.command == null then "no command" else task.command})"
+    ) config.tasks;
 
     task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
 

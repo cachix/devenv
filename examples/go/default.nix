@@ -1,4 +1,9 @@
-{ pkgs, name, version, ... }:
+{
+  pkgs,
+  name,
+  version,
+  ...
+}:
 pkgs.buildGoApplication {
   pname = name;
   version = version;

@@ -1,8 +1,24 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   inherit (builtins) dirOf mapAttrs;
-  inherit (lib) types optionalAttrs mkOption attrNames filter length mapAttrsToList concatStringsSep head assertMsg;
+  inherit (lib)
+    types
+    optionalAttrs
+    mkOption
+    attrNames
+    filter
+    length
+    mapAttrsToList
+    concatStringsSep
+    head
+    assertMsg
+    ;
   inherit (types) attrsOf submodule;
 
   formats = {
@@ -16,60 +32,68 @@ let
     };
   };
 
+  fileType = types.submodule (
+    { name, config, ... }:
+    {
+      options =
+        {
+          format = mkOption {
+            type = types.anything;
+            default = null;
+            internal = true;
+            description = "Format of the file";
+          };
 
-  fileType = types.submodule ({ name, config, ... }: {
-    options = {
-      format = mkOption {
-        type = types.anything;
-        default = null;
-        internal = true;
-        description = "Format of the file";
-      };
+          data = mkOption {
+            type = types.anything;
+            default = null;
+            internal = true;
+            description = "Data of the file";
+          };
 
-      data = mkOption {
-        type = types.anything;
-        default = null;
-        internal = true;
-        description = "Data of the file";
-      };
+          file = mkOption {
+            type = types.path;
+            default = null;
+            internal = true;
+            description = "Path of the file";
+          };
 
-      file = mkOption {
-        type = types.path;
-        default = null;
-        internal = true;
-        description = "Path of the file";
-      };
+          executable = mkOption {
+            type = types.bool;
+            default = false;
+            description = "Make the file executable";
+          };
+        }
+        // (mapAttrs (
+          name: format:
+          mkOption {
+            type = types.nullOr format.type;
+            default = null;
+            description = "${name} contents";
+          }
+        ) formats);
 
-      executable = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Make the file executable";
-      };
-    } // (mapAttrs
-      (name: format: mkOption {
-        type = types.nullOr format.type;
-        default = null;
-        description = "${name} contents";
-      })
-      formats);
-
-    config =
-      let
-        formatNames = attrNames formats;
-        activeFormatNames = filter (name: config.${name} != null) formatNames;
-        activeFormatCount = length activeFormatNames;
-        activeFormatName =
-          if activeFormatCount == 1 then head activeFormatNames
-          else if activeFormatCount > 1 then throw "Multiple formats specified for 'files.${name}'"
-          else throw "No contents specified for 'files.${name}'";
-        activeFormat = formats.${activeFormatName};
-      in
-      {
-        format = activeFormat;
-        data = config.${activeFormatName};
-        file = config.format.generate name config.data;
-      };
-  });
+      config =
+        let
+          formatNames = attrNames formats;
+          activeFormatNames = filter (name: config.${name} != null) formatNames;
+          activeFormatCount = length activeFormatNames;
+          activeFormatName =
+            if activeFormatCount == 1 then
+              head activeFormatNames
+            else if activeFormatCount > 1 then
+              throw "Multiple formats specified for 'files.${name}'"
+            else
+              throw "No contents specified for 'files.${name}'";
+          activeFormat = formats.${activeFormatName};
+        in
+        {
+          format = activeFormat;
+          data = config.${activeFormatName};
+          file = config.format.generate name config.data;
+        };
+    }
+  );
   createFileScript = filename: fileOption: ''
     echo "Creating ${filename}"
     mkdir -p "${dirOf filename}"

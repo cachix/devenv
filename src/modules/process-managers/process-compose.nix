@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   cfg = config.process.managers.process-compose;
   settingsFormat = pkgs.formats.yaml { };
@@ -27,9 +32,11 @@ in
     };
 
     unixSocket = {
-      enable = lib.mkEnableOption "running the process-compose server over unix domain sockets instead of tcp" // {
-        default = true;
-      };
+      enable =
+        lib.mkEnableOption "running the process-compose server over unix domain sockets instead of tcp"
+        // {
+          default = true;
+        };
 
       path = lib.mkOption {
         type = lib.types.str;
@@ -67,8 +74,7 @@ in
           backoff_seconds = 2;
           max_restarts = 5; # default: 0 (unlimited)
         };
-        depends_on.some-other-process.condition =
-          "process_completed_successfully";
+        depends_on.some-other-process.condition = "process_completed_successfully";
       };
     };
   };
@@ -86,24 +92,26 @@ in
       # Prevent the TUI from immediately closing if all processes fail.
       # Improves the UX by letting users inspect the logs.
       "keep-project" = cfg.tui.enable;
-      "unix-socket" =
-        if cfg.unixSocket.enable
-        then cfg.unixSocket.path
-        else null;
+      "unix-socket" = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
       # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
     };
 
     process.manager.command = lib.mkDefault ''
       # Ensure the log directory exists
       mkdir -p "${config.env.DEVENV_STATE}/process-compose"
-      
-      ${if cfg.unixSocket.enable then ''
-      # Check if process-compose server is already running on the socket
-      if [ -S "${cfg.unixSocket.path}" ]; then
-        echo "Attaching to existing process-compose server at ${cfg.unixSocket.path}"
-        exec ${cfg.package}/bin/process-compose --unix-socket "${cfg.unixSocket.path}" attach "$@"
-      fi
-      '' else ""}
+
+      ${
+        if cfg.unixSocket.enable then
+          ''
+            # Check if process-compose server is already running on the socket
+            if [ -S "${cfg.unixSocket.path}" ]; then
+              echo "Attaching to existing process-compose server at ${cfg.unixSocket.path}"
+              exec ${cfg.package}/bin/process-compose --unix-socket "${cfg.unixSocket.path}" attach "$@"
+            fi
+          ''
+        else
+          ""
+      }
 
       # Start a new process-compose server if none exists
       ${cfg.package}/bin/process-compose \
@@ -120,18 +128,15 @@ in
         version = lib.mkDefault "0.5";
         is_strict = lib.mkDefault true;
         log_location = lib.mkDefault "${config.env.DEVENV_STATE}/process-compose/process-compose.log";
-        processes = lib.mapAttrs
-          (name: value:
-            let
-              scriptPath = pkgs.writeShellScript name value.exec;
-              command =
-                if value.process-compose.is_elevated or false
-                then "${scriptPath}"
-                else "exec ${scriptPath}";
-            in
-            { inherit command; } // value.process-compose
-          )
-          config.processes;
+        processes = lib.mapAttrs (
+          name: value:
+          let
+            scriptPath = pkgs.writeShellScript name value.exec;
+            command =
+              if value.process-compose.is_elevated or false then "${scriptPath}" else "exec ${scriptPath}";
+          in
+          { inherit command; } // value.process-compose
+        ) config.processes;
       };
     };
   };

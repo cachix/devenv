@@ -1,18 +1,24 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.android;
 
   androidEnvModule = pkgs.callPackage "${toString pkgs.path}/pkgs/development/mobile/androidenv";
-  androidEnvArgs = {
-    inherit pkgs;
-    licenseAccepted = true;
-  }
-  # `config` was removed in https://github.com/NixOS/nixpkgs/commit/807356fa6960fa76767ee7b696530cf5c671bd62
-  # It was only ever used to set a default for `licenseAccepted`.
-  // lib.optionalAttrs (builtins.hasAttr "config" (builtins.functionArgs androidEnvModule)) {
-    config = { };
-  };
+  androidEnvArgs =
+    {
+      inherit pkgs;
+      licenseAccepted = true;
+    }
+    # `config` was removed in https://github.com/NixOS/nixpkgs/commit/807356fa6960fa76767ee7b696530cf5c671bd62
+    # It was only ever used to set a default for `licenseAccepted`.
+    // lib.optionalAttrs (builtins.hasAttr "config" (builtins.functionArgs androidEnvModule)) {
+      config = { };
+    };
   androidEnv = androidEnvModule androidEnvArgs;
 
   sdkArgs = {
@@ -51,7 +57,10 @@ in
 
     platforms.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "32" "34" ];
+      default = [
+        "32"
+        "34"
+      ];
       description = ''
         The Android platform versions to install.
         By default, versions 32 and 34 are installed.
@@ -69,7 +78,10 @@ in
 
     abis = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "arm64-v8a" "x86_64" ];
+      default = [
+        "arm64-v8a"
+        "x86_64"
+      ];
       description = ''
         The Android ABIs to install.
         By default, the arm64-v8a and x86_64 ABIs are installed.
@@ -114,7 +126,14 @@ in
 
     buildTools.version = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = if cfg.flutter.enable then [ "33.0.2" "30.0.3" ] else [ "34.0.0" ];
+      default =
+        if cfg.flutter.enable then
+          [
+            "33.0.2"
+            "30.0.3"
+          ]
+        else
+          [ "34.0.0" ];
       description = ''
         The version of the Android build tools to install.
         By default, version 30.0.3 is installed or [ "33.0.2" "30.0.3" ] if flutter is enabled.
@@ -259,13 +278,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = [
-      androidSdk
-      platformTools
-      androidEmulator
-    ]
-    ++ lib.optional cfg.flutter.enable cfg.flutter.package
-    ++ lib.optional cfg.android-studio.enable cfg.android-studio.package;
+    packages =
+      [
+        androidSdk
+        platformTools
+        androidEmulator
+      ]
+      ++ lib.optional cfg.flutter.enable cfg.flutter.package
+      ++ lib.optional cfg.android-studio.enable cfg.android-studio.package;
 
     # Nested conditional for flutter
     languages = lib.mkMerge [
@@ -295,7 +315,12 @@ in
 
     enterShell = ''
       set -e
-      export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${pkgs.lib.makeLibraryPath [pkgs.vulkan-loader pkgs.libGL]}:${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/lib64/:${config.env.ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
+      export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${
+        pkgs.lib.makeLibraryPath [
+          pkgs.vulkan-loader
+          pkgs.libGL
+        ]
+      }:${config.env.ANDROID_HOME}/build-tools/${lib.head cfg.buildTools.version}/lib64/:${config.env.ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/lib/:$LD_LIBRARY_PATH"
 
       export PATH="$PATH:${config.env.ANDROID_HOME}/tools:${config.env.ANDROID_HOME}/tools/bin:${config.env.ANDROID_HOME}/platform-tools"
       cat <<EOF > local.properties

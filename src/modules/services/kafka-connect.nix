@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   kafkaCfg = config.services.kafka;
@@ -20,9 +25,8 @@ let
     in
     v: render.${builtins.typeOf v} v;
 
-  stringlyGeneric = (attrs:
-    lib.mapAttrs (_: mkPropertyString)
-      (lib.filterAttrs (_: v: v != null) attrs)
+  stringlyGeneric = (
+    attrs: lib.mapAttrs (_: mkPropertyString) (lib.filterAttrs (_: v: v != null) attrs)
   );
 
   stringlySettings = stringlyGeneric cfg.settings;
@@ -34,27 +38,35 @@ in
     enable = lib.mkEnableOption "Kafka Connect";
 
     initialConnectors = lib.mkOption {
-      type = types.listOf (types.submodule {
-        freeformType = with lib.types; let
-          primitive = oneOf [ bool int str ];
-        in
-        lazyAttrsOf (nullOr (either primitive (listOf primitive)));
+      type = types.listOf (
+        types.submodule {
+          freeformType =
+            with lib.types;
+            let
+              primitive = oneOf [
+                bool
+                int
+                str
+              ];
+            in
+            lazyAttrsOf (nullOr (either primitive (listOf primitive)));
 
-        options = {
-          name = lib.mkOption {
-            type = types.str;
-            description = ''
-              Name of the connector
-            '';
+          options = {
+            name = lib.mkOption {
+              type = types.str;
+              description = ''
+                Name of the connector
+              '';
+            };
+            config = lib.mkOption {
+              type = types.attrs;
+              description = ''
+                Initial configuration for the connector
+              '';
+            };
           };
-          config = lib.mkOption {
-            type = types.attrs;
-            description = ''
-              Initial configuration for the connector
-            '';
-          };
-        };
-      });
+        }
+      );
       default = [ ];
       description = ''
         List of Kafka Connect connectors to set up initially
@@ -72,10 +84,16 @@ in
       '';
       default = { };
       type = lib.types.submodule {
-        freeformType = with lib.types; let
-          primitive = oneOf [ bool int str ];
-        in
-        lazyAttrsOf (nullOr (either primitive (listOf primitive)));
+        freeformType =
+          with lib.types;
+          let
+            primitive = oneOf [
+              bool
+              int
+              str
+            ];
+          in
+          lazyAttrsOf (nullOr (either primitive (listOf primitive)));
 
         options = {
           "listeners" = lib.mkOption {
@@ -168,7 +186,9 @@ in
 
       # TODO: make it work with .properties files?
       # connectorFiles = lib.lists.map (c: generator "connector-${c.name}.properties" (stringlyGeneric c)) cfg.initialConnectors;
-      connectorFiles = lib.lists.map (c: pkgs.writeText "connector.json" (builtins.toJSON c)) cfg.initialConnectors;
+      connectorFiles = lib.lists.map (
+        c: pkgs.writeText "connector.json" (builtins.toJSON c)
+      ) cfg.initialConnectors;
       connectorFilesConcatted = lib.concatStringsSep " " connectorFiles;
 
       startKafkaConnect = pkgs.writeShellScriptBin "start-kafka-connect" ''
@@ -176,26 +196,28 @@ in
         ${pkg}/bin/connect-standalone.sh ${configFile} ${connectorFilesConcatted}
       '';
     in
-    (lib.mkIf cfg.enable (lib.mkIf kafkaCfg.enable {
-      processes.kafka-connect = {
-        exec = "${startKafkaConnect}/bin/start-kafka-connect";
+    (lib.mkIf cfg.enable (
+      lib.mkIf kafkaCfg.enable {
+        processes.kafka-connect = {
+          exec = "${startKafkaConnect}/bin/start-kafka-connect";
 
-        process-compose = {
-          readiness_probe = {
-            initial_delay_seconds = 2;
-            http_get = {
-              path = "/connectors";
-              port = 8083;
+          process-compose = {
+            readiness_probe = {
+              initial_delay_seconds = 2;
+              http_get = {
+                path = "/connectors";
+                port = 8083;
+              };
             };
-          };
 
-          depends_on = {
-            kafka = {
-              condition = "process_healthy";
+            depends_on = {
+              kafka = {
+                condition = "process_healthy";
+              };
             };
           };
         };
-      };
 
-    }));
+      }
+    ));
 }

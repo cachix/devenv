@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.kafka;
@@ -16,8 +21,9 @@ let
     in
     v: render.${builtins.typeOf v} v;
 
-  stringlySettings = lib.mapAttrs (_: mkPropertyString)
-    (lib.filterAttrs (_: v: v != null) cfg.settings);
+  stringlySettings = lib.mapAttrs (_: mkPropertyString) (
+    lib.filterAttrs (_: v: v != null) cfg.settings
+  );
 
   generator = (pkgs.formats.javaProperties { }).generate;
 in
@@ -32,7 +38,10 @@ in
         - `zookeeper`: Run Kafka in Zookeeper mode, this requires more configuration.
       '';
       default = "kraft";
-      type = lib.types.enum [ "zookeeper" "kraft" ];
+      type = lib.types.enum [
+        "zookeeper"
+        "kraft"
+      ];
     };
 
     settings = lib.mkOption {
@@ -47,10 +56,16 @@ in
       '';
       default = { };
       type = lib.types.submodule {
-        freeformType = with lib.types; let
-          primitive = oneOf [ bool int str ];
-        in
-        lazyAttrsOf (nullOr (either primitive (listOf primitive)));
+        freeformType =
+          with lib.types;
+          let
+            primitive = oneOf [
+              bool
+              int
+              str
+            ];
+          in
+          lazyAttrsOf (nullOr (either primitive (listOf primitive)));
 
         options = {
           "broker.id" = lib.mkOption {
@@ -157,16 +172,22 @@ in
         CLUSTER_ID=$(cat ${clusterIdFile} 2>/dev/null || ${cfg.package}/bin/kafka-storage.sh random-uuid | tee ${clusterIdFile})
       '';
 
-      formatLogDirsScript = pkgs.writeShellScriptBin "format-log-dirs"
-        (if cfg.formatLogDirsIgnoreFormatted then ''
-          ${getOrGenerateClusterId}
-          ${cfg.package}/bin/kafka-storage.sh format -t "$CLUSTER_ID" -c ${cfg.configFiles.serverProperties} --ignore-formatted
-        '' else ''
-          if ${lib.concatMapStringsSep " && " (l: ''[ ! -f "${l}/meta.properties" ]'') cfg.settings."log.dirs"}; then
+      formatLogDirsScript = pkgs.writeShellScriptBin "format-log-dirs" (
+        if cfg.formatLogDirsIgnoreFormatted then
+          ''
             ${getOrGenerateClusterId}
-            ${cfg.package}/bin/kafka-storage.sh format -t "$CLUSTER_ID" -c ${cfg.configFiles.serverProperties}
-          fi
-        '');
+            ${cfg.package}/bin/kafka-storage.sh format -t "$CLUSTER_ID" -c ${cfg.configFiles.serverProperties} --ignore-formatted
+          ''
+        else
+          ''
+            if ${
+              lib.concatMapStringsSep " && " (l: ''[ ! -f "${l}/meta.properties" ]'') cfg.settings."log.dirs"
+            }; then
+              ${getOrGenerateClusterId}
+              ${cfg.package}/bin/kafka-storage.sh format -t "$CLUSTER_ID" -c ${cfg.configFiles.serverProperties}
+            fi
+          ''
+      );
 
       startKafka = pkgs.writeShellScriptBin "start-kafka" ''
         set -e
@@ -185,10 +206,16 @@ in
     lib.mkMerge [
       (lib.mkIf (cfg.defaultMode == "kraft") {
         services.kafka.settings = {
-          "process.roles" = lib.mkDefault [ "broker" "controller" ];
+          "process.roles" = lib.mkDefault [
+            "broker"
+            "controller"
+          ];
           "broker.id" = lib.mkDefault 1;
           "controller.quorum.voters" = lib.mkDefault "1@localhost:9093";
-          "listeners" = lib.mkDefault [ "PLAINTEXT://localhost:9092" "CONTROLLER://localhost:9093" ];
+          "listeners" = lib.mkDefault [
+            "PLAINTEXT://localhost:9092"
+            "CONTROLLER://localhost:9093"
+          ];
           "inter.broker.listener.name" = lib.mkDefault "PLAINTEXT";
           "advertised.listeners" = lib.mkDefault [ "PLAINTEXT://localhost:9092" ];
           "controller.listener.names" = lib.mkDefault [ "CONTROLLER" ];

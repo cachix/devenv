@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   cfg = config.process.managers.overmind;
 in
@@ -25,7 +30,7 @@ in
 
     process.manager.command = lib.mkDefault ''
       OVERMIND_ENV=${config.procfileEnv} ${cfg.package}/bin/overmind start \
-        ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
+        ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
         "$@" &
     '';
 

@@ -1,4 +1,9 @@
-{ pkgs, lib, config, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   cfg = config.services.typesense;
@@ -61,7 +66,11 @@ in
         --api-key ${lib.escapeShellArg cfg.apiKey} \
         --api-host ${cfg.host} \
         --api-port ${toString cfg.port} \
-        ${lib.optionalString (cfg.searchOnlyKey != null) "--search-only-api-key ${lib.escapeShellArg cfg.searchOnlyKey}"} \
+        ${
+          lib.optionalString (
+            cfg.searchOnlyKey != null
+          ) "--search-only-api-key ${lib.escapeShellArg cfg.searchOnlyKey}"
+        } \
         ${lib.escapeShellArgs cfg.additionalArgs}
     '';
   };

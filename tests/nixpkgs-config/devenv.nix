@@ -1,4 +1,5 @@
-{ pkgs, ... }: {
+{ pkgs, ... }:
+{
   env = {
     ALLOW_UNFREE = pkgs.lib.boolToString (pkgs.config.allowUnfree or false);
     CUDA_SUPPORT = pkgs.lib.boolToString (pkgs.config.cudaSupport or false);

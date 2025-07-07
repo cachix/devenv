@@ -54,7 +54,8 @@ in
           '';
         };
         # Normalize versions by stripping trailing .0 to make X.x.0 equivalent to X.X
-        normalizeVersion = v:
+        normalizeVersion =
+          v:
           let
             stripped = builtins.replaceStrings [ ".0" ] [ "" ] v;
           in

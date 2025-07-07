@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 
 let
   cfg = config.languages.haskell;
@@ -20,10 +25,9 @@ in
 
     languageServer = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
-      default = pkgs.haskell-language-server.override
-        {
-          supportedGhcVersions = [ ghcVersion ];
-        };
+      default = pkgs.haskell-language-server.override {
+        supportedGhcVersions = [ ghcVersion ];
+      };
       defaultText = lib.literalExpression "pkgs.haskell-language-server";
       description = ''
         Haskell language server to use.
@@ -41,13 +45,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    packages = with pkgs; [
-      cfg.package
-      cabal-install
-      zlib
-      hpack
-    ]
-    ++ (lib.optional (cfg.languageServer != null) cfg.languageServer)
-    ++ (lib.optional (cfg.stack != null) cfg.stack);
+    packages =
+      with pkgs;
+      [
+        cfg.package
+        cabal-install
+        zlib
+        hpack
+      ]
+      ++ (lib.optional (cfg.languageServer != null) cfg.languageServer)
+      ++ (lib.optional (cfg.stack != null) cfg.stack);
   };
 }

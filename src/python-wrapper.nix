@@ -1,21 +1,21 @@
-{ lib
-, stdenv
-, buildEnv
-, makeBinaryWrapper
+{
+  lib,
+  stdenv,
+  buildEnv,
+  makeBinaryWrapper,
 
   # manually pased
-, python
-, requiredPythonModules
+  python,
+  requiredPythonModules,
 
   # extra opts
-, extraLibs ? [ ]
-, extraOutputsToInstall ? [ ]
-, postBuild ? ""
-, ignoreCollisions ? false
-, permitUserSite ? false
+  extraLibs ? [ ],
+  extraOutputsToInstall ? [ ],
+  postBuild ? "",
+  ignoreCollisions ? false,
+  permitUserSite ? false,
   # Wrap executables with the given argument.
-, makeWrapperArgs ? [ ]
-,
+  makeWrapperArgs ? [ ],
 }:
 
 # Create a python executable that knows about additional packages.
@@ -35,34 +35,38 @@ let
 
       nativeBuildInputs = [ makeBinaryWrapper ];
 
-      postBuild = ''
-        if [ -L "$out/bin" ]; then
-            unlink "$out/bin"
-        fi
-        mkdir -p "$out/bin"
+      postBuild =
+        ''
+          if [ -L "$out/bin" ]; then
+              unlink "$out/bin"
+          fi
+          mkdir -p "$out/bin"
 
-        rm -f $out/bin/.*-wrapped
+          rm -f $out/bin/.*-wrapped
 
-        for path in ${lib.concatStringsSep " " paths}; do
-          if [ -d "$path/bin" ]; then
-            cd "$path/bin"
-            for prg in *; do
-              if [ -f "$prg" ]; then
-                rm -f "$out/bin/$prg"
-                if [ -x "$prg" ]; then
-                  if [ -f ".$prg-wrapped" ]; then
-                    echo "#!${pythonExecutable}" > "$out/bin/$prg"
-                    sed -e '1d' -e '3d' ".$prg-wrapped" >> "$out/bin/$prg"
-                    chmod +x "$out/bin/$prg"
-                  else
-                    makeWrapper "$path/bin/$prg" "$out/bin/$prg" --inherit-argv0 --resolve-argv0 ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true"''} ${lib.concatStringsSep " " makeWrapperArgs}
+          for path in ${lib.concatStringsSep " " paths}; do
+            if [ -d "$path/bin" ]; then
+              cd "$path/bin"
+              for prg in *; do
+                if [ -f "$prg" ]; then
+                  rm -f "$out/bin/$prg"
+                  if [ -x "$prg" ]; then
+                    if [ -f ".$prg-wrapped" ]; then
+                      echo "#!${pythonExecutable}" > "$out/bin/$prg"
+                      sed -e '1d' -e '3d' ".$prg-wrapped" >> "$out/bin/$prg"
+                      chmod +x "$out/bin/$prg"
+                    else
+                      makeWrapper "$path/bin/$prg" "$out/bin/$prg" --inherit-argv0 --resolve-argv0 ${
+                        lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true"''
+                      } ${lib.concatStringsSep " " makeWrapperArgs}
+                    fi
                   fi
                 fi
-              fi
-            done
-          fi
-        done
-      '' + postBuild;
+              done
+            fi
+          done
+        ''
+        + postBuild;
 
       inherit (python) meta;
 

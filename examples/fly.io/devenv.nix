@@ -1,4 +1,9 @@
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 let
   pythonPackages = config.languages.python.package.pkgs;
@@ -6,8 +11,7 @@ in
 {
   languages.python.enable = true;
 
-  packages = [ pythonPackages.flask ]
-    ++ lib.optionals (!config.container.isBuilding) [ pkgs.flyctl ];
+  packages = [ pythonPackages.flask ] ++ lib.optionals (!config.container.isBuilding) [ pkgs.flyctl ];
 
   processes.serve.exec = "flask --app hello run";
 

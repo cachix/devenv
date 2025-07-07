@@ -1,9 +1,11 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  ...
 }:
-with lib; let
+with lib;
+let
   cfg = config.services.mysql;
   isMariaDB = getName cfg.package == getName pkgs.mariadb;
   format = pkgs.formats.ini { listsAsDuplicateKeys = true; };
@@ -38,14 +40,16 @@ with lib; let
   '';
 
   initDatabaseCmd =
-    if isMariaDB
-    then "${cfg.package}/bin/mysql_install_db ${mysqldOptions} --auth-root-authentication-method=normal"
-    else "${cfg.package}/bin/mysqld ${mysqldOptions} --default-time-zone=SYSTEM --initialize-insecure";
+    if isMariaDB then
+      "${cfg.package}/bin/mysql_install_db ${mysqldOptions} --auth-root-authentication-method=normal"
+    else
+      "${cfg.package}/bin/mysqld ${mysqldOptions} --default-time-zone=SYSTEM --initialize-insecure";
 
   importTimeZones =
-    if (cfg.importTimeZones != null)
-    then cfg.importTimeZones
-    else hasAttrByPath [ "settings" "mysqld" "default-time-zone" ] cfg;
+    if (cfg.importTimeZones != null) then
+      cfg.importTimeZones
+    else
+      hasAttrByPath [ "settings" "mysqld" "default-time-zone" ] cfg;
 
   configureTimezones = ''
     # Start a temp database with the default-time-zone to import tz data
@@ -75,7 +79,12 @@ with lib; let
   '';
 
   configureScript = pkgs.writeShellScriptBin "configure-mysql" ''
-    PATH="${lib.makeBinPath [cfg.package pkgs.coreutils]}:$PATH"
+    PATH="${
+      lib.makeBinPath [
+        cfg.package
+        pkgs.coreutils
+      ]
+    }:$PATH"
     set -euo pipefail
 
     while ! MYSQL_PWD="" ${mysqladminWrappedEmpty}/bin/mysqladmin ping -u root --silent; do
@@ -84,49 +93,50 @@ with lib; let
     done
 
     ${concatMapStrings (database: ''
-        # Create initial databases
-        exists="$(
-          MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -sB information_schema \
-            <<< 'select count(*) from schemata where schema_name = "${database.name}"'
-        )"
-        if [[ "$exists" -eq 0 ]]; then
-          echo "Creating initial database: ${database.name}"
-          ( echo 'create database `${database.name}`;'
-            ${optionalString (database.schema != null) ''
-          echo 'use `${database.name}`;'
-          # TODO: this silently falls through if database.schema does not exist,
-          # we should catch this somehow and exit, but can't do it here because we're in a subshell.
-          if [ -f "${database.schema}" ]
-          then
-              cat ${database.schema}
-          elif [ -d "${database.schema}" ]
-          then
-              cat ${database.schema}/mysql-databases/*.sql
-          fi
-        ''}
-          ) | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -N
-        else
-          echo "Database ${database.name} exists, skipping creation."
-        fi
-      '')
-      cfg.initialDatabases}
+      # Create initial databases
+      exists="$(
+        MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -sB information_schema \
+          <<< 'select count(*) from schemata where schema_name = "${database.name}"'
+      )"
+      if [[ "$exists" -eq 0 ]]; then
+        echo "Creating initial database: ${database.name}"
+        ( echo 'create database `${database.name}`;'
+          ${optionalString (database.schema != null) ''
+            echo 'use `${database.name}`;'
+            # TODO: this silently falls through if database.schema does not exist,
+            # we should catch this somehow and exit, but can't do it here because we're in a subshell.
+            if [ -f "${database.schema}" ]
+            then
+                cat ${database.schema}
+            elif [ -d "${database.schema}" ]
+            then
+                cat ${database.schema}/mysql-databases/*.sql
+            fi
+          ''}
+        ) | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -N
+      else
+        echo "Database ${database.name} exists, skipping creation."
+      fi
+    '') cfg.initialDatabases}
 
     ${concatMapStrings (user: ''
-        echo "Adding user: ${user.name}"
-        ${optionalString (user.password != null) "password='${user.password}'"}
-        (
-          if [ "${user.name}" = "root" ] && [ -n "$password" ]; then
-            echo "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';"
-          else
-            echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${optionalString (user.password != null) "IDENTIFIED BY '$password'"};"
-          fi
-          ${concatStringsSep "\n" (mapAttrsToList (database: permission: ''
+      echo "Adding user: ${user.name}"
+      ${optionalString (user.password != null) "password='${user.password}'"}
+      (
+        if [ "${user.name}" = "root" ] && [ -n "$password" ]; then
+          echo "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password';"
+        else
+          echo "CREATE USER IF NOT EXISTS '${user.name}'@'localhost' ${
+            optionalString (user.password != null) "IDENTIFIED BY '$password'"
+          };"
+        fi
+        ${concatStringsSep "\n" (
+          mapAttrsToList (database: permission: ''
             echo 'GRANT ${permission} ON ${database} TO `${user.name}`@`localhost`;'
-          '')
-          user.ensurePermissions)}
-        ) | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -N
-      '')
-      cfg.ensureUsers}
+          '') user.ensurePermissions
+        )}
+      ) | MYSQL_PWD="" ${mysqlWrappedEmpty}/bin/mysql -u root -N
+    '') cfg.ensureUsers}
 
     # We need to sleep until infinity otherwise all processes stop
     sleep infinity
@@ -170,24 +180,26 @@ in
     };
 
     initialDatabases = mkOption {
-      type = types.listOf (types.submodule {
-        options = {
-          name = mkOption {
-            type = types.str;
-            description = ''
-              The name of the database to create.
-            '';
+      type = types.listOf (
+        types.submodule {
+          options = {
+            name = mkOption {
+              type = types.str;
+              description = ''
+                The name of the database to create.
+              '';
+            };
+            schema = mkOption {
+              type = types.nullOr types.path;
+              default = null;
+              description = ''
+                The initial schema of the database; if null (the default),
+                an empty database is created.
+              '';
+            };
           };
-          schema = mkOption {
-            type = types.nullOr types.path;
-            default = null;
-            description = ''
-              The initial schema of the database; if null (the default),
-              an empty database is created.
-            '';
-          };
-        };
-      });
+        }
+      );
       default = [ ];
       description = ''
         List of database names and their initial schemas that should be used to create databases on the first startup
@@ -221,46 +233,48 @@ in
     };
 
     ensureUsers = lib.mkOption {
-      type = types.listOf (types.submodule {
-        options = {
-          name = lib.mkOption {
-            type = types.str;
-            description = ''
-              Name of the user to ensure.
-            '';
-          };
+      type = types.listOf (
+        types.submodule {
+          options = {
+            name = lib.mkOption {
+              type = types.str;
+              description = ''
+                Name of the user to ensure.
+              '';
+            };
 
-          password = lib.mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = ''
-              Password of the user to ensure.
-            '';
-          };
+            password = lib.mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = ''
+                Password of the user to ensure.
+              '';
+            };
 
-          ensurePermissions = lib.mkOption {
-            type = types.attrsOf types.str;
-            default = { };
-            description = ''
-              Permissions to ensure for the user, specified as attribute set.
-              The attribute names specify the database and tables to grant the permissions for,
-              separated by a dot. You may use wildcards here.
-              The attribute values specfiy the permissions to grant.
-              You may specify one or multiple comma-separated SQL privileges here.
-              For more information on how to specify the target
-              and on which privileges exist, see the
-              [GRANT syntax](https://mariadb.com/kb/en/library/grant/).
-              The attributes are used as `GRANT ''${attrName} ON ''${attrValue}`.
-            '';
-            example = literalExpression ''
-              {
-                "database.*" = "ALL PRIVILEGES";
-                "*.*" = "SELECT, LOCK TABLES";
-              }
-            '';
+            ensurePermissions = lib.mkOption {
+              type = types.attrsOf types.str;
+              default = { };
+              description = ''
+                Permissions to ensure for the user, specified as attribute set.
+                The attribute names specify the database and tables to grant the permissions for,
+                separated by a dot. You may use wildcards here.
+                The attribute values specfiy the permissions to grant.
+                You may specify one or multiple comma-separated SQL privileges here.
+                For more information on how to specify the target
+                and on which privileges exist, see the
+                [GRANT syntax](https://mariadb.com/kb/en/library/grant/).
+                The attributes are used as `GRANT ''${attrName} ON ''${attrValue}`.
+              '';
+              example = literalExpression ''
+                {
+                  "database.*" = "ALL PRIVILEGES";
+                  "*.*" = "SELECT, LOCK TABLES";
+                }
+              '';
+            };
           };
-        };
-      });
+        }
+      );
       default = [ ];
       description = ''
         Ensures that the specified users exist and have at least the ensured permissions.

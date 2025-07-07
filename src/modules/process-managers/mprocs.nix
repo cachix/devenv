@@ -1,13 +1,17 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   cfg = config.process.managers.mprocs;
   settingsFormat = pkgs.formats.yaml { };
-  makeImpurePackage = impurePath:
-    pkgs.runCommandLocal
-      "${lib.strings.sanitizeDerivationName impurePath}-impure"
-      {
-        __impureHostDeps = [ impurePath ];
-      } "mkdir -p $out/bin && ln -s ${impurePath} $out/bin";
+  makeImpurePackage =
+    impurePath:
+    pkgs.runCommandLocal "${lib.strings.sanitizeDerivationName impurePath}-impure" {
+      __impureHostDeps = [ impurePath ];
+    } "mkdir -p $out/bin && ln -s ${impurePath} $out/bin";
 in
 {
   options.process.managers.mprocs = {
@@ -39,25 +43,31 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    process.manager.args = { "config" = cfg.configFile; };
+    process.manager.args = {
+      "config" = cfg.configFile;
+    };
 
     process.manager.command = lib.mkDefault ''
       ${cfg.package}/bin/mprocs \
         ${lib.cli.toGNUCommandLineShell { } config.process.manager.args}
     '';
 
-    packages = [ cfg.package ] ++ lib.optionals pkgs.stdenv.isDarwin
-      [ (makeImpurePackage "/usr/bin/pbcopy") ];
+    packages = [
+      cfg.package
+    ] ++ lib.optionals pkgs.stdenv.isDarwin [ (makeImpurePackage "/usr/bin/pbcopy") ];
 
     process.managers.mprocs = {
-      configFile =
-        lib.mkDefault (settingsFormat.generate "mprocs.yaml" cfg.settings);
+      configFile = lib.mkDefault (settingsFormat.generate "mprocs.yaml" cfg.settings);
       settings = {
-        procs = lib.mapAttrs
-          (name: value:
-            let scriptPath = pkgs.writeShellScript name value.exec;
-            in { cmd = [ "${scriptPath}" ]; })
-          config.processes;
+        procs = lib.mapAttrs (
+          name: value:
+          let
+            scriptPath = pkgs.writeShellScript name value.exec;
+          in
+          {
+            cmd = [ "${scriptPath}" ];
+          }
+        ) config.processes;
       };
     };
   };

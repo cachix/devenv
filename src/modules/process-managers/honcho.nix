@@ -1,4 +1,9 @@
-{ pkgs, config, lib, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 let
   cfg = config.process.managers.honcho;
 in
@@ -24,7 +29,7 @@ in
 
     process.manager.command = lib.mkDefault ''
       ${cfg.package}/bin/honcho start \
-        ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
+        ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
         "$@" &
     '';
 

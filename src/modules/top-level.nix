@@ -1,11 +1,17 @@
-{ config, pkgs, lib, bootstrapPkgs ? null, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  bootstrapPkgs ? null,
+  ...
+}:
 let
   types = lib.types;
   # Returns a list of all the entries in a folder
-  listEntries = path:
-    map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
+  listEntries = path: map (name: path + "/${name}") (builtins.attrNames (builtins.readDir path));
 
-  drvOrPackageToPaths = drvOrPackage:
+  drvOrPackageToPaths =
+    drvOrPackage:
     if drvOrPackage ? outputs then
       builtins.map (output: drvOrPackage.${output}) drvOrPackage.outputs
     else
@@ -16,23 +22,26 @@ let
     ignoreCollisions = true;
   };
 
-  failedAssertions = builtins.map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+  failedAssertions = builtins.map (x: x.message) (
+    builtins.filter (x: !x.assertion) config.assertions
+  );
 
   performAssertions =
     let
-      formatAssertionMessage = message:
+      formatAssertionMessage =
+        message:
         let
           lines = lib.splitString "\n" message;
         in
         "- ${lib.concatStringsSep "\n  " lines}";
     in
-    if failedAssertions != [ ]
-    then
+    if failedAssertions != [ ] then
       throw ''
         Failed assertions:
         ${lib.concatStringsSep "\n" (builtins.map formatAssertionMessage failedAssertions)}
       ''
-    else lib.trivial.showWarnings config.warnings;
+    else
+      lib.trivial.showWarnings config.warnings;
 in
 {
   options = {
@@ -89,15 +98,14 @@ in
 
       # Remove the default apple-sdk on macOS.
       # Allow users to specify an optional SDK in `apple.sdk`.
-      apply = stdenv:
-        if stdenv.isDarwin
-        then
-          stdenv.override
-            (prev: {
-              extraBuildInputs =
-                builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
-            })
-        else stdenv;
+      apply =
+        stdenv:
+        if stdenv.isDarwin then
+          stdenv.override (prev: {
+            extraBuildInputs = builtins.filter (x: !lib.hasPrefix "apple-sdk" x.pname) prev.extraBuildInputs;
+          })
+        else
+          stdenv;
 
     };
 
@@ -171,7 +179,12 @@ in
       type = types.listOf types.unspecified;
       internal = true;
       default = [ ];
-      example = [{ assertion = false; message = "you can't enable this for that reason"; }];
+      example = [
+        {
+          assertion = false;
+          message = "you can't enable this for that reason";
+        }
+      ];
       description = ''
         This option allows modules to express conditions that must
         hold for the evaluation of the configuration to succeed,
@@ -244,7 +257,12 @@ in
             xdg = builtins.getEnv "XDG_RUNTIME_DIR";
             tmp = builtins.getEnv "TMPDIR";
           in
-          if xdg != "" then xdg else if tmp != "" then tmp else "/tmp";
+          if xdg != "" then
+            xdg
+          else if tmp != "" then
+            tmp
+          else
+            "/tmp";
       };
 
       profile = lib.mkOption {
@@ -254,26 +272,26 @@ in
     };
   };
 
-  imports = [
-    ./info.nix
-    ./outputs.nix
-    ./files.nix
-    ./processes.nix
-    ./outputs.nix
-    ./scripts.nix
-    ./update-check.nix
-    ./containers.nix
-    ./debug.nix
-    ./lib.nix
-    ./tests.nix
-    ./cachix.nix
-    ./tasks.nix
-  ]
-  ++ (listEntries ./languages)
-  ++ (listEntries ./services)
-  ++ (listEntries ./integrations)
-  ++ (listEntries ./process-managers)
-  ;
+  imports =
+    [
+      ./info.nix
+      ./outputs.nix
+      ./files.nix
+      ./processes.nix
+      ./outputs.nix
+      ./scripts.nix
+      ./update-check.nix
+      ./containers.nix
+      ./debug.nix
+      ./lib.nix
+      ./tests.nix
+      ./cachix.nix
+      ./tasks.nix
+    ]
+    ++ (listEntries ./languages)
+    ++ (listEntries ./services)
+    ++ (listEntries ./integrations)
+    ++ (listEntries ./process-managers);
 
   config = {
     assertions = [
@@ -286,7 +304,10 @@ in
         '';
       }
       {
-        assertion = config.devenv.flakesIntegration || config.overlays == [ ] || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
+        assertion =
+          config.devenv.flakesIntegration
+          || config.overlays == [ ]
+          || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
         message = ''
           Using overlays requires devenv 1.4.2 or higher, while your current version is ${config.devenv.cliVersion}.
         '';
@@ -306,8 +327,7 @@ in
     packages = [
       # needed to make sure we can load libs
       pkgs.pkg-config
-    ]
-    ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
+    ] ++ lib.optional (config.apple.sdk != null) config.apple.sdk;
 
     enterShell = lib.mkBefore ''
       export PS1="\[\e[0;34m\](devenv)\[\e[0m\] ''${PS1-}"
@@ -358,19 +378,26 @@ in
         nativeBuildInputs = partitionedPkgs.wrong;
       in
       performAssertions (
-        (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          name = "devenv-shell";
-          hardeningDisable = config.hardeningDisable;
-          inherit buildInputs nativeBuildInputs;
-          shellHook = ''
-            ${lib.optionalString config.devenv.debug "set -x"}
-            ${config.enterShell}
-          '';
-        } // config.env)
+        (pkgs.mkShell.override { stdenv = config.stdenv; }) (
+          {
+            name = "devenv-shell";
+            hardeningDisable = config.hardeningDisable;
+            inherit buildInputs nativeBuildInputs;
+            shellHook = ''
+              ${lib.optionalString config.devenv.debug "set -x"}
+              ${config.enterShell}
+            '';
+          }
+          // config.env
+        )
       );
 
     infoSections."env" = lib.mapAttrsToList (name: value: "${name}: ${toString value}") config.env;
-    infoSections."packages" = builtins.map (package: package.name) (builtins.filter (package: !(builtins.elem package.name (builtins.attrNames config.scripts))) config.packages);
+    infoSections."packages" = builtins.map (package: package.name) (
+      builtins.filter (
+        package: !(builtins.elem package.name (builtins.attrNames config.scripts))
+      ) config.packages
+    );
 
     ci = [ config.shell ];
     ciDerivation = pkgs.runCommand "ci" { } "echo ${toString config.ci} > $out";

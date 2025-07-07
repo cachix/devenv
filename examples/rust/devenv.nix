@@ -6,7 +6,13 @@
     # https://devenv.sh/reference/options/#languagesrustchannel
     channel = "nightly";
 
-    components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
+    components = [
+      "rustc"
+      "cargo"
+      "clippy"
+      "rustfmt"
+      "rust-analyzer"
+    ];
   };
 
   git-hooks.hooks = {
