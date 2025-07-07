@@ -1075,7 +1075,8 @@ impl Devenv {
         if !self.global_options.option.is_empty() {
             let mut cli_options = String::from("{ pkgs, lib, config, ... }: {\n");
 
-            const SUPPORTED_TYPES: &[&str] = &["string", "int", "float", "bool", "path", "pkgs"];
+            const SUPPORTED_TYPES: &[&str] =
+                &["string", "int", "float", "bool", "path", "pkg", "pkgs"];
 
             for chunk in self.global_options.option.chunks_exact(2) {
                 // Parse the path and type from the first value
@@ -1095,6 +1096,7 @@ impl Devenv {
                     "float" => chunk[1].clone(),
                     "bool" => chunk[1].clone(), // true/false will work directly in Nix
                     "path" => format!("./{}", &chunk[1]), // relative path
+                    "pkg" => format!("pkgs.{}", &chunk[1]),
                     "pkgs" => {
                         // Split by whitespace and format as a Nix list of package references
                         let items = chunk[1]
