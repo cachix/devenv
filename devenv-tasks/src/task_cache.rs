@@ -301,6 +301,7 @@ mod tests {
         {
             let mut file = File::create(&file_path).unwrap();
             file.write_all(b"initial content").unwrap();
+            file.sync_all().unwrap(); // Ensure file is fully written to disk
         }
 
         let task_name = "test_task";
