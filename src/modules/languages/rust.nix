@@ -92,13 +92,12 @@ in
 
     mold.enable = lib.mkOption {
       type = lib.types.bool;
-      default = pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64 && cfg.targets == [ ];
-      defaultText =
-        lib.literalExpression "pkgs.stdenv.isLinux && pkgs.stdenv.isx86_64 && languages.rust.targets == [ ]";
+      default = false;
       description = ''
-        Enable mold as the linker.
+        Use [mold](https://github.com/rui314/mold) as the linker.
 
-        Enabled by default on x86_64 Linux machines when no cross-compilation targets are specified.
+        mold is a faster drop-in replacement for existing Unix linkers.
+        It is several times quicker than the LLVM lld linker.
       '';
     };
 
