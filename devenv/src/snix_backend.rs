@@ -19,9 +19,15 @@ use snix_store::nar::{NarCalculationService, SimpleRenderer};
 use snix_store::pathinfoservice::from_addr as pathinfo_from_addr;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+/// Snix backend implementation for devenv.
+///
+/// NOTE: The snix library (EvaluationBuilder and Evaluation types) uses single-threaded
+/// reference-counted pointers (Rc<T>) internally, making these types incompatible with
+/// multi-threaded sharing. This backend creates fresh evaluator instances per operation
+/// rather than storing them in shared state.
 pub struct SnixBackend {
     #[allow(dead_code)] // Will be used when more functionality is implemented
     config: config::Config,
@@ -29,11 +35,6 @@ pub struct SnixBackend {
     global_options: cli::GlobalOptions,
     #[allow(dead_code)] // Will be used when more functionality is implemented
     paths: DevenvPaths,
-    eval_builder: Arc<
-        OnceLock<
-            snix_eval::EvaluationBuilder<'static, 'static, 'static, Box<dyn snix_eval::EvalIO>>,
-        >,
-    >,
 }
 
 impl SnixBackend {
@@ -48,17 +49,18 @@ impl SnixBackend {
             config,
             global_options,
             paths,
-            eval_builder: Arc::new(OnceLock::new()),
         })
     }
 
-    /// Initialize the Snix evaluator
-    async fn init_evaluator(&self) -> Result<()> {
-        if self.eval_builder.get().is_some() {
-            return Ok(());
-        }
-
-        debug!("Initializing Snix evaluator");
+    /// Create a fresh Snix evaluator for a single operation.
+    ///
+    /// Since snix types use single-threaded Rc pointers, we cannot store them in shared state.
+    /// Instead, we create a fresh evaluator for each operation.
+    #[allow(dead_code)] // Will be used when backend methods are fully implemented
+    async fn create_evaluator(
+        &self,
+    ) -> Result<snix_eval::Evaluation<'static, 'static, 'static, Box<dyn snix_eval::EvalIO>>> {
+        debug!("Creating fresh Snix evaluator");
 
         // Create the required services
         let blob_service = blob_from_addr("memory://")
@@ -108,16 +110,15 @@ impl SnixBackend {
             eval_builder = eval_builder.nix_path(Some(nix_path));
         }
 
-        let _ = self.eval_builder.set(eval_builder);
-        Ok(())
+        // Build the final evaluator
+        Ok(eval_builder.build())
     }
 }
 
 #[async_trait(?Send)]
 impl NixBackend for SnixBackend {
     async fn assemble(&self) -> Result<()> {
-        // Initialize the evaluator on first use
-        self.init_evaluator().await?;
+        // No shared state to initialize - evaluators are created per operation
         Ok(())
     }
 
