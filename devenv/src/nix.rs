@@ -116,6 +116,13 @@ impl Nix {
         Ok(env)
     }
 
+    /// Add a GC root for the given path.
+    ///
+    /// SAFETY
+    ///
+    /// You should prefer protecting build outputs with options like `--out-link` to avoid race conditions.
+    /// A untimely GC run -- the usual culprit is auto-gc with min-free -- could delete the store
+    /// path you're trying to protect.
     pub async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
         self.run_nix(
             "nix-store",
@@ -935,6 +942,15 @@ impl NixBackend for Nix {
         options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
         self.run_nix(command, args, options).await
+    }
+
+    async fn run_nix_with_substituters(
+        &self,
+        command: &str,
+        args: &[&str],
+        options: &nix_backend::Options,
+    ) -> Result<devenv_eval_cache::Output> {
+        self.run_nix_with_substituters(command, args, options).await
     }
 }
 

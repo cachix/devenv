@@ -187,4 +187,14 @@ impl NixBackend for SnixBackend {
         // Snix doesn't use external nix commands
         bail!("Snix backend doesn't use external nix commands")
     }
+
+    async fn run_nix_with_substituters(
+        &self,
+        _command: &str,
+        _args: &[&str],
+        _options: &Options,
+    ) -> Result<Output> {
+        // Snix doesn't use external nix commands
+        bail!("Snix backend doesn't use external nix commands")
+    }
 }

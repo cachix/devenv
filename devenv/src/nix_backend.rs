@@ -102,4 +102,12 @@ pub trait NixBackend: Send + Sync {
 
     /// Run a nix command
     async fn run_nix(&self, command: &str, args: &[&str], options: &Options) -> Result<Output>;
+
+    /// Run a nix command with substituters
+    async fn run_nix_with_substituters(
+        &self,
+        command: &str,
+        args: &[&str],
+        options: &Options,
+    ) -> Result<Output>;
 }
