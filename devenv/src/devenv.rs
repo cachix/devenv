@@ -828,15 +828,35 @@ impl Devenv {
         // collect tests
         let test_script = {
             let span = info_span!("test", devenv.user_message = "Building tests");
-            self.nix
-                .build(&["devenv.test"], None)
+            let gc_root = self.devenv_dot_gc.join("test");
+            let options = nix_backend::Options {
+                cache_output: true,
+                ..Default::default()
+            };
+            let output = self
+                .nix
+                .run_nix_with_substituters(
+                    "nix",
+                    &[
+                        "build",
+                        "--out-link",
+                        &gc_root.to_string_lossy(),
+                        "--print-out-paths",
+                        "-L",
+                        ".#devenv.test",
+                    ],
+                    &options,
+                )
                 .instrument(span)
-                .await?
+                .await?;
+            let paths = String::from_utf8_lossy(&output.stdout)
+                .to_string()
+                .split_whitespace()
+                .map(|s| PathBuf::from(s.to_string()))
+                .collect::<Vec<_>>();
+            paths
         };
         let test_script_path = &test_script[0];
-
-        // Add GC root for test script to prevent garbage collection
-        self.nix.add_gc("test", test_script_path).await?;
 
         let test_script = test_script_path.to_string_lossy().to_string();
 
