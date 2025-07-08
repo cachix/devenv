@@ -437,9 +437,10 @@ impl Devenv {
         async move {
             self.assemble(false).await?;
 
+            let sanitized_name = sanitize_container_name(name);
             let gc_root = self
                 .devenv_dot_gc
-                .join(format!("container-{name}-derivation"));
+                .join(format!("container-{sanitized_name}-derivation"));
             let paths = self
                 .nix
                 .build(
@@ -471,7 +472,10 @@ impl Devenv {
         );
 
         async move {
-            let gc_root = self.devenv_dot_gc.join(format!("container-{name}-copy"));
+            let sanitized_name = sanitize_container_name(name);
+            let gc_root = self
+                .devenv_dot_gc
+                .join(format!("container-{sanitized_name}-copy"));
             let paths = self
                 .nix
                 .build(
@@ -527,7 +531,10 @@ impl Devenv {
         );
 
         async move {
-            let gc_root = self.devenv_dot_gc.join(format!("container-{name}-run"));
+            let sanitized_name = sanitize_container_name(name);
+            let gc_root = self
+                .devenv_dot_gc
+                .join(format!("container-{sanitized_name}-run"));
             let paths = self
                 .nix
                 .build(
@@ -1352,6 +1359,12 @@ struct DevenvPackageResult {
     version: String,
     #[table(title = "Description")]
     description: String,
+}
+
+fn sanitize_container_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect::<String>()
 }
 
 fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
