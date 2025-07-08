@@ -123,6 +123,8 @@ impl Nix {
     /// You should prefer protecting build outputs with options like `--out-link` to avoid race conditions.
     /// A untimely GC run -- the usual culprit is auto-gc with min-free -- could delete the store
     /// path you're trying to protect.
+    ///
+    /// The `build` command supports an optional `gc_root` argument.
     pub async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
         self.run_nix(
             "nix-store",

@@ -439,11 +439,11 @@ impl Devenv {
 
             let gc_root = self
                 .devenv_dot_gc
-                .join(format!("container-{}-derivation", name));
+                .join(format!("container-{name}-derivation"));
             let paths = self
                 .nix
                 .build(
-                    &[&format!("devenv.containers.{}.derivation", name)],
+                    &[&format!("devenv.containers.{name}.derivation")],
                     None,
                     Some(&gc_root),
                 )
@@ -471,11 +471,11 @@ impl Devenv {
         );
 
         async move {
-            let gc_root = self.devenv_dot_gc.join(format!("container-{}-copy", name));
+            let gc_root = self.devenv_dot_gc.join(format!("container-{name}-copy"));
             let paths = self
                 .nix
                 .build(
-                    &[&format!("devenv.containers.{}.copyScript", name)],
+                    &[&format!("devenv.containers.{name}.copyScript")],
                     None,
                     Some(&gc_root),
                 )
@@ -527,11 +527,11 @@ impl Devenv {
         );
 
         async move {
-            let gc_root = self.devenv_dot_gc.join(format!("container-{}-run", name));
+            let gc_root = self.devenv_dot_gc.join(format!("container-{name}-run"));
             let paths = self
                 .nix
                 .build(
-                    &[&format!("devenv.containers.{}.dockerRun", name)],
+                    &[&format!("devenv.containers.{name}.dockerRun")],
                     None,
                     Some(&gc_root),
                 )
