@@ -51,6 +51,8 @@ shell-escape.workspace = true
 rmcp.workspace = true
 rmcp-macros.workspace = true
 async-trait.workspace = true
+secretspec = { path = "/home/domen/dev/secretspec" }
+secretspec-types = { path = "/home/domen/dev/secretspec/secretspec-types" }
 
 # Optional snix dependencies
 snix-eval = { git = "https://github.com/cachix/snix", optional = true }

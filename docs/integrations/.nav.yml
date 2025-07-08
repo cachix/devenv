@@ -1,5 +1,6 @@
 nav:
    - .env: dotenv.md
+   - secretspec: secretspec.md
    - Android: android.md
    - Wordpress: wordpress.md
    - GitHub Actions: github-actions.md

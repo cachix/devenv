@@ -8,6 +8,7 @@ use include_dir::{include_dir, Dir};
 use miette::{bail, miette, Context, IntoDiagnostic, Result};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
+use serde_json;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, HashMap};
@@ -1125,6 +1126,91 @@ impl Devenv {
             .map_err(|e| {
                 miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
             })?;
+
+        // Check for secretspec.toml and load secrets
+        let secretspec_path = self.devenv_root.join("secretspec.toml");
+        let secretspec_config_exists = config.secretspec.is_some();
+        let secretspec_enabled = config
+            .secretspec
+            .as_ref()
+            .map(|c| c.enable)
+            .unwrap_or(false); // Default to false if secretspec config is not present
+
+        if secretspec_path.exists() {
+            // Log warning when secretspec.toml exists but is not configured
+            if !secretspec_enabled && !secretspec_config_exists {
+                info!(
+                    "{}",
+                    indoc::formatdoc! {"
+                    Found secretspec.toml but secretspec integration is not enabled.
+                    
+                    To enable, add to devenv.yaml:
+                      secretspec:
+                        enable: true
+                    
+                    To disable this message:
+                      secretspec:
+                        enable: false
+                    
+                    Learn more: https://devenv.sh/integrations/secretspec/
+                "}
+                );
+            }
+
+            if !secretspec_enabled {
+                // Set empty environment variable when not enabled (covers both unconfigured and explicitly disabled cases)
+                std::env::set_var("SECRETSPEC_SECRETS", "");
+            } else {
+                // Get profile and provider from devenv.yaml config
+                let (profile, provider) = if let Some(ref secretspec_config) = config.secretspec {
+                    (
+                        secretspec_config.profile.clone(),
+                        secretspec_config.provider.clone(),
+                    )
+                } else {
+                    (None, None)
+                };
+
+                // Load and validate secrets using SecretSpec API
+                let mut spec_builder = secretspec::SecretSpec::builder();
+
+                if let Some(provider_str) = provider.clone() {
+                    spec_builder = spec_builder.default_provider(provider_str);
+                }
+
+                if let Some(profile_str) = profile.clone() {
+                    spec_builder = spec_builder.default_profile(profile_str);
+                }
+
+                let spec = spec_builder
+                    .load()
+                    .wrap_err("Failed to load secretspec configuration")?;
+
+                match spec.validate(provider, profile) {
+                    Ok(secretspec_secrets) => {
+                        if !secretspec_secrets.is_valid() {
+                            bail!(
+                                "Required secrets are missing: {}",
+                                secretspec_secrets.missing_required.join(", ")
+                            );
+                        }
+
+                        // Serialize the ValidationResult directly
+                        let secrets_json = serde_json::to_string(&secretspec_secrets)
+                            .wrap_err("Failed to serialize secretspec secrets")?;
+
+                        // Set environment variable for Nix to read
+                        std::env::set_var("SECRETSPEC_SECRETS", secrets_json);
+                    }
+                    Err(e) => {
+                        bail!("Failed to validate secrets from secretspec: {}", e);
+                    }
+                }
+            }
+        } else {
+            // Set empty environment variable when secretspec.toml doesn't exist
+            std::env::set_var("SECRETSPEC_SECRETS", "");
+        }
 
         // Create cli-options.nix if there are CLI options
         if !self.global_options.option.is_empty() {

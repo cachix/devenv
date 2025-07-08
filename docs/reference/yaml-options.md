@@ -26,6 +26,14 @@
 | nixpkgs.per-platform.&lt;system&gt;.cudaCapabilities          | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
 | nixpkgs.per-platform.&lt;system&gt;.cudaSupport               | (per-platform) Enable CUDA support for nixpkgs. Defaults to `false`.          |
 | nixpkgs.per-platform.&lt;system&gt;.permittedInsecurePackages | (per-platform) Select CUDA capabilities for nixpkgs. Defaults to `[]`         |
+|                                                               |                                                                               |
+| secretspec.enable                                             | Enable [secretspec integration](../integrations/secretspec.md). Defaults to `false`.                           |
+| secretspec.profile                                            | Secretspec profile name to use.                                               |
+| secretspec.provider                                           | Secretspec provider to use.                                                   |
+
+!!! note "Added in 1.8"
+
+    - `secretspec`
 
 !!! note "Added in 1.7"
 
