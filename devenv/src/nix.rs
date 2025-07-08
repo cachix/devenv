@@ -153,6 +153,7 @@ impl Nix {
         &self,
         attributes: &[&str],
         options: Option<nix_backend::Options>,
+        gc_root: Option<&Path>,
     ) -> Result<Vec<PathBuf>> {
         if attributes.is_empty() {
             return Ok(Vec::new());
@@ -164,12 +165,22 @@ impl Nix {
         });
 
         // TODO: use eval underneath
-        let mut args: Vec<String> = vec![
-            "build".to_string(),
-            "--no-link".to_string(),
-            "--print-out-paths".to_string(),
-            "-L".to_string(),
-        ];
+        let mut args: Vec<String> = vec!["build".to_string()];
+
+        // Add GC root or --no-link
+        match gc_root {
+            Some(root) => {
+                args.push("--out-link".to_string());
+                args.push(root.to_string_lossy().to_string());
+            }
+            None => {
+                args.push("--no-link".to_string());
+            }
+        }
+
+        args.push("--print-out-paths".to_string());
+        args.push("-L".to_string());
+
         args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
         let output = self
@@ -907,8 +918,9 @@ impl NixBackend for Nix {
         &self,
         attributes: &[&str],
         options: Option<nix_backend::Options>,
+        gc_root: Option<&Path>,
     ) -> Result<Vec<PathBuf>> {
-        self.build(attributes, options).await
+        self.build(attributes, options, gc_root).await
     }
 
     async fn eval(&self, attributes: &[&str]) -> Result<String> {

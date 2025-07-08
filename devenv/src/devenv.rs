@@ -440,33 +440,17 @@ impl Devenv {
             let gc_root = self
                 .devenv_dot_gc
                 .join(format!("container-{}-derivation", name));
-            let options = nix_backend::Options {
-                cache_output: true,
-                ..Default::default()
-            };
-            let output = self
+            let paths = self
                 .nix
-                .run_nix_with_substituters(
-                    "nix",
-                    &[
-                        "build",
-                        "--out-link",
-                        &gc_root.to_string_lossy(),
-                        "--print-out-paths",
-                        "-L",
-                        &format!(".#devenv.containers.{}.derivation", name),
-                    ],
-                    &options,
+                .build(
+                    &[&format!("devenv.containers.{}.derivation", name)],
+                    None,
+                    Some(&gc_root),
                 )
                 .await?;
-            let paths = String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>();
-            let container_store_path = &paths[0];
+            let container_store_path = &paths[0].to_string_lossy();
             println!("{}", container_store_path);
-            Ok(container_store_path.clone())
+            Ok(container_store_path.to_string())
         }
         .instrument(span)
         .await
@@ -488,30 +472,14 @@ impl Devenv {
 
         async move {
             let gc_root = self.devenv_dot_gc.join(format!("container-{}-copy", name));
-            let options = nix_backend::Options {
-                cache_output: true,
-                ..Default::default()
-            };
-            let output = self
+            let paths = self
                 .nix
-                .run_nix_with_substituters(
-                    "nix",
-                    &[
-                        "build",
-                        "--out-link",
-                        &gc_root.to_string_lossy(),
-                        "--print-out-paths",
-                        "-L",
-                        &format!(".#devenv.containers.{}.copyScript", name),
-                    ],
-                    &options,
+                .build(
+                    &[&format!("devenv.containers.{}.copyScript", name)],
+                    None,
+                    Some(&gc_root),
                 )
                 .await?;
-            let paths = String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| PathBuf::from(s.to_string()))
-                .collect::<Vec<_>>();
             let copy_script = &paths[0];
             let copy_script_string = &copy_script.to_string_lossy();
 
@@ -560,30 +528,14 @@ impl Devenv {
 
         async move {
             let gc_root = self.devenv_dot_gc.join(format!("container-{}-run", name));
-            let options = nix_backend::Options {
-                cache_output: true,
-                ..Default::default()
-            };
-            let output = self
+            let paths = self
                 .nix
-                .run_nix_with_substituters(
-                    "nix",
-                    &[
-                        "build",
-                        "--out-link",
-                        &gc_root.to_string_lossy(),
-                        "--print-out-paths",
-                        "-L",
-                        &format!(".#devenv.containers.{}.dockerRun", name),
-                    ],
-                    &options,
+                .build(
+                    &[&format!("devenv.containers.{}.dockerRun", name)],
+                    None,
+                    Some(&gc_root),
                 )
                 .await?;
-            let paths = String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| PathBuf::from(s.to_string()))
-                .collect::<Vec<_>>();
 
             let status = process::Command::new(&paths[0])
                 .status()
@@ -683,7 +635,7 @@ impl Devenv {
         };
         let options = self
             .nix
-            .build(&["optionsJSON"], Some(build_options))
+            .build(&["optionsJSON"], Some(build_options), None)
             .await?;
         let options_path = options[0]
             .join("share")
@@ -765,31 +717,10 @@ impl Devenv {
             // TODO: No newline
             let span = info_span!("tasks_run", devenv.user_message = "Evaluating tasks");
             let gc_root = self.devenv_dot_gc.join("task-config");
-            let options = nix_backend::Options {
-                cache_output: true,
-                ..Default::default()
-            };
-            let output = self
-                .nix
-                .run_nix_with_substituters(
-                    "nix",
-                    &[
-                        "build",
-                        "--out-link",
-                        &gc_root.to_string_lossy(),
-                        "--print-out-paths",
-                        "-L",
-                        ".#devenv.task.config",
-                    ],
-                    &options,
-                )
+            self.nix
+                .build(&["devenv.task.config"], None, Some(&gc_root))
                 .instrument(span)
-                .await?;
-            String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| PathBuf::from(s.to_string()))
-                .collect::<Vec<_>>()
+                .await?
         };
         // parse tasks config
         let tasks_json = fs::read_to_string(&tasks_json_file[0])
@@ -914,32 +845,10 @@ impl Devenv {
         let test_script = {
             let span = info_span!("test", devenv.user_message = "Building tests");
             let gc_root = self.devenv_dot_gc.join("test");
-            let options = nix_backend::Options {
-                cache_output: true,
-                ..Default::default()
-            };
-            let output = self
-                .nix
-                .run_nix_with_substituters(
-                    "nix",
-                    &[
-                        "build",
-                        "--out-link",
-                        &gc_root.to_string_lossy(),
-                        "--print-out-paths",
-                        "-L",
-                        ".#devenv.test",
-                    ],
-                    &options,
-                )
+            self.nix
+                .build(&["devenv.test"], None, Some(&gc_root))
                 .instrument(span)
-                .await?;
-            let paths = String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| PathBuf::from(s.to_string()))
-                .collect::<Vec<_>>();
-            paths
+                .await?
         };
         let test_script_path = &test_script[0];
 
@@ -1034,6 +943,7 @@ impl Devenv {
                 .build(
                     &attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
                     None,
+                    None,
                 )
                 .await?;
             for path in paths {
@@ -1062,31 +972,11 @@ impl Devenv {
         );
         let proc_script_string = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
-            let options = nix_backend::Options {
-                cache_output: true,
-                ..Default::default()
-            };
-            let output = self
+            let paths = self
                 .nix
-                .run_nix_with_substituters(
-                    "nix",
-                    &[
-                        "build",
-                        "--out-link",
-                        &gc_root.to_string_lossy(),
-                        "--print-out-paths",
-                        "-L",
-                        ".#procfileScript",
-                    ],
-                    &options,
-                )
+                .build(&["procfileScript"], None, Some(&gc_root))
                 .await?;
-            let paths = String::from_utf8_lossy(&output.stdout)
-                .to_string()
-                .split_whitespace()
-                .map(|s| s.to_string())
-                .collect::<Vec<_>>();
-            let proc_script_string = paths[0].clone();
+            let proc_script_string = paths[0].to_string_lossy().to_string();
             Ok::<String, miette::Report>(proc_script_string)
         }
         .instrument(span)

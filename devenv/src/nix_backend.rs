@@ -80,7 +80,12 @@ pub trait NixBackend: Send + Sync {
     async fn repl(&self) -> Result<()>;
 
     /// Build the specified attributes
-    async fn build(&self, attributes: &[&str], options: Option<Options>) -> Result<Vec<PathBuf>>;
+    async fn build(
+        &self,
+        attributes: &[&str],
+        options: Option<Options>,
+        gc_root: Option<&Path>,
+    ) -> Result<Vec<PathBuf>>;
 
     /// Evaluate a Nix expression
     async fn eval(&self, attributes: &[&str]) -> Result<String>;

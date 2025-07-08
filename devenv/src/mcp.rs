@@ -150,7 +150,7 @@ impl DevenvMcpServer {
 
         let options_paths = devenv
             .nix
-            .build(&["optionsJSON"], Some(build_options))
+            .build(&["optionsJSON"], Some(build_options), None)
             .await?;
 
         // Read the options.json file from the build result
