@@ -10,12 +10,7 @@
       "type": "boolean"
     },
     "backend": {
-      "default": "nix",
-      "allOf": [
-        {
-          "$ref": "#/definitions/NixBackendType"
-        }
-      ]
+      "$ref": "#/definitions/NixBackendType"
     },
     "clean": {
       "anyOf": [
