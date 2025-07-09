@@ -1,6 +1,7 @@
 use clap::Parser;
 use devenv::{log, Devenv, DevenvOptions};
 use miette::{IntoDiagnostic, Result, WrapErr};
+use serde::{Deserialize, Serialize};
 use std::{
     env, fs,
     path::PathBuf,
@@ -35,6 +36,48 @@ struct TestResult {
     passed: bool,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone)]
+struct TestConfig {
+    /// Whether to initialize a git repository for the test
+    #[serde(default = "default_git_init")]
+    git_init: bool,
+}
+
+fn default_git_init() -> bool {
+    true
+}
+
+impl Default for TestConfig {
+    fn default() -> Self {
+        Self {
+            git_init: default_git_init(),
+        }
+    }
+}
+
+impl TestConfig {
+    fn load_from_path(path: &std::path::Path) -> Result<Self> {
+        // Try different config file extensions
+        let config_paths = [
+            path.join(".test-config.yml"),
+            path.join(".test-config.yaml"),
+        ];
+
+        for config_path in &config_paths {
+            if config_path.exists() {
+                let content = fs::read_to_string(config_path)
+                    .into_diagnostic()
+                    .wrap_err("Failed to read .test-config file")?;
+                return serde_yaml::from_str(&content)
+                    .into_diagnostic()
+                    .wrap_err("Failed to parse .test-config YAML");
+            }
+        }
+
+        Ok(Self::default())
+    }
+}
+
 async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
     eprintln!("Running Tests");
 
@@ -66,6 +109,9 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                 eprintln!("Skipping {}", dir_name);
                 continue;
             }
+
+            // Load test configuration
+            let test_config = TestConfig::load_from_path(path)?;
 
             let mut config = devenv::config::Config::load_from(path)?;
             for input in args.override_input.chunks_exact(2) {
@@ -105,15 +151,17 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
 
             env::set_current_dir(&devenv_root).into_diagnostic()?;
 
-            // Initialize a git repository in the temporary directory.
+            // Initialize a git repository in the temporary directory if configured to do so.
             // This helps Nix Flakes and git-hooks find the root of the project.
-            let git_init_status = Command::new("git")
-                .arg("init")
-                .arg("--initial-branch=main")
-                .status()
-                .into_diagnostic()?;
-            if !git_init_status.success() {
-                return Err(miette::miette!("Failed to initialize the git repository"));
+            if test_config.git_init {
+                let git_init_status = Command::new("git")
+                    .arg("init")
+                    .arg("--initial-branch=main")
+                    .status()
+                    .into_diagnostic()?;
+                if !git_init_status.success() {
+                    return Err(miette::miette!("Failed to initialize the git repository"));
+                }
             }
 
             let options = DevenvOptions {
