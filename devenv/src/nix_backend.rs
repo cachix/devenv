@@ -105,7 +105,7 @@ pub trait NixBackend: Send + Sync {
     async fn metadata(&self) -> Result<String>;
 
     /// Search for packages
-    async fn search(&self, name: &str) -> Result<Output>;
+    async fn search(&self, name: &str, options: Option<Options>) -> Result<Output>;
 
     /// Garbage collect the specified paths
     async fn gc(&self, paths: Vec<PathBuf>) -> Result<()>;
