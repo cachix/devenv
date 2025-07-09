@@ -12,6 +12,13 @@ pub use command::{
 /// These tests require the `integration-tests` feature flag and the `DEVENV_NIX`
 /// environment variable pointing to a Nix installation directory.
 ///
+/// These tests do *not* cover flake-related edge-cases.
+/// For example, this will not catch path resolution issues due to evaluation
+/// restrictions/deficiencies in flakes.
+///
+/// Such behaviours are best tested by devenv-run-tests.
+/// See tests/eval-cache-*
+///
 /// To run these tests:
 /// ```bash
 /// DEVENV_NIX=/path/to/nix cargo test --features integration-tests

@@ -10,3 +10,5 @@ devenv.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
 miette.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true

@@ -1103,6 +1103,8 @@ dependencies = [
  "clap",
  "devenv",
  "miette",
+ "serde",
+ "serde_yaml",
  "tempfile",
  "tokio",
 ]
