@@ -116,6 +116,15 @@ impl Nix {
         Ok(env)
     }
 
+    /// Add a GC root for the given path.
+    ///
+    /// SAFETY
+    ///
+    /// You should prefer protecting build outputs with options like `--out-link` to avoid race conditions.
+    /// A untimely GC run -- the usual culprit is auto-gc with min-free -- could delete the store
+    /// path you're trying to protect.
+    ///
+    /// The `build` command supports an optional `gc_root` argument.
     pub async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
         self.run_nix(
             "nix-store",
@@ -146,6 +155,7 @@ impl Nix {
         &self,
         attributes: &[&str],
         options: Option<nix_backend::Options>,
+        gc_root: Option<&Path>,
     ) -> Result<Vec<PathBuf>> {
         if attributes.is_empty() {
             return Ok(Vec::new());
@@ -157,12 +167,22 @@ impl Nix {
         });
 
         // TODO: use eval underneath
-        let mut args: Vec<String> = vec![
-            "build".to_string(),
-            "--no-link".to_string(),
-            "--print-out-paths".to_string(),
-            "-L".to_string(),
-        ];
+        let mut args: Vec<String> = vec!["build".to_string()];
+
+        // Add GC root or --no-link
+        match gc_root {
+            Some(root) => {
+                args.push("--out-link".to_string());
+                args.push(root.to_string_lossy().to_string());
+            }
+            None => {
+                args.push("--no-link".to_string());
+            }
+        }
+
+        args.push("--print-out-paths".to_string());
+        args.push("-L".to_string());
+
         args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
         let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
         let output = self
@@ -900,8 +920,9 @@ impl NixBackend for Nix {
         &self,
         attributes: &[&str],
         options: Option<nix_backend::Options>,
+        gc_root: Option<&Path>,
     ) -> Result<Vec<PathBuf>> {
-        self.build(attributes, options).await
+        self.build(attributes, options, gc_root).await
     }
 
     async fn eval(&self, attributes: &[&str]) -> Result<String> {
@@ -935,6 +956,15 @@ impl NixBackend for Nix {
         options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
         self.run_nix(command, args, options).await
+    }
+
+    async fn run_nix_with_substituters(
+        &self,
+        command: &str,
+        args: &[&str],
+        options: &nix_backend::Options,
+    ) -> Result<devenv_eval_cache::Output> {
+        self.run_nix_with_substituters(command, args, options).await
     }
 }
 

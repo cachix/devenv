@@ -74,13 +74,26 @@ pub trait NixBackend: Send + Sync {
     async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<Output>;
 
     /// Add a garbage collection root
+    ///
+    /// SAFETY (cnix)
+    ///
+    /// You should prefer protecting build outputs with options like `--out-link` to avoid race conditions.
+    /// A untimely GC run -- the usual culprit is auto-gc with min-free -- could delete the store
+    /// path you're trying to protect.
+    ///
+    /// The `build` command supports an optional `gc_root` argument.
     async fn add_gc(&self, name: &str, path: &Path) -> Result<()>;
 
     /// Open a Nix REPL
     async fn repl(&self) -> Result<()>;
 
     /// Build the specified attributes
-    async fn build(&self, attributes: &[&str], options: Option<Options>) -> Result<Vec<PathBuf>>;
+    async fn build(
+        &self,
+        attributes: &[&str],
+        options: Option<Options>,
+        gc_root: Option<&Path>,
+    ) -> Result<Vec<PathBuf>>;
 
     /// Evaluate a Nix expression
     async fn eval(&self, attributes: &[&str]) -> Result<String>;
@@ -102,4 +115,12 @@ pub trait NixBackend: Send + Sync {
 
     /// Run a nix command
     async fn run_nix(&self, command: &str, args: &[&str], options: &Options) -> Result<Output>;
+
+    /// Run a nix command with substituters
+    async fn run_nix_with_substituters(
+        &self,
+        command: &str,
+        args: &[&str],
+        options: &Options,
+    ) -> Result<Output>;
 }

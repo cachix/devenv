@@ -437,14 +437,20 @@ impl Devenv {
         async move {
             self.assemble(false).await?;
 
-            let container_store_path = self
+            let sanitized_name = sanitize_container_name(name);
+            let gc_root = self
+                .devenv_dot_gc
+                .join(format!("container-{sanitized_name}-derivation"));
+            let paths = self
                 .nix
-                .build(&[&format!("devenv.containers.{name}.derivation")], None)
+                .build(
+                    &[&format!("devenv.containers.{name}.derivation")],
+                    None,
+                    Some(&gc_root),
+                )
                 .await?;
-            let container_store_path = container_store_path[0]
-                .to_str()
-                .expect("Failed to get container store path");
-            println!("{}", &container_store_path);
+            let container_store_path = &paths[0].to_string_lossy();
+            println!("{}", container_store_path);
             Ok(container_store_path.to_string())
         }
         .instrument(span)
@@ -466,11 +472,19 @@ impl Devenv {
         );
 
         async move {
-            let copy_script = self
+            let sanitized_name = sanitize_container_name(name);
+            let gc_root = self
+                .devenv_dot_gc
+                .join(format!("container-{sanitized_name}-copy"));
+            let paths = self
                 .nix
-                .build(&[&format!("devenv.containers.{name}.copyScript")], None)
+                .build(
+                    &[&format!("devenv.containers.{name}.copyScript")],
+                    None,
+                    Some(&gc_root),
+                )
                 .await?;
-            let copy_script = &copy_script[0];
+            let copy_script = &paths[0];
             let copy_script_string = &copy_script.to_string_lossy();
 
             let base_args = [spec, registry.unwrap_or("false").to_string()];
@@ -517,12 +531,20 @@ impl Devenv {
         );
 
         async move {
-            let run_script = self
+            let sanitized_name = sanitize_container_name(name);
+            let gc_root = self
+                .devenv_dot_gc
+                .join(format!("container-{sanitized_name}-run"));
+            let paths = self
                 .nix
-                .build(&[&format!("devenv.containers.{name}.dockerRun")], None)
+                .build(
+                    &[&format!("devenv.containers.{name}.dockerRun")],
+                    None,
+                    Some(&gc_root),
+                )
                 .await?;
 
-            let status = process::Command::new(&run_script[0])
+            let status = process::Command::new(&paths[0])
                 .status()
                 .await
                 .expect("Failed to run container script");
@@ -620,7 +642,7 @@ impl Devenv {
         };
         let options = self
             .nix
-            .build(&["optionsJSON"], Some(build_options))
+            .build(&["optionsJSON"], Some(build_options), None)
             .await?;
         let options_path = options[0]
             .join("share")
@@ -701,8 +723,9 @@ impl Devenv {
         let tasks_json_file = {
             // TODO: No newline
             let span = info_span!("tasks_run", devenv.user_message = "Evaluating tasks");
+            let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
-                .build(&["devenv.task.config"], None)
+                .build(&["devenv.task.config"], None, Some(&gc_root))
                 .instrument(span)
                 .await?
         };
@@ -828,15 +851,13 @@ impl Devenv {
         // collect tests
         let test_script = {
             let span = info_span!("test", devenv.user_message = "Building tests");
+            let gc_root = self.devenv_dot_gc.join("test");
             self.nix
-                .build(&["devenv.test"], None)
+                .build(&["devenv.test"], None, Some(&gc_root))
                 .instrument(span)
                 .await?
         };
         let test_script_path = &test_script[0];
-
-        // Add GC root for test script to prevent garbage collection
-        self.nix.add_gc("test", test_script_path).await?;
 
         let test_script = test_script_path.to_string_lossy().to_string();
 
@@ -929,6 +950,7 @@ impl Devenv {
                 .build(
                     &attributes.iter().map(AsRef::as_ref).collect::<Vec<&str>>(),
                     None,
+                    None,
                 )
                 .await?;
             for path in paths {
@@ -956,12 +978,12 @@ impl Devenv {
             devenv.user_message = "Building processes"
         );
         let proc_script_string = async {
-            let proc_script = self.nix.build(&["procfileScript"], None).await?;
-            let proc_script_string = proc_script[0]
-                .to_str()
-                .expect("Failed to get proc script path")
-                .to_string();
-            self.nix.add_gc("procfilescript", &proc_script[0]).await?;
+            let gc_root = self.devenv_dot_gc.join("procfilescript");
+            let paths = self
+                .nix
+                .build(&["procfileScript"], None, Some(&gc_root))
+                .await?;
+            let proc_script_string = paths[0].to_string_lossy().to_string();
             Ok::<String, miette::Report>(proc_script_string)
         }
         .instrument(span)
@@ -1337,6 +1359,12 @@ struct DevenvPackageResult {
     version: String,
     #[table(title = "Description")]
     description: String,
+}
+
+fn sanitize_container_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect::<String>()
 }
 
 fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {

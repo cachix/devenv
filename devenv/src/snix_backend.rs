@@ -139,7 +139,12 @@ impl NixBackend for SnixBackend {
         bail!("REPL is not yet implemented for Snix backend")
     }
 
-    async fn build(&self, _attributes: &[&str], _options: Option<Options>) -> Result<Vec<PathBuf>> {
+    async fn build(
+        &self,
+        _attributes: &[&str],
+        _options: Option<Options>,
+        _gc_root: Option<&Path>,
+    ) -> Result<Vec<PathBuf>> {
         // TODO: This requires implementing the build functionality
         // using snix_glue::snix_build
         bail!("Build functionality is not yet implemented for Snix backend")
@@ -185,6 +190,16 @@ impl NixBackend for SnixBackend {
     }
 
     async fn run_nix(&self, _command: &str, _args: &[&str], _options: &Options) -> Result<Output> {
+        // Snix doesn't use external nix commands
+        bail!("Snix backend doesn't use external nix commands")
+    }
+
+    async fn run_nix_with_substituters(
+        &self,
+        _command: &str,
+        _args: &[&str],
+        _options: &Options,
+    ) -> Result<Output> {
         // Snix doesn't use external nix commands
         bail!("Snix backend doesn't use external nix commands")
     }
