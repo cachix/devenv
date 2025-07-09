@@ -108,6 +108,10 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+fn is_default<T: Default + PartialEq>(t: &T) -> bool {
+    t == &T::default()
+}
+
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Clean {
     pub enabled: bool,
@@ -152,7 +156,7 @@ pub struct Config {
     pub clean: Option<Clean>,
     #[serde(skip_serializing_if = "is_false", default = "false_default")]
     pub impure: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_default")]
     pub backend: NixBackendType,
 }
 
@@ -341,6 +345,17 @@ mod tests {
         assert_eq!(
             config.inputs["non-flake"].url,
             Some("path:some-other-path".to_string())
+        );
+    }
+
+    #[test]
+    fn default_config_serializes_to_empty_yaml() {
+        let config = Config::default();
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        assert_eq!(
+            yaml.trim(),
+            "{}",
+            "Default config should serialize to empty YAML"
         );
     }
 }
