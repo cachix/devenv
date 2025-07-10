@@ -41,9 +41,16 @@ struct TestConfig {
     /// Whether to initialize a git repository for the test
     #[serde(default = "default_git_init")]
     git_init: bool,
+    /// Whether to run .test.sh inside the shell automatically (default: true)
+    #[serde(default = "default_use_shell")]
+    use_shell: bool,
 }
 
 fn default_git_init() -> bool {
+    true
+}
+
+fn default_use_shell() -> bool {
     true
 }
 
@@ -51,6 +58,7 @@ impl Default for TestConfig {
     fn default() -> Self {
         Self {
             git_init: default_git_init(),
+            use_shell: default_use_shell(),
         }
     }
 }
@@ -210,7 +218,30 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
             }
 
             // TODO: wait for processes to shut down before exiting
-            let status = devenv.test().await;
+            let status = if test_config.use_shell {
+                devenv.test().await
+            } else {
+                // Run .test.sh directly - it must exist when run_test_sh is false
+                if PathBuf::from(".test.sh").exists() {
+                    eprintln!("    Running .test.sh directly");
+                    let output = Command::new("bash")
+                        .arg(".test.sh")
+                        .status()
+                        .into_diagnostic()?;
+                    if output.success() {
+                        Ok(())
+                    } else {
+                        Err(miette::miette!(
+                            "Test script failed. Status code: {}",
+                            output.code().unwrap_or(1)
+                        ))
+                    }
+                } else {
+                    Err(miette::miette!(
+                        ".test.sh file is required when use_shell is disabled"
+                    ))
+                }
+            };
             let result = TestResult {
                 name: dir_name.to_string(),
                 passed: status.is_ok(),
