@@ -14,6 +14,9 @@ let
     python = cfg.package;
     requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
     makeWrapperArgs = [
+      "--set"
+      "DEVENV_LD_LIBRARY_PATH_PREFIX"
+      libraries
       "--prefix"
       "LD_LIBRARY_PATH"
       ":"
@@ -38,6 +41,20 @@ let
     attribute = "languages.python.version";
     follows = [ "nixpkgs" ];
   };
+
+  pth_file =
+    let
+      exec_content = ''
+        ld_library_path = os.environ.get("LD_LIBRARY_PATH")
+        ld_library_path_prefix = os.environ.get("DEVENV_LD_LIBRARY_PATH_PREFIX")
+        if ld_library_path and ld_library_path_prefix:
+            if ld_library_path == ld_library_path_prefix:
+                del os.environ["LD_LIBRARY_PATH"]
+            else:
+                os.environ["LD_LIBRARY_PATH"] = ld_library_path.removeprefix(ld_library_path_prefix + ":")
+      '';
+    in
+    pkgs.writeText "devenv.pth" ''import os; exec("""${builtins.replaceStrings [ "\n" ] [ "\\n" ] exec_content}""")'';
 
   initVenvScript =
     ''
@@ -73,6 +90,9 @@ let
           ''
         }
         echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+        ${lib.optionalString pkgs.stdenv.isLinux ''
+          ln -snf ${pth_file} "$VENV_PATH/${package.sitePackages}/devenv.pth"
+        ''}
       fi
 
       source "$VENV_PATH"/bin/activate
@@ -160,6 +180,9 @@ let
         if "''${UV_SYNC_COMMAND[@]}"
         then
           echo "$ACTUAL_UV_CHECKSUM" > "$UV_CHECKSUM_FILE"
+          ${lib.optionalString pkgs.stdenv.isLinux ''
+            ln -snf ${pth_file} "$VENV_PATH/${package.sitePackages}/devenv.pth"
+          ''}
         else
           echo "uv sync failed. Run 'uv sync' manually." >&2
           exit 1
@@ -197,6 +220,10 @@ let
 
       # Make sure poetry's venv uses the configured Python executable.
       ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
+
+      ${lib.optionalString pkgs.stdenv.isLinux ''
+        ln -snf ${pth_file} ".venv/${package.sitePackages}/devenv.pth"
+      ''}
     }
 
     function _devenv_poetry_install
