@@ -531,7 +531,7 @@ where
                                 let prefix = if has_error {
                                     style("✖").red()
                                 } else {
-                                    style("✔").green()
+                                    style("✓").green()
                                 };
                                 return writeln!(writer, "{} {} in {}", prefix, msg, time_total);
                             }

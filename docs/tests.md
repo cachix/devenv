@@ -22,13 +22,13 @@ A simple test would look like:
 
 ```shell-session
 $ devenv test
-✔ Building tests in 2.5s.
+✓ Building tests in 2.5s.
 • Running tests ...
 Setting up shell environment...
 Running test...
 ncdu 2.2
-✔ Running tests in 4.7s.
-✔ Tests passed. in 0.0s.
+✓ Running tests in 4.7s.
+✓ Tests passed. in 0.0s.
 ```
 
 By default, the `enterTest` detects if `.test.sh` file exists and runs it.
@@ -61,19 +61,19 @@ they will be started and stopped for you.
 
 ```shell-session
 $ devenv test
-✔ Building tests in 2.5s.
-✔ Building processes in 15.7s.
+✓ Building tests in 2.5s.
+✓ Building processes in 15.7s.
 • Starting processes ...• PID is 113105
 • See logs:  $ tail -f /run/user/1000/nix-shell.upTad4/.tmpv25BxA/processes.log
 • Stop:      $ devenv processes stop
-✔ Starting processes in 0.0s.
+✓ Starting processes in 0.0s.
 • Running tests ...
 Setting up shell environment...
 Running test...
 ncdu 2.2
-✔ Running tests in 4.7s.
+✓ Running tests in 4.7s.
 • Stopping process with PID 113105
-✔ Tests passed. in 0.0s.
+✓ Tests passed. in 0.0s.
 ```
 
 ## Changing environment if testing
