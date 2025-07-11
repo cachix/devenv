@@ -3015,6 +3015,18 @@ format typst
 
 Beautiful and reliable typst code formatter
 
+**` uv-check `**
+
+Check if uv’s lockfile is up-to-date.
+
+**` uv-export `**
+
+Export uv’s lockfile.
+
+**` uv-lock `**
+
+Update uv’s lockfile.
+
 **` vale `**
 
 A markup-aware linter for prose built with speed and extensibility in mind.
@@ -11005,6 +11017,133 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.uv-export
+
+
+
+uv export hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.uv-export.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.uv-export.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.uv-export.settings.flags
+
+
+
+Flags passed to ` uv export `
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.uv-export.settings.format
+
+
+
+Output format of the project’s lockfile.
+
+
+
+*Type:*
+one of “requirements.txt”, “pylock.toml”
+
+
+
+*Default:*
+` "pylock.toml" `
+
+
+
+*Example:*
+` "requirements.txt" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.uv-export.settings.locked
+
+
+
+Assert that the ` uv.lock ` will remain unchanged.
+Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated, uv will exit with an error.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
