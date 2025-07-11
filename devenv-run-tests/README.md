@@ -82,6 +82,10 @@ A YAML configuration file that controls test behavior.
 # Whether to initialize a git repository for the test
 # Default: true
 git_init: false
+
+# Whether to run .test.sh inside the devenv shell
+# Default: true
+use_shell: false
 ```
 
 ## Test Configuration
@@ -104,6 +108,25 @@ This is useful for:
 - Testing flake evaluation without git context
 - Debugging caching issues that only occur in non-git environments
 
+### Shell Execution Behavior
+
+By default, tests run inside the devenv shell environment using `devenv test`. This provides:
+- Access to all environment variables and PATH modifications
+- Helper functions like `wait_for_port` and `wait_for_processes`
+- Automatic `.test.sh` execution if it exists
+
+To run `.test.sh` directly outside the shell environment, create a `.test-config.yml` file:
+
+```yaml
+use_shell: false
+```
+
+When `use_shell: false`:
+- `.test.sh` must exist or the test will fail
+- The script runs directly with bash, outside the devenv shell
+- No helper functions or environment modifications are available
+- Useful for testing scenarios where you need to avoid shell overhead
+
 ## Execution Order
 
 For each test directory, devenv-run-tests:
@@ -114,7 +137,9 @@ For each test directory, devenv-run-tests:
 4. **Initializes git repository** (if `git_init: true` in config)
 5. **Sets up devenv environment**
 6. **Runs `.setup.sh`** (if present) inside the devenv shell
-7. **Runs test**: Either `.test.sh` (if present) or `devenv test` (which executes `enterTest` from `devenv.nix`)
+7. **Runs test**: 
+   - If `use_shell: true` (default): Uses `devenv test` which runs inside the shell and executes `.test.sh` if present, or `enterTest` from `devenv.nix`
+   - If `use_shell: false`: Runs `.test.sh` directly with bash outside the devenv shell
 8. **Reports test results**
 
 ## Examples
@@ -150,6 +175,15 @@ tests/no-git-test/
 ├── devenv.yaml
 ├── .test-config.yml   # git_init: false
 └── .test.sh
+```
+
+### Test with Direct Shell Execution
+```
+tests/direct-test/
+├── devenv.nix
+├── devenv.yaml
+├── .test-config.yml   # use_shell: false
+└── .test.sh           # Required when use_shell: false
 ```
 
 ### Test with Patching
