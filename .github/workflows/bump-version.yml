@@ -2,7 +2,7 @@ name: "Bump Version on Tag"
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v*.*"
   workflow_dispatch:
 
 jobs:
