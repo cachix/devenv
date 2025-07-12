@@ -15418,6 +15418,9 @@ boolean
 
 The rustup toolchain to install.
 
+` nixpkgs ` is a special channel.
+It will use whichever version is currently available in nixpkgs.
+
 
 
 *Type:*
@@ -15479,6 +15482,52 @@ boolean
 
 
 
+## languages.rust.profile
+
+
+
+The rustup toolchain [profile](https://rust-lang.github.io/rustup/concepts/profiles.html) to use.
+
+Only used when languages.rust.channel is NOT set to ` nixpkgs `.
+
+
+
+*Type:*
+one of “default”, “minimal”, “complete”
+
+
+
+*Default:*
+` "default" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
+## languages.rust.rustBin
+
+
+
+Initialized rust-overlay library.
+
+Only available when ` channel ` is not set to ` nixpkgs `.
+
+
+
+*Type:*
+null or anything *(read only)*
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.rustflags
 
 
@@ -15505,7 +15554,7 @@ string
 
 
 List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
-to install. Defaults to only the native target.
+to install. Defaults to the native target.
 
 
 
@@ -15526,122 +15575,16 @@ list of string
 
 
 
-Rust component packages. May optionally define additional components, for example ` miri `.
+The Rust toolchain to use.
+
+When the channel is set to ` nixpkgs `, the toolchain is created by symlinking the individual components from ` languages.rust.components `.
+
+For other channels, the toolchain is created using rust-overlay with the specified version, profile, and components.
 
 
 
 *Type:*
-attribute set of package
-
-
-
-*Default:*
-` nixpkgs `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
-
-
-
-## languages.rust.toolchain.cargo
-
-
-
-cargo package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.cargo `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
-
-
-
-## languages.rust.toolchain.clippy
-
-
-
-clippy package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.clippy `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
-
-
-
-## languages.rust.toolchain.rust-analyzer
-
-
-
-rust-analyzer package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.rust-analyzer `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
-
-
-
-## languages.rust.toolchain.rustc
-
-
-
-rustc package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.rustc `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
-
-
-
-## languages.rust.toolchain.rustfmt
-
-
-
-rustfmt package
-
-
-
-*Type:*
-null or package
-
-
-
-*Default:*
-` pkgs.rustfmt `
+package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
@@ -15652,8 +15595,11 @@ null or package
 
 
 
-Which version of rust to use, this value could be ` latest `,` 1.81.0 `, ` 2021-01-01 `.
-Only works when languages.rust.channel is NOT nixpkgs.
+The version of rust to use.
+
+Examples: ` latest `,` 1.81.0 `, ` 2021-01-01 `.
+
+Only used when languages.rust.channel is NOT set to ` nixpkgs `.
 
 
 

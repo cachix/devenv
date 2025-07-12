@@ -9,35 +9,6 @@ let
     attribute = "languages.rust.input";
     follows = [ "nixpkgs" ];
   };
-
-  # https://github.com/nix-community/fenix/blob/cdfd7bf3e3edaf9e3f6d1e397d3ee601e513613c/lib/combine.nix
-  combine = name: paths:
-    pkgs.symlinkJoin {
-      inherit name paths;
-      postBuild = ''
-        for file in $(find $out/bin -xtype f -maxdepth 1); do
-          install -m755 $(realpath "$file") $out/bin
-
-          if [[ $file =~ /rustfmt$ ]]; then
-            continue
-          fi
-
-          ${lib.optionalString pkgs.stdenv.isLinux ''
-            if isELF "$file"; then
-              patchelf --set-rpath $out/lib "$file" || true
-            fi
-          ''}
-
-          ${lib.optionalString pkgs.stdenv.isDarwin ''
-            install_name_tool -add_rpath $out/lib "$file" || true
-          ''}
-        done
-
-        for file in $(find $out/lib -name "librustc_driver-*"); do
-          install $(realpath "$file") "$file"
-        done
-      '';
-    };
 in
 {
   imports = [
@@ -63,24 +34,40 @@ in
       defaultText = lib.literalExpression ''[ ]'';
       description = ''
         List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
-        to install. Defaults to only the native target. 
+        to install. Defaults to the native target.
       '';
     };
 
     channel = lib.mkOption {
       type = lib.types.enum [ "nixpkgs" "stable" "beta" "nightly" ];
       default = "nixpkgs";
-      defaultText = lib.literalExpression ''"nixpkgs"'';
-      description = "The rustup toolchain to install.";
+      description = ''
+        The rustup toolchain to install.
+
+        `nixpkgs` is a special channel.
+        It will use whichever version is currently available in nixpkgs.
+      '';
     };
 
     version = lib.mkOption {
       type = lib.types.str;
       default = "latest";
-      defaultText = lib.literalExpression ''"latest"'';
       description = ''
-        Which version of rust to use, this value could be `latest`,`1.81.0`, `2021-01-01`.
-        Only works when languages.rust.channel is NOT nixpkgs.
+        The version of rust to use.
+
+        Examples: `latest`,`1.81.0`, `2021-01-01`.
+
+        Only used when languages.rust.channel is NOT set to `nixpkgs`.
+      '';
+    };
+
+    profile = lib.mkOption {
+      type = lib.types.enum [ "default" "minimal" "complete" ];
+      default = "default";
+      description = ''
+        The rustup toolchain [profile](https://rust-lang.github.io/rustup/concepts/profiles.html) to use.
+
+        Only used when languages.rust.channel is NOT set to `nixpkgs`.
       '';
     };
 
@@ -101,25 +88,29 @@ in
       '';
     };
 
-    toolchain = lib.mkOption {
-      type = lib.types.submodule ({
-        freeformType = lib.types.attrsOf lib.types.package;
+    # Read-only components of the toolchain.
+    # toolchainComponents = ...
 
-        options =
-          let
-            documented-components = [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ];
-            mkComponentOption = component: lib.mkOption {
-              type = lib.types.nullOr lib.types.package;
-              default = pkgs.${component};
-              defaultText = lib.literalExpression "pkgs.${component}";
-              description = "${component} package";
-            };
-          in
-          lib.genAttrs documented-components mkComponentOption;
-      });
-      default = { };
-      defaultText = lib.literalExpression "nixpkgs";
-      description = "Rust component packages. May optionally define additional components, for example `miri`.";
+    toolchain = lib.mkOption {
+      type = lib.types.package;
+      description = ''
+        The Rust toolchain to use.
+
+        When the channel is set to `nixpkgs`, the toolchain is created by symlinking the individual components from `languages.rust.components`.
+
+        For other channels, the toolchain is created using rust-overlay with the specified version, profile, and components.
+      '';
+    };
+
+    rustBin = lib.mkOption {
+      type = lib.types.nullOr lib.types.anything;
+      readOnly = true;
+      default = null;
+      description = ''
+        Initialized rust-overlay library.
+
+        Only available when `channel` is not set to `nixpkgs`.
+      '';
     };
   };
 
@@ -179,42 +170,48 @@ in
             optionalEnv = cond: str: if cond then str else null;
           in
           {
-            # RUST_SRC_PATH is necessary when rust-src is not at the same location as
-            # as rustc. This is the case with the rust toolchain from nixpkgs.
-            RUST_SRC_PATH =
-              if cfg.toolchain ? rust-src
-              then "${cfg.toolchain.rust-src}/lib/rustlib/src/rust/library"
-              else pkgs.rustPlatform.rustLibSrc;
             RUSTFLAGS = optionalEnv (moldFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags cfg.rustflags ]));
             RUSTDOCFLAGS = optionalEnv (moldFlags != "") moldFlags;
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
 
-        git-hooks.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
-        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
-        git-hooks.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
+        git-hooks.tools.cargo = mkOverrideTools cfg.toolchain;
+        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchain;
+        git-hooks.tools.clippy = mkOverrideTools cfg.toolchain;
       }
     )
 
     (lib.mkIf (cfg.channel == "nixpkgs") {
-      packages = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
+      languages.rust.toolchain = pkgs.symlinkJoin {
+        name = "nixpkgs-rust-toolchain";
+        paths = builtins.map
+          (c:
+            if c == "rust-src"
+            then pkgs.rustPlatform.rustcSrc
+            else
+              pkgs.${c} or (throw "No rust component named ${c} in pkgs"))
+          cfg.components;
+      };
+      packages = [ cfg.toolchain ];
     })
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        toolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages)."${cfg.channel}"."${cfg.version}";
-        filteredToolchain = (lib.filterAttrs (n: _: builtins.elem n toolchain._manifest.profiles.complete) toolchain);
+        rustBin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+
+        # Get the pre-made toolchain for the channel and version
+        baseToolchain = rustBin.${cfg.channel}.${cfg.version};
+
+        # Get the combined toolchain for the specified profile with overrides
+        combinedToolchain = baseToolchain.${cfg.profile}.override {
+          extensions = cfg.components;
+          targets = cfg.targets;
+        };
       in
       {
-        languages.rust.toolchain =
-          (builtins.mapAttrs (_: pkgs.lib.mkDefault) filteredToolchain);
-
-        packages = [
-          (combine "rust-mixed" (
-            (map (c: cfg.toolchain.${c}) (cfg.components ++ [ "rust-std" ])) ++
-            (map (t: toolchain._components.${t}.rust-std) cfg.targets)
-          ))
-        ];
+        languages.rust.rustBin = rustBin;
+        languages.rust.toolchain = combinedToolchain;
+        packages = [ cfg.toolchain ];
       }
     ))
   ]);
