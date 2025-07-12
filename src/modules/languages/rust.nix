@@ -3,41 +3,14 @@
 let
   cfg = config.languages.rust;
 
+  validChannels = [ "nixpkgs" "stable" "beta" "nightly" ];
+
   rust-overlay = config.lib.getInput {
     name = "rust-overlay";
     url = "github:oxalica/rust-overlay";
     attribute = "languages.rust.input";
     follows = [ "nixpkgs" ];
   };
-
-  # https://github.com/nix-community/fenix/blob/cdfd7bf3e3edaf9e3f6d1e397d3ee601e513613c/lib/combine.nix
-  combine = name: paths:
-    pkgs.symlinkJoin {
-      inherit name paths;
-      postBuild = ''
-        for file in $(find $out/bin -xtype f -maxdepth 1); do
-          install -m755 $(realpath "$file") $out/bin
-
-          if [[ $file =~ /rustfmt$ ]]; then
-            continue
-          fi
-
-          ${lib.optionalString pkgs.stdenv.isLinux ''
-            if isELF "$file"; then
-              patchelf --set-rpath $out/lib "$file" || true
-            fi
-          ''}
-
-          ${lib.optionalString pkgs.stdenv.isDarwin ''
-            install_name_tool -add_rpath $out/lib "$file" || true
-          ''}
-        done
-
-        for file in $(find $out/lib -name "librustc_driver-*"); do
-          install $(realpath "$file") "$file"
-        done
-      '';
-    };
 in
 {
   imports = [
@@ -68,7 +41,7 @@ in
     };
 
     channel = lib.mkOption {
-      type = lib.types.enum [ "nixpkgs" "stable" "beta" "nightly" ];
+      type = lib.types.enum validChannels;
       default = "nixpkgs";
       defaultText = lib.literalExpression ''"nixpkgs"'';
       description = "The rustup toolchain to install.";
@@ -202,19 +175,53 @@ in
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        toolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages)."${cfg.channel}"."${cfg.version}";
-        filteredToolchain = (lib.filterAttrs (n: _: builtins.elem n toolchain._manifest.profiles.complete) toolchain);
+        rustBin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+
+        # WARNING: private API
+        # Import the mkAggregated function.
+        # This symlinkJoins and patches the individual components.
+        mkAggregated = import (rust-overlay + "/lib/mk-aggregated.nix") {
+          inherit (pkgs) lib stdenv symlinkJoin bash curl;
+          inherit (pkgs.buildPackages) rustc;
+          pkgsTargetTarget = pkgs.targetPackages;
+        };
+
+        # Get the toolchain for component resolution with error handling
+        channel = rustBin.${cfg.channel} or (throw "Invalid Rust channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (lib.filter (c: c != "nixpkgs") validChannels)}");
+        toolchain = channel.${cfg.version} or (throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}");
+        # A list of all available components. This will be filtered down to the requested components.
+        availableComponents = toolchain._manifest.profiles.complete or [ ];
+
+        # Try the component name, then with the -preview suffix.
+        # rust-overlay has a more specific list of renames, but they're all just -preview differences.
+        resolveComponentName = c:
+          if builtins.elem c availableComponents then c
+          else if builtins.elem "${c}-preview" availableComponents then "${c}-preview"
+          else throw "Component '${c}' not found. Available: ${lib.concatStringsSep ", " availableComponents}";
+
+        toolchainComponents = lib.filterAttrs (c: _: builtins.elem c availableComponents) toolchain;
+
+        # Resolve components with user overrides
+        resolvedComponents = lib.map
+          (c:
+            let resolvedName = resolveComponentName c;
+            in cfg.toolchain.${c} or cfg.toolchain.${resolvedName} or toolchainComponents.${resolvedName}
+          )
+          cfg.components;
+
+        # Create aggregated profile with user overrides
+        # TODO: this is private API. We're doing this to retain API compatibility with the previous fenix implementation.
+        # TODO: the final toolchain derivation/package should be overridable
+        # TODO: profiles should be exposed as an option. 99% of uses should be covered by the pre-built profiles with overrides.
+        profile = mkAggregated {
+          pname = "rust-${cfg.channel}-${toolchain._manifest.version}";
+          inherit (toolchain._manifest) version date;
+          selectedComponents = resolvedComponents;
+        };
       in
       {
-        languages.rust.toolchain =
-          (builtins.mapAttrs (_: pkgs.lib.mkDefault) filteredToolchain);
-
-        packages = [
-          (combine "rust-mixed" (
-            (map (c: cfg.toolchain.${c}) (cfg.components ++ [ "rust-std" ])) ++
-            (map (t: toolchain._components.${t}.rust-std) cfg.targets)
-          ))
-        ];
+        languages.rust.toolchain = builtins.mapAttrs (_: lib.mkDefault) toolchainComponents;
+        packages = [ profile ];
       }
     ))
   ]);
