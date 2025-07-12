@@ -209,6 +209,16 @@ in
           )
           cfg.components;
 
+        # Add target components (rust-std for different architectures)
+        targetComponents = lib.map
+          (target:
+            let targetStdName = "rust-std-${target}";
+            in cfg.toolchain.${targetStdName} or toolchainComponents.${targetStdName} or (throw "Target '${target}' not available. rust-std-${target} component not found.")
+          )
+          cfg.targets;
+
+        allSelectedComponents = resolvedComponents ++ targetComponents;
+
         # Create aggregated profile with user overrides
         # TODO: this is private API. We're doing this to retain API compatibility with the previous fenix implementation.
         # TODO: the final toolchain derivation/package should be overridable
@@ -216,7 +226,7 @@ in
         profile = mkAggregated {
           pname = "rust-${cfg.channel}-${toolchain._manifest.version}";
           inherit (toolchain._manifest) version date;
-          selectedComponents = resolvedComponents;
+          selectedComponents = allSelectedComponents;
         };
       in
       {
