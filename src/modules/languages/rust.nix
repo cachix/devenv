@@ -192,6 +192,9 @@ in
         # A list of all available components. This will be filtered down to the requested components.
         availableComponents = toolchain._manifest.profiles.complete or [ ];
 
+        # All components available in the toolchain (includes target-specific components)
+        allToolchainComponents = builtins.attrNames toolchain;
+
         # Try the component name, then with the -preview suffix.
         # rust-overlay has a more specific list of renames, but they're all just -preview differences.
         resolveComponentName = c:
@@ -199,9 +202,40 @@ in
           else if builtins.elem "${c}-preview" availableComponents then "${c}-preview"
           else throw "Component '${c}' not found. Available: ${lib.concatStringsSep ", " availableComponents}";
 
-        toolchainComponents = lib.filterAttrs (c: _: builtins.elem c availableComponents) toolchain;
+        # Include all toolchain components, not just those in the complete profile
+        # This ensures target components like rust-std-${target} are available
+        toolchainComponents = toolchain;
 
-        # Resolve components with user overrides
+        # Get available targets from the manifest
+        availableTargets = toolchain._manifest.pkg.rust-std.target or { };
+
+        # Validate targets are available in manifest
+        _ = lib.map
+          (target:
+            if availableTargets ? ${target}
+            then target
+            else throw "Target '${target}' not available in manifest. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames availableTargets)}"
+          )
+          cfg.targets;
+
+        # Get target components from the toolchain's _components attribute
+        # rust-overlay structures components by platform in _components.${platform}.${component}
+        allComponents = toolchain._components or { };
+
+        # Get target components for requested targets
+        targetComponents = lib.flatten (lib.map
+          (target:
+            let
+              targetComponentSet = allComponents.${target} or { };
+              targetRustStd = targetComponentSet.rust-std or null;
+            in
+            if targetRustStd != null
+            then [ targetRustStd ]
+            else throw "Target '${target}' not available. No rust-std component found for target '${target}'. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames allComponents)}"
+          )
+          cfg.targets);
+
+        # Resolve regular components with user overrides
         resolvedComponents = lib.map
           (c:
             let resolvedName = resolveComponentName c;
@@ -209,14 +243,16 @@ in
           )
           cfg.components;
 
-        # Create aggregated profile with user overrides
-        # TODO: this is private API. We're doing this to retain API compatibility with the previous fenix implementation.
-        # TODO: the final toolchain derivation/package should be overridable
-        # TODO: profiles should be exposed as an option. 99% of uses should be covered by the pre-built profiles with overrides.
+        allSelectedComponents = resolvedComponents ++ targetComponents;
+
+        # Create aggregated profile with user overrides and target components
+        # NOTE: this uses private API to retain API compatibility with the previous fenix implementation.
+        # The final toolchain derivation/package should be overridable and profiles should be exposed as an option.
+        # 99% of uses should be covered by the pre-built profiles with overrides.
         profile = mkAggregated {
           pname = "rust-${cfg.channel}-${toolchain._manifest.version}";
           inherit (toolchain._manifest) version date;
-          selectedComponents = resolvedComponents;
+          selectedComponents = allSelectedComponents;
         };
       in
       {
