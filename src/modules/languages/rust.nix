@@ -189,57 +189,39 @@ in
         # Get the toolchain for component resolution with error handling
         channel = rustBin.${cfg.channel} or (throw "Invalid Rust channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (lib.filter (c: c != "nixpkgs") validChannels)}");
         toolchain = channel.${cfg.version} or (throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}");
-        # A list of all available components. This will be filtered down to the requested components.
-        availableComponents = toolchain._manifest.profiles.complete or [ ];
-
-        # All components available in the toolchain (includes target-specific components)
-        allToolchainComponents = builtins.attrNames toolchain;
-
-        # Try the component name, then with the -preview suffix.
-        # rust-overlay has a more specific list of renames, but they're all just -preview differences.
-        resolveComponentName = c:
-          if builtins.elem c availableComponents then c
-          else if builtins.elem "${c}-preview" availableComponents then "${c}-preview"
-          else throw "Component '${c}' not found. Available: ${lib.concatStringsSep ", " availableComponents}";
-
         # Include all toolchain components, not just those in the complete profile
         # This ensures target components like rust-std-${target} are available
         toolchainComponents = toolchain;
 
         # Get available targets from the manifest
         availableTargets = toolchain._manifest.pkg.rust-std.target or { };
-
-        # Validate targets are available in manifest
-        _ = lib.map
-          (target:
-            if availableTargets ? ${target}
-            then target
-            else throw "Target '${target}' not available in manifest. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames availableTargets)}"
-          )
-          cfg.targets;
-
-        # Get target components from the toolchain's _components attribute
-        # rust-overlay structures components by platform in _components.${platform}.${component}
         allComponents = toolchain._components or { };
-
-        # Get target components for requested targets
-        targetComponents = lib.flatten (lib.map
+        availableComponents = toolchain._manifest.profiles.complete or [ ];
+        targetComponents = lib.map
           (target:
             let
               targetComponentSet = allComponents.${target} or { };
               targetRustStd = targetComponentSet.rust-std or null;
             in
-            if targetRustStd != null
-            then [ targetRustStd ]
-            else throw "Target '${target}' not available. No rust-std component found for target '${target}'. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames allComponents)}"
+            if !(availableTargets ? ${target})
+            then throw "Target '${target}' not available in manifest. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames availableTargets)}"
+            else if targetRustStd == null
+            then throw "Target '${target}' component not found in toolchain. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames availableTargets)}"
+            else targetRustStd
           )
-          cfg.targets);
+          cfg.targets;
 
         # Resolve regular components with user overrides
+        # Try the component name, then with the -preview suffix for rust-overlay compatibility
         resolvedComponents = lib.map
           (c:
-            let resolvedName = resolveComponentName c;
-            in cfg.toolchain.${c} or cfg.toolchain.${resolvedName} or toolchainComponents.${resolvedName}
+            let
+              resolvedName =
+                if builtins.elem c availableComponents then c
+                else if builtins.elem "${c}-preview" availableComponents then "${c}-preview"
+                else throw "Component '${c}' not found. Available: ${lib.concatStringsSep ", " availableComponents}";
+            in
+              cfg.toolchain.${c} or cfg.toolchain.${resolvedName} or toolchainComponents.${resolvedName}
           )
           cfg.components;
 
