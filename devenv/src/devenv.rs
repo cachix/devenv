@@ -380,21 +380,42 @@ impl Devenv {
         Ok(shell_cmd)
     }
 
-    /// Exec into the shell.
-    /// This method does not return after calling `exec`.
-    pub async fn shell(self) -> Result<()> {
-        let shell_cmd = self.prepare_shell(&None, &[]).await?;
-        info!(devenv.is_user_message = true, "Entering shell");
-        let err = shell_cmd.into_std().exec();
-        bail!("Failed to execute shell: {}", err);
+    /// Launch an interactive shell (uses exec, never returns).
+    pub async fn shell(&self) -> Result<()> {
+        self.exec_in_shell(None, &[]).await
     }
 
-    pub async fn exec_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
+    /// Execute a command by replacing the current process using exec.
+    ///
+    /// This method accepts `Option<String>` for the command to support both:
+    /// - Interactive shell: `exec_in_shell(None, &[])`
+    /// - Command execution: `exec_in_shell(Some(cmd), args)`
+    ///
+    /// **Important**: This function never returns `Ok(())` on success because `exec()`
+    /// replaces the current process. The `Result<()>` return type only represents
+    /// potential errors during setup or if `exec()` fails to start the new process.
+    /// On successful exec, this function never returns.
+    pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
+        let shell_cmd = self.prepare_shell(&cmd, args).await?;
+        info!(devenv.is_user_message = true, "Entering shell");
+        let err = shell_cmd.into_std().exec();
+
+        let cmd_context = match &cmd {
+            Some(c) => format!("command '{}'", c),
+            None => "interactive shell".to_string(),
+        };
+        bail!("Failed to exec into shell with {}: {}", cmd_context, err);
+    }
+
+    /// Run a command and return the output.
+    ///
+    /// This method accepts `String` (not `Option<String>`) because it's specifically
+    /// designed for running commands and capturing their output. Unlike `exec_in_shell`,
+    /// this method always requires a command and uses `spawn` + `wait_with_output`
+    /// to return control to the caller with the command's output.
+    pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let span = info_span!(
-            "executing_in_shell",
-            devenv.user_message = "Executing in shell"
-        );
+        let span = info_span!("running_in_shell", devenv.user_message = "Running in shell");
         // Note that tokio's `output()` always configures stdout/stderr as pipes.
         // Use `spawn` + `wait_with_output` instead.
         let proc = shell_cmd

@@ -4,11 +4,7 @@ use devenv::{
     config, log, Devenv,
 };
 use miette::{IntoDiagnostic, Result, WrapErr};
-use std::env;
-use std::{
-    os::unix::process::CommandExt,
-    process::{self, Command},
-};
+use std::{env, os::unix::process::CommandExt, process::Command};
 use tempfile::TempDir;
 use tracing::{info, warn};
 
@@ -100,13 +96,7 @@ async fn main() -> Result<()> {
 
     match command {
         Commands::Shell { cmd, ref args } => match cmd {
-            Some(cmd) => {
-                let output = devenv.exec_in_shell(cmd, args).await?;
-                if !output.status.success() {
-                    process::exit(output.status.code().unwrap_or(1));
-                }
-                Ok(())
-            }
+            Some(cmd) => devenv.exec_in_shell(Some(cmd), args).await,
             None => devenv.shell().await,
         },
         Commands::Test { .. } => devenv.test().await,
