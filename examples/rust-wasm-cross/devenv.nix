@@ -23,6 +23,7 @@
 
   packages = [
     pkgs.wasm-pack
+    pkgs.wasm-bindgen-cli_0_2_100
     pkgs.binaryen # use a newer version of wasm-opt
     pkgs.nodejs
   ];
