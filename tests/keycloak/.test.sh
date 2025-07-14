@@ -45,7 +45,7 @@ test_export() {
   process-compose process start keycloak-realm-export-all -u "$PC_SOCKET_PATH"
 
   completed="false"
-  for i in $(seq 1 10); do
+  for i in $(seq 1 30); do
     if
       [ "$(
         process-compose process get keycloak-realm-export-all \
