@@ -189,14 +189,20 @@ in
         # Get the toolchain for component resolution with error handling
         channel = rustBin.${cfg.channel} or (throw "Invalid Rust channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (lib.filter (c: c != "nixpkgs") validChannels)}");
         toolchain = channel.${cfg.version} or (throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}");
-        # Include all toolchain components, not just those in the complete profile
+        # Extract individual components from toolchain, avoiding the 'rust' profile, which triggers warnings.
         # This ensures target components like rust-std-${target} are available
-        toolchainComponents = toolchain;
+        toolchainComponents = builtins.removeAttrs toolchain [ "rust" ];
 
         # Get available targets from the manifest
         availableTargets = toolchain._manifest.pkg.rust-std.target or { };
         allComponents = toolchain._components or { };
         availableComponents = toolchain._manifest.profiles.complete or [ ];
+
+        # Ensure native platform target is always included for rust-overlay
+        # Read the native target from the nixpkgs config.
+        nativeTarget = pkgs.stdenv.hostPlatform.rust.rustcTargetSpec;
+        allTargets = lib.unique ([ nativeTarget ] ++ cfg.targets);
+
         targetComponents = lib.map
           (target:
             let
@@ -209,7 +215,7 @@ in
             then throw "Target '${target}' component not found in toolchain. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames availableTargets)}"
             else targetRustStd
           )
-          cfg.targets;
+          allTargets;
 
         # Resolve regular components with user overrides
         # Try the component name, then with the -preview suffix for rust-overlay compatibility
