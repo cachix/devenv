@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 ARG VERSION=latest
 ARG DEVENV_INSTALL_URI=github:cachix/devenv/$VERSION
@@ -35,9 +36,13 @@ ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
 RUN /nix-entrypoint.sh sleep 5
 
 # Install devenv and dependencies
-RUN nix profile install nixpkgs#direnv nixpkgs#cachix
-RUN USER=root cachix use devenv
-RUN nix profile install $DEVENV_INSTALL_URI --accept-flake-config
+RUN --mount=type=secret,id=github_token \
+    if [ -f /run/secrets/github_token ]; then \
+        export NIX_CONFIG="access-tokens = github.com=$(cat /run/secrets/github_token)"; \
+    fi && \
+    nix profile install nixpkgs#direnv nixpkgs#cachix && \
+    USER=root cachix use devenv && \
+    nix profile install $DEVENV_INSTALL_URI --accept-flake-config
 
 # Clean up
 RUN rm -rf ~/.cache/nix && \
