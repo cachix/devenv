@@ -275,22 +275,32 @@ async fn main() -> Result<ExitCode> {
     // Otherwise, run the tests in a subprocess with a fresh environment.
     let executable_path = env::current_exe().into_diagnostic()?;
     let executable_dir = executable_path.parent().unwrap();
-    let path = format!(
-        "{}:{}",
-        executable_dir.display(),
-        env::var("PATH").unwrap_or_default()
-    );
+
+    let mut env = vec![
+        ("DEVENV_RUN_TESTS", "1".to_string()),
+        ("DEVENV_NIX", env::var("DEVENV_NIX").unwrap_or_default()),
+        (
+            "PATH",
+            format!(
+                "{}:{}",
+                executable_dir.display(),
+                env::var("PATH").unwrap_or_default()
+            ),
+        ),
+        ("HOME", env::var("HOME").unwrap_or_default()),
+    ];
+
+    if let Ok(tzdir) = env::var("TZDIR") {
+        env.push(("TZDIR", tzdir));
+    }
 
     let mut cmd = Command::new(&executable_path);
     cmd.stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .args(env::args().skip(1));
-    cmd.env_clear()
-        .env("DEVENV_RUN_TESTS", "1")
-        .env("DEVENV_NIX", env::var("DEVENV_NIX").unwrap_or_default())
-        .env("PATH", path)
-        .env("HOME", env::var("HOME").unwrap_or_default());
+        .args(env::args().skip(1))
+        .env_clear()
+        .envs(env);
 
     let output = cmd.output().into_diagnostic()?;
     if output.status.success() {
