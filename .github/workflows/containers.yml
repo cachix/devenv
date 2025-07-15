@@ -9,6 +9,11 @@ on:
         required: false
         type: string
         default: ""
+      push:
+        description: "Whether to push the built images to registry"
+        required: false
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       ref:
@@ -16,6 +21,11 @@ on:
         required: false
         type: string
         default: ""
+      push:
+        description: "Whether to push the built images to registry"
+        required: false
+        type: boolean
+        default: true
 
 env:
   REGISTRY: ghcr.io
@@ -65,7 +75,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           context: ./containers/devcontainer
           file: ./containers/devcontainer/Dockerfile
-          push: true
+          push: ${{ inputs.push }}
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -117,7 +127,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           context: ./containers/devenv
           file: ./containers/devenv/Dockerfile
-          push: true
+          push: ${{ inputs.push }}
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
