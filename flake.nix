@@ -22,8 +22,7 @@
   inputs.nix = {
     url = "github:cachix/nix/devenv-2.30";
     inputs = {
-      # disabled until we fix https://github.com/cachix/devenv-nixpkgs/issues/2
-      # nixpkgs.follows = "nixpkgs";
+      nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
       git-hooks-nix.follows = "git-hooks";
       nixpkgs-23-11.follows = "";
