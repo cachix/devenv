@@ -3,41 +3,14 @@
 let
   cfg = config.languages.rust;
 
+  validChannels = [ "nixpkgs" "stable" "beta" "nightly" ];
+
   rust-overlay = config.lib.getInput {
     name = "rust-overlay";
     url = "github:oxalica/rust-overlay";
     attribute = "languages.rust.input";
     follows = [ "nixpkgs" ];
   };
-
-  # https://github.com/nix-community/fenix/blob/cdfd7bf3e3edaf9e3f6d1e397d3ee601e513613c/lib/combine.nix
-  combine = name: paths:
-    pkgs.symlinkJoin {
-      inherit name paths;
-      postBuild = ''
-        for file in $(find $out/bin -xtype f -maxdepth 1); do
-          install -m755 $(realpath "$file") $out/bin
-
-          if [[ $file =~ /rustfmt$ ]]; then
-            continue
-          fi
-
-          ${lib.optionalString pkgs.stdenv.isLinux ''
-            if isELF "$file"; then
-              patchelf --set-rpath $out/lib "$file" || true
-            fi
-          ''}
-
-          ${lib.optionalString pkgs.stdenv.isDarwin ''
-            install_name_tool -add_rpath $out/lib "$file" || true
-          ''}
-        done
-
-        for file in $(find $out/lib -name "librustc_driver-*"); do
-          install $(realpath "$file") "$file"
-        done
-      '';
-    };
 in
 {
   imports = [
@@ -68,7 +41,7 @@ in
     };
 
     channel = lib.mkOption {
-      type = lib.types.enum [ "nixpkgs" "stable" "beta" "nightly" ];
+      type = lib.types.enum validChannels;
       default = "nixpkgs";
       defaultText = lib.literalExpression ''"nixpkgs"'';
       description = "The rustup toolchain to install.";
@@ -202,19 +175,77 @@ in
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
       let
-        toolchain = (rust-overlay.lib.mkRustBin { } pkgs.buildPackages)."${cfg.channel}"."${cfg.version}";
-        filteredToolchain = (lib.filterAttrs (n: _: builtins.elem n toolchain._manifest.profiles.complete) toolchain);
+        rustBin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+
+        # WARNING: private API
+        # Import the mkAggregated function.
+        # This symlinkJoins and patches the individual components.
+        mkAggregated = import (rust-overlay + "/lib/mk-aggregated.nix") {
+          inherit (pkgs) lib stdenv symlinkJoin bash curl;
+          inherit (pkgs.buildPackages) rustc;
+          pkgsTargetTarget = pkgs.targetPackages;
+        };
+
+        # Get the toolchain for component resolution with error handling
+        channel = rustBin.${cfg.channel} or (throw "Invalid Rust channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (lib.filter (c: c != "nixpkgs") validChannels)}");
+        toolchain = channel.${cfg.version} or (throw "Invalid Rust version '${cfg.version}' for channel '${cfg.channel}'. Available: ${lib.concatStringsSep ", " (builtins.attrNames channel)}");
+        # Extract individual components from toolchain, avoiding the 'rust' profile, which triggers warnings.
+        # This ensures target components like rust-std-${target} are available
+        toolchainComponents = builtins.removeAttrs toolchain [ "rust" ];
+
+        # Get available targets from the manifest
+        availableTargets = toolchain._manifest.pkg.rust-std.target or { };
+        allComponents = toolchain._components or { };
+        availableComponents = toolchain._manifest.profiles.complete or [ ];
+
+        # Ensure native platform target is always included for rust-overlay
+        # Read the native target from the nixpkgs config.
+        nativeTarget = pkgs.stdenv.hostPlatform.rust.rustcTargetSpec;
+        allTargets = lib.unique ([ nativeTarget ] ++ cfg.targets);
+
+        targetComponents = lib.map
+          (target:
+            let
+              targetComponentSet = allComponents.${target} or { };
+              targetRustStd = targetComponentSet.rust-std or null;
+            in
+            if !(availableTargets ? ${target})
+            then throw "Target '${target}' not available in manifest. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames availableTargets)}"
+            else if targetRustStd == null
+            then throw "Target '${target}' component not found in toolchain. Available targets: ${lib.concatStringsSep ", " (builtins.attrNames availableTargets)}"
+            else targetRustStd
+          )
+          allTargets;
+
+        # Resolve regular components with user overrides
+        # Try the component name, then with the -preview suffix for rust-overlay compatibility
+        resolvedComponents = lib.map
+          (c:
+            let
+              resolvedName =
+                if builtins.elem c availableComponents then c
+                else if builtins.elem "${c}-preview" availableComponents then "${c}-preview"
+                else throw "Component '${c}' not found. Available: ${lib.concatStringsSep ", " availableComponents}";
+            in
+              cfg.toolchain.${c} or cfg.toolchain.${resolvedName} or toolchainComponents.${resolvedName}
+          )
+          cfg.components;
+
+        allSelectedComponents = resolvedComponents ++ targetComponents;
+
+        # Create aggregated profile with user overrides and target components
+        # NOTE: this uses private API to retain API compatibility with the previous fenix implementation.
+        # The final toolchain derivation/package should be overridable and profiles should be exposed as an option.
+        # 99% of uses should be covered by the pre-built profiles with overrides.
+        profile = mkAggregated {
+          pname = "rust-${cfg.channel}-${toolchain._manifest.version}";
+          inherit (toolchain._manifest) version date;
+          selectedComponents = allSelectedComponents;
+        };
       in
       {
-        languages.rust.toolchain =
-          (builtins.mapAttrs (_: pkgs.lib.mkDefault) filteredToolchain);
-
-        packages = [
-          (combine "rust-mixed" (
-            (map (c: cfg.toolchain.${c}) (cfg.components ++ [ "rust-std" ])) ++
-            (map (t: toolchain._components.${t}.rust-std) cfg.targets)
-          ))
-        ];
+        languages.rust.toolchain = builtins.mapAttrs (_: lib.mkDefault) toolchainComponents;
+        packages = [ profile ];
       }
     ))
   ]);
