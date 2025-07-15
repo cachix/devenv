@@ -99,6 +99,7 @@ in
       type = lib.types.package;
       description = ''
         The aggregated toolchain package, which includes the configured components and targets.
+        This is automatically set based on the channel and components configuration.
       '';
     };
   };
