@@ -179,6 +179,7 @@ in
     (lib.mkIf (cfg.channel == "nixpkgs") {
       languages.rust.toolchainPackage = lib.mkDefault (
         pkgs.symlinkJoin {
+          name = "rust-toolchain-${cfg.channel}";
           paths = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
         }
       );
