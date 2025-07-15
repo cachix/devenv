@@ -32,3 +32,5 @@ jobs:
     needs: build
     uses: ./.github/workflows/containers.yml
     secrets: inherit
+    with:
+      ref: ${{ github.sha }}

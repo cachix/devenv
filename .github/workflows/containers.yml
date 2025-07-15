@@ -3,7 +3,19 @@ name: Publish containers
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: "Git revision (tag, commit, or branch) to build from"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git revision (tag, commit, or branch) to build from"
+        required: false
+        type: string
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -19,6 +31,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Set up QEMU for multi-arch builds
         uses: docker/setup-qemu-action@v3
@@ -56,7 +70,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.sha }}
+            VERSION=${{ inputs.ref || github.sha }}
 
   devenv:
     runs-on: ubuntu-latest
@@ -67,6 +81,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Set up QEMU for multi-arch builds
         uses: docker/setup-qemu-action@v3
@@ -104,4 +120,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.sha }}
+            VERSION=${{ inputs.ref || github.sha }}
