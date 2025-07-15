@@ -30,9 +30,12 @@ let
     source ${shell.envScript}
 
     # expand any envvars before exec
-    cmd="`echo "$@"|${pkgs.envsubst}/bin/envsubst`"
+    expanded_args=()
+    for arg in "$@"; do
+        expanded_args+=("$(printf '%s' "$arg" | ${pkgs.envsubst}/bin/envsubst)")
+    done
 
-    ${bash} -c "$cmd"
+    exec "''${expanded_args[@]}"
   '';
   user = "user";
   group = "user";
