@@ -94,6 +94,13 @@ in
       defaultText = lib.literalExpression "nixpkgs";
       description = "Rust component packages. May optionally define additional components, for example `miri`.";
     };
+
+    toolchainPackage = lib.mkOption {
+      type = lib.types.package;
+      description = ''
+        The aggregated toolchain package, which includes the configured components and targets.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
@@ -163,14 +170,19 @@ in
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
 
-        git-hooks.tools.cargo = mkOverrideTools cfg.toolchain.cargo or null;
-        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchain.rustfmt or null;
-        git-hooks.tools.clippy = mkOverrideTools cfg.toolchain.clippy or null;
+        git-hooks.tools.cargo = mkOverrideTools cfg.toolchainPackage;
+        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchainPackage;
+        git-hooks.tools.clippy = mkOverrideTools cfg.toolchainPackage;
       }
     )
 
     (lib.mkIf (cfg.channel == "nixpkgs") {
-      packages = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
+      languages.rust.toolchainPackage = lib.mkDefault (
+        pkgs.symlinkJoin {
+          paths = builtins.map (c: cfg.toolchain.${c} or (throw "toolchain.${c}")) cfg.components;
+        }
+      );
+      packages = [ cfg.toolchainPackage ];
     })
 
     (lib.mkIf (cfg.channel != "nixpkgs") (
@@ -245,7 +257,8 @@ in
       in
       {
         languages.rust.toolchain = builtins.mapAttrs (_: lib.mkDefault) toolchainComponents;
-        packages = [ profile ];
+        languages.rust.toolchainPackage = lib.mkDefault profile;
+        packages = [ cfg.toolchainPackage ];
       }
     ))
   ]);
