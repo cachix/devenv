@@ -7,6 +7,7 @@ use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
 use miette::{bail, miette, Context, IntoDiagnostic, Result};
 use once_cell::sync::Lazy;
+use secretspec;
 use serde::Deserialize;
 use serde_json;
 use sha2::Digest;
@@ -90,6 +91,9 @@ pub struct Devenv {
 
     has_processes: Arc<OnceCell<bool>>,
 
+    // Secretspec resolved data to pass to Nix
+    secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
+
     // TODO: make private.
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
@@ -145,11 +149,19 @@ impl Devenv {
             cachix_trusted_keys,
         };
 
+        // Create shared secretspec_resolved Arc to share between Devenv and Nix
+        let secretspec_resolved = Arc::new(OnceCell::new());
+
         let nix: Box<dyn nix_backend::NixBackend> = match backend_type {
             config::NixBackendType::Nix => Box::new(
-                crate::nix::Nix::new(options.config.clone(), global_options.clone(), paths)
-                    .await
-                    .expect("Failed to initialize Nix backend"),
+                crate::nix::Nix::new(
+                    options.config.clone(),
+                    global_options.clone(),
+                    paths,
+                    secretspec_resolved.clone(),
+                )
+                .await
+                .expect("Failed to initialize Nix backend"),
             ),
             #[cfg(feature = "snix")]
             config::NixBackendType::Snix => Box::new(
@@ -176,6 +188,7 @@ impl Devenv {
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
+            secretspec_resolved,
             container_name: None,
         }
     }
@@ -1200,6 +1213,79 @@ impl Devenv {
             .map_err(|e| {
                 miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
             })?;
+
+        // Check for secretspec.toml and load secrets
+        let secretspec_path = self.devenv_root.join("secretspec.toml");
+        let secretspec_config_exists = config.secretspec.is_some();
+        let secretspec_enabled = config
+            .secretspec
+            .as_ref()
+            .map(|c| c.enable)
+            .unwrap_or(false); // Default to false if secretspec config is not present
+
+        if secretspec_path.exists() {
+            // Log warning when secretspec.toml exists but is not configured
+            if !secretspec_enabled && !secretspec_config_exists {
+                info!(
+                    "{}",
+                    indoc::formatdoc! {"
+                    Found secretspec.toml but secretspec integration is not enabled.
+                    
+                    To enable, add to devenv.yaml:
+                      secretspec:
+                        enable: true
+                    
+                    To disable this message:
+                      secretspec:
+                        enable: false
+                    
+                    Learn more: https://devenv.sh/integrations/secretspec/
+                "}
+                );
+            }
+
+            if secretspec_enabled {
+                // Get profile and provider from devenv.yaml config
+                let (profile, provider) = if let Some(ref secretspec_config) = config.secretspec {
+                    (
+                        secretspec_config.profile.clone(),
+                        secretspec_config.provider.clone(),
+                    )
+                } else {
+                    (None, None)
+                };
+
+                // Load and validate secrets using SecretSpec API
+                let mut secrets = secretspec::Secrets::load()
+                    .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
+
+                // Configure provider and profile if specified
+                if let Some(ref provider_str) = provider {
+                    secrets.set_provider(provider_str);
+                }
+                if let Some(ref profile_str) = profile {
+                    secrets.set_profile(profile_str);
+                }
+
+                // Validate secrets
+                match secrets.validate()? {
+                    Ok(validated_secrets) => {
+                        // Store resolved secrets in OnceCell for Nix to use
+                        self.secretspec_resolved
+                            .set(validated_secrets.resolved)
+                            .map_err(|_| miette!("Secretspec resolved already set"))?;
+                    }
+                    Err(validation_errors) => {
+                        bail!(
+                            "Required secrets are missing: {} (provider: {}, profile: {})",
+                            validation_errors.missing_required.join(", "),
+                            validation_errors.provider,
+                            validation_errors.profile
+                        );
+                    }
+                }
+            }
+        }
 
         // Create cli-options.nix if there are CLI options
         if !self.global_options.option.is_empty() {

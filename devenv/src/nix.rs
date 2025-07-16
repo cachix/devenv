@@ -4,9 +4,11 @@ use async_trait::async_trait;
 use futures::future;
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
+use secretspec;
 use serde::Deserialize;
+use serde_json;
 use sqlx::SqlitePool;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
@@ -27,6 +29,7 @@ pub struct Nix {
     global_options: cli::GlobalOptions,
     cachix_caches: Arc<OnceCell<CachixCaches>>,
     paths: nix_backend::DevenvPaths,
+    secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
 }
 
 impl Nix {
@@ -34,6 +37,7 @@ impl Nix {
         config: config::Config,
         global_options: cli::GlobalOptions,
         paths: nix_backend::DevenvPaths,
+        secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
     ) -> Result<Self> {
         let cachix_caches = Arc::new(OnceCell::new());
         let options = nix_backend::Options::default();
@@ -51,6 +55,7 @@ impl Nix {
             global_options,
             cachix_caches,
             paths,
+            secretspec_resolved,
         })
     }
 
@@ -609,6 +614,19 @@ impl Nix {
             // set a dummy value to overcome https://github.com/NixOS/nix/issues/10247
             cmd.env("NIX_PATH", ":");
         }
+
+        // Pass secretspec data to Nix if available
+        if let Some(resolved) = self.secretspec_resolved.get() {
+            let secrets_data = serde_json::json!({
+                "secrets": resolved.secrets,
+                "profile": resolved.profile,
+                "provider": resolved.provider
+            });
+            if let Ok(secrets_json) = serde_json::to_string(&secrets_data) {
+                cmd.env("SECRETSPEC_SECRETS", secrets_json);
+            }
+        }
+
         cmd.args(flags);
         cmd.current_dir(&self.paths.root);
 

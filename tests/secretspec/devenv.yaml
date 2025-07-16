@@ -1,0 +1,8 @@
+inputs:
+  devenv:
+    url: path:../../?dir=src/modules
+
+secretspec:
+  enable: true
+  provider: dotenv
+  profile: test

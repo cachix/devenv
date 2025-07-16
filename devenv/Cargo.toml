@@ -53,6 +53,7 @@ shell-escape.workspace = true
 rmcp.workspace = true
 rmcp-macros.workspace = true
 async-trait.workspace = true
+secretspec = "0.2.0"
 
 # Optional snix dependencies
 snix-eval = { git = "https://github.com/cachix/snix", optional = true }
