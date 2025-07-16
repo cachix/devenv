@@ -8,7 +8,7 @@ let
   rust-overlay = config.lib.getInput {
     name = "rust-overlay";
     url = "github:oxalica/rust-overlay";
-    attribute = "languages.rust.input";
+    attribute = "languages.rust.channel";
     follows = [ "nixpkgs" ];
   };
 in
