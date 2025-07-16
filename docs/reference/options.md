@@ -15648,6 +15648,23 @@ null or package
 
 
 
+## languages.rust.toolchainPackage
+
+
+
+The aggregated toolchain package, which includes the configured components and targets.
+This is automatically set based on the channel and components configuration.
+
+
+
+*Type:*
+package
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.version
 
 
