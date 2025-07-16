@@ -10,7 +10,7 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::path::{Path, PathBuf};
@@ -733,6 +733,24 @@ impl Devenv {
         Ok(*value)
     }
 
+    async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
+        let tasks_json_file = {
+            let span = info_span!("load_tasks", devenv.user_message = "Evaluating tasks");
+            let gc_root = self.devenv_dot_gc.join("task-config");
+            self.nix
+                .build(&["devenv.task.config"], None, Some(&gc_root))
+                .instrument(span)
+                .await?
+        };
+        // parse tasks config
+        let tasks_json = fs::read_to_string(&tasks_json_file[0])
+            .await
+            .expect("Failed to read config file");
+        let tasks: Vec<tasks::TaskConfig> =
+            serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
+        Ok(tasks)
+    }
+
     pub async fn tasks_run(
         &self,
         roots: Vec<String>,
@@ -752,22 +770,8 @@ impl Devenv {
             std::env::set_var(key, value);
         }
 
-        let tasks_json_file = {
-            // TODO: No newline
-            let span = info_span!("tasks_run", devenv.user_message = "Evaluating tasks");
-            let gc_root = self.devenv_dot_gc.join("task-config");
-            self.nix
-                .build(&["devenv.task.config"], None, Some(&gc_root))
-                .instrument(span)
-                .await?
-        };
-        // parse tasks config
-        let tasks_json = fs::read_to_string(&tasks_json_file[0])
-            .await
-            .expect("Failed to read config file");
-        let tasks: Vec<tasks::TaskConfig> =
-            serde_json::from_str(&tasks_json).expect("Failed to parse tasks config");
-        // run tasks
+        let tasks = self.load_tasks().await?;
+
         // Convert global options to verbosity level
         let verbosity = if self.global_options.quiet {
             tasks::VerbosityLevel::Quiet
@@ -798,6 +802,24 @@ impl Devenv {
             "{}",
             serde_json::to_string(&outputs).expect("parsing of outputs failed")
         );
+        Ok(())
+    }
+
+    pub async fn tasks_list(&self) -> Result<()> {
+        self.assemble(false).await?;
+
+        let tasks = self.load_tasks().await?;
+
+        if tasks.is_empty() {
+            println!("No tasks defined.");
+            return Ok(());
+        }
+
+        println!("Available tasks:");
+
+        // Print the task tree
+        print_tasks_tree(&tasks);
+
         Ok(())
     }
 
@@ -1421,4 +1443,273 @@ fn cleanup_symlinks(root: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     }
 
     (to_gc, removed_symlinks)
+}
+
+fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
+    // Group tasks by their prefix (namespace)
+    let mut namespaces: BTreeMap<String, Vec<&tasks::TaskConfig>> = BTreeMap::new();
+    let mut standalone_tasks: Vec<&tasks::TaskConfig> = Vec::new();
+
+    for task in tasks {
+        if let Some(colon_pos) = task.name.find(':') {
+            let namespace = &task.name[..colon_pos];
+            namespaces
+                .entry(namespace.to_string())
+                .or_default()
+                .push(task);
+        } else {
+            standalone_tasks.push(task);
+        }
+    }
+
+    // Build dependency information
+    let mut task_deps: HashMap<String, Vec<String>> = HashMap::new();
+    let mut task_dependents: HashMap<String, Vec<String>> = HashMap::new();
+    let task_names: HashSet<String> = tasks.iter().map(|t| t.name.clone()).collect();
+    let mut task_configs: HashMap<String, &tasks::TaskConfig> = HashMap::new();
+
+    for task in tasks {
+        task_deps.insert(task.name.clone(), task.after.clone());
+        task_configs.insert(task.name.clone(), task);
+
+        // Build reverse dependencies (dependents)
+        for dep in &task.after {
+            task_dependents
+                .entry(dep.clone())
+                .or_default()
+                .push(task.name.clone());
+        }
+
+        // Handle "before" dependencies
+        for before in &task.before {
+            task_deps
+                .entry(before.clone())
+                .or_default()
+                .push(task.name.clone());
+            task_dependents
+                .entry(task.name.clone())
+                .or_default()
+                .push(before.clone());
+        }
+    }
+
+    let mut visited = HashSet::new();
+
+    // Print namespaced tasks grouped by namespace
+    let namespace_count = namespaces.len();
+    for (idx, (namespace, tasks_in_ns)) in namespaces.iter().enumerate() {
+        let is_last_namespace = idx == namespace_count - 1 && standalone_tasks.is_empty();
+        let namespace_prefix = if is_last_namespace {
+            "└── "
+        } else {
+            "├── "
+        };
+        println!("{}{}:", namespace_prefix, namespace);
+
+        // Find roots within this namespace
+        let mut ns_roots: Vec<&str> = Vec::new();
+        for task in tasks_in_ns {
+            let deps = task_deps.get(&task.name).unwrap();
+            if deps.is_empty()
+                || !deps
+                    .iter()
+                    .any(|d| task_names.contains(d) && d.starts_with(&format!("{}:", namespace)))
+            {
+                ns_roots.push(&task.name);
+            }
+        }
+
+        // If no roots found, use all tasks in namespace
+        if ns_roots.is_empty() {
+            ns_roots = tasks_in_ns.iter().map(|t| t.name.as_str()).collect();
+        }
+
+        ns_roots.sort();
+
+        let sub_prefix = if is_last_namespace { "    " } else { "│   " };
+        for (i, root) in ns_roots.iter().enumerate() {
+            if !visited.contains(*root) {
+                let is_last = i == ns_roots.len() - 1;
+                print_task_tree_with_namespace(
+                    root,
+                    &task_dependents,
+                    &task_configs,
+                    &mut visited,
+                    sub_prefix,
+                    is_last,
+                    namespace,
+                );
+            }
+        }
+    }
+
+    // Print standalone tasks (without namespace)
+    if !standalone_tasks.is_empty() {
+        if !namespaces.is_empty() {
+            println!("└── (standalone)");
+        }
+
+        // Find roots among standalone tasks
+        let mut standalone_roots: Vec<&str> = Vec::new();
+        for task in &standalone_tasks {
+            let deps = task_deps.get(&task.name).unwrap();
+            if deps.is_empty()
+                || !deps
+                    .iter()
+                    .any(|d| task_names.contains(d) && !d.contains(':'))
+            {
+                standalone_roots.push(&task.name);
+            }
+        }
+
+        if standalone_roots.is_empty() {
+            standalone_roots = standalone_tasks.iter().map(|t| t.name.as_str()).collect();
+        }
+
+        standalone_roots.sort();
+
+        let sub_prefix = if namespaces.is_empty() { "" } else { "    " };
+        for (i, root) in standalone_roots.iter().enumerate() {
+            if !visited.contains(*root) {
+                let is_last = i == standalone_roots.len() - 1;
+                print_task_tree(
+                    root,
+                    &task_dependents,
+                    &task_configs,
+                    &mut visited,
+                    sub_prefix,
+                    is_last,
+                );
+            }
+        }
+    }
+}
+
+fn print_task_tree_with_namespace(
+    task_name: &str,
+    task_dependents: &HashMap<String, Vec<String>>,
+    task_configs: &HashMap<String, &tasks::TaskConfig>,
+    visited: &mut HashSet<String>,
+    prefix: &str,
+    is_last: bool,
+    namespace: &str,
+) {
+    if visited.contains(task_name) {
+        return;
+    }
+    visited.insert(task_name.to_string());
+
+    // Print the current task with tree formatting, stripping the namespace prefix
+    let connector = if is_last { "└── " } else { "├── " };
+    let display_name = task_name
+        .strip_prefix(&format!("{}:", namespace))
+        .unwrap_or(task_name);
+    print!("{}{}{}", prefix, connector, display_name);
+
+    // Add additional info if available
+    if let Some(task) = task_configs.get(task_name) {
+        let mut extra_info = Vec::new();
+
+        if task.status.is_some() {
+            extra_info.push("has status check".to_string());
+        }
+
+        if !task.exec_if_modified.is_empty() {
+            let files = task.exec_if_modified.join(", ");
+            extra_info.push(format!("watches: {}", files));
+        }
+
+        if !extra_info.is_empty() {
+            print!(" ({})", extra_info.join(", "));
+        }
+    }
+
+    println!();
+
+    // Get children (tasks that depend on this task) within the same namespace
+    let children = task_dependents.get(task_name).cloned().unwrap_or_default();
+    let mut children: Vec<_> = children
+        .into_iter()
+        .filter(|t| task_configs.contains_key(t) && t.starts_with(&format!("{}:", namespace)))
+        .collect();
+    children.sort();
+
+    // Determine the new prefix for children
+    let new_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
+
+    // Print children
+    for (i, child) in children.iter().enumerate() {
+        let is_last_child = i == children.len() - 1;
+        print_task_tree_with_namespace(
+            child,
+            task_dependents,
+            task_configs,
+            visited,
+            &new_prefix,
+            is_last_child,
+            namespace,
+        );
+    }
+}
+
+fn print_task_tree(
+    task_name: &str,
+    task_dependents: &HashMap<String, Vec<String>>,
+    task_configs: &HashMap<String, &tasks::TaskConfig>,
+    visited: &mut HashSet<String>,
+    prefix: &str,
+    is_last: bool,
+) {
+    if visited.contains(task_name) {
+        return;
+    }
+    visited.insert(task_name.to_string());
+
+    // Print the current task with tree formatting
+    let connector = if is_last { "└── " } else { "├── " };
+    print!("{}{}{}", prefix, connector, task_name);
+
+    // Add additional info if available
+    if let Some(task) = task_configs.get(task_name) {
+        let mut extra_info = Vec::new();
+
+        if task.status.is_some() {
+            extra_info.push("has status check".to_string());
+        }
+
+        if !task.exec_if_modified.is_empty() {
+            let files = task.exec_if_modified.join(", ");
+            extra_info.push(format!("watches: {}", files));
+        }
+
+        if !extra_info.is_empty() {
+            print!(" ({})", extra_info.join(", "));
+        }
+    }
+
+    println!();
+
+    // Get children (tasks that depend on this task)
+    let children = task_dependents.get(task_name).cloned().unwrap_or_default();
+    let mut children: Vec<_> = children
+        .into_iter()
+        .filter(|t| task_configs.contains_key(t))
+        .collect();
+    children.sort();
+
+    // Determine the new prefix for children
+    let new_prefix = format!("{}{}", prefix, if is_last { "    " } else { "│   " });
+
+    // Print children
+    for (i, child) in children.iter().enumerate() {
+        let is_last_child = i == children.len() - 1;
+        print_task_tree(
+            child,
+            task_dependents,
+            task_configs,
+            visited,
+            &new_prefix,
+            is_last_child,
+        );
+    }
 }

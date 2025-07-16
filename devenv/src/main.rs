@@ -199,6 +199,7 @@ async fn main() -> Result<()> {
         } => devenv.down().await,
         Commands::Tasks { command } => match command {
             TasksCommand::Run { tasks, mode } => devenv.tasks_run(tasks, mode).await,
+            TasksCommand::List {} => devenv.tasks_list().await,
         },
         Commands::Inputs { command } => match command {
             InputsCommand::Add { name, url, follows } => {

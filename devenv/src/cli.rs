@@ -375,6 +375,8 @@ pub enum TasksCommand {
         )]
         mode: RunMode,
     },
+    #[command(about = "List all available tasks.")]
+    List {},
 }
 
 #[derive(Subcommand, Clone)]
