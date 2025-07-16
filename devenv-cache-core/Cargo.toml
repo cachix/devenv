@@ -18,7 +18,6 @@ sqlx = { workspace = true, features = [
 # Error handling
 thiserror.workspace = true
 miette.workspace = true
-eyre.workspace = true
 
 # Hashing
 blake3.workspace = true

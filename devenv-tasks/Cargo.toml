@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 clap.workspace = true
 console.workspace = true
-eyre.workspace = true
 miette.workspace = true
 petgraph.workspace = true
 serde.workspace = true

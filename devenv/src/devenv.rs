@@ -8,6 +8,7 @@ use include_dir::{include_dir, Dir};
 use miette::{bail, miette, Context, IntoDiagnostic, Result};
 use once_cell::sync::Lazy;
 use serde::Deserialize;
+use serde_json;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -824,7 +825,7 @@ impl Devenv {
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
         let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
-            .wrap_err("Failed to create temporary directory for environment capture")?;
+            .context("Failed to create temporary directory for environment capture")?;
 
         let script_path = temp_dir.path().join("script");
         let env_path = temp_dir.path().join("env");
@@ -833,14 +834,14 @@ impl Devenv {
         fs::write(&script_path, script)
             .await
             .into_diagnostic()
-            .wrap_err(format!(
+            .context(format!(
                 "Failed to write script to {}",
                 script_path.display()
             ))?;
         fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
             .await
             .into_diagnostic()
-            .wrap_err(format!(
+            .context(format!(
                 "Failed to set execute permissions on {}",
                 script_path.display()
             ))?;
@@ -852,17 +853,17 @@ impl Devenv {
             .stdout(Stdio::inherit())
             .spawn()
             .into_diagnostic()
-            .wrap_err("Failed to execute environment capture script")?
+            .context("Failed to execute environment capture script")?
             .wait()
             .await
             .into_diagnostic()
-            .wrap_err("Failed to wait for environment capture script to complete")?;
+            .context("Failed to wait for environment capture script to complete")?;
 
         // Parse the environment variables
         let file = File::open(&env_path)
             .await
             .into_diagnostic()
-            .wrap_err(format!(
+            .context(format!(
                 "Failed to open environment file at {}",
                 env_path.display()
             ))?;
@@ -932,14 +933,14 @@ impl Devenv {
                 .envs(envs)
                 .spawn()
                 .into_diagnostic()
-                .wrap_err(format!(
+                .context(format!(
                     "Failed to spawn test process using {}",
                     test_script
                 ))?
                 .wait_with_output()
                 .await
                 .into_diagnostic()
-                .wrap_err("Failed to get output from test process")
+                .context("Failed to get output from test process")
         }
         .instrument(span)
         .await?;
