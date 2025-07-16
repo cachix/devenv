@@ -815,8 +815,6 @@ impl Devenv {
             return Ok(());
         }
 
-        println!("Available tasks:");
-
         // Print the task tree
         print_tasks_tree(&tasks);
 
@@ -1496,15 +1494,8 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
     let mut visited = HashSet::new();
 
     // Print namespaced tasks grouped by namespace
-    let namespace_count = namespaces.len();
-    for (idx, (namespace, tasks_in_ns)) in namespaces.iter().enumerate() {
-        let is_last_namespace = idx == namespace_count - 1 && standalone_tasks.is_empty();
-        let namespace_prefix = if is_last_namespace {
-            "└── "
-        } else {
-            "├── "
-        };
-        println!("{}{}:", namespace_prefix, namespace);
+    for (namespace, tasks_in_ns) in namespaces.iter() {
+        println!("{}:", namespace);
 
         // Find roots within this namespace
         let mut ns_roots: Vec<&str> = Vec::new();
@@ -1526,7 +1517,7 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
 
         ns_roots.sort();
 
-        let sub_prefix = if is_last_namespace { "    " } else { "│   " };
+        let sub_prefix = "  ";
         for (i, root) in ns_roots.iter().enumerate() {
             if !visited.contains(*root) {
                 let is_last = i == ns_roots.len() - 1;
@@ -1546,7 +1537,7 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
     // Print standalone tasks (without namespace)
     if !standalone_tasks.is_empty() {
         if !namespaces.is_empty() {
-            println!("└── (standalone)");
+            println!("(standalone)");
         }
 
         // Find roots among standalone tasks
@@ -1568,7 +1559,7 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
 
         standalone_roots.sort();
 
-        let sub_prefix = if namespaces.is_empty() { "" } else { "    " };
+        let sub_prefix = if namespaces.is_empty() { "" } else { "  " };
         for (i, root) in standalone_roots.iter().enumerate() {
             if !visited.contains(*root) {
                 let is_last = i == standalone_roots.len() - 1;
