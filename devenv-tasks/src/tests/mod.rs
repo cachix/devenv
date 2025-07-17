@@ -2537,9 +2537,13 @@ mod property_tests {
                 matched_names.sort();
                 Ok(matched_names)
             }
-            Err(_e) => {
-                // If task creation fails, return empty vec (e.g., for invalid query)
+            Err(Error::TaskNotFound(_)) => {
+                // Only return empty vec for TaskNotFound (no matching tasks)
                 Ok(vec![])
+            }
+            Err(e) => {
+                // Propagate other errors (IoError, CacheError, InvalidTaskName, etc.)
+                Err(e)
             }
         }
     }
