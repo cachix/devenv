@@ -97,19 +97,23 @@ impl Tasks {
                 continue;
             }
 
-            // Check if this is a namespace prefix (no colon)
-            if !name.contains(':') {
-                // This is a namespace prefix, find all tasks with this prefix
-                let matching_tasks: Vec<_> = task_indices
-                    .iter()
-                    .filter(|(task_name, _)| task_name.starts_with(&format!("{}:", name)))
-                    .map(|(_, &index)| index)
-                    .collect();
+            // Check if this is a namespace prefix (with or without colon)
+            let search_prefix = if name.ends_with(':') {
+                name.clone()
+            } else {
+                format!("{}:", name)
+            };
 
-                if !matching_tasks.is_empty() {
-                    roots.extend(matching_tasks);
-                    continue;
-                }
+            // Find all tasks with this prefix
+            let matching_tasks: Vec<_> = task_indices
+                .iter()
+                .filter(|(task_name, _)| task_name.starts_with(&search_prefix))
+                .map(|(_, &index)| index)
+                .collect();
+
+            if !matching_tasks.is_empty() {
+                roots.extend(matching_tasks);
+                continue;
             }
 
             return Err(Error::TaskNotFound(name));
