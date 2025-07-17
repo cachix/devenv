@@ -106,9 +106,6 @@ in
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
     (
-      let
-        mkOverrideTools = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
-      in
       {
         assertions = [
           {
@@ -171,9 +168,18 @@ in
             CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
 
-        git-hooks.tools.cargo = mkOverrideTools cfg.toolchainPackage;
-        git-hooks.tools.rustfmt = mkOverrideTools cfg.toolchainPackage;
-        git-hooks.tools.clippy = mkOverrideTools cfg.toolchainPackage;
+        git-hooks.tools =
+          let
+            mkOverrideTool = lib.mkOverride (lib.modules.defaultOverridePriority - 1);
+          in
+          {
+            cargo = mkOverrideTool cfg.toolchainPackage;
+            rustfmt = mkOverrideTool cfg.toolchainPackage;
+            clippy = mkOverrideTool cfg.toolchainPackage;
+          };
+
+        # Allow clippy to access the internet to fetch dependencies.
+        git-hooks.hooks.clippy.settings.offline = lib.mkDefault false;
       }
     )
 
