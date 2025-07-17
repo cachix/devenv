@@ -1642,7 +1642,7 @@ async fn test_non_root_before_and_after() -> Result<(), Error> {
 }
 
 #[tokio::test]
-async fn test_prefix_matching() -> Result<(), Error> {
+async fn test_namespace_matching() -> Result<(), Error> {
     // Create a unique tempdir for this test
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");
@@ -1652,54 +1652,250 @@ async fn test_prefix_matching() -> Result<(), Error> {
     let script3 = create_basic_script("3")?;
     let script4 = create_basic_script("4")?;
 
-    // Create tasks in two different namespaces
+    // Test namespace matching scenarios:
+    // ci -> [ci:format:nixfmt, ci:format:shfmt, ci:lint:shellcheck]
+    // ci:lint -> [ci:lint:shellcheck]
+    // ci:format -> [ci:format:nixfmt, ci:format:shfmt]
+    // ci:format:nixfmt -> [ci:format:nixfmt]
+
+    // Test top-level namespace matching with exclusion of other namespaces
     let tasks = Tasks::new_with_db_path(
         Config::try_from(json!({
-            "roots": ["myapp"], // Just use the namespace prefix
+            "roots": ["ci"],
             "run_mode": "all",
             "tasks": [
                 {
-                    "name": "myapp:task_1",
+                    "name": "ci:format:nixfmt",
                     "command": script1.to_str().unwrap()
                 },
                 {
-                    "name": "myapp:task_2",
+                    "name": "ci:format:shfmt",
                     "command": script2.to_str().unwrap()
                 },
                 {
-                    "name": "myapp:task_3",
+                    "name": "ci:lint:shellcheck",
                     "command": script3.to_str().unwrap()
                 },
                 {
-                    "name": "other:task_4",
+                    "name": "other:task",
                     "command": script4.to_str().unwrap()
                 }
             ]
         }))
         .unwrap(),
-        db_path,
+        db_path.clone(),
         VerbosityLevel::Verbose,
     )
     .await?;
+
     tasks.run().await;
 
     let task_statuses = inspect_tasks(&tasks).await;
-    let task_statuses = task_statuses.as_slice();
 
-    // Should only match the "myapp" namespace tasks, not "other"
+    // Should match all three tasks in the "ci" namespace, excluding "other"
     assert_eq!(
         task_statuses.len(),
         3,
-        "Should only run the myapp namespace tasks"
+        "Should run all tasks in ci namespace"
     );
 
-    // Verify we got the three myapp tasks and they all succeeded
+    // Verify all tasks succeeded and are from ci namespace
     assert!(
-        task_statuses
-            .iter()
-            .all(|(name, status)| name.starts_with("myapp:")
-                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))),
-        "All tasks should be from myapp namespace and have succeeded"
+        task_statuses.iter().all(|(name, status)| {
+            name.starts_with("ci:")
+                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        }),
+        "All ci namespace tasks should succeed"
+    );
+
+    // Test ci:lint namespace matching
+    let tasks2 = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["ci:lint"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "ci:format:nixfmt",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "ci:format:shfmt",
+                    "command": script2.to_str().unwrap()
+                },
+                {
+                    "name": "ci:lint:shellcheck",
+                    "command": script3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks2.run().await;
+
+    let task_statuses2 = inspect_tasks(&tasks2).await;
+
+    // Should match only the shellcheck task
+    assert_eq!(
+        task_statuses2.len(),
+        1,
+        "Should run only tasks in ci:lint namespace"
+    );
+    assert_eq!(task_statuses2[0].0, "ci:lint:shellcheck");
+    assert!(matches!(
+        task_statuses2[0].1,
+        TaskStatus::Completed(TaskCompleted::Success(_, _))
+    ));
+
+    // Test ci:format namespace matching
+    let tasks3 = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["ci:format"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "ci:format:nixfmt",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "ci:format:shfmt",
+                    "command": script2.to_str().unwrap()
+                },
+                {
+                    "name": "ci:lint:shellcheck",
+                    "command": script3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks3.run().await;
+
+    let task_statuses3 = inspect_tasks(&tasks3).await;
+
+    // Should match both format tasks
+    assert_eq!(
+        task_statuses3.len(),
+        2,
+        "Should run both tasks in ci:format namespace"
+    );
+
+    let task_names: Vec<_> = task_statuses3
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert!(task_names.contains(&"ci:format:nixfmt"));
+    assert!(task_names.contains(&"ci:format:shfmt"));
+
+    // Verify both format tasks succeeded
+    assert!(
+        task_statuses3.iter().all(|(name, status)| {
+            name.starts_with("ci:format:")
+                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        }),
+        "All ci:format namespace tasks should succeed"
+    );
+
+    // Test exact task name matching (should still work)
+    let tasks4 = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["ci:format:nixfmt"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "ci:format:nixfmt",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "ci:format:shfmt",
+                    "command": script2.to_str().unwrap()
+                },
+                {
+                    "name": "ci:lint:shellcheck",
+                    "command": script3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks4.run().await;
+
+    let task_statuses4 = inspect_tasks(&tasks4).await;
+
+    // Should match only the exact task
+    assert_eq!(
+        task_statuses4.len(),
+        1,
+        "Should run only the exact task match"
+    );
+    assert_eq!(task_statuses4[0].0, "ci:format:nixfmt");
+    assert!(matches!(
+        task_statuses4[0].1,
+        TaskStatus::Completed(TaskCompleted::Success(_, _))
+    ));
+
+    // Test namespace matching with trailing colon (should work same as without)
+    let tasks5 = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["ci:format:"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "ci:format:nixfmt",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "ci:format:shfmt",
+                    "command": script2.to_str().unwrap()
+                },
+                {
+                    "name": "ci:lint:shellcheck",
+                    "command": script3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks5.run().await;
+
+    let task_statuses5 = inspect_tasks(&tasks5).await;
+
+    // Should match both format tasks (same as "ci:format")
+    assert_eq!(
+        task_statuses5.len(),
+        2,
+        "Should run both tasks in ci:format: namespace"
+    );
+
+    let task_names5: Vec<_> = task_statuses5
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
+    assert!(task_names5.contains(&"ci:format:nixfmt"));
+    assert!(task_names5.contains(&"ci:format:shfmt"));
+
+    // Verify both format tasks succeeded
+    assert!(
+        task_statuses5.iter().all(|(name, status)| {
+            name.starts_with("ci:format:")
+                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        }),
+        "All ci:format: namespace tasks should succeed"
     );
 
     Ok(())
@@ -1942,6 +2138,197 @@ fi
     assert_eq!(
         outputs.get("myapp:task_2").unwrap(),
         &json!({"result": "success"})
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
+    // Create a unique tempdir for this test
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script1 = create_basic_script("1")?;
+    let script2 = create_basic_script("2")?;
+
+    // Test empty string namespace
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": [""],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task2",
+                    "command": script2.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "");
+
+    // Test whitespace-only namespace
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["  "],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "  ");
+
+    // Test just colon namespace
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": [":"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == ":");
+
+    // Test namespace starting with colon
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": [":invalid"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == ":invalid");
+
+    // Test namespace with consecutive colons
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["test::invalid"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "test::invalid");
+
+    // Test that trimming works correctly for valid namespaces
+    let tasks = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["  test  "],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task2",
+                    "command": script2.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // Should match both tasks in the "test" namespace (after trimming)
+    assert_eq!(
+        task_statuses.len(),
+        2,
+        "Should run both tasks in test namespace after trimming whitespace"
+    );
+
+    // Test that valid namespaces still work
+    let tasks = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["test"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task2",
+                    "command": script2.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path,
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // Should match both tasks in the "test" namespace
+    assert_eq!(
+        task_statuses.len(),
+        2,
+        "Should run both tasks in test namespace"
+    );
+
+    // Verify all tasks succeeded
+    assert!(
+        task_statuses.iter().all(|(name, status)| {
+            name.starts_with("test:")
+                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        }),
+        "All test namespace tasks should succeed"
     );
 
     Ok(())

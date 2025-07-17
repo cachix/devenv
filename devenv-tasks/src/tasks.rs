@@ -8,6 +8,7 @@ use crate::types::{
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -60,6 +61,56 @@ impl Tasks {
         Self::new_with_config_and_cache(config, cache, verbosity).await
     }
 
+    fn resolve_namespace_roots(
+        roots: &[String],
+        task_indices: &HashMap<String, NodeIndex>,
+    ) -> Result<Vec<NodeIndex>, Error> {
+        let mut resolved_roots = Vec::new();
+
+        for name in roots {
+            let trimmed_name = name.trim();
+
+            // Validate namespace name
+            if trimmed_name.is_empty() {
+                return Err(Error::TaskNotFound(name.clone()));
+            }
+
+            // Reject invalid namespace patterns
+            if trimmed_name == ":" || trimmed_name.starts_with(':') || trimmed_name.contains("::") {
+                return Err(Error::TaskNotFound(name.clone()));
+            }
+
+            // Check for exact match first
+            if let Some(index) = task_indices.get(trimmed_name) {
+                resolved_roots.push(*index);
+                continue;
+            }
+
+            // Check if this is a namespace prefix (with or without colon)
+            let search_prefix: Cow<str> = if trimmed_name.ends_with(':') {
+                Cow::Borrowed(trimmed_name)
+            } else {
+                Cow::Owned(format!("{}:", trimmed_name))
+            };
+
+            // Find all tasks with this prefix
+            let matching_tasks: Vec<_> = task_indices
+                .iter()
+                .filter(|(task_name, _)| task_name.starts_with(&*search_prefix))
+                .map(|(_, &index)| index)
+                .collect();
+
+            if !matching_tasks.is_empty() {
+                resolved_roots.extend(matching_tasks);
+                continue;
+            }
+
+            return Err(Error::TaskNotFound(name.clone()));
+        }
+
+        Ok(resolved_roots)
+    }
+
     async fn new_with_config_and_cache(
         config: Config,
         cache: TaskCache,
@@ -88,32 +139,7 @@ impl Tasks {
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(task, verbosity))));
             task_indices.insert(name, index);
         }
-        let mut roots = Vec::new();
-
-        for name in config.roots.clone() {
-            // Check for exact match first
-            if let Some(index) = task_indices.get(&name) {
-                roots.push(*index);
-                continue;
-            }
-
-            // Check if this is a namespace prefix (no colon)
-            if !name.contains(':') {
-                // This is a namespace prefix, find all tasks with this prefix
-                let matching_tasks: Vec<_> = task_indices
-                    .iter()
-                    .filter(|(task_name, _)| task_name.starts_with(&format!("{}:", name)))
-                    .map(|(_, &index)| index)
-                    .collect();
-
-                if !matching_tasks.is_empty() {
-                    roots.extend(matching_tasks);
-                    continue;
-                }
-            }
-
-            return Err(Error::TaskNotFound(name));
-        }
+        let roots = Self::resolve_namespace_roots(&config.roots, &task_indices)?;
         let mut tasks = Self {
             roots,
             root_names: config.roots,
