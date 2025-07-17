@@ -66,4 +66,4 @@ nix-compat-derive = { git = "https://github.com/cachix/snix", optional = true }
 [features]
 default = []
 integration-tests = []
-snix = ["snix-eval", "snix-glue", "snix-castore", "snix-store", "snix-build"]
+snix = ["dep:snix-eval", "dep:snix-glue", "dep:snix-castore", "dep:snix-store", "dep:snix-build", "dep:nix-compat", "dep:nix-compat-derive"]
