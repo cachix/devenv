@@ -8,6 +8,7 @@ use crate::types::{
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -98,16 +99,16 @@ impl Tasks {
             }
 
             // Check if this is a namespace prefix (with or without colon)
-            let search_prefix = if name.ends_with(':') {
-                name.clone()
+            let search_prefix: Cow<str> = if name.ends_with(':') {
+                Cow::Borrowed(&name)
             } else {
-                format!("{}:", name)
+                Cow::Owned(format!("{}:", name))
             };
 
             // Find all tasks with this prefix
             let matching_tasks: Vec<_> = task_indices
                 .iter()
-                .filter(|(task_name, _)| task_name.starts_with(&search_prefix))
+                .filter(|(task_name, _)| task_name.starts_with(&*search_prefix))
                 .map(|(_, &index)| index)
                 .collect();
 
