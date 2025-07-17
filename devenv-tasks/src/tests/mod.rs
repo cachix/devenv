@@ -2143,6 +2143,197 @@ fi
     Ok(())
 }
 
+#[tokio::test]
+async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
+    // Create a unique tempdir for this test
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    let script1 = create_basic_script("1")?;
+    let script2 = create_basic_script("2")?;
+
+    // Test empty string namespace
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": [""],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task2",
+                    "command": script2.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "");
+
+    // Test whitespace-only namespace
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["  "],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "  ");
+
+    // Test just colon namespace
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": [":"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == ":");
+
+    // Test namespace starting with colon
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": [":invalid"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == ":invalid");
+
+    // Test namespace with consecutive colons
+    let result = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["test::invalid"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await;
+
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "test::invalid");
+
+    // Test that trimming works correctly for valid namespaces
+    let tasks = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["  test  "],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task2",
+                    "command": script2.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path.clone(),
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // Should match both tasks in the "test" namespace (after trimming)
+    assert_eq!(
+        task_statuses.len(),
+        2,
+        "Should run both tasks in test namespace after trimming whitespace"
+    );
+
+    // Test that valid namespaces still work
+    let tasks = Tasks::new_with_db_path(
+        Config::try_from(json!({
+            "roots": ["test"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task1",
+                    "command": script1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task2",
+                    "command": script2.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        db_path,
+        VerbosityLevel::Verbose,
+    )
+    .await?;
+
+    tasks.run().await;
+
+    let task_statuses = inspect_tasks(&tasks).await;
+
+    // Should match both tasks in the "test" namespace
+    assert_eq!(
+        task_statuses.len(),
+        2,
+        "Should run both tasks in test namespace"
+    );
+
+    // Verify all tasks succeeded
+    assert!(
+        task_statuses.iter().all(|(name, status)| {
+            name.starts_with("test:")
+                && matches!(status, TaskStatus::Completed(TaskCompleted::Success(_, _)))
+        }),
+        "All test namespace tasks should succeed"
+    );
+
+    Ok(())
+}
+
 async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
     let mut result = Vec::new();
     for index in &tasks.tasks_order {

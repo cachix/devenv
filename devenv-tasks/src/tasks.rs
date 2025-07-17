@@ -68,17 +68,29 @@ impl Tasks {
         let mut resolved_roots = Vec::new();
 
         for name in roots {
+            let trimmed_name = name.trim();
+
+            // Validate namespace name
+            if trimmed_name.is_empty() {
+                return Err(Error::TaskNotFound(name.clone()));
+            }
+
+            // Reject invalid namespace patterns
+            if trimmed_name == ":" || trimmed_name.starts_with(':') || trimmed_name.contains("::") {
+                return Err(Error::TaskNotFound(name.clone()));
+            }
+
             // Check for exact match first
-            if let Some(index) = task_indices.get(name) {
+            if let Some(index) = task_indices.get(trimmed_name) {
                 resolved_roots.push(*index);
                 continue;
             }
 
             // Check if this is a namespace prefix (with or without colon)
-            let search_prefix: Cow<str> = if name.ends_with(':') {
-                Cow::Borrowed(name)
+            let search_prefix: Cow<str> = if trimmed_name.ends_with(':') {
+                Cow::Borrowed(trimmed_name)
             } else {
-                Cow::Owned(format!("{}:", name))
+                Cow::Owned(format!("{}:", trimmed_name))
             };
 
             // Find all tasks with this prefix
