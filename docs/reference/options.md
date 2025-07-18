@@ -17142,6 +17142,90 @@ string
 
 
 
+## secretspec.enable
+
+
+
+Whether secretspec integration is enabled (automatically true when secrets are loaded)
+
+
+
+*Type:*
+boolean *(read only)*
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
+
+
+
+## secretspec.profile
+
+
+
+The secretspec profile that was used to load secrets (read-only)
+
+
+
+*Type:*
+null or string *(read only)*
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
+
+
+
+## secretspec.provider
+
+
+
+The secretspec provider that was used to load secrets (read-only)
+
+
+
+*Type:*
+null or string *(read only)*
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
+
+
+
+## secretspec.secrets
+
+
+
+Secrets loaded from secretspec.toml (read-only)
+
+
+
+*Type:*
+attribute set of string *(read only)*
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/secretspec.nix)
+
+
+
 ## services.adminer.enable
 
 

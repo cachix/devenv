@@ -52,6 +52,16 @@
       "items": {
         "type": "string"
       }
+    },
+    "secretspec": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SecretspecConfig"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "definitions": {
@@ -166,6 +176,26 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "SecretspecConfig": {
+      "type": "object",
+      "properties": {
+        "enable": {
+          "type": "boolean"
+        },
+        "profile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     }

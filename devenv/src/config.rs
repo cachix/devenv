@@ -158,6 +158,20 @@ pub struct Config {
     pub impure: bool,
     #[serde(default, skip_serializing_if = "is_default")]
     pub backend: NixBackendType,
+    #[setting(nested)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub secretspec: Option<SecretspecConfig>,
+}
+
+#[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SecretspecConfig {
+    #[serde(skip_serializing_if = "is_false", default = "false_default")]
+    #[setting(default = false)]
+    pub enable: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub provider: Option<String>,
 }
 
 // TODO: https://github.com/moonrepo/schematic/issues/105
