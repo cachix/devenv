@@ -34,3 +34,4 @@ jobs:
         with:
           commit_message: "Next release is ${{ steps.get-version.outputs.VERSION }}"
           file_pattern: "Cargo.toml Cargo.lock"
+          branch: main
