@@ -117,6 +117,8 @@ In `devenv.nix`:
 { pkgs, lib, config, ... }:
 
 {
+  languages.rust.enable = true;
+
   services.minio = {
     enable = true;
     buckets = [ config.secretspec.secrets.BUCKET_NAME ];
