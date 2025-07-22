@@ -1,7 +1,7 @@
 # Nix & devenv
 result
-.env
-.env.*
+/.env
+/.env.*
 .devenv*
 .direnv*
 /.cache
