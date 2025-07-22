@@ -92,7 +92,7 @@ Succeeded         deploy:production                        5ms
 The CLI now supports specifying single packages via the `--option` flag ([#1988](https://github.com/cachix/devenv/pull/1988)). This allows for more flexible package configuration directly from the command line:
 
 ```shell-session
-$ devenv shell --option "languages.java.jdk.package" "graalvm-oracle"
+$ devenv shell --option "languages.java.jdk.package:pkg" "graalvm-oracle"
 ```
 
 ## Container optimizations
