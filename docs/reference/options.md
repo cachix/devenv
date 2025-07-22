@@ -25189,7 +25189,9 @@ package
 
 
 
-List of tasks to run after this task.
+List of tasks that must complete before this task runs.
+
+Here’s a helpful mnemonic to remember: This task runs *after* these tasks.
 
 
 
@@ -25210,7 +25212,9 @@ list of string
 
 
 
-List of tasks to run before this task.
+List of tasks that depend on this task completing first.
+
+Here’s a helpful mnemonic to remember: This task runs *before* these tasks.
 
 
 
