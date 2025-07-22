@@ -242,9 +242,15 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                     ))
                 }
             };
+
+            let passed = status.is_ok();
+            if let Err(error) = &status {
+                eprintln!("    Error in {}: {}", dir_name, error);
+            }
+
             let result = TestResult {
                 name: dir_name.to_string(),
-                passed: status.is_ok(),
+                passed,
             };
             test_results.push(result);
 
