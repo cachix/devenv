@@ -35,3 +35,7 @@ Starting processes ...
 ```
 
 A set of common services are also available, such as [services.postgres.enable](reference/options.md#servicespostgresenable) for setting up a PostgreSQL process.
+
+## Running tasks before/after the process
+
+Processes are automatically available as tasks, allowing you to define pre and post hooks. See the [Processes as tasks](tasks.md#processes-as-tasks) section for details on how to run tasks before a process starts or after it stops.

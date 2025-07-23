@@ -154,6 +154,67 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
 }
 ```
 
+## Processes as tasks
+
+!!! info "New in version 1.4"
+
+All processes defined in `processes` are automatically available as tasks with the `devenv:processes:` prefix. This allows you to:
+
+- Run individual processes as tasks
+- Define dependencies between tasks and processes
+- Use task features like `before`/`after` with processes
+
+```nix title="devenv.nix"
+{ pkgs, ... }:
+
+{
+  # Define a process
+  processes.web-server = {
+    exec = "python -m http.server 8080";
+  };
+
+  # Define a task that runs before the process
+  tasks."setup-data" = {
+    exec = "echo 'Setting up data...'";
+    before = [ "devenv:processes:web-server" ];
+  };
+}
+```
+
+When you run `devenv tasks run devenv:processes:web-server`, it will:
+1. First run any tasks that have `before = [ "devenv:processes:web-server" ]`
+2. Then execute the process itself
+
+This is particularly useful for:
+- Running setup tasks before starting a process
+- Creating complex startup sequences
+- Testing individual processes without starting all of them
+
+You can also run tasks after a process finishes by using the `after` attribute:
+
+```nix title="devenv.nix"
+{ pkgs, ... }:
+
+{
+  # Define an application server process
+  processes.app-server = {
+    exec = "node server.js";
+  };
+
+  # Define a task that runs after the server stops
+  tasks."app:cleanup" = {
+    exec = ''
+      echo "Server stopped, cleaning up..."
+      rm -f ./server.pid
+      rm -rf ./tmp/cache/*
+    '';
+    after = [ "devenv:processes:app-server" ];
+  };
+}
+```
+
+This ensures that cleanup tasks like removing PID files or clearing caches are executed when the application server stops.
+
 ## SDK using Task Server Protocol
 
 See [Task Server Protocol](https://github.com/cachix/devenv/issues/1457) for a proposal how defining tasks in your favorite language would look like.

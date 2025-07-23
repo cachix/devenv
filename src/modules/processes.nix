@@ -136,9 +136,19 @@ in
 
     process.managers.${implementation}.enable = lib.mkDefault true;
 
+    # Create tasks for each defined process
+    tasks = lib.mapAttrs'
+      (name: process: {
+        name = "devenv:processes:${name}";
+        value = {
+          exec = process.exec;
+        };
+      })
+      config.processes;
+
     procfile =
       pkgs.writeText "procfile" (lib.concatStringsSep "\n"
-        (lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}")
+        (lib.mapAttrsToList (name: process: "${name}: exec ${config.task.package}/bin/devenv-tasks run --mode all devenv:processes:${name}")
           config.processes));
 
     procfileEnv =
