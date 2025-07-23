@@ -1021,6 +1021,446 @@ list of string
 
 
 
+## claude.code.enable
+
+
+
+Whether to enable Claude Code integration with automatic hooks and commands setup.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.apiKeyHelper
+
+
+
+Custom script for generating authentication tokens.
+The script should output the API key to stdout.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "aws secretsmanager get-secret-value --secret-id claude-api-key | jq -r .SecretString" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.cleanupPeriodDays
+
+
+
+Retention period for chat transcripts in days.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 30 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.commands
+
+
+
+Custom Claude Code slash commands to create in the project.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+``````
+{
+  test = ''
+    Run all tests in the project
+
+    ```bash
+    cargo test
+    ```
+  '';
+  fmt = ''
+    Format all code in the project
+
+    ```bash
+    cargo fmt
+    nixfmt **/*.nix
+    ```
+  '';
+}
+
+``````
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.env
+
+
+
+Custom environment variables for Claude Code sessions.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  NODE_ENV = "development";
+  PYTHONPATH = "/custom/python/path";
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.forceLoginMethod
+
+
+
+Restrict the login method to either browser or API key authentication.
+
+
+
+*Type:*
+null or one of “browser”, “api-key”
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.hooks
+
+
+
+Hooks that run at different points in Claude Code’s workflow.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  protect-secrets = {
+    enable = true;
+    name = "Protect sensitive files";
+    hookType = "PreToolUse";
+    matcher = "^(Edit|MultiEdit|Write)$";
+    command = ''
+      json=$(cat);
+      file_path = $(echo "$json" | jq - r '.file_path // empty');
+      grep -q 'SECRET\\|PASSWORD\\|API_KEY' "$file_path" && echo 'Blocked: sensitive data detected' && exit 1 || exit 0
+    '';
+  };
+  run-tests = {
+    enable = true;
+    name = "Run tests after edit";
+    hookType = "PostToolUse";
+    matcher = "^(Edit|MultiEdit|Write)$";
+    command = "cargo test";
+  };
+  log-completion = {
+    enable = true;
+    name = "Log when Claude finishes";
+    hookType = "Stop";
+    command = "echo 'Claude finished responding' >> claude.log";
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.hooks.\<name>.enable
+
+
+
+Whether to enable this hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.hooks.\<name>.command
+
+
+
+The command to execute.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.hooks.\<name>.hookType
+
+
+
+The type of hook:
+
+ - PreToolUse: Runs before tool calls (can block them)
+ - PostToolUse: Runs after tool calls complete
+ - Notification: Runs when Claude Code sends notifications
+ - Stop: Runs when Claude Code finishes responding
+ - SubagentStop: Runs when subagent tasks complete
+
+
+
+*Type:*
+one of “PreToolUse”, “PostToolUse”, “Notification”, “Stop”, “SubagentStop”
+
+
+
+*Default:*
+` "PostToolUse" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.hooks.\<name>.matcher
+
+
+
+Regex pattern to match against tool names (for PreToolUse/PostToolUse hooks).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.hooks.\<name>.name
+
+
+
+The name of the hook (appears in logs).
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.model
+
+
+
+Override the default Claude model.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "claude-3-opus-20240229" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions
+
+
+
+Fine-grained permissions for tool usage.
+Can specify allow/deny rules for different tools.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  Edit = {
+    deny = [ "*.secret" "*.env" ];
+  };
+  Bash = {
+    deny = [ "rm -rf" ];
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions.\<name>.allow
+
+
+
+List of allowed tools or patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.permissions.\<name>.deny
+
+
+
+List of denied tools or patterns.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## container.isBuilding
 
 
@@ -1961,8 +2401,6 @@ string or list of string
 
 ## enterShell
 
-
-
 Bash code to execute when entering the shell.
 
 
@@ -2330,6 +2768,8 @@ list of (one of “commit-msg”, “post-checkout”, “post-commit”, “pos
 
 
 ## git-hooks.excludes
+
+
 
 Exclude files that were matched by these patterns.
 
@@ -4777,8 +5217,6 @@ boolean
 
 ## git-hooks.hooks.denofmt
 
-
-
 denofmt hook
 
 
@@ -5113,6 +5551,8 @@ boolean
 
 
 ## git-hooks.hooks.eclint.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -6814,8 +7254,6 @@ boolean
 
 ## git-hooks.hooks.mdl.settings.json
 
-
-
 Format output as JSON.
 
 
@@ -7148,6 +7586,8 @@ one of “get”, “head”
 
 
 ## git-hooks.hooks.mkdocs-linkcheck.settings.path
+
+
 
 Path to check
 
