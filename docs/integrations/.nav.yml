@@ -1,10 +1,11 @@
 nav:
-   - .env: dotenv.md
-   - secretspec: secretspec.md
-   - Android: android.md
-   - Wordpress: wordpress.md
-   - GitHub Actions: github-actions.md
-   - Devenv Container: devenv-container.md
-   - Codespaces / devcontainer: codespaces-devcontainer.md
-   - Difftastic: difftastic.md
-   - Delta: delta.md
+  - .env: dotenv.md
+  - secretspec: secretspec.md
+  - Android: android.md
+  - Claude Code: claude-code.md
+  - Wordpress: wordpress.md
+  - GitHub Actions: github-actions.md
+  - Devenv Container: devenv-container.md
+  - Codespaces / devcontainer: codespaces-devcontainer.md
+  - Difftastic: difftastic.md
+  - Delta: delta.md

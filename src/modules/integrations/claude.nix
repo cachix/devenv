@@ -1,0 +1,314 @@
+{ pkgs
+, lib
+, config
+, ...
+}:
+
+let
+  cfg = config.claude.code;
+
+  # Build hooks configuration
+  buildHooks =
+    hookType: hooks:
+    if hooks == [ ] then
+      null
+    else
+      map
+        (hook: {
+          matcher = hook.matcher or "";
+          hooks = [
+            {
+              type = "command";
+              command = hook.command;
+            }
+          ];
+        })
+        hooks;
+
+  # Check if git-hooks task is defined (indicates git-hooks are enabled)
+  anyGitHooksEnabled = (config.tasks."devenv:git-hooks:run".exec or null) == "pre-commit run -a";
+
+  # Auto-format hook using pre-commit if any git-hooks are enabled
+  preCommitHook = lib.optional anyGitHooksEnabled {
+    matcher = "^(Edit|MultiEdit|Write)$";
+    command = ''
+      cd "$DEVENV_ROOT" && pre-commit run
+    '';
+  };
+
+  # Collect all hooks by type
+  allHooks = lib.mapAttrsToList
+    (
+      name: hook:
+        lib.mkIf hook.enable {
+          type = hook.hookType;
+          hook = {
+            matcher = hook.matcher;
+            command = hook.command;
+          };
+        }
+    )
+    cfg.hooks;
+
+  # Group hooks by type
+  groupedHooks = lib.mapAttrs (k: v: map (h: h.hook) v) (
+    lib.groupBy (h: h.type) (lib.filter (h: h != false) allHooks)
+  );
+
+  # Add pre-commit hook if git-hooks are enabled
+  postToolUseHooks = (groupedHooks.PostToolUse or [ ]) ++ preCommitHook;
+
+  # Generate the settings content
+  settingsContent = lib.filterAttrs (n: v: v != null) {
+    hooks = lib.filterAttrs (n: v: v != null) {
+      PreToolUse = buildHooks "PreToolUse" (groupedHooks.PreToolUse or [ ]);
+      PostToolUse = buildHooks "PostToolUse" postToolUseHooks;
+      Notification = buildHooks "Notification" (groupedHooks.Notification or [ ]);
+      Stop = buildHooks "Stop" (groupedHooks.Stop or [ ]);
+      SubagentStop = buildHooks "SubagentStop" (groupedHooks.SubagentStop or [ ]);
+    };
+    inherit (cfg)
+      apiKeyHelper
+      model
+      forceLoginMethod
+      cleanupPeriodDays
+      ;
+    env = if cfg.env == { } then null else cfg.env;
+    permissions = if cfg.permissions == { } then null else cfg.permissions;
+  };
+in
+{
+  options.claude.code = {
+    enable = lib.mkEnableOption "Claude Code integration with automatic hooks and commands setup";
+
+    hooks = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = true;
+              description = "Whether to enable this hook.";
+            };
+            name = lib.mkOption {
+              type = lib.types.str;
+              description = "The name of the hook (appears in logs).";
+            };
+            hookType = lib.mkOption {
+              type = lib.types.enum [
+                "PreToolUse"
+                "PostToolUse"
+                "Notification"
+                "Stop"
+                "SubagentStop"
+              ];
+              default = "PostToolUse";
+              description = ''
+                The type of hook:
+                - PreToolUse: Runs before tool calls (can block them)
+                - PostToolUse: Runs after tool calls complete
+                - Notification: Runs when Claude Code sends notifications
+                - Stop: Runs when Claude Code finishes responding
+                - SubagentStop: Runs when subagent tasks complete
+              '';
+            };
+            matcher = lib.mkOption {
+              type = lib.types.str;
+              default = "";
+              description = "Regex pattern to match against tool names (for PreToolUse/PostToolUse hooks).";
+            };
+            command = lib.mkOption {
+              type = lib.types.str;
+              description = "The command to execute.";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Hooks that run at different points in Claude Code's workflow.
+      '';
+      example = lib.literalExpression ''
+        {
+          protect-secrets = {
+            enable = true;
+            name = "Protect sensitive files";
+            hookType = "PreToolUse";
+            matcher = "^(Edit|MultiEdit|Write)$";
+            command = '''
+              json=$(cat);
+              file_path = $(echo "$json" | jq - r '.file_path // empty');
+              grep -q 'SECRET\\|PASSWORD\\|API_KEY' "$file_path" && echo 'Blocked: sensitive data detected' && exit 1 || exit 0
+            ''';
+          };
+          run-tests = {
+            enable = true;
+            name = "Run tests after edit";
+            hookType = "PostToolUse";
+            matcher = "^(Edit|MultiEdit|Write)$";
+            command = "cargo test";
+          };
+          log-completion = {
+            enable = true;
+            name = "Log when Claude finishes";
+            hookType = "Stop";
+            command = "echo 'Claude finished responding' >> claude.log";
+          };
+        }
+      '';
+    };
+
+    commands = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = ''
+        Custom Claude Code slash commands to create in the project.
+      '';
+      example = lib.literalExpression ''
+        {
+          test = '''
+            Run all tests in the project
+
+            ```bash
+            cargo test
+            ```
+          ''';
+          fmt = '''
+            Format all code in the project
+
+            ```bash
+            cargo fmt
+            nixfmt **/*.nix
+            ```
+          ''';
+        }
+      '';
+    };
+
+    apiKeyHelper = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Custom script for generating authentication tokens.
+        The script should output the API key to stdout.
+      '';
+      example = "aws secretsmanager get-secret-value --secret-id claude-api-key | jq -r .SecretString";
+    };
+
+    model = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        Override the default Claude model.
+      '';
+      example = "claude-3-opus-20240229";
+    };
+
+    forceLoginMethod = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.enum [
+          "browser"
+          "api-key"
+        ]
+      );
+      default = null;
+      description = ''
+        Restrict the login method to either browser or API key authentication.
+      '';
+    };
+
+    cleanupPeriodDays = lib.mkOption {
+      type = lib.types.nullOr lib.types.int;
+      default = null;
+      description = ''
+        Retention period for chat transcripts in days.
+      '';
+      example = 30;
+    };
+
+    env = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = ''
+        Custom environment variables for Claude Code sessions.
+      '';
+      example = {
+        PYTHONPATH = "/custom/python/path";
+        NODE_ENV = "development";
+      };
+    };
+
+    permissions = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            allow = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "List of allowed tools or patterns.";
+            };
+            deny = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "List of denied tools or patterns.";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Fine-grained permissions for tool usage.
+        Can specify allow/deny rules for different tools.
+      '';
+      example = lib.literalExpression ''
+        {
+          Edit = {
+            deny = [ "*.secret" "*.env" ];
+          };
+          Bash = {
+            deny = [ "rm -rf" ];
+          };
+        }
+      '';
+    };
+
+    settingsPath = lib.mkOption {
+      type = lib.types.str;
+      default = "${config.devenv.root}/.claude/settings.json";
+      internal = true;
+      description = ''
+        Path to the Claude Code settings file within the repository.
+      '';
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    files = lib.mkMerge [
+      { ".claude/settings.json".json = settingsContent; }
+
+      # Command files
+      (lib.mapAttrs'
+        (name: content: {
+          name = ".claude/commands/${name}.md";
+          value = {
+            text = content;
+          };
+        })
+        cfg.commands)
+    ];
+
+    # Add a message about the integration
+    infoSections."claude" = [
+      ''
+        Claude Code integration is enabled with automatic hooks and commands setup.
+        Settings are configured at: ${cfg.settingsPath}
+        ${lib.optionalString anyGitHooksEnabled "- Auto-formatting: enabled via git-hooks (pre-commit)"}
+        ${lib.optionalString (cfg.commands != { })
+          "- Project commands: ${
+            lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
+          }"
+        }
+      ''
+    ];
+  };
+}
