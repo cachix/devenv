@@ -25,6 +25,7 @@ The `--option` flag requires you to specify the inferred Nix type:
 - `:float` for floating-point values  
 - `:bool` for boolean values (true/false)
 - `:path` for file paths (interpreted as relative paths)
+- `:pkg` for a package 
 - `:pkgs` for lists of packages (space-separated package names)
 
 ## Installing Packages
