@@ -115,7 +115,8 @@ async fn main() -> Result<()> {
                         match c {
                             ContainerCommand::Build { name } => {
                                 devenv.container_name = Some(name.clone());
-                                let _ = devenv.container_build(&name).await?;
+                                let path = devenv.container_build(&name).await?;
+                                println!("{path}");
                             }
                             ContainerCommand::Copy { name } => {
                                 devenv.container_name = Some(name.clone());
