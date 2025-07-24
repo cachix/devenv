@@ -499,11 +499,7 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        let span = info_span!(
-            "copying_container",
-            devenv.user_message = format!("Copying {name} container")
-        );
-
+        let span = info_span!("copying_container");
         async move {
             let sanitized_name = sanitize_container_name(name);
             let gc_root = self
@@ -526,7 +522,7 @@ impl Devenv {
                 .chain(copy_args.iter().map(|s| s.to_string()))
                 .collect();
 
-            info!("Running {copy_script_string} {}", command_args.join(" "));
+            debug!("Running {copy_script_string} {}", command_args.join(" "));
 
             let status = process::Command::new(copy_script)
                 .args(command_args)
