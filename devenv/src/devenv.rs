@@ -485,7 +485,6 @@ impl Devenv {
                 )
                 .await?;
             let container_store_path = &paths[0].to_string_lossy();
-            println!("{}", container_store_path);
             Ok(container_store_path.to_string())
         }
         .instrument(span)
@@ -500,7 +499,6 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        // TODO: No newline
         let span = info_span!(
             "copying_container",
             devenv.user_message = format!("Copying {name} container")
@@ -560,38 +558,29 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        let span = info_span!(
-            "running_container",
-            devenv.user_message = format!("Running {name} container")
+        info!(devenv.is_user_message = true, "Running container",);
+
+        let sanitized_name = sanitize_container_name(name);
+        let gc_root = self
+            .devenv_dot_gc
+            .join(format!("container-{sanitized_name}-run"));
+        let paths = self
+            .nix
+            .build(
+                &[&format!("devenv.containers.{name}.dockerRun")],
+                None,
+                Some(&gc_root),
+            )
+            .await?;
+
+        let err = process::Command::new(&paths[0]).into_std().exec();
+
+        // If exec fails, we return an error.
+        error!(
+            devenv.is_user_message = true,
+            "Failed to run container: {}", err
         );
-
-        async move {
-            let sanitized_name = sanitize_container_name(name);
-            let gc_root = self
-                .devenv_dot_gc
-                .join(format!("container-{sanitized_name}-run"));
-            let paths = self
-                .nix
-                .build(
-                    &[&format!("devenv.containers.{name}.dockerRun")],
-                    None,
-                    Some(&gc_root),
-                )
-                .await?;
-
-            let status = process::Command::new(&paths[0])
-                .status()
-                .await
-                .expect("Failed to run container script");
-
-            if !status.success() {
-                bail!("Failed to run container")
-            } else {
-                Ok(())
-            }
-        }
-        .instrument(span)
-        .await
+        bail!("Failed to run container")
     }
 
     pub async fn repl(&self) -> Result<()> {
