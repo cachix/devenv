@@ -32,7 +32,6 @@ If you do need secrets in your devenv environment:
 ```yaml title="devenv.yaml"
 secretspec:
   enable: true
-  # these are optional global overrides
   provider: keyring  # keyring, dotenv, env, 1password, lastpass
   profile: default   # profile from secretspec.toml
 ```
@@ -46,10 +45,11 @@ Then access in `devenv.nix`:
   env.DATABASE_URL = config.secretspec.secrets.DATABASE_URL or "";
 }
 ```
+https://secretspec.dev/sdk/rust/
 
 ## Learn More
 
 - [secretspec.dev](https://secretspec.dev)
-- [Providers](https://secretspec.dev/docs/providers) - Keyring, 1Password, dotenv, and more
-- [Profiles](https://secretspec.dev/docs/profiles) - Environment-specific configurations
-- [Rust SDK](https://secretspec.dev/docs/rust-sdk) - Type-safe secret access
+- [Providers](https://secretspec.dev/providers/keyring/) - Keyring, 1Password, dotenv, and more
+- [Profiles](https://secretspec.dev/concepts/profiles/) - Environment-specific configurations
+- [Rust SDK](https://secretspec.dev/sdk/rust/) - Type-safe 
