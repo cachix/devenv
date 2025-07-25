@@ -40,11 +40,11 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
 
             tokio::select! {
                 _ = sigint.recv() => {
-                    cleanup_before_exec();
+                    cleanup_tui();
                     std::process::exit(130); // Standard exit code for SIGINT
                 }
                 _ = sigterm.recv() => {
-                    cleanup_before_exec();
+                    cleanup_tui();
                     std::process::exit(143); // Standard exit code for SIGTERM
                 }
             }
@@ -91,17 +91,33 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
     (layer, state)
 }
 
-/// Force cleanup of TUI to prevent terminal corruption before exec
-pub fn cleanup_before_exec() {
+/// Cleanup TUI terminal state
+pub fn cleanup_tui() {
+    use ratatui::{backend::CrosstermBackend, Terminal};
     use std::io::Write;
 
-    // Force terminal restoration to prevent corruption when process is replaced by exec
+    // Move cursor to the bottom of the active region
+    if let Ok(mut terminal) = Terminal::new(CrosstermBackend::new(std::io::stderr())) {
+        if let Ok(size) = terminal.size() {
+            let _ = crossterm::execute!(
+                std::io::stderr(),
+                crossterm::cursor::MoveTo(0, size.height - 1)
+            );
+        }
+    }
+
     ratatui::restore();
 
-    // Ensure cursor is visible after cleanup
-    if crossterm::execute!(std::io::stderr(), crossterm::cursor::Show).is_err() {
-        // Fallback if crossterm fails - try basic ANSI escape
-        let _ = std::io::stderr().write_all(b"\x1b[?25h");
+    // Insert a new line to push content down and show cursor
+    if crossterm::execute!(
+        std::io::stderr(),
+        crossterm::cursor::MoveToNextLine(1),
+        crossterm::cursor::Show
+    )
+    .is_err()
+    {
+        // Fallback if crossterm fails - try basic ANSI escapes
+        let _ = std::io::stderr().write_all(b"\x1b[E\x1b[?25h"); // Move to next line + show cursor
         let _ = std::io::stderr().flush();
     }
 }

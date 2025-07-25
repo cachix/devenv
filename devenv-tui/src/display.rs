@@ -392,29 +392,9 @@ impl RatatuiDisplay {
             }
         };
 
-        // Always cleanup terminal state on exit, ensuring restoration even if cleanup fails
-        if let Err(cleanup_err) = self.cleanup_terminal() {
-            eprintln!(
-                "Warning: Failed to cleanup terminal properly: {}",
-                cleanup_err
-            );
-            // Force restoration as fallback
-            ratatui::restore();
-        }
+        // Always cleanup terminal state on exit
+        crate::cleanup_tui();
         result
-    }
-
-    /// Cleanup terminal state on exit
-    fn cleanup_terminal(&mut self) -> io::Result<()> {
-        // Clear the active region one final time
-        self.clear_active_region()?;
-
-        // Ensure cursor is visible
-        if let Err(e) = crossterm::execute!(std::io::stderr(), crossterm::cursor::Show) {
-            eprintln!("Warning: Failed to show cursor: {}", e);
-        }
-
-        Ok(())
     }
 
     /// Handle individual TUI events
@@ -448,10 +428,8 @@ impl RatatuiDisplay {
 
 impl Drop for RatatuiDisplay {
     fn drop(&mut self) {
-        // Ensure terminal is always restored, even if cleanup_terminal wasn't called
-        if let Err(e) = self.cleanup_terminal() {
-            eprintln!("Warning: Failed to cleanup terminal in Drop: {}", e);
-        }
+        // Ensure terminal is always restored
+        crate::cleanup_tui();
     }
 }
 
