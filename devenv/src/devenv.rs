@@ -457,6 +457,11 @@ impl Devenv {
         Ok(())
     }
 
+    #[instrument(
+        name = "building_container",
+        skip(self),
+        fields(devenv.user_message = "Building {name} container")
+    )]
     pub async fn container_build(&self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
             bail!(
@@ -464,31 +469,22 @@ impl Devenv {
             );
         }
 
-        let span = info_span!(
-            "building_container",
-            devenv.user_message = format!("Building {name} container")
-        );
+        self.assemble(false).await?;
 
-        async move {
-            self.assemble(false).await?;
-
-            let sanitized_name = sanitize_container_name(name);
-            let gc_root = self
-                .devenv_dot_gc
-                .join(format!("container-{sanitized_name}-derivation"));
-            let paths = self
-                .nix
-                .build(
-                    &[&format!("devenv.containers.{name}.derivation")],
-                    None,
-                    Some(&gc_root),
-                )
-                .await?;
-            let container_store_path = &paths[0].to_string_lossy();
-            Ok(container_store_path.to_string())
-        }
-        .instrument(span)
-        .await
+        let sanitized_name = sanitize_container_name(name);
+        let gc_root = self
+            .devenv_dot_gc
+            .join(format!("container-{sanitized_name}-derivation"));
+        let paths = self
+            .nix
+            .build(
+                &[&format!("devenv.containers.{name}.derivation")],
+                None,
+                Some(&gc_root),
+            )
+            .await?;
+        let container_store_path = &paths[0].to_string_lossy();
+        Ok(container_store_path.to_string())
     }
 
     pub async fn container_copy(
@@ -572,11 +568,7 @@ impl Devenv {
         let err = process::Command::new(&paths[0]).into_std().exec();
 
         // If exec fails, we return an error.
-        error!(
-            devenv.is_user_message = true,
-            "Failed to run container: {}", err
-        );
-        bail!("Failed to run container")
+        bail!("Failed to run container: {}", err);
     }
 
     pub async fn repl(&self) -> Result<()> {
