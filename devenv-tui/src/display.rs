@@ -191,10 +191,15 @@ impl RatatuiDisplay {
             Span::raw(format!(" {}{}", source_prefix, message)),
         ]);
 
-        self.terminal.insert_before(1, |buf| {
-            let paragraph = Paragraph::new(line.clone());
-            paragraph.render(buf.area, buf);
-        })?;
+        // Calculate how many lines this log message will need
+        let paragraph = Paragraph::new(line.clone()).wrap(Wrap { trim: true });
+        let width = crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80);
+        let line_count = paragraph.line_count(width);
+
+        self.terminal
+            .insert_before(line_count.try_into().unwrap_or(1), |buf| {
+                paragraph.render(buf.area, buf);
+            })?;
         Ok(())
     }
 
@@ -225,10 +230,15 @@ impl RatatuiDisplay {
             ]);
 
             // Print completion message above the active region
-            self.terminal.insert_before(1, |buf| {
-                let paragraph = Paragraph::new(line.clone());
-                paragraph.render(buf.area, buf);
-            })?;
+            // Calculate how many lines this completion message will need
+            let paragraph = Paragraph::new(line.clone()).wrap(Wrap { trim: true });
+            let width = crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80);
+            let line_count = paragraph.line_count(width);
+
+            self.terminal
+                .insert_before(line_count.try_into().unwrap_or(1), |buf| {
+                    paragraph.render(buf.area, buf);
+                })?;
 
             // If no more active operations, clear the active region
             if self.active_operations.is_empty() {
