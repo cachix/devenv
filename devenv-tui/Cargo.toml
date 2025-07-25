@@ -1,0 +1,38 @@
+[package]
+name = "devenv-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core async runtime
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+futures = { workspace = true }
+
+# TUI library
+ratatui = "0.28"
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Tracing integration
+tracing = { workspace = true }
+tracing-core = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Data structures
+indexmap = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Time handling
+once_cell = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
