@@ -460,7 +460,7 @@ impl Devenv {
     #[instrument(
         name = "building_container",
         skip(self),
-        fields(devenv.user_message = "Building {name} container")
+        fields(devenv.user_message = format!("Building {name} container"))
     )]
     pub async fn container_build(&self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
@@ -550,7 +550,7 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        info!(devenv.is_user_message = true, "Running container",);
+        info!(devenv.is_user_message = true, "Running container {name}",);
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
