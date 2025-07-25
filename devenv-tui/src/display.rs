@@ -294,12 +294,6 @@ impl RatatuiDisplay {
         let mut operations: Vec<_> = active_operations.values().collect();
         operations.sort_by_key(|op| &op.start_time);
 
-        // Filter to show only child operations if any exist, otherwise show all
-        let has_child_operations = operations.iter().any(|op| op.parent.is_some());
-        if has_child_operations {
-            operations.retain(|op| op.parent.is_some());
-        }
-
         let constraints: Vec<Constraint> = operations
             .iter()
             .map(|op| {
@@ -493,12 +487,6 @@ impl RatatuiDisplay {
         // Create layout for operations - same logic as normal rendering
         let mut operations: Vec<_> = active_operations.values().collect();
         operations.sort_by_key(|op| &op.start_time);
-
-        // Filter to show only child operations if any exist, otherwise show all
-        let has_child_operations = operations.iter().any(|op| op.parent.is_some());
-        if has_child_operations {
-            operations.retain(|op| op.parent.is_some());
-        }
 
         let constraints: Vec<Constraint> = operations
             .iter()
