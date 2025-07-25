@@ -318,7 +318,7 @@ impl RatatuiDisplay {
 
     /// Main display loop
     pub async fn run(&mut self) -> io::Result<()> {
-        let mut spinner_ticker = tokio::time::interval(Duration::from_millis(100));
+        let mut spinner_ticker = tokio::time::interval(Duration::from_millis(50));
 
         let result = loop {
             tokio::select! {
@@ -336,7 +336,7 @@ impl RatatuiDisplay {
                 }
                 // Update spinners and render periodically
                 _ = spinner_ticker.tick() => {
-                    if self.last_spinner_update.elapsed() >= Duration::from_millis(100) {
+                    if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
                         self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
                         self.last_spinner_update = Instant::now();
 
@@ -592,7 +592,7 @@ impl DefaultDisplay {
 
     /// Main display loop
     pub async fn run(&mut self) {
-        let mut spinner_ticker = tokio::time::interval(Duration::from_millis(100));
+        let mut spinner_ticker = tokio::time::interval(Duration::from_millis(50));
 
         loop {
             tokio::select! {
@@ -608,7 +608,7 @@ impl DefaultDisplay {
                 }
                 // Update spinners periodically
                 _ = spinner_ticker.tick() => {
-                    if self.last_spinner_update.elapsed() >= Duration::from_millis(100) {
+                    if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
                         self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
                         self.update_spinner_frames();
                         self.last_spinner_update = Instant::now();
