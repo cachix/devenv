@@ -329,7 +329,7 @@ in
         enable = lib.mkEnableOption "uv sync during devenv initialisation";
         arguments = lib.mkOption {
           type = lib.types.listOf lib.types.str;
-          default = [ "--frozen" "--no-install-workspace" ];
+          default = [ ];
           description = "Command line arguments pass to `uv sync` during devenv initialisation.";
           internal = true;
         };
