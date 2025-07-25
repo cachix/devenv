@@ -31,7 +31,6 @@ http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }
 
-ansiterm = "0.12.2"
 async-trait = "0.1"
 binaryornot = "1.0.0"
 blake3 = "1.8.2"
@@ -82,6 +81,7 @@ tokio = { version = "1.47.1", features = [
   "io-util",
   "macros",
   "rt-multi-thread",
+  "signal",
   "sync",
   "time",
 ] }
