@@ -21,7 +21,8 @@ use tokio::sync::mpsc;
 pub struct RatatuiDisplay {
     event_receiver: mpsc::UnboundedReceiver<TuiEvent>,
     state: Arc<TuiState>,
-    terminal: ratatui::Terminal<ratatui::backend::CrosstermBackend<std::io::Stderr>>,
+    terminal:
+        ratatui::Terminal<ratatui::backend::CrosstermBackend<std::io::BufWriter<std::io::Stderr>>>,
     active_operations: HashMap<OperationId, OperationWidget>,
     spinner_frame: usize,
     last_spinner_update: Instant,
@@ -77,7 +78,7 @@ impl RatatuiDisplay {
         use ratatui::{backend::CrosstermBackend, Terminal};
 
         // Don't enable raw mode - we want signals to propagate normally
-        let backend = CrosstermBackend::new(std::io::stderr());
+        let backend = CrosstermBackend::new(std::io::BufWriter::new(std::io::stderr()));
         let mut terminal = Terminal::with_options(
             backend,
             TerminalOptions {
@@ -137,7 +138,7 @@ impl RatatuiDisplay {
 
             // Create a new terminal with the updated viewport size
             use ratatui::{backend::CrosstermBackend, Terminal};
-            let backend = CrosstermBackend::new(std::io::stderr());
+            let backend = CrosstermBackend::new(std::io::BufWriter::new(std::io::stderr()));
             let mut new_terminal = Terminal::with_options(
                 backend,
                 TerminalOptions {
