@@ -28,6 +28,29 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
     let state = Arc::new(TuiState::new());
     let layer = DevenvTuiLayer::new(tx, state.clone());
 
+    // Set up signal handler for graceful TUI cleanup on Ctrl+C
+    tokio::spawn(async move {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{signal, SignalKind};
+            let mut sigint =
+                signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler");
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler");
+
+            tokio::select! {
+                _ = sigint.recv() => {
+                    cleanup_before_exec();
+                    std::process::exit(130); // Standard exit code for SIGINT
+                }
+                _ = sigterm.recv() => {
+                    cleanup_before_exec();
+                    std::process::exit(143); // Standard exit code for SIGTERM
+                }
+            }
+        }
+    });
+
     // Spawn the display thread based on mode
     let display_state = state.clone();
     tokio::spawn(async move {
