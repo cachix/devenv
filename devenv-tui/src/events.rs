@@ -44,6 +44,7 @@ pub enum TuiEvent {
     NixBuildStart {
         operation_id: OperationId,
         derivation: String,
+        machine: Option<String>,
     },
     /// Nix build progress update
     NixBuildProgress {
@@ -53,6 +54,61 @@ pub enum TuiEvent {
     /// Nix build ended
     NixBuildEnd {
         operation_id: OperationId,
+        success: bool,
+    },
+    /// Nix derivation started (from internal-json)
+    NixDerivationStart {
+        operation_id: OperationId,
+        activity_id: u64,
+        derivation_path: String,
+        derivation_name: String,
+        machine: Option<String>,
+    },
+    /// Nix derivation phase change
+    NixPhaseProgress {
+        operation_id: OperationId,
+        activity_id: u64,
+        phase: String,
+    },
+    /// Nix derivation ended
+    NixDerivationEnd {
+        operation_id: OperationId,
+        activity_id: u64,
+        success: bool,
+    },
+    /// Nix download started
+    NixDownloadStart {
+        operation_id: OperationId,
+        activity_id: u64,
+        store_path: String,
+        package_name: String,
+        substituter: String,
+    },
+    /// Nix download progress
+    NixDownloadProgress {
+        operation_id: OperationId,
+        activity_id: u64,
+        bytes_downloaded: u64,
+        total_bytes: Option<u64>,
+    },
+    /// Nix download ended
+    NixDownloadEnd {
+        operation_id: OperationId,
+        activity_id: u64,
+        success: bool,
+    },
+    /// Nix store query started
+    NixQueryStart {
+        operation_id: OperationId,
+        activity_id: u64,
+        store_path: String,
+        package_name: String,
+        substituter: String,
+    },
+    /// Nix store query ended
+    NixQueryEnd {
+        operation_id: OperationId,
+        activity_id: u64,
         success: bool,
     },
     /// Shutdown the TUI display
@@ -178,4 +234,59 @@ pub struct NixBuildInfo {
     pub derivation: String,
     pub current_phase: Option<String>,
     pub start_time: Instant,
+}
+
+/// Information about a Nix derivation being built
+#[derive(Debug, Clone)]
+pub struct NixDerivationInfo {
+    pub operation_id: OperationId,
+    pub activity_id: u64,
+    pub derivation_path: String,
+    pub derivation_name: String,
+    pub machine: Option<String>,
+    pub current_phase: Option<String>,
+    pub start_time: Instant,
+    pub state: NixActivityState,
+}
+
+/// Information about a Nix download
+#[derive(Debug, Clone)]
+pub struct NixDownloadInfo {
+    pub operation_id: OperationId,
+    pub activity_id: u64,
+    pub store_path: String,
+    pub package_name: String,
+    pub substituter: String,
+    pub bytes_downloaded: u64,
+    pub total_bytes: Option<u64>,
+    pub start_time: Instant,
+    pub state: NixActivityState,
+}
+
+/// Information about a Nix store query
+#[derive(Debug, Clone)]
+pub struct NixQueryInfo {
+    pub operation_id: OperationId,
+    pub activity_id: u64,
+    pub store_path: String,
+    pub package_name: String,
+    pub substituter: String,
+    pub start_time: Instant,
+    pub state: NixActivityState,
+}
+
+/// State of a Nix activity
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NixActivityState {
+    Active,
+    Completed { success: bool, duration: Duration },
+}
+
+/// Type of Nix activity for categorization
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NixActivityType {
+    Build,
+    Download,
+    Query,
+    Unknown,
 }

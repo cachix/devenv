@@ -551,6 +551,92 @@ impl RatatuiDisplay {
             } => {
                 self.print_log_message(&message, level, source)?;
             }
+            TuiEvent::NixDerivationStart {
+                derivation_name,
+                machine,
+                ..
+            } => {
+                let machine_text = machine.map(|m| format!(" on {}", m)).unwrap_or_default();
+                let message = format!("Building {}{}", derivation_name, machine_text);
+                self.print_log_message(&message, LogLevel::Info, LogSource::Nix)?;
+            }
+            TuiEvent::NixPhaseProgress { phase, .. } => {
+                let message = format!("Phase: {}", phase);
+                self.print_log_message(&message, LogLevel::Debug, LogSource::Nix)?;
+            }
+            TuiEvent::NixDerivationEnd { success, .. } => {
+                let message = if success {
+                    "Build completed"
+                } else {
+                    "Build failed"
+                };
+                let level = if success {
+                    LogLevel::Info
+                } else {
+                    LogLevel::Error
+                };
+                self.print_log_message(message, level, LogSource::Nix)?;
+            }
+            TuiEvent::NixDownloadStart {
+                package_name,
+                substituter,
+                ..
+            } => {
+                let message = format!("Downloading {} from {}", package_name, substituter);
+                self.print_log_message(&message, LogLevel::Info, LogSource::Nix)?;
+            }
+            TuiEvent::NixDownloadProgress {
+                bytes_downloaded,
+                total_bytes,
+                ..
+            } => {
+                let message = if let Some(total) = total_bytes {
+                    let percent = (bytes_downloaded as f64 / total as f64 * 100.0) as u32;
+                    format!(
+                        "Download progress: {}% ({}/{})",
+                        percent,
+                        format_bytes(bytes_downloaded),
+                        format_bytes(total)
+                    )
+                } else {
+                    format!("Downloaded: {}", format_bytes(bytes_downloaded))
+                };
+                self.print_log_message(&message, LogLevel::Debug, LogSource::Nix)?;
+            }
+            TuiEvent::NixDownloadEnd { success, .. } => {
+                let message = if success {
+                    "Download completed"
+                } else {
+                    "Download failed"
+                };
+                let level = if success {
+                    LogLevel::Info
+                } else {
+                    LogLevel::Error
+                };
+                self.print_log_message(message, level, LogSource::Nix)?;
+            }
+            TuiEvent::NixQueryStart {
+                package_name,
+                substituter,
+                ..
+            } => {
+                let message = format!("Querying {} on {}", package_name, substituter);
+                self.print_log_message(&message, LogLevel::Debug, LogSource::Nix)?;
+            }
+            TuiEvent::NixQueryEnd { success, .. } => {
+                let message = if success {
+                    "Query completed"
+                } else {
+                    "Query failed"
+                };
+                let level = if success {
+                    LogLevel::Debug
+                } else {
+                    LogLevel::Warn
+                };
+                self.print_log_message(message, level, LogSource::Nix)?;
+            }
             _ => {} // Handle other events as needed
         }
         Ok(())
@@ -778,6 +864,45 @@ impl DefaultDisplay {
             TuiEvent::LogMessage { level, message, .. } => {
                 self.print_message(&message, level);
             }
+            TuiEvent::NixDerivationStart {
+                derivation_name,
+                machine,
+                ..
+            } => {
+                let machine_text = machine.map(|m| format!(" on {}", m)).unwrap_or_default();
+                let message = format!("Building {}{}", derivation_name, machine_text);
+                self.print_message(&message, LogLevel::Info);
+            }
+            TuiEvent::NixPhaseProgress { phase, .. } => {
+                let message = format!("Phase: {}", phase);
+                self.print_message(&message, LogLevel::Debug);
+            }
+            TuiEvent::NixDownloadStart {
+                package_name,
+                substituter,
+                ..
+            } => {
+                let message = format!("Downloading {} from {}", package_name, substituter);
+                self.print_message(&message, LogLevel::Info);
+            }
+            TuiEvent::NixDownloadProgress {
+                bytes_downloaded,
+                total_bytes,
+                ..
+            } => {
+                let message = if let Some(total) = total_bytes {
+                    let percent = (bytes_downloaded as f64 / total as f64 * 100.0) as u32;
+                    format!(
+                        "Download progress: {}% ({}/{})",
+                        percent,
+                        format_bytes(bytes_downloaded),
+                        format_bytes(total)
+                    )
+                } else {
+                    format!("Downloaded: {}", format_bytes(bytes_downloaded))
+                };
+                self.print_message(&message, LogLevel::Debug);
+            }
             _ => {} // Handle other events as needed
         }
     }
@@ -797,6 +922,28 @@ fn format_duration(duration: Duration) -> String {
         t /= 1000.0;
     }
     format!("{:.0}s", t * 1000.0)
+}
+
+/// Format bytes in human-readable format
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut size = bytes as f64;
+    let mut unit_index = 0;
+
+    while size >= 1024.0 && unit_index < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit_index += 1;
+    }
+
+    if unit_index == 0 {
+        format!("{} {}", bytes, UNITS[unit_index])
+    } else if size < 10.0 {
+        format!("{:.2} {}", size, UNITS[unit_index])
+    } else if size < 100.0 {
+        format!("{:.1} {}", size, UNITS[unit_index])
+    } else {
+        format!("{:.0} {}", size, UNITS[unit_index])
+    }
 }
 
 /// Fallback display that works without TUI (similar to current indicatif setup)
