@@ -1267,6 +1267,7 @@ name = "devenv-tui"
 version = "1.8.1"
 dependencies = [
  "crossterm 0.28.1",
+ "devenv-eval-cache",
  "futures",
  "indexmap 2.9.0",
  "once_cell",

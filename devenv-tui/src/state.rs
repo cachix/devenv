@@ -1,4 +1,7 @@
-use crate::{LogMessage, NixBuildInfo, Operation, OperationId, OperationResult, TuiEvent};
+use crate::{
+    LogMessage, NixActivityState, NixBuildInfo, NixDerivationInfo, NixDownloadInfo, NixQueryInfo,
+    Operation, OperationId, OperationResult, TuiEvent,
+};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
@@ -14,6 +17,9 @@ struct TuiStateInner {
     operations: HashMap<OperationId, Operation>,
     message_log: VecDeque<LogMessage>,
     nix_builds: HashMap<OperationId, NixBuildInfo>,
+    nix_derivations: HashMap<u64, NixDerivationInfo>,
+    nix_downloads: HashMap<u64, NixDownloadInfo>,
+    nix_queries: HashMap<u64, NixQueryInfo>,
     root_operations: Vec<OperationId>,
 }
 
@@ -24,6 +30,9 @@ impl TuiState {
                 operations: HashMap::new(),
                 message_log: VecDeque::new(),
                 nix_builds: HashMap::new(),
+                nix_derivations: HashMap::new(),
+                nix_downloads: HashMap::new(),
+                nix_queries: HashMap::new(),
                 root_operations: Vec::new(),
             })),
         }
@@ -80,6 +89,7 @@ impl TuiState {
             TuiEvent::NixBuildStart {
                 operation_id,
                 derivation,
+                machine: _,
             } => {
                 let build_info = NixBuildInfo {
                     operation_id: operation_id.clone(),
@@ -104,6 +114,123 @@ impl TuiState {
                 success: _,
             } => {
                 inner.nix_builds.remove(&operation_id);
+            }
+
+            TuiEvent::NixDerivationStart {
+                operation_id,
+                activity_id,
+                derivation_path,
+                derivation_name,
+                machine,
+            } => {
+                let derivation_info = NixDerivationInfo {
+                    operation_id,
+                    activity_id,
+                    derivation_path,
+                    derivation_name,
+                    machine,
+                    current_phase: None,
+                    start_time: std::time::Instant::now(),
+                    state: NixActivityState::Active,
+                };
+                inner.nix_derivations.insert(activity_id, derivation_info);
+            }
+
+            TuiEvent::NixPhaseProgress {
+                operation_id: _,
+                activity_id,
+                phase,
+            } => {
+                if let Some(derivation_info) = inner.nix_derivations.get_mut(&activity_id) {
+                    derivation_info.current_phase = Some(phase);
+                }
+            }
+
+            TuiEvent::NixDerivationEnd {
+                operation_id: _,
+                activity_id,
+                success,
+            } => {
+                if let Some(derivation_info) = inner.nix_derivations.get_mut(&activity_id) {
+                    let duration = derivation_info.start_time.elapsed();
+                    derivation_info.state = NixActivityState::Completed { success, duration };
+                }
+            }
+
+            TuiEvent::NixDownloadStart {
+                operation_id,
+                activity_id,
+                store_path,
+                package_name,
+                substituter,
+            } => {
+                let download_info = NixDownloadInfo {
+                    operation_id,
+                    activity_id,
+                    store_path,
+                    package_name,
+                    substituter,
+                    bytes_downloaded: 0,
+                    total_bytes: None,
+                    start_time: std::time::Instant::now(),
+                    state: NixActivityState::Active,
+                };
+                inner.nix_downloads.insert(activity_id, download_info);
+            }
+
+            TuiEvent::NixDownloadProgress {
+                operation_id: _,
+                activity_id,
+                bytes_downloaded,
+                total_bytes,
+            } => {
+                if let Some(download_info) = inner.nix_downloads.get_mut(&activity_id) {
+                    download_info.bytes_downloaded = bytes_downloaded;
+                    if total_bytes.is_some() {
+                        download_info.total_bytes = total_bytes;
+                    }
+                }
+            }
+
+            TuiEvent::NixDownloadEnd {
+                operation_id: _,
+                activity_id,
+                success,
+            } => {
+                if let Some(download_info) = inner.nix_downloads.get_mut(&activity_id) {
+                    let duration = download_info.start_time.elapsed();
+                    download_info.state = NixActivityState::Completed { success, duration };
+                }
+            }
+
+            TuiEvent::NixQueryStart {
+                operation_id,
+                activity_id,
+                store_path,
+                package_name,
+                substituter,
+            } => {
+                let query_info = NixQueryInfo {
+                    operation_id,
+                    activity_id,
+                    store_path,
+                    package_name,
+                    substituter,
+                    start_time: std::time::Instant::now(),
+                    state: NixActivityState::Active,
+                };
+                inner.nix_queries.insert(activity_id, query_info);
+            }
+
+            TuiEvent::NixQueryEnd {
+                operation_id: _,
+                activity_id,
+                success,
+            } => {
+                if let Some(query_info) = inner.nix_queries.get_mut(&activity_id) {
+                    let duration = query_info.start_time.elapsed();
+                    query_info.state = NixActivityState::Completed { success, duration };
+                }
             }
 
             TuiEvent::Shutdown => {
@@ -171,6 +298,86 @@ impl TuiState {
     pub fn get_nix_build(&self, operation_id: &OperationId) -> Option<NixBuildInfo> {
         let inner = self.inner.lock().unwrap();
         inner.nix_builds.get(operation_id).cloned()
+    }
+
+    /// Get all active Nix derivations for an operation
+    pub fn get_nix_derivations_for_operation(
+        &self,
+        operation_id: &OperationId,
+    ) -> Vec<NixDerivationInfo> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .nix_derivations
+            .values()
+            .filter(|info| {
+                &info.operation_id == operation_id && info.state == NixActivityState::Active
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Get all active Nix downloads for an operation
+    pub fn get_nix_downloads_for_operation(
+        &self,
+        operation_id: &OperationId,
+    ) -> Vec<NixDownloadInfo> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .nix_downloads
+            .values()
+            .filter(|info| {
+                &info.operation_id == operation_id && info.state == NixActivityState::Active
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Get all active Nix queries for an operation
+    pub fn get_nix_queries_for_operation(&self, operation_id: &OperationId) -> Vec<NixQueryInfo> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .nix_queries
+            .values()
+            .filter(|info| {
+                &info.operation_id == operation_id && info.state == NixActivityState::Active
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Get all Nix activities (derivations, downloads, queries) for an operation
+    pub fn get_all_nix_activities_for_operation(
+        &self,
+        operation_id: &OperationId,
+    ) -> (
+        Vec<NixDerivationInfo>,
+        Vec<NixDownloadInfo>,
+        Vec<NixQueryInfo>,
+    ) {
+        let inner = self.inner.lock().unwrap();
+
+        let derivations = inner
+            .nix_derivations
+            .values()
+            .filter(|info| &info.operation_id == operation_id)
+            .cloned()
+            .collect();
+
+        let downloads = inner
+            .nix_downloads
+            .values()
+            .filter(|info| &info.operation_id == operation_id)
+            .cloned()
+            .collect();
+
+        let queries = inner
+            .nix_queries
+            .values()
+            .filter(|info| &info.operation_id == operation_id)
+            .cloned()
+            .collect();
+
+        (derivations, downloads, queries)
     }
 
     /// Clean up completed operations that are older than a certain threshold

@@ -30,6 +30,9 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+# Nix log parsing
+devenv-eval-cache = { path = "../devenv-eval-cache" }
+
 # Time handling
 once_cell = { workspace = true }
 

@@ -375,6 +375,9 @@ impl Nix {
                 cached_cmd.force_refresh();
             }
 
+            // Try to get TUI bridge for enhanced log processing
+            let nix_bridge = devenv_tui::create_nix_bridge();
+
             if options.logging && !self.global_options.quiet {
                 // Show eval and build logs only in verbose mode
                 let target_log_level = if self.global_options.verbose {
@@ -383,7 +386,15 @@ impl Nix {
                     Verbosity::Warn
                 };
 
+                let bridge_for_callback = nix_bridge.clone();
                 cached_cmd.on_stderr(move |log| {
+                    // Send to TUI bridge for detailed progress tracking
+                    if let Some(bridge) = &bridge_for_callback {
+                        // Process the InternalLog directly instead of serializing it
+                        bridge.process_internal_log(log.clone());
+                    }
+
+                    // Original tracing-based logging
                     if let Some(log) = log.filter_by_level(target_log_level) {
                         if let Some(msg) = log.get_msg() {
                             use devenv_eval_cache::internal_log::InternalLog;
@@ -407,12 +418,26 @@ impl Nix {
                 command = pretty_cmd.as_str(),
                 devenv.user_message = format!("Running command: {}", pretty_cmd)
             );
+
+            // Set current operation for Nix log correlation
+            if let Some(bridge) = &nix_bridge {
+                if let Some(span_id) = span.id() {
+                    let operation_id = devenv_tui::OperationId::new(format!("{:?}", span_id));
+                    bridge.set_current_operation(operation_id);
+                }
+            }
+
             let output = cached_cmd
                 .output(&mut cmd)
                 .instrument(span)
                 .await
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+
+            // Clear current operation after command completion
+            if let Some(bridge) = &nix_bridge {
+                bridge.clear_current_operation();
+            }
 
             if output.cache_hit {
                 tracing::Span::current().record(

@@ -1,10 +1,12 @@
 pub mod display;
 pub mod events;
+pub mod nix_bridge;
 pub mod state;
 pub mod tracing_layer;
 
 pub use display::{DefaultDisplay, FallbackDisplay, RatatuiDisplay};
 pub use events::*;
+pub use nix_bridge::NixLogBridge;
 pub use state::TuiState;
 pub use tracing_layer::DevenvTuiLayer;
 
@@ -74,6 +76,16 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
     });
 
     (layer, state)
+}
+
+/// Create a NixLogBridge that can be used to send Nix log events to the TUI
+pub fn create_nix_bridge() -> Option<Arc<NixLogBridge>> {
+    if let Ok(sender) = GLOBAL_SENDER.lock() {
+        if let Some(tx) = sender.as_ref() {
+            return Some(Arc::new(NixLogBridge::new(tx.clone())));
+        }
+    }
+    None
 }
 
 /// Cleanup TUI terminal state
