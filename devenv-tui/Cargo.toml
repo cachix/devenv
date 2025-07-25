@@ -8,11 +8,11 @@ repository.workspace = true
 
 [dependencies]
 # Core async runtime
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
 futures = { workspace = true }
 
 # TUI library
-ratatui = "0.28"
+ratatui = { version = "0.29", features = ["scrolling-regions"] }
 crossterm = { version = "0.28", features = ["event-stream"] }
 
 # Tracing integration

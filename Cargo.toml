@@ -82,6 +82,7 @@ tokio = { version = "1.39.3", features = [
     "rt-multi-thread",
     "sync",
     "time",
+    "signal",
 ] }
 tokio-util = { version = "0.7.12", features = ["io"] }
 which = "7.0.2"
