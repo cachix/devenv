@@ -358,34 +358,94 @@ impl RatatuiDisplay {
     pub async fn run(&mut self) -> io::Result<()> {
         let mut spinner_ticker = tokio::time::interval(Duration::from_millis(50));
 
+        // Set up signal handlers
+        #[cfg(unix)]
+        let mut sigint = {
+            use tokio::signal::unix::{signal, SignalKind};
+            signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler")
+        };
+        #[cfg(unix)]
+        let mut sigterm = {
+            use tokio::signal::unix::{signal, SignalKind};
+            signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler")
+        };
+
         let result = loop {
-            tokio::select! {
-                // Handle TUI events
-                event = self.event_receiver.recv() => {
-                    match event {
-                        Some(event) => {
-                            if let Err(e) = self.handle_tui_event(event.clone()) {
+            #[cfg(unix)]
+            {
+                tokio::select! {
+                    // Handle TUI events
+                    event = self.event_receiver.recv() => {
+                        match event {
+                            Some(event) => {
+                                if let Err(e) = self.handle_tui_event(event.clone()) {
+                                    break Err(e);
+                                }
+                                self.state.handle_event(event);
+                            }
+                            None => break Ok(()), // Channel closed
+                        }
+                    }
+                    // Handle signals with access to active operations
+                    _ = sigint.recv() => {
+                        self.show_interrupted_operations()?;
+                        crate::cleanup_tui();
+                        std::process::exit(130); // Standard exit code for SIGINT
+                    }
+                    _ = sigterm.recv() => {
+                        self.show_interrupted_operations()?;
+                        crate::cleanup_tui();
+                        std::process::exit(143); // Standard exit code for SIGTERM
+                    }
+                    // Update spinners and render periodically
+                    _ = spinner_ticker.tick() => {
+                        if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
+                            self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
+                            self.last_spinner_update = Instant::now();
+
+                            // Update viewport height if needed
+                            if let Err(e) = self.update_viewport_height() {
                                 break Err(e);
                             }
-                            self.state.handle_event(event);
+
+                            // Render the active region
+                            if let Err(e) = self.render_active_region() {
+                                break Err(e);
+                            }
                         }
-                        None => break Ok(()), // Channel closed
                     }
                 }
-                // Update spinners and render periodically
-                _ = spinner_ticker.tick() => {
-                    if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
-                        self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
-                        self.last_spinner_update = Instant::now();
-
-                        // Update viewport height if needed
-                        if let Err(e) = self.update_viewport_height() {
-                            break Err(e);
+            }
+            #[cfg(not(unix))]
+            {
+                tokio::select! {
+                    // Handle TUI events
+                    event = self.event_receiver.recv() => {
+                        match event {
+                            Some(event) => {
+                                if let Err(e) = self.handle_tui_event(event.clone()) {
+                                    break Err(e);
+                                }
+                                self.state.handle_event(event);
+                            }
+                            None => break Ok(()), // Channel closed
                         }
+                    }
+                    // Update spinners and render periodically
+                    _ = spinner_ticker.tick() => {
+                        if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
+                            self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
+                            self.last_spinner_update = Instant::now();
 
-                        // Render the active region
-                        if let Err(e) = self.render_active_region() {
-                            break Err(e);
+                            // Update viewport height if needed
+                            if let Err(e) = self.update_viewport_height() {
+                                break Err(e);
+                            }
+
+                            // Render the active region
+                            if let Err(e) = self.render_active_region() {
+                                break Err(e);
+                            }
                         }
                     }
                 }
@@ -395,6 +455,71 @@ impl RatatuiDisplay {
         // Always cleanup terminal state on exit
         crate::cleanup_tui();
         result
+    }
+
+    /// Show interrupted state for all active operations
+    fn show_interrupted_operations(&mut self) -> io::Result<()> {
+        if self.active_operations.is_empty() {
+            return Ok(());
+        }
+
+        self.terminal.draw(|frame| {
+            Self::draw_interrupted_operations(frame, &self.active_operations);
+        })?;
+        Ok(())
+    }
+
+    /// Draw interrupted operations with gray pause icons
+    fn draw_interrupted_operations(
+        frame: &mut Frame,
+        active_operations: &HashMap<OperationId, OperationWidget>,
+    ) {
+        let area = frame.area();
+
+        if active_operations.is_empty() {
+            return;
+        }
+
+        // Create layout for operations - same logic as normal rendering
+        let mut operations: Vec<_> = active_operations.values().collect();
+        operations.sort_by_key(|op| &op.start_time);
+
+        // Filter to show only child operations if any exist, otherwise show all
+        let has_child_operations = operations.iter().any(|op| op.parent.is_some());
+        if has_child_operations {
+            operations.retain(|op| op.parent.is_some());
+        }
+
+        let constraints: Vec<Constraint> = operations
+            .iter()
+            .map(|op| {
+                let line = Line::from(vec![
+                    Span::raw("⏸ "), // Interrupted icon
+                    Span::raw(&op.message),
+                ]);
+                let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
+                let lines = paragraph.line_count(area.width);
+                Constraint::Length(lines.try_into().unwrap_or(1))
+            })
+            .collect();
+
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(constraints)
+            .split(area);
+
+        for (i, operation) in operations.iter().enumerate() {
+            if i < layout.len() {
+                // Render with interrupted icon
+                let line = Line::from(vec![
+                    Span::styled("⏸", Style::default().fg(Color::Yellow)),
+                    Span::raw(format!(" {}", operation.message)),
+                ]);
+
+                let widget = Paragraph::new(line).wrap(Wrap { trim: true });
+                frame.render_widget(widget, layout[i]);
+            }
+        }
     }
 
     /// Handle individual TUI events
