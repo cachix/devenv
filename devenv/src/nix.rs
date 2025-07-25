@@ -336,7 +336,7 @@ impl Nix {
                 cmd.arg("--debugger");
             }
 
-            debug!("Running command: {}", display_command(&cmd));
+            debug!(tui.log = true, "Running command: {}", display_command(&cmd));
 
             let error = cmd.exec();
             error!(
