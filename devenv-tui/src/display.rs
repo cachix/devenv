@@ -253,9 +253,15 @@ impl RatatuiDisplay {
             .constraints(constraints)
             .split(area);
 
-        // Render each operation
+        // Render each operation - prioritize child operations (those with parents)
         let mut operations: Vec<_> = active_operations.values().collect();
         operations.sort_by_key(|op| &op.start_time);
+
+        // Filter to show only child operations if any exist, otherwise show all
+        let has_child_operations = operations.iter().any(|op| op.parent.is_some());
+        if has_child_operations {
+            operations.retain(|op| op.parent.is_some());
+        }
 
         for (i, operation) in operations.iter().enumerate() {
             if i < layout.len() {
@@ -274,11 +280,19 @@ impl RatatuiDisplay {
         match operation.widget_type {
             OperationWidgetType::Spinner => {
                 let spinner_char = SPINNER_FRAMES[spinner_frame % SPINNER_FRAMES.len()];
-                let text = format!("{} {}", spinner_char, operation.message);
 
-                let widget = Paragraph::new(text)
-                    .style(Style::default().fg(Color::Blue))
-                    .wrap(Wrap { trim: true });
+                // Truncate long messages to fit terminal width
+                let max_width = area.width.saturating_sub(3) as usize; // Reserve space for spinner + space
+                let display_message = if operation.message.len() > max_width {
+                    let truncated = &operation.message[..max_width.saturating_sub(3)];
+                    format!("{}...", truncated)
+                } else {
+                    operation.message.clone()
+                };
+
+                let text = format!("{} {}", spinner_char, display_message);
+
+                let widget = Paragraph::new(text).style(Style::default().fg(Color::Blue));
 
                 frame.render_widget(widget, area);
             }
