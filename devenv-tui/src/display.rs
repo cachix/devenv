@@ -290,9 +290,12 @@ impl RatatuiDisplay {
                     operation.message.clone()
                 };
 
-                let text = format!("{} {}", spinner_char, display_message);
+                let line = Line::from(vec![
+                    Span::styled(spinner_char, Style::default().fg(Color::Blue)),
+                    Span::raw(format!(" {}", display_message)),
+                ]);
 
-                let widget = Paragraph::new(text).style(Style::default().fg(Color::Blue));
+                let widget = Paragraph::new(line);
 
                 frame.render_widget(widget, area);
             }
