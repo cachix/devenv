@@ -81,7 +81,7 @@ impl RatatuiDisplay {
         let mut terminal = Terminal::with_options(
             backend,
             TerminalOptions {
-                viewport: Viewport::Inline(3), // Start with 3 lines
+                viewport: Viewport::Inline(3), // Start small, will resize dynamically
             },
         )?;
 
@@ -97,28 +97,59 @@ impl RatatuiDisplay {
             last_spinner_update: Instant::now(),
             viewport_height: 3,
             min_viewport_height: 1,
-            max_viewport_height: 10,
+            max_viewport_height: 15,
         })
     }
 
     /// Calculate optimal viewport height based on active operations
     fn calculate_viewport_height(&self) -> u16 {
-        let operation_count = self.active_operations.len() as u16;
-        let needed_height = operation_count.max(1); // At least 1 line for status
+        if self.active_operations.is_empty() {
+            return self.min_viewport_height.max(1);
+        }
 
+        // Calculate total lines needed for all operations (accounting for text wrapping)
+        let total_lines: usize = self
+            .active_operations
+            .values()
+            .map(|op| {
+                let line = Line::from(vec![
+                    Span::raw("⠋ "), // Spinner character (2 chars: spinner + space)
+                    Span::raw(&op.message),
+                ]);
+                let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
+                // Use actual terminal width for calculation
+                let width = crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80);
+                paragraph.line_count(width) as usize
+            })
+            .sum();
+
+        let needed_height = total_lines.max(1) as u16;
         needed_height
             .max(self.min_viewport_height)
             .min(self.max_viewport_height)
     }
 
-    /// Resize viewport if needed
+    /// Resize viewport if needed by creating a new terminal instance
     fn update_viewport_height(&mut self) -> io::Result<()> {
         let new_height = self.calculate_viewport_height();
         if new_height != self.viewport_height {
             self.viewport_height = new_height;
-            // Note: Ratatui doesn't support dynamic viewport resizing yet
-            // The viewport size is set at terminal creation time
-            // This is a placeholder for future enhancement
+
+            // Create a new terminal with the updated viewport size
+            use ratatui::{backend::CrosstermBackend, Terminal};
+            let backend = CrosstermBackend::new(std::io::stderr());
+            let mut new_terminal = Terminal::with_options(
+                backend,
+                TerminalOptions {
+                    viewport: Viewport::Inline(new_height),
+                },
+            )?;
+
+            // Clear the new terminal area
+            new_terminal.clear()?;
+
+            // Swap the terminal instance
+            self.terminal = new_terminal;
         }
         Ok(())
     }
@@ -219,6 +250,11 @@ impl RatatuiDisplay {
 
     /// Render the active region with current operations
     fn render_active_region(&mut self) -> io::Result<()> {
+        // Force viewport height recalculation before rendering
+        if let Err(e) = self.update_viewport_height() {
+            return Err(e);
+        }
+
         let active_operations = &self.active_operations;
         let spinner_frame = self.spinner_frame;
 
@@ -243,17 +279,7 @@ impl RatatuiDisplay {
             return;
         }
 
-        // Create layout for operations
-        let constraints: Vec<Constraint> = (0..active_operations.len())
-            .map(|_| Constraint::Length(1))
-            .collect();
-
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(constraints)
-            .split(area);
-
-        // Render each operation - prioritize child operations (those with parents)
+        // Create layout for operations - calculate lines needed for each
         let mut operations: Vec<_> = active_operations.values().collect();
         operations.sort_by_key(|op| &op.start_time);
 
@@ -262,6 +288,26 @@ impl RatatuiDisplay {
         if has_child_operations {
             operations.retain(|op| op.parent.is_some());
         }
+
+        let constraints: Vec<Constraint> = operations
+            .iter()
+            .map(|op| {
+                let line = Line::from(vec![
+                    Span::raw("⠋ "), // Spinner character (2 chars: spinner + space)
+                    Span::raw(&op.message),
+                ]);
+                let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
+                let lines = paragraph.line_count(area.width);
+                Constraint::Length(lines.try_into().unwrap_or(1))
+            })
+            .collect();
+
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(constraints)
+            .split(area);
+
+        // operations are already filtered and sorted above
 
         for (i, operation) in operations.iter().enumerate() {
             if i < layout.len() {
@@ -281,21 +327,12 @@ impl RatatuiDisplay {
             OperationWidgetType::Spinner => {
                 let spinner_char = SPINNER_FRAMES[spinner_frame % SPINNER_FRAMES.len()];
 
-                // Truncate long messages to fit terminal width
-                let max_width = area.width.saturating_sub(3) as usize; // Reserve space for spinner + space
-                let display_message = if operation.message.len() > max_width {
-                    let truncated = &operation.message[..max_width.saturating_sub(3)];
-                    format!("{}...", truncated)
-                } else {
-                    operation.message.clone()
-                };
-
                 let line = Line::from(vec![
                     Span::styled(spinner_char, Style::default().fg(Color::Blue)),
-                    Span::raw(format!(" {}", display_message)),
+                    Span::raw(format!(" {}", operation.message)),
                 ]);
 
-                let widget = Paragraph::new(line);
+                let widget = Paragraph::new(line).wrap(Wrap { trim: true });
 
                 frame.render_widget(widget, area);
             }
