@@ -381,6 +381,10 @@ impl RatatuiDisplay {
                     // Handle TUI events
                     event = self.event_receiver.recv() => {
                         match event {
+                            Some(TuiEvent::Shutdown) => {
+                                // Clean shutdown requested
+                                break Ok(());
+                            }
                             Some(event) => {
                                 if let Err(e) = self.handle_tui_event(event.clone()) {
                                     break Err(e);
@@ -426,6 +430,10 @@ impl RatatuiDisplay {
                     // Handle TUI events
                     event = self.event_receiver.recv() => {
                         match event {
+                            Some(TuiEvent::Shutdown) => {
+                                // Clean shutdown requested
+                                break Ok(());
+                            }
                             Some(event) => {
                                 if let Err(e) = self.handle_tui_event(event.clone()) {
                                     break Err(e);
