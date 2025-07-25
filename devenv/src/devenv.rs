@@ -212,7 +212,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            info!("Creating {}", filename);
+            info!(tui.log = true, file = %filename, "Creating file");
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -451,7 +451,12 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let span = info_span!("update", devenv.user_message = msg);
+        let span = info_span!(
+            "update",
+            tui.op = true,
+            devenv.user_message = msg,
+            input = ?input_name
+        );
         self.nix.update(input_name).instrument(span).await?;
 
         Ok(())
@@ -893,7 +898,11 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let span = info_span!("test", devenv.user_message = "Building tests");
+            let span = info_span!(
+                "test_build",
+                tui.op = true,
+                devenv.user_message = "Building tests"
+            );
             let gc_root = self.devenv_dot_gc.join("test");
             self.nix
                 .build(&["devenv.test"], None, Some(&gc_root))
@@ -915,7 +924,11 @@ impl Devenv {
             self.up(vec![], &options).await?;
         }
 
-        let span = info_span!("test", devenv.user_message = "Running tests");
+        let span = info_span!(
+            "test_run",
+            tui.op = true,
+            devenv.user_message = "Running tests"
+        );
         let result = async {
             debug!("Running command: {test_script}");
             process::Command::new(&test_script)
@@ -956,7 +969,12 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<()> {
-        let span = info_span!("build", devenv.user_message = "Building");
+        let span = info_span!(
+            "build",
+            tui.op = true,
+            devenv.user_message = "Building",
+            attributes = ?attributes
+        );
         async move {
             self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {

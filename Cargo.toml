@@ -6,6 +6,7 @@ members = [
     "devenv-eval-cache",
     "devenv-run-tests",
     "devenv-tasks",
+    "devenv-tui",
     "http-client-tls",
     "nix-conf-parser",
     "xtask",
@@ -24,6 +25,7 @@ devenv = { path = "devenv" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-tasks = { path = "devenv-tasks" }
+devenv-tui = { path = "devenv-tui" }
 devenv-cache-core = { path = "devenv-cache-core" }
 http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
