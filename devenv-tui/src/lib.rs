@@ -28,29 +28,6 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
     let state = Arc::new(TuiState::new());
     let layer = DevenvTuiLayer::new(tx, state.clone());
 
-    // Set up signal handler for graceful TUI cleanup on Ctrl+C
-    tokio::spawn(async move {
-        #[cfg(unix)]
-        {
-            use tokio::signal::unix::{signal, SignalKind};
-            let mut sigint =
-                signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler");
-            let mut sigterm =
-                signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler");
-
-            tokio::select! {
-                _ = sigint.recv() => {
-                    cleanup_tui();
-                    std::process::exit(130); // Standard exit code for SIGINT
-                }
-                _ = sigterm.recv() => {
-                    cleanup_tui();
-                    std::process::exit(143); // Standard exit code for SIGTERM
-                }
-            }
-        }
-    });
-
     // Spawn the display thread based on mode
     let display_state = state.clone();
     tokio::spawn(async move {
@@ -97,7 +74,7 @@ pub fn cleanup_tui() {
     use std::io::Write;
 
     // Move cursor to the bottom of the active region
-    if let Ok(mut terminal) = Terminal::new(CrosstermBackend::new(std::io::stderr())) {
+    if let Ok(terminal) = Terminal::new(CrosstermBackend::new(std::io::stderr())) {
         if let Ok(size) = terminal.size() {
             let _ = crossterm::execute!(
                 std::io::stderr(),
