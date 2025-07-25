@@ -289,12 +289,15 @@ impl TaskState {
             let mut stdout_lines = Vec::new();
             let mut stderr_lines = Vec::new();
 
+            // Check if this is a process task (always show output for processes)
+            let is_process = self.task.name.starts_with("devenv:processes:");
+
             loop {
                 tokio::select! {
                     result = stdout_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => {
-                                if self.verbosity == VerbosityLevel::Verbose {
+                                if self.verbosity == VerbosityLevel::Verbose || is_process {
                                     eprintln!("[{}] {}", self.task.name, line);
                                 }
                                 stdout_lines.push((std::time::Instant::now(), line));
@@ -309,7 +312,7 @@ impl TaskState {
                     result = stderr_reader.next_line() => {
                         match result {
                             Ok(Some(line)) => {
-                                if self.verbosity == VerbosityLevel::Verbose {
+                                if self.verbosity == VerbosityLevel::Verbose || is_process {
                                     eprintln!("[{}] {}", self.task.name, line);
                                 }
                                 stderr_lines.push((std::time::Instant::now(), line));

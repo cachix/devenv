@@ -123,11 +123,10 @@ in
         processes = lib.mapAttrs
           (name: value:
             let
-              scriptPath = pkgs.writeShellScript name value.exec;
               command =
                 if value.process-compose.is_elevated or false
-                then "${scriptPath}"
-                else "exec ${scriptPath}";
+                then "${config.task.package}/bin/devenv-tasks run --mode all devenv:processes:${name}"
+                else "exec ${config.task.package}/bin/devenv-tasks run --mode all devenv:processes:${name}";
             in
             { inherit command; } // value.process-compose
           )
