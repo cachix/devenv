@@ -23,6 +23,7 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
+      clang-tools
       stdenv
       gnumake
       ccls
