@@ -105,6 +105,10 @@ impl TuiState {
             } => {
                 inner.nix_builds.remove(&operation_id);
             }
+
+            TuiEvent::Shutdown => {
+                // No state changes needed for shutdown
+            }
         }
     }
 

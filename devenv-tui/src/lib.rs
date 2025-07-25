@@ -8,8 +8,11 @@ pub use events::*;
 pub use state::TuiState;
 pub use tracing_layer::DevenvTuiLayer;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+
+// Global sender to allow cleanup to send shutdown event
+static GLOBAL_SENDER: Mutex<Option<mpsc::UnboundedSender<TuiEvent>>> = Mutex::new(None);
 
 /// Display mode for the TUI
 #[derive(Debug, Clone, Copy)]
@@ -26,7 +29,12 @@ pub enum DisplayMode {
 pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let state = Arc::new(TuiState::new());
-    let layer = DevenvTuiLayer::new(tx, state.clone());
+    let layer = DevenvTuiLayer::new(tx.clone(), state.clone());
+
+    // Store the sender globally for cleanup
+    if let Ok(mut sender) = GLOBAL_SENDER.lock() {
+        *sender = Some(tx);
+    }
 
     // Spawn the display thread based on mode
     let display_state = state.clone();
@@ -72,6 +80,17 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
 pub fn cleanup_tui() {
     use ratatui::{backend::CrosstermBackend, Terminal};
     use std::io::Write;
+
+    // First, send shutdown event to gracefully close the TUI event loop
+    if let Ok(sender) = GLOBAL_SENDER.lock() {
+        if let Some(tx) = sender.as_ref() {
+            let _ = tx.send(TuiEvent::Shutdown);
+        }
+    }
+
+    // Give the TUI loop a moment to process the shutdown event
+    // TODO: avoid using a sleep. Use a different approach.
+    std::thread::sleep(std::time::Duration::from_millis(50));
 
     // Move cursor to the bottom of the active region
     if let Ok(terminal) = Terminal::new(CrosstermBackend::new(std::io::stderr())) {

@@ -55,6 +55,8 @@ pub enum TuiEvent {
         operation_id: OperationId,
         success: bool,
     },
+    /// Shutdown the TUI display
+    Shutdown,
 }
 
 /// Result of an operation
