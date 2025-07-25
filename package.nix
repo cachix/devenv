@@ -30,6 +30,7 @@ rustPlatform.buildRustPackage {
     ".*devenv-cache-core(/.*)?"
     ".*devenv-run-tests(/.*)?"
     ".*devenv-tasks(/.*)?"
+    ".*devenv-tui(/.*)?"
     ".*http-client-tls(/.*)?"
     ".*nix-conf-parser(/.*)?"
     ".*xtask(/.*)?"

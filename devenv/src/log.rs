@@ -47,6 +47,8 @@ pub enum LogFormat {
     /// The default human-readable log format used in the CLI.
     #[default]
     Cli,
+    /// Enhanced TUI interface with operations and logs.
+    Tui,
     /// A verbose structured log format used for debugging.
     TracingFull,
     /// A pretty human-readable log format used for debugging.
@@ -89,6 +91,16 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
                 .with(filter)
                 .with(stderr_layer)
                 .with(devenv_layer)
+                .init();
+        }
+        LogFormat::Tui => {
+            // Initialize the TUI system
+            let (tui_layer, _state) = devenv_tui::init_tui(devenv_tui::DisplayMode::Tui);
+
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(devenv_layer)
+                .with(tui_layer)
                 .init();
         }
         LogFormat::Cli => {
