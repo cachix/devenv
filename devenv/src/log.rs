@@ -66,7 +66,7 @@ pub fn init_tracing_default() {
 /// Cleanup TUI before exec to prevent terminal corruption
 pub fn cleanup_before_exec() {
     // Force cleanup of any active TUI display to prevent terminal corruption
-    devenv_tui::cleanup_before_exec();
+    devenv_tui::cleanup_tui();
 }
 
 pub fn init_tracing(level: Level, log_format: LogFormat) {
