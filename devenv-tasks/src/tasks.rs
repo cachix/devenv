@@ -15,6 +15,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument};
 
 #[derive(Debug)]
@@ -29,10 +30,15 @@ pub struct Tasks {
     pub notify_ui: Arc<Notify>,
     pub run_mode: RunMode,
     pub cache: TaskCache,
+    pub cancellation_token: Option<CancellationToken>,
 }
 
 impl Tasks {
-    pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
+    pub async fn new(
+        config: Config,
+        verbosity: VerbosityLevel,
+        cancellation_token: Option<CancellationToken>,
+    ) -> Result<Self, Error> {
         // Initialize the task cache using the environment variable
         let cache = TaskCache::new().await.map_err(|e| {
             Error::IoError(std::io::Error::new(
@@ -41,7 +47,7 @@ impl Tasks {
             ))
         })?;
 
-        Self::new_with_config_and_cache(config, cache, verbosity).await
+        Self::new_with_config_and_cache(config, cache, verbosity, cancellation_token).await
     }
 
     /// Create a new Tasks instance with a specific database path.
@@ -49,6 +55,7 @@ impl Tasks {
         config: Config,
         db_path: PathBuf,
         verbosity: VerbosityLevel,
+        cancellation_token: Option<CancellationToken>,
     ) -> Result<Self, Error> {
         // Initialize the task cache with a specific database path
         let cache = TaskCache::with_db_path(db_path).await.map_err(|e| {
@@ -58,7 +65,7 @@ impl Tasks {
             ))
         })?;
 
-        Self::new_with_config_and_cache(config, cache, verbosity).await
+        Self::new_with_config_and_cache(config, cache, verbosity, cancellation_token).await
     }
 
     fn resolve_namespace_roots(
@@ -111,10 +118,27 @@ impl Tasks {
         Ok(resolved_roots)
     }
 
+    pub async fn new_with_db_path_and_shutdown(
+        config: Config,
+        db_path: PathBuf,
+        verbosity: VerbosityLevel,
+        cancellation_token: CancellationToken,
+    ) -> Result<Self, Error> {
+        let cache = TaskCache::with_db_path(db_path).await.map_err(|e| {
+            Error::IoError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to initialize task cache: {}", e),
+            ))
+        })?;
+
+        Self::new_with_config_and_cache(config, cache, verbosity, Some(cancellation_token)).await
+    }
+
     async fn new_with_config_and_cache(
         config: Config,
         cache: TaskCache,
         verbosity: VerbosityLevel,
+        cancellation_token: Option<CancellationToken>,
     ) -> Result<Self, Error> {
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
@@ -136,7 +160,11 @@ impl Tasks {
             if task.status.is_some() && task.command.is_none() {
                 return Err(Error::MissingCommand(name));
             }
-            let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(task, verbosity))));
+            let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
+                task,
+                verbosity,
+                cancellation_token.clone(),
+            ))));
             task_indices.insert(name, index);
         }
         let roots = Self::resolve_namespace_roots(&config.roots, &task_indices)?;
@@ -150,6 +178,7 @@ impl Tasks {
             tasks_order: vec![],
             run_mode: config.run_mode,
             cache,
+            cancellation_token,
         };
         tasks.resolve_dependencies(task_indices).await?;
         tasks.tasks_order = tasks.schedule().await?;
@@ -317,6 +346,8 @@ impl Tasks {
                 if dependencies_completed {
                     break;
                 }
+
+                // Process groups will handle signal propagation automatically
 
                 self.notify_finished.notified().await;
             }
