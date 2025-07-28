@@ -199,15 +199,15 @@ Create project-specific slash commands that Claude can use:
 
 These commands will be available in Claude as `/test`, `/build`, `/deploy`, and `/db-migrate`.
 
-## Sub-agents
+## Agents
 
-Sub-agents are specialized AI assistants that handle specific tasks with their own context window and can be invoked automatically or explicitly. They're perfect for delegating complex or repetitive tasks.
+Agents are specialized AI assistants that handle specific tasks with their own context window and can be invoked automatically or explicitly. They're perfect for delegating complex or repetitive tasks.
 
 ### Configuration
 
 ```nix
 {
-  claude.code.subagents = {
+  claude.code.agents = {
     code-reviewer = {
       description = "Expert code review specialist that checks for quality, security, and best practices";
       proactive = true;  # Claude will use this automatically when appropriate
@@ -253,16 +253,16 @@ Sub-agents are specialized AI assistants that handle specific tasks with their o
 }
 ```
 
-### Sub-agent Properties
+### Properties
 
 - **description**: What the sub-agent does (shown in Claude's agent selection)
 - **proactive**: Whether Claude should use this sub-agent automatically when relevant
 - **tools**: List of tools the sub-agent can use (restricts access for safety)
 - **prompt**: The system prompt that defines the sub-agent's behavior
 
-### Available Tools for Sub-agents
+### Available Tools
 
-Common tools that can be assigned to sub-agents:
+Common tools that can be assigned to agents:
 - `Read`: Read files
 - `Write`: Create new files
 - `Edit`/`MultiEdit`: Modify existing files
@@ -273,18 +273,18 @@ Common tools that can be assigned to sub-agents:
 
 ### Usage
 
-**Proactive sub-agents** (with `proactive: true`) are automatically invoked by Claude when their expertise is relevant. For example, the code-reviewer sub-agent will automatically review code after significant changes.
+**Proactive agents** (with `proactive: true`) are automatically invoked by Claude when their expertise is relevant. For example, the code-reviewer sub-agent will automatically review code after significant changes.
 
-**Non-proactive sub-agents** (with `proactive: false`) must be explicitly requested. You can invoke them by asking Claude to use a specific sub-agent or by describing a task that matches their expertise.
+**Non-proactive agents** (with `proactive: false`) must be explicitly requested. You can invoke them by asking Claude to use a specific agent or by describing a task that matches their expertise.
 
 ### Best Practices
 
-1. **Limit tool access**: Only give sub-agents the tools they need
-2. **Clear descriptions**: Help Claude understand when to use each sub-agent
-3. **Focused prompts**: Keep sub-agent prompts specific to their task
-4. **Use proactive mode carefully**: Only for sub-agents that should run automatically
+1. **Limit tool access**: Only give agents the tools they need
+2. **Clear descriptions**: Help Claude understand when to use each agent
+3. **Focused prompts**: Keep agent prompts specific to their task
+4. **Use proactive mode carefully**: Only for agents that should run automatically
 
-For more details on sub-agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/sub-agents).
+For more details on agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/agents).
 
 ## Hook Input Format
 
