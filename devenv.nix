@@ -14,6 +14,51 @@
 
   apple.sdk = if pkgs.stdenv.isDarwin then pkgs.apple-sdk_11 else null;
 
+
+  claude.code = {
+    enable = true;
+    permissions = {
+      WebFetch = {
+        allow = [ "domain:github.com" "domain:docs.rs" "domain:docs.anthropic.com" ];
+      };
+      Bash = {
+        allow = [ "rg:*" "cargo test:*" "nix search:*" "devenv-run-tests:*" "nix-instantiate:*" ];
+      };
+    };
+    agents = {
+      code-reviewer = {
+        description = "Expert code review specialist that checks for quality, security, and best practices";
+        proactive = true;
+        tools = [ "Read" "Grep" "TodoWrite" ];
+        prompt = ''
+          You are an expert code reviewer for the devenv project. When reviewing code, check for:
+          - Code readability and maintainability
+          - Proper error handling using thiserror and bail!
+          - Security vulnerabilities
+          - Performance issues
+          - Adherence to project conventions (snake_case, CamelCase, rustfmt)
+          - No unsafe code usage
+          
+          Provide constructive feedback with specific suggestions for improvement.
+        '';
+      };
+
+      test-writer = {
+        description = "Specialized in writing comprehensive test suites for Rust and Nix";
+        proactive = false;
+        tools = [ "Read" "Write" "Edit" "Bash" ];
+        prompt = ''
+          You are a test writing specialist for the devenv project. Create comprehensive test suites that:
+          - Cover edge cases and error conditions
+          - Follow the project's testing conventions (cargo test, devenv-run-tests)
+          - Include unit, integration, and property-based tests where appropriate
+          - Have clear test names that describe what is being tested
+          - Test both Rust code and Nix module configurations
+        '';
+      };
+    };
+  };
+
   packages = [
     pkgs.cairo
     pkgs.git

@@ -199,6 +199,93 @@ Create project-specific slash commands that Claude can use:
 
 These commands will be available in Claude as `/test`, `/build`, `/deploy`, and `/db-migrate`.
 
+## Sub-agents
+
+Sub-agents are specialized AI assistants that handle specific tasks with their own context window and can be invoked automatically or explicitly. They're perfect for delegating complex or repetitive tasks.
+
+### Configuration
+
+```nix
+{
+  claude.code.subagents = {
+    code-reviewer = {
+      description = "Expert code review specialist that checks for quality, security, and best practices";
+      proactive = true;  # Claude will use this automatically when appropriate
+      tools = [ "Read" "Grep" "TodoWrite" ];
+      prompt = ''
+        You are an expert code reviewer. When reviewing code, check for:
+        - Code readability and maintainability
+        - Proper error handling
+        - Security vulnerabilities
+        - Performance issues
+        - Adherence to project conventions
+        
+        Provide constructive feedback with specific suggestions for improvement.
+      '';
+    };
+    
+    test-writer = {
+      description = "Specialized in writing comprehensive test suites";
+      proactive = false;  # Only invoked explicitly
+      tools = [ "Read" "Write" "Edit" "Bash" ];
+      prompt = ''
+        You are a test writing specialist. Create comprehensive test suites that:
+        - Cover edge cases and error conditions
+        - Follow the project's testing conventions
+        - Include unit, integration, and property-based tests where appropriate
+        - Have clear test names that describe what is being tested
+      '';
+    };
+    
+    docs-updater = {
+      description = "Updates project documentation based on code changes";
+      proactive = true;
+      tools = [ "Read" "Edit" "Grep" ];
+      prompt = ''
+        You specialize in keeping documentation up-to-date. When code changes:
+        - Update API documentation
+        - Ensure examples still work
+        - Update configuration references
+        - Keep README files current
+      '';
+    };
+  };
+}
+```
+
+### Sub-agent Properties
+
+- **description**: What the sub-agent does (shown in Claude's agent selection)
+- **proactive**: Whether Claude should use this sub-agent automatically when relevant
+- **tools**: List of tools the sub-agent can use (restricts access for safety)
+- **prompt**: The system prompt that defines the sub-agent's behavior
+
+### Available Tools for Sub-agents
+
+Common tools that can be assigned to sub-agents:
+- `Read`: Read files
+- `Write`: Create new files
+- `Edit`/`MultiEdit`: Modify existing files
+- `Grep`/`Glob`: Search through code
+- `Bash`: Execute commands
+- `TodoWrite`: Manage task lists
+- `WebFetch`/`WebSearch`: Access web resources
+
+### Usage
+
+**Proactive sub-agents** (with `proactive: true`) are automatically invoked by Claude when their expertise is relevant. For example, the code-reviewer sub-agent will automatically review code after significant changes.
+
+**Non-proactive sub-agents** (with `proactive: false`) must be explicitly requested. You can invoke them by asking Claude to use a specific sub-agent or by describing a task that matches their expertise.
+
+### Best Practices
+
+1. **Limit tool access**: Only give sub-agents the tools they need
+2. **Clear descriptions**: Help Claude understand when to use each sub-agent
+3. **Focused prompts**: Keep sub-agent prompts specific to their task
+4. **Use proactive mode carefully**: Only for sub-agents that should run automatically
+
+For more details on sub-agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/sub-agents).
+
 ## Hook Input Format
 
 Hooks receive a JSON object via stdin containing the tool information. For file-related tools (Edit/Write), the JSON includes:
