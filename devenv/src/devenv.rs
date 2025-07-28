@@ -782,7 +782,7 @@ impl Devenv {
             serde_json::to_string_pretty(&config).unwrap()
         );
 
-        let mut tui = tasks::TasksUi::new(config, verbosity).await?;
+        let mut tui = tasks::TasksUi::builder(config, verbosity).build().await?;
         let (tasks_status, outputs) = tui.run().await?;
 
         if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
