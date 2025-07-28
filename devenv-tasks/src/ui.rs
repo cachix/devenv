@@ -82,7 +82,6 @@ impl TasksUiBuilder {
             tasks: Arc::new(tasks),
             verbosity: self.verbosity,
             term: Term::stderr(),
-            cancellation_token: self.cancellation_token,
         })
     }
 }
@@ -92,7 +91,6 @@ pub struct TasksUi {
     tasks: Arc<Tasks>,
     verbosity: VerbosityLevel,
     term: Term,
-    cancellation_token: Option<CancellationToken>,
 }
 
 impl TasksUi {
