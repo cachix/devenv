@@ -121,6 +121,24 @@ attribute set of string
 
 
 
+### services\.mysql\.ensureUsers\.\*\.host
+
+
+
+Host of the user to ensure\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "localhost" `
+
+
+
 ### services\.mysql\.ensureUsers\.\*\.name
 
 
