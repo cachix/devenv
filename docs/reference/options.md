@@ -1047,6 +1047,143 @@ boolean
 
 
 
+## claude.code.agents
+
+
+
+Custom Claude Code sub-agents to create in the project.
+Sub-agents are specialized AI assistants that handle specific tasks
+with their own context window and can be invoked automatically or explicitly.
+
+For more details, see: https://docs.anthropic.com/en/docs/claude-code/sub-agents
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  code-reviewer = {
+    description = "Expert code review specialist that checks for quality, security, and best practices";
+    proactive = true;
+    tools = [ "Read" "Grep" "TodoWrite" ];
+    prompt = ''
+      You are an expert code reviewer. When reviewing code, check for:
+      - Code readability and maintainability
+      - Proper error handling
+      - Security vulnerabilities
+      - Performance issues
+      - Adherence to project conventions
+      
+      Provide constructive feedback with specific suggestions for improvement.
+    '';
+  };
+  
+  test-writer = {
+    description = "Specialized in writing comprehensive test suites";
+    proactive = false;
+    tools = [ "Read" "Write" "Edit" "Bash" ];
+    prompt = ''
+      You are a test writing specialist. Create comprehensive test suites that:
+      - Cover edge cases and error conditions
+      - Follow the project's testing conventions
+      - Include unit, integration, and property-based tests where appropriate
+      - Have clear test names that describe what is being tested
+    '';
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.agents.\<name>.description
+
+
+
+What the sub-agent does
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.agents.\<name>.proactive
+
+
+
+Whether Claude should use this sub-agent automatically
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.agents.\<name>.prompt
+
+
+
+The system prompt for the sub-agent
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.agents.\<name>.tools
+
+
+
+List of allowed tools for this sub-agent
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## claude.code.apiKeyHelper
 
 
@@ -1105,6 +1242,7 @@ null or signed integer
 
 
 Custom Claude Code slash commands to create in the project.
+Commands are invoked with ` /command-name ` in Claude Code.
 
 
 
@@ -2291,8 +2429,6 @@ string
 
 ## devenv.warnOnNewVersion
 
-
-
 Whether to warn when a new version of either devenv or the direnv integration is available.
 
 
@@ -2400,6 +2536,8 @@ string or list of string
 
 
 ## enterShell
+
+
 
 Bash code to execute when entering the shell.
 
@@ -5112,8 +5250,6 @@ list of string
 
 ## git-hooks.hooks.deadnix.settings.hidden
 
-
-
 Recurse into hidden subdirectories and process hidden .\*.nix files.
 
 
@@ -5216,6 +5352,8 @@ boolean
 
 
 ## git-hooks.hooks.denofmt
+
+
 
 denofmt hook
 
@@ -7170,8 +7308,6 @@ boolean
 
 ## git-hooks.hooks.mdl.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -7253,6 +7389,8 @@ boolean
 
 
 ## git-hooks.hooks.mdl.settings.json
+
+
 
 Format output as JSON.
 
