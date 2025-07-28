@@ -1156,7 +1156,7 @@ The system prompt for the sub-agent
 
 
 *Type:*
-string
+strings concatenated with “\\n”
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
