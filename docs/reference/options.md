@@ -21722,6 +21722,27 @@ attribute set of string
 
 
 
+## services.mysql.ensureUsers.\*.host
+
+
+
+Host of the user to ensure.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "localhost" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
+
+
 ## services.mysql.ensureUsers.\*.name
 
 
