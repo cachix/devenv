@@ -284,7 +284,7 @@ Common tools that can be assigned to agents:
 3. **Focused prompts**: Keep agent prompts specific to their task
 4. **Use proactive mode carefully**: Only for agents that should run automatically
 
-For more details on agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/agents).
+For more details on agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/sub-agents).
 
 ## Hook Input Format
 
