@@ -286,6 +286,17 @@ Common tools that can be assigned to agents:
 
 For more details on agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/sub-agents).
 
+## Composable Specialized Agents
+
+The [devenv-claude-agents](https://github.com/cachix/devenv-claude-agents) repository provides a composable collection of specialized agents:
+
+- `code-reviewer`
+- `architecture-designer`
+- `documentation-writer`
+- `devops-specialist`
+- `fullstack-developer`
+- `quality-assurance`
+
 ## Hook Input Format
 
 Hooks receive a JSON object via stdin containing the tool information. For file-related tools (Edit/Write), the JSON includes:
