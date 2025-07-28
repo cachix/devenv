@@ -308,7 +308,7 @@ impl TaskState {
 
             loop {
                 tokio::select! {
-                    // Check for cancellation
+                    // Check for cancellation from shared signal handler
                     _ = async {
                         if let Some(ref token) = self.cancellation_token {
                             token.cancelled().await
@@ -318,20 +318,27 @@ impl TaskState {
                     } => {
                         eprintln!("Task {} received shutdown signal, terminating child process", self.task.name);
 
-                        // Kill the child process
+                        // Kill the child process and its process group
                         #[cfg(unix)]
                         if let Some(pid) = child.id() {
                             use ::nix::sys::signal::{self, Signal};
                             use ::nix::unistd::Pid;
 
-                            // Send SIGTERM to the process group
+                            // Send SIGTERM to the process group first for graceful shutdown
                             let _ = signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
 
-                            // Wait a bit then force kill if needed
+                            // Wait a bit for graceful shutdown
                             tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
                             if child.try_wait().unwrap_or(None).is_none() {
+                                // Force kill if still running
                                 let _ = signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);
                             }
+                        }
+
+                        #[cfg(not(unix))]
+                        {
+                            // On non-Unix systems, try to kill the child process directly
+                            let _ = child.kill().await;
                         }
 
                         return Ok(TaskCompleted::Cancelled(now.elapsed()));

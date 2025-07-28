@@ -1,5 +1,6 @@
 mod config;
 mod error;
+pub mod signal_handler;
 mod task_cache;
 mod task_state;
 mod tasks;

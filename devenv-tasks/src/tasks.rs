@@ -349,8 +349,6 @@ impl Tasks {
                     break;
                 }
 
-                // Process groups will handle signal propagation automatically
-
                 self.notify_finished.notified().await;
             }
 
