@@ -11,6 +11,7 @@ inputs:
     url: github:cachix/devenv-nixpkgs/rolling
   devenv:
     url: github:cachix/devenv
+    flake: false
 imports:
 - ./frontend
 - ./backend

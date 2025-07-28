@@ -26,7 +26,7 @@ nav:
       - Outputs: outputs.md
     - Writing devenv.yaml:
       - Inputs: inputs.md
-      - Imports: composing-using-imports.md
+      - Composing: composing-using-imports.md
     - Overview:
       - Automatic shell activation: automatic-shell-activation.md
       - Garbage collection: garbage-collection.md
