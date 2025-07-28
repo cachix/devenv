@@ -8,7 +8,7 @@ pub mod ui;
 
 pub use config::{Config, RunMode, TaskConfig};
 pub use error::Error;
-pub use tasks::Tasks;
+pub use tasks::{Tasks, TasksBuilder};
 pub use types::{Outputs, VerbosityLevel};
 pub use ui::{TasksStatus, TasksUi, TasksUiBuilder};
 

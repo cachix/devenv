@@ -66,17 +66,17 @@ impl TasksUiBuilder {
 
     /// Build the TasksUi instance
     pub async fn build(self) -> Result<TasksUi, Error> {
-        let tasks = if let Some(db_path) = self.db_path {
-            Tasks::new_with_db_path(
-                self.config,
-                db_path,
-                self.verbosity,
-                self.cancellation_token.clone(),
-            )
-            .await?
-        } else {
-            Tasks::new(self.config, self.verbosity, self.cancellation_token.clone()).await?
-        };
+        let mut tasks_builder = Tasks::builder(self.config, self.verbosity);
+
+        if let Some(db_path) = self.db_path {
+            tasks_builder = tasks_builder.with_db_path(db_path);
+        }
+
+        if let Some(token) = self.cancellation_token.clone() {
+            tasks_builder = tasks_builder.with_cancellation_token(token);
+        }
+
+        let tasks = tasks_builder.build().await?;
 
         Ok(TasksUi {
             tasks: Arc::new(tasks),
