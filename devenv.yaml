@@ -4,10 +4,12 @@ inputs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
   rust-overlay:
     url: github:oxalica/rust-overlay
+  cargo2nix:
+    url: github:cargo2nix/cargo2nix
     inputs:
       nixpkgs:
         follows: nixpkgs
   nix:
     url: github:cachix/nix/devenv-2.30
-  devenv:
-    url: path:.?dir=src/modules
+  nixpkgs:
+    url: github:NixOS/nixpkgs/nixpkgs-unstable
