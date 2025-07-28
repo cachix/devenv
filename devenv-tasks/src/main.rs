@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{Config, RunMode, TaskConfig, TasksUi, VerbosityLevel};
+use devenv_tasks::{
+    signal_handler::SignalHandler, Config, RunMode, TaskConfig, TasksUi, VerbosityLevel,
+};
 use std::env;
-use tokio::signal;
-use tokio_util::sync::CancellationToken;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -62,40 +62,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 run_mode: mode,
             };
 
-            // Create cancellation token and set up signal handling
-            let cancellation_token = CancellationToken::new();
-            let token_clone = cancellation_token.clone();
-
-            tokio::spawn(async move {
-                let ctrl_c = signal::ctrl_c();
-
-                #[cfg(unix)]
-                {
-                    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
-                        .expect("Failed to install SIGTERM handler");
-
-                    tokio::select! {
-                        _ = ctrl_c => {
-                            eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
-                            token_clone.cancel();
-                        }
-                        _ = sigterm.recv() => {
-                            eprintln!("Received SIGTERM, shutting down gracefully...");
-                            token_clone.cancel();
-                        }
-                    }
-                }
-
-                #[cfg(not(unix))]
-                {
-                    tokio::select! {
-                        _ = ctrl_c => {
-                            eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
-                            token_clone.cancel();
-                        }
-                    }
-                }
-            });
+            // Create shared signal handler
+            let signal_handler = SignalHandler::start();
+            let cancellation_token = signal_handler.cancellation_token();
 
             let mut tasks_ui = TasksUi::builder(config, verbosity)
                 .with_cancellation_token(cancellation_token)
