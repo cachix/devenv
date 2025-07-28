@@ -205,7 +205,7 @@ in
               description = "List of allowed tools for this sub-agent";
             };
             prompt = lib.mkOption {
-              type = lib.types.str;
+              type = lib.types.lines;
               description = "The system prompt for the sub-agent";
             };
           };
