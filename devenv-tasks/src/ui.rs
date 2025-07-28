@@ -1,6 +1,7 @@
 use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 use crate::types::{Skipped, TaskCompleted, TaskStatus};
 use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
@@ -14,6 +15,7 @@ pub struct TasksStatus {
     pub failed: usize,
     pub skipped: usize,
     pub dependency_failed: usize,
+    pub cancelled: usize,
 }
 
 impl TasksStatus {
@@ -26,6 +28,7 @@ impl TasksStatus {
             failed: 0,
             skipped: 0,
             dependency_failed: 0,
+            cancelled: 0,
         }
     }
 }
@@ -35,17 +38,35 @@ pub struct TasksUi {
     tasks: Arc<Tasks>,
     verbosity: VerbosityLevel,
     term: Term,
+    cancellation_token: Option<CancellationToken>,
 }
 
 impl TasksUi {
     /// Create a new TasksUi
     pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
-        let tasks = Tasks::new(config, verbosity).await?;
+        let tasks = Tasks::new(config, verbosity, None).await?;
 
         Ok(Self {
             tasks: Arc::new(tasks),
             verbosity,
             term: Term::stderr(),
+            cancellation_token: None,
+        })
+    }
+
+    /// Create a new TasksUi with cancellation token support
+    pub async fn new_with_shutdown(
+        config: Config,
+        verbosity: VerbosityLevel,
+        cancellation_token: CancellationToken,
+    ) -> Result<Self, Error> {
+        let tasks = Tasks::new(config, verbosity, Some(cancellation_token.clone())).await?;
+
+        Ok(Self {
+            tasks: Arc::new(tasks),
+            verbosity,
+            term: Term::stderr(),
+            cancellation_token: Some(cancellation_token),
         })
     }
 
@@ -54,13 +75,16 @@ impl TasksUi {
         config: Config,
         db_path: PathBuf,
         verbosity: VerbosityLevel,
+        cancellation_token: Option<CancellationToken>,
     ) -> Result<Self, Error> {
-        let tasks = Tasks::new_with_db_path(config, db_path, verbosity).await?;
+        let tasks =
+            Tasks::new_with_db_path(config, db_path, verbosity, cancellation_token.clone()).await?;
 
         Ok(Self {
             tasks: Arc::new(tasks),
             verbosity,
             term: Term::stderr(),
+            cancellation_token,
         })
     }
 
@@ -113,6 +137,15 @@ impl TasksUi {
                             .magenta()
                             .bold(),
                         None,
+                    )
+                }
+                TaskStatus::Completed(TaskCompleted::Cancelled(duration)) => {
+                    tasks_status.cancelled += 1;
+                    (
+                        console::style(format!("{:17}", "Cancelled"))
+                            .yellow()
+                            .bold(),
+                        Some(duration),
                     )
                 }
             };
@@ -231,6 +264,15 @@ impl TasksUi {
                 } else {
                     String::new()
                 },
+                if tasks_status.cancelled > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.cancelled,
+                        console::style("Cancelled").yellow().bold()
+                    )
+                } else {
+                    String::new()
+                },
             ]
             .into_iter()
             .filter(|s| !s.is_empty())
@@ -310,6 +352,11 @@ impl TasksUi {
                                     "Dependency failed".to_string(),
                                     console::style("Dependency failed").red().bold(),
                                     "".to_string(),
+                                ),
+                                TaskCompleted::Cancelled(duration) => (
+                                    format!("Cancelled ({:.2?})", duration),
+                                    console::style("Cancelled").yellow().bold(),
+                                    format!(" ({:.2?})", duration),
                                 ),
                             };
 

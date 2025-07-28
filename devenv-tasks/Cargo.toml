@@ -15,12 +15,16 @@ serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["signal"] }
+tokio-util.workspace = true
 tracing.workspace = true
 sqlx.workspace = true
 blake3.workspace = true
 walkdir.workspace = true
 shell-escape.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use devenv_tasks::{Config, RunMode, TaskConfig, TasksUi, VerbosityLevel};
 use std::env;
+use tokio::signal;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -60,8 +62,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 run_mode: mode,
             };
 
-            // Pass verbosity level directly to TasksUi
-            let mut tasks_ui = TasksUi::new(config, verbosity).await?;
+            // Create cancellation token and set up signal handling
+            let cancellation_token = CancellationToken::new();
+            let token_clone = cancellation_token.clone();
+
+            tokio::spawn(async move {
+                let ctrl_c = signal::ctrl_c();
+
+                #[cfg(unix)]
+                {
+                    let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
+                        .expect("Failed to install SIGTERM handler");
+
+                    tokio::select! {
+                        _ = ctrl_c => {
+                            eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                            token_clone.cancel();
+                        }
+                        _ = sigterm.recv() => {
+                            eprintln!("Received SIGTERM, shutting down gracefully...");
+                            token_clone.cancel();
+                        }
+                    }
+                }
+
+                #[cfg(not(unix))]
+                {
+                    tokio::select! {
+                        _ = ctrl_c => {
+                            eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                            token_clone.cancel();
+                        }
+                    }
+                }
+            });
+
+            // Pass the cancellation token to TasksUi
+            let mut tasks_ui =
+                TasksUi::new_with_shutdown(config, verbosity, cancellation_token).await?;
             let (status, _outputs) = tasks_ui.run().await?;
 
             if status.failed + status.dependency_failed > 0 {

@@ -1223,6 +1223,7 @@ dependencies = [
  "console",
  "devenv-cache-core",
  "miette",
+ "nix 0.29.0",
  "petgraph 0.7.1",
  "pretty_assertions",
  "serde",
@@ -1232,6 +1233,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-util",
  "tracing",
  "walkdir",
 ]
