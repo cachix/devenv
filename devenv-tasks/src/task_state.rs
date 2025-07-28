@@ -78,7 +78,6 @@ impl TaskState {
         // This ensures that signals sent to the parent are propagated to all children
         #[cfg(unix)]
         {
-            use std::os::unix::process::CommandExt;
             command.process_group(0);
         }
 
