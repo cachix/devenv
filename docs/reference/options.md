@@ -13021,21 +13021,64 @@ null or package
 
 
 
-## languages.haskell.stack
+## languages.haskell.stack.enable
 
 
 
-Haskell stack to use.
+Whether to enable the Haskell Stack
 
 
 
 *Type:*
-null or package
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+## languages.haskell.stack.package
+
+
+
+Haskell stack package to use.
+
+
+
+*Type:*
+package
 
 
 
 *Default:*
 ` pkgs.stack `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+## languages.haskell.stack.args
+
+
+
+Additional arguments to pass to stack.
+By default, stack is configured to use devenv’s GHC installation.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ "--no-nix" "--system-ghc" "--no-install-ghc" ] `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
