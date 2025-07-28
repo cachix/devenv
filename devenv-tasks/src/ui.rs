@@ -1,6 +1,7 @@
 use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 use crate::types::{Skipped, TaskCompleted, TaskStatus};
 use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
@@ -14,6 +15,7 @@ pub struct TasksStatus {
     pub failed: usize,
     pub skipped: usize,
     pub dependency_failed: usize,
+    pub cancelled: usize,
 }
 
 impl TasksStatus {
@@ -26,7 +28,61 @@ impl TasksStatus {
             failed: 0,
             skipped: 0,
             dependency_failed: 0,
+            cancelled: 0,
         }
+    }
+}
+
+/// Builder for TasksUi configuration
+pub struct TasksUiBuilder {
+    config: Config,
+    verbosity: VerbosityLevel,
+    db_path: Option<PathBuf>,
+    cancellation_token: Option<CancellationToken>,
+}
+
+impl TasksUiBuilder {
+    /// Create a new builder with required configuration
+    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+        Self {
+            config,
+            verbosity,
+            db_path: None,
+            cancellation_token: None,
+        }
+    }
+
+    /// Set the database path
+    pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
+        self.db_path = Some(db_path);
+        self
+    }
+
+    /// Set the cancellation token for shutdown support
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Build the TasksUi instance
+    pub async fn build(self) -> Result<TasksUi, Error> {
+        let mut tasks_builder = Tasks::builder(self.config, self.verbosity);
+
+        if let Some(db_path) = self.db_path {
+            tasks_builder = tasks_builder.with_db_path(db_path);
+        }
+
+        if let Some(token) = self.cancellation_token.clone() {
+            tasks_builder = tasks_builder.with_cancellation_token(token);
+        }
+
+        let tasks = tasks_builder.build().await?;
+
+        Ok(TasksUi {
+            tasks: Arc::new(tasks),
+            verbosity: self.verbosity,
+            term: Term::stderr(),
+        })
     }
 }
 
@@ -38,30 +94,9 @@ pub struct TasksUi {
 }
 
 impl TasksUi {
-    /// Create a new TasksUi
-    pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
-        let tasks = Tasks::new(config, verbosity).await?;
-
-        Ok(Self {
-            tasks: Arc::new(tasks),
-            verbosity,
-            term: Term::stderr(),
-        })
-    }
-
-    /// Create a new TasksUi with a specific database path
-    pub async fn new_with_db_path(
-        config: Config,
-        db_path: PathBuf,
-        verbosity: VerbosityLevel,
-    ) -> Result<Self, Error> {
-        let tasks = Tasks::new_with_db_path(config, db_path, verbosity).await?;
-
-        Ok(Self {
-            tasks: Arc::new(tasks),
-            verbosity,
-            term: Term::stderr(),
-        })
+    /// Create a new TasksUiBuilder for configuring TasksUi
+    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksUiBuilder {
+        TasksUiBuilder::new(config, verbosity)
     }
 
     async fn get_tasks_status(&self) -> TasksStatus {
@@ -113,6 +148,15 @@ impl TasksUi {
                             .magenta()
                             .bold(),
                         None,
+                    )
+                }
+                TaskStatus::Completed(TaskCompleted::Cancelled(duration)) => {
+                    tasks_status.cancelled += 1;
+                    (
+                        console::style(format!("{:17}", "Cancelled"))
+                            .yellow()
+                            .bold(),
+                        Some(duration),
                     )
                 }
             };
@@ -231,6 +275,15 @@ impl TasksUi {
                 } else {
                     String::new()
                 },
+                if tasks_status.cancelled > 0 {
+                    format!(
+                        "{} {}",
+                        tasks_status.cancelled,
+                        console::style("Cancelled").yellow().bold()
+                    )
+                } else {
+                    String::new()
+                },
             ]
             .into_iter()
             .filter(|s| !s.is_empty())
@@ -310,6 +363,11 @@ impl TasksUi {
                                     "Dependency failed".to_string(),
                                     console::style("Dependency failed").red().bold(),
                                     "".to_string(),
+                                ),
+                                TaskCompleted::Cancelled(duration) => (
+                                    format!("Cancelled ({:.2?})", duration),
+                                    console::style("Cancelled").yellow().bold(),
+                                    format!(" ({:.2?})", duration),
                                 ),
                             };
 
