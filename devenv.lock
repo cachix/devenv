@@ -13,6 +13,21 @@
       },
       "parent": []
     },
+    "devenv-claude-agents": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1753726105,
+        "owner": "cachix",
+        "repo": "devenv-claude-agents",
+        "rev": "db22f74fd504f97ba733015ce61a039a1337b37e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "cachix",
+        "repo": "devenv-claude-agents",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -216,6 +231,7 @@
     "root": {
       "inputs": {
         "devenv": "devenv",
+        "devenv-claude-agents": "devenv-claude-agents",
         "git-hooks": "git-hooks",
         "nix": "nix",
         "nixpkgs": "nixpkgs_2",

@@ -11,3 +11,8 @@ inputs:
     url: github:cachix/nix/devenv-2.30
   devenv:
     url: path:.?dir=src/modules
+  devenv-claude-agents:
+    url: github:cachix/devenv-claude-agents
+    flake: false
+imports:
+  - devenv-claude-agents
