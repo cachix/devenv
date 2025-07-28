@@ -37,7 +37,10 @@ async fn test_task_name() -> Result<(), Error> {
         }))
         .unwrap();
         assert_matches!(
-            Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await,
+            Tasks::builder(config, VerbosityLevel::Verbose)
+                .with_db_path(db_path.clone())
+                .build()
+                .await,
             Err(Error::InvalidTaskName(_))
         );
     }
@@ -59,7 +62,10 @@ async fn test_task_name() -> Result<(), Error> {
         }))
         .unwrap();
         assert_matches!(
-            Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await,
+            Tasks::builder(config, VerbosityLevel::Verbose)
+                .with_db_path(db_path.clone())
+                .build()
+                .await,
             Ok(_)
         );
     }
@@ -84,7 +90,7 @@ async fn test_basic_tasks() -> Result<(), Error> {
     )?;
     let script4 = create_script("#!/bin/sh\necho 'Task 4 is running' && echo 'Task 4 completed'")?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1", "myapp:task_4"],
             "run_mode": "all",
@@ -110,9 +116,10 @@ async fn test_basic_tasks() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
     tasks.run().await;
 
@@ -135,7 +142,7 @@ async fn test_tasks_cycle() -> Result<(), Error> {
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");
 
-    let result = Tasks::new_with_db_path(
+    let result = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1"],
             "run_mode": "all",
@@ -153,9 +160,10 @@ async fn test_tasks_cycle() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await;
     if let Err(Error::CycleDetected(_)) = result {
         // The source of the cycle can be either task.
@@ -213,7 +221,10 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
     }))
     .unwrap();
 
-    let tasks1 = Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     tasks1.run().await;
 
     assert_eq!(tasks1.tasks_order.len(), 1);
@@ -247,7 +258,10 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
     }))
     .unwrap();
 
-    let tasks2 = Tasks::new_with_db_path(config2, db_path2, VerbosityLevel::Verbose).await?;
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+        .with_db_path(db_path2)
+        .build()
+        .await?;
     tasks2.run().await;
 
     assert_eq!(tasks2.tasks_order.len(), 1);
@@ -313,7 +327,10 @@ exit 0
     }))
     .unwrap();
 
-    let tasks1 = Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     let outputs1 = tasks1.run().await;
 
     // Print the status and outputs for debugging
@@ -350,7 +367,10 @@ exit 0
     }))
     .unwrap();
 
-    let tasks2 = Tasks::new_with_db_path(config2, db_path, VerbosityLevel::Verbose).await?;
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+        .with_db_path(db_path)
+        .build()
+        .await?;
     let outputs2 = tasks2.run().await;
 
     // Print the status and outputs for debugging
@@ -429,7 +449,10 @@ echo "Task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
 
     // Run task first time - should execute
     let outputs = tasks.run().await;
@@ -474,7 +497,10 @@ echo "Task executed successfully"
     }))
     .unwrap();
 
-    let tasks2 = Tasks::new_with_db_path(config2, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     let outputs2 = tasks2.run().await;
 
     // Print status for debugging
@@ -526,7 +552,10 @@ echo "Task executed successfully"
     }))
     .unwrap();
 
-    let tasks3 = Tasks::new_with_db_path(config3, db_path, VerbosityLevel::Verbose).await?;
+    let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose)
+        .with_db_path(db_path)
+        .build()
+        .await?;
     let outputs3 = tasks3.run().await;
 
     // Print status for debugging
@@ -606,7 +635,10 @@ echo "Multiple files task executed successfully"
     .unwrap();
 
     // Create tasks with multiple files in exec_if_modified
-    let tasks = Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks = Tasks::builder(config1, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
 
     // Run task first time - should execute
     let outputs = tasks.run().await;
@@ -641,7 +673,10 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::new_with_db_path(config2, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks = Tasks::builder(config2, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     let outputs = tasks.run().await;
 
     // Verify the output is preserved in the skipped task
@@ -670,7 +705,10 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks2 = Tasks::new_with_db_path(config3, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks2 = Tasks::builder(config3, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     let outputs2 = tasks2.run().await;
 
     // Verify output is still preserved on subsequent runs
@@ -701,7 +739,10 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::new_with_db_path(config4, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks = Tasks::builder(config4, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     let outputs = tasks.run().await;
 
     // Verify the output after modification of second file
@@ -738,7 +779,10 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::new_with_db_path(config5, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks = Tasks::builder(config5, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     let outputs = tasks.run().await;
 
     // Verify the output when both files have been modified
@@ -809,8 +853,10 @@ echo "Task executed successfully"
         .unwrap();
 
         // Create the tasks with explicit db path
-        let tasks1 =
-            Tasks::new_with_db_path(config1, db_path.clone(), VerbosityLevel::Verbose).await?;
+        let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose)
+            .with_db_path(db_path.clone())
+            .build()
+            .await?;
 
         // Run task first time - should execute
         let outputs1 = tasks1.run().await;
@@ -853,8 +899,10 @@ echo "Task executed successfully"
         .unwrap();
 
         // Create the tasks with explicit db path
-        let tasks2 =
-            Tasks::new_with_db_path(config2, db_path.clone(), VerbosityLevel::Verbose).await?;
+        let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+            .with_db_path(db_path.clone())
+            .build()
+            .await?;
         let outputs2 = tasks2.run().await;
 
         // Print the status and outputs for debugging
@@ -918,7 +966,10 @@ echo "Task executed successfully"
         .unwrap();
 
         // Create the tasks with explicit db path
-        let tasks3 = Tasks::new_with_db_path(config3, db_path, VerbosityLevel::Verbose).await?;
+        let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose)
+            .with_db_path(db_path)
+            .build()
+            .await?;
         let outputs3 = tasks3.run().await;
 
         // Print the status and outputs for debugging
@@ -1015,7 +1066,10 @@ echo "Task completed and modified the file"
     };
 
     // Create and run the tasks
-    let tasks = Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     tasks.run().await;
 
     // Check the modified file content
@@ -1069,7 +1123,10 @@ echo "Task completed and modified the file"
     }))
     .unwrap();
 
-    let tasks2 = Tasks::new_with_db_path(config2, db_path, VerbosityLevel::Verbose).await?;
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+        .with_db_path(db_path)
+        .build()
+        .await?;
     tasks2.run().await;
 
     // Check that the task was skipped
@@ -1145,7 +1202,10 @@ exit 1
     };
 
     // Create and run the tasks
-    let tasks = Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
     tasks.run().await;
 
     // Check that the task failed
@@ -1206,7 +1266,7 @@ async fn test_nonexistent_script() -> Result<(), Error> {
     let temp_dir = TempDir::new().unwrap();
     let db_path = temp_dir.path().join("tasks.db");
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1"],
             "run_mode": "all",
@@ -1218,9 +1278,10 @@ async fn test_nonexistent_script() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
 
     tasks.run().await;
@@ -1253,7 +1314,7 @@ async fn test_status_without_command() -> Result<(), Error> {
 
     let status_script = create_script("#!/bin/sh\nexit 0")?;
 
-    let result = Tasks::new_with_db_path(
+    let result = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1"],
             "run_mode": "all",
@@ -1265,9 +1326,10 @@ async fn test_status_without_command() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await;
 
     assert!(matches!(result, Err(Error::MissingCommand(_))));
@@ -1308,9 +1370,10 @@ async fn test_run_mode() -> Result<(), Error> {
 
     // Single task
     {
-        let tasks =
-            Tasks::new_with_db_path(config.clone(), db_path.clone(), VerbosityLevel::Verbose)
-                .await?;
+        let tasks = Tasks::builder(config.clone(), VerbosityLevel::Verbose)
+            .with_db_path(db_path.clone())
+            .build()
+            .await?;
         tasks.run().await;
 
         let task_statuses = inspect_tasks(&tasks).await;
@@ -1328,8 +1391,10 @@ async fn test_run_mode() -> Result<(), Error> {
             run_mode: RunMode::Before,
             ..config.clone()
         };
-        let tasks =
-            Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
+        let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+            .with_db_path(db_path.clone())
+            .build()
+            .await?;
         tasks.run().await;
         let task_statuses = inspect_tasks(&tasks).await;
         assert_matches!(
@@ -1347,8 +1412,10 @@ async fn test_run_mode() -> Result<(), Error> {
             run_mode: RunMode::After,
             ..config.clone()
         };
-        let tasks =
-            Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
+        let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+            .with_db_path(db_path.clone())
+            .build()
+            .await?;
         tasks.run().await;
         let task_statuses = inspect_tasks(&tasks).await;
         assert_matches!(
@@ -1366,8 +1433,10 @@ async fn test_run_mode() -> Result<(), Error> {
             run_mode: RunMode::All,
             ..config.clone()
         };
-        let tasks =
-            Tasks::new_with_db_path(config, db_path.clone(), VerbosityLevel::Verbose).await?;
+        let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+            .with_db_path(db_path.clone())
+            .build()
+            .await?;
         tasks.run().await;
         let task_statuses = inspect_tasks(&tasks).await;
         assert_matches!(
@@ -1393,7 +1462,7 @@ async fn test_before_tasks() -> Result<(), Error> {
     let script2 = create_basic_script("2")?;
     let script3 = create_basic_script("3")?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1"],
             "run_mode": "all",
@@ -1415,9 +1484,10 @@ async fn test_before_tasks() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
     tasks.run().await;
 
@@ -1444,7 +1514,7 @@ async fn test_after_tasks() -> Result<(), Error> {
     let script2 = create_basic_script("2")?;
     let script3 = create_basic_script("3")?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1"],
             "run_mode": "all",
@@ -1466,9 +1536,10 @@ async fn test_after_tasks() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
     tasks.run().await;
 
@@ -1495,7 +1566,7 @@ async fn test_before_and_after_tasks() -> Result<(), Error> {
     let script2 = create_basic_script("2")?;
     let script3 = create_basic_script("3")?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1"],
             "run_mode": "all",
@@ -1518,9 +1589,10 @@ async fn test_before_and_after_tasks() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
     tasks.run().await;
 
@@ -1548,7 +1620,7 @@ async fn test_transitive_dependencies() -> Result<(), Error> {
     let script2 = create_basic_script("2")?;
     let script3 = create_basic_script("3")?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_3"],
             "run_mode": "all",
@@ -1570,9 +1642,10 @@ async fn test_transitive_dependencies() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
     tasks.run().await;
 
@@ -1600,7 +1673,7 @@ async fn test_non_root_before_and_after() -> Result<(), Error> {
     let script2 = create_basic_script("2")?;
     let script3 = create_basic_script("3")?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_2"],
             "run_mode": "all",
@@ -1622,9 +1695,10 @@ async fn test_non_root_before_and_after() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
     tasks.run().await;
 
@@ -1659,7 +1733,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     // ci:format:nixfmt -> [ci:format:nixfmt]
 
     // Test top-level namespace matching with exclusion of other namespaces
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["ci"],
             "run_mode": "all",
@@ -1683,9 +1757,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
 
     tasks.run().await;
@@ -1709,7 +1784,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     );
 
     // Test ci:lint namespace matching
-    let tasks2 = Tasks::new_with_db_path(
+    let tasks2 = Tasks::builder(
         Config::try_from(json!({
             "roots": ["ci:lint"],
             "run_mode": "all",
@@ -1729,9 +1804,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
 
     tasks2.run().await;
@@ -1751,7 +1827,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     ));
 
     // Test ci:format namespace matching
-    let tasks3 = Tasks::new_with_db_path(
+    let tasks3 = Tasks::builder(
         Config::try_from(json!({
             "roots": ["ci:format"],
             "run_mode": "all",
@@ -1771,9 +1847,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
 
     tasks3.run().await;
@@ -1804,7 +1881,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     );
 
     // Test exact task name matching (should still work)
-    let tasks4 = Tasks::new_with_db_path(
+    let tasks4 = Tasks::builder(
         Config::try_from(json!({
             "roots": ["ci:format:nixfmt"],
             "run_mode": "all",
@@ -1824,9 +1901,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
 
     tasks4.run().await;
@@ -1846,7 +1924,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     ));
 
     // Test namespace matching with trailing colon (should work same as without)
-    let tasks5 = Tasks::new_with_db_path(
+    let tasks5 = Tasks::builder(
         Config::try_from(json!({
             "roots": ["ci:format:"],
             "run_mode": "all",
@@ -1866,9 +1944,10 @@ async fn test_namespace_matching() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
 
     tasks5.run().await;
@@ -1910,7 +1989,7 @@ async fn test_dependency_failure() -> Result<(), Error> {
     let failing_script = create_script("#!/bin/sh\necho 'Failing task' && exit 1")?;
     let dependent_script = create_script("#!/bin/sh\necho 'Dependent task' && exit 0")?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_2"],
             "run_mode": "all",
@@ -1927,9 +2006,10 @@ async fn test_dependency_failure() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
 
     tasks.run().await;
@@ -1977,7 +2057,7 @@ exit 0
 
     let task_name = "test:status_output";
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": [task_name],
             "run_mode": "all",
@@ -1990,9 +2070,10 @@ exit 0
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
 
     tasks.run().await;
@@ -2032,7 +2113,7 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
 "#,
     )?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_3"],
             "run_mode": "all",
@@ -2054,9 +2135,10 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
 
     let outputs = tasks.run().await;
@@ -2097,7 +2179,7 @@ fi
 "#,
     )?;
 
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["myapp:task_1", "myapp:task_2"],
             "run_mode": "all",
@@ -2115,9 +2197,10 @@ fi
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
 
     let outputs = tasks.run().await;
@@ -2153,7 +2236,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
     let script2 = create_basic_script("2")?;
 
     // Test empty string namespace
-    let result = Tasks::new_with_db_path(
+    let result = Tasks::builder(
         Config::try_from(json!({
             "roots": [""],
             "run_mode": "all",
@@ -2169,15 +2252,16 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await;
 
     assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "");
 
     // Test whitespace-only namespace
-    let result = Tasks::new_with_db_path(
+    let result = Tasks::builder(
         Config::try_from(json!({
             "roots": ["  "],
             "run_mode": "all",
@@ -2189,15 +2273,16 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await;
 
     assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "  ");
 
     // Test just colon namespace
-    let result = Tasks::new_with_db_path(
+    let result = Tasks::builder(
         Config::try_from(json!({
             "roots": [":"],
             "run_mode": "all",
@@ -2209,15 +2294,16 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await;
 
     assert_matches!(result, Err(Error::TaskNotFound(name)) if name == ":");
 
     // Test namespace starting with colon
-    let result = Tasks::new_with_db_path(
+    let result = Tasks::builder(
         Config::try_from(json!({
             "roots": [":invalid"],
             "run_mode": "all",
@@ -2229,15 +2315,16 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await;
 
     assert_matches!(result, Err(Error::TaskNotFound(name)) if name == ":invalid");
 
     // Test namespace with consecutive colons
-    let result = Tasks::new_with_db_path(
+    let result = Tasks::builder(
         Config::try_from(json!({
             "roots": ["test::invalid"],
             "run_mode": "all",
@@ -2249,15 +2336,16 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await;
 
     assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "test::invalid");
 
     // Test that trimming works correctly for valid namespaces
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["  test  "],
             "run_mode": "all",
@@ -2273,9 +2361,10 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path.clone(),
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path.clone())
+    .build()
     .await?;
 
     tasks.run().await;
@@ -2290,7 +2379,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
     );
 
     // Test that valid namespaces still work
-    let tasks = Tasks::new_with_db_path(
+    let tasks = Tasks::builder(
         Config::try_from(json!({
             "roots": ["test"],
             "run_mode": "all",
@@ -2306,9 +2395,10 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
             ]
         }))
         .unwrap(),
-        db_path,
         VerbosityLevel::Verbose,
     )
+    .with_db_path(db_path)
+    .build()
     .await?;
 
     tasks.run().await;
