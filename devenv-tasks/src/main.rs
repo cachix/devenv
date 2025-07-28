@@ -97,9 +97,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             });
 
-            // Pass the cancellation token to TasksUi
-            let mut tasks_ui =
-                TasksUi::new_with_shutdown(config, verbosity, cancellation_token).await?;
+            let mut tasks_ui = TasksUi::builder(config, verbosity)
+                .with_cancellation_token(cancellation_token)
+                .build()
+                .await?;
             let (status, _outputs) = tasks_ui.run().await?;
 
             if status.failed + status.dependency_failed > 0 {

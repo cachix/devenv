@@ -10,7 +10,7 @@ pub use config::{Config, RunMode, TaskConfig};
 pub use error::Error;
 pub use tasks::Tasks;
 pub use types::{Outputs, VerbosityLevel};
-pub use ui::{TasksStatus, TasksUi};
+pub use ui::{TasksStatus, TasksUi, TasksUiBuilder};
 
 #[cfg(test)]
 mod tests;

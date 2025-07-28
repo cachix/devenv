@@ -33,6 +33,60 @@ impl TasksStatus {
     }
 }
 
+/// Builder for TasksUi configuration
+pub struct TasksUiBuilder {
+    config: Config,
+    verbosity: VerbosityLevel,
+    db_path: Option<PathBuf>,
+    cancellation_token: Option<CancellationToken>,
+}
+
+impl TasksUiBuilder {
+    /// Create a new builder with required configuration
+    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+        Self {
+            config,
+            verbosity,
+            db_path: None,
+            cancellation_token: None,
+        }
+    }
+
+    /// Set the database path
+    pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
+        self.db_path = Some(db_path);
+        self
+    }
+
+    /// Set the cancellation token for shutdown support
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Build the TasksUi instance
+    pub async fn build(self) -> Result<TasksUi, Error> {
+        let tasks = if let Some(db_path) = self.db_path {
+            Tasks::new_with_db_path(
+                self.config,
+                db_path,
+                self.verbosity,
+                self.cancellation_token.clone(),
+            )
+            .await?
+        } else {
+            Tasks::new(self.config, self.verbosity, self.cancellation_token.clone()).await?
+        };
+
+        Ok(TasksUi {
+            tasks: Arc::new(tasks),
+            verbosity: self.verbosity,
+            term: Term::stderr(),
+            cancellation_token: self.cancellation_token,
+        })
+    }
+}
+
 /// UI manager for tasks
 pub struct TasksUi {
     tasks: Arc<Tasks>,
@@ -42,50 +96,9 @@ pub struct TasksUi {
 }
 
 impl TasksUi {
-    /// Create a new TasksUi
-    pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
-        let tasks = Tasks::new(config, verbosity, None).await?;
-
-        Ok(Self {
-            tasks: Arc::new(tasks),
-            verbosity,
-            term: Term::stderr(),
-            cancellation_token: None,
-        })
-    }
-
-    /// Create a new TasksUi with cancellation token support
-    pub async fn new_with_shutdown(
-        config: Config,
-        verbosity: VerbosityLevel,
-        cancellation_token: CancellationToken,
-    ) -> Result<Self, Error> {
-        let tasks = Tasks::new(config, verbosity, Some(cancellation_token.clone())).await?;
-
-        Ok(Self {
-            tasks: Arc::new(tasks),
-            verbosity,
-            term: Term::stderr(),
-            cancellation_token: Some(cancellation_token),
-        })
-    }
-
-    /// Create a new TasksUi with a specific database path
-    pub async fn new_with_db_path(
-        config: Config,
-        db_path: PathBuf,
-        verbosity: VerbosityLevel,
-        cancellation_token: Option<CancellationToken>,
-    ) -> Result<Self, Error> {
-        let tasks =
-            Tasks::new_with_db_path(config, db_path, verbosity, cancellation_token.clone()).await?;
-
-        Ok(Self {
-            tasks: Arc::new(tasks),
-            verbosity,
-            term: Term::stderr(),
-            cancellation_token,
-        })
+    /// Create a new TasksUiBuilder for configuring TasksUi
+    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksUiBuilder {
+        TasksUiBuilder::new(config, verbosity)
     }
 
     async fn get_tasks_status(&self) -> TasksStatus {
