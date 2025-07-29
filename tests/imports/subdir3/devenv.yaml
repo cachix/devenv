@@ -1,0 +1,14 @@
+impure: true
+
+clean:
+  enabled: true
+  keep:
+  - "build"
+  - "dist"
+
+nixpkgs:
+  cudaCapabilities:
+  - "9.0"
+
+permittedInsecurePackages:
+- node-14.0.0
