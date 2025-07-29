@@ -3,7 +3,9 @@
     let
       __DEVENV_VARS__
         in {
-        git-hooks.url = "github:cachix/git-hooks.nix";
+        _root.url = "git+file://.";
+      _root.flake = false;
+      git-hooks.url = "github:cachix/git-hooks.nix";
       git-hooks.inputs.nixpkgs.follows = "nixpkgs";
       pre-commit-hooks.follows = "git-hooks";
       nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
@@ -46,7 +48,18 @@
             then ./. + (builtins.substring 1 255 path)
             else ./. + (builtins.substring 1 255 path) + "/devenv.nix"
             else if lib.hasPrefix "../" path
-            then throw "devenv: ../ is not supported for imports"
+            then throw "devenv: ../ is not supported. Use absolute paths starting with / to reference files from the repository root"
+            else if lib.hasPrefix "/" path
+            then
+              let
+                absolutePath =
+                  if lib.hasSuffix ".nix" path
+                  then "${inputs._root}${path}"
+                  else "${inputs._root}${path}/devenv.nix";
+              in
+              if builtins.pathExists absolutePath
+              then absolutePath
+              else throw "Absolute path ${absolutePath} does not exist"
             else
               let
                 paths = lib.splitString "/" path;
