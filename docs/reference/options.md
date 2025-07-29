@@ -2282,7 +2282,7 @@ string
 
 
 *Default:*
-` "1.8" `
+` "1.8.1" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
