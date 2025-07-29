@@ -6,7 +6,7 @@
 | allowUnfree                                                   | (deprecated) Allow unfree packages. Defaults to `false`.                      |
 | clean.enabled                                                 | Clean the environment when entering the shell. Defaults to `false`.           |
 | clean.keep                                                    | A list of environment variables to keep when cleaning the environment.        |
-| imports                                                       | A list of relative paths or references to inputs to import ``devenv.nix``.    |
+| imports                                                       | A list of relative paths, absolute paths, or references to inputs to import ``devenv.nix``. |
 | impure                                                        | Relax the hermeticity of the environment.                                     |
 | inputs                                                        | Defaults to `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.       |
 | inputs.&lt;name&gt;                                           | Identifier name used when passing the input in your ``devenv.nix`` function.  |
@@ -83,9 +83,14 @@ imports:
   - ./frontend
   - ./backend
   - ./mymodule.nix
+  - /absolute/path/from/repo/root
   - myproject
   - myproject/relative/path
 ```
+
+!!! note "Added in 1.9"
+
+    - absolute path support in imports: `/absolute/path/from/repo/root`
 
 !!! note "Added in 1.0"
 
