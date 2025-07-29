@@ -1,5 +1,7 @@
-use crate::nix_backend::{self, NixBackend};
-use crate::{cli, config};
+use crate::{
+    cli, config, devenv,
+    nix_backend::{self, NixBackend},
+};
 use async_trait::async_trait;
 use futures::future;
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
@@ -360,6 +362,7 @@ impl Nix {
             let pool = self.pool.get().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
 
+            cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
             cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
             cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
             cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));

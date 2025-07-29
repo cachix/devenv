@@ -48,7 +48,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
         .unwrap_or(0)
 });
 // project vars
-const DEVENV_FLAKE: &str = ".devenv.flake.nix";
+pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
 #[derive(Default, Debug)]
 pub struct DevenvOptions {
