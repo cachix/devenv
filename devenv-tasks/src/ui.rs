@@ -189,6 +189,7 @@ impl TasksUi {
                 if tasks_status.pending == 0 && tasks_status.running == 0 {
                     break;
                 }
+                self.tasks.notify_ui.notified().await;
             }
 
             // Print errors even in quiet mode
