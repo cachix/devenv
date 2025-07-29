@@ -91,6 +91,11 @@ whoami = "1.6.1"
 xdg = "3.0.0"
 tokio-tar = "0.3.1"
 walkdir = "2.5"
+shell-escape = "0.1.5"
+anyhow = "1.0"
+chrono = "0.4"
+rmcp = { version = "0.7", features = ["server", "transport-io"] }
+rmcp-macros = "0.7"
 
 # The version of rustls must match the version used by reqwest to set up rustls-platform-verifier.
 # If you encounter an error, lock these versions down.
@@ -98,9 +103,6 @@ walkdir = "2.5"
 reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
 rustls = { version = "0.23.32" }
 rustls-platform-verifier = "0.6.1"
-shell-escape = "0.1.5"
-rmcp = { version = "0.7", features = ["server", "transport-io"] }
-rmcp-macros = "0.7"
 
 # Optional snix dependencies
 snix-eval = { git = "https://github.com/cachix/snix" }
