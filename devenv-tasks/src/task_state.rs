@@ -303,6 +303,10 @@ impl TaskState {
             let mut stdout_lines = Vec::new();
             let mut stderr_lines = Vec::new();
 
+            // Track EOF status for stdout and stderr streams
+            let mut stdout_closed = false;
+            let mut stderr_closed = false;
+
             // Check if this is a process task (always show output for processes)
             let is_process = self.task.name.starts_with("devenv:processes:");
 
@@ -343,7 +347,7 @@ impl TaskState {
 
                         return Ok(TaskCompleted::Cancelled(now.elapsed()));
                     }
-                    result = stdout_reader.next_line() => {
+                    result = stdout_reader.next_line(), if !stdout_closed => {
                         match result {
                             Ok(Some(line)) => {
                                 if self.verbosity == VerbosityLevel::Verbose || is_process {
@@ -351,14 +355,17 @@ impl TaskState {
                                 }
                                 stdout_lines.push((std::time::Instant::now(), line));
                             },
-                            Ok(None) => {},
+                            Ok(None) => {
+                                stdout_closed = true;
+                            },
                             Err(e) => {
                                 error!("Error reading stdout: {}", e);
                                 stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                                stdout_closed = true;
                             },
                         }
                     }
-                    result = stderr_reader.next_line() => {
+                    result = stderr_reader.next_line(), if !stderr_closed => {
                         match result {
                             Ok(Some(line)) => {
                                 if self.verbosity == VerbosityLevel::Verbose || is_process {
@@ -366,10 +373,13 @@ impl TaskState {
                                 }
                                 stderr_lines.push((std::time::Instant::now(), line));
                             },
-                            Ok(None) => {},
+                            Ok(None) => {
+                                stderr_closed = true;
+                            },
                             Err(e) => {
                                 error!("Error reading stderr: {}", e);
                                 stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                                stderr_closed = true;
                             },
                         }
                     }
