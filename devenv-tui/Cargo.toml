@@ -25,6 +25,7 @@ indexmap = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }
+anyhow = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
@@ -35,6 +36,11 @@ devenv-eval-cache = { path = "../devenv-eval-cache" }
 
 # Time handling
 once_cell = { workspace = true }
+chrono = { workspace = true }
+
+[[bin]]
+name = "tui-replay"
+path = "src/bin/tui-replay.rs"
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

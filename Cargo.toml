@@ -98,6 +98,8 @@ reqwest = { version = "0.12", features = ["json", "stream", "rustls-tls"] }
 rustls = { version = "0.23.4" }
 rustls-platform-verifier = "0.5.1"
 shell-escape = "0.1.5"
+anyhow = "1.0"
+chrono = "0.4"
 rmcp = { version = "0.1", features = ["server", "transport-io"] }
 rmcp-macros = "0.1"
 
