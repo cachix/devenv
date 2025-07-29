@@ -1,0 +1,4 @@
+allowUnfree: true
+imports:
+  - ./sub1
+  - ./sub2

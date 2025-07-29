@@ -1,0 +1,8 @@
+imports:
+  - ./shared
+  - ./module1
+  - ./shared  # duplicate import
+  - ./module2
+permittedInsecurePackages:
+  - "openssl-1.0.2"
+  - "openssl-1.0.2"  # duplicate entry

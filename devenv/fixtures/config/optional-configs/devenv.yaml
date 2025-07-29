@@ -1,0 +1,6 @@
+clean:
+  enabled: true
+  keep: ["result"]
+imports:
+  - ./override-clean
+  - ./add-secretspec
