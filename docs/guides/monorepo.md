@@ -8,7 +8,8 @@ This guide shows how to structure a monorepo where multiple services share commo
 ```
 my-monorepo/
 ├── shared/              
-│   └── devenv.nix       # Shared configurations
+│   ├── devenv.nix       # Shared configurations
+│   └── devenv.yaml      # Shared YAML configurations
 ├── services/
 │   ├── api/
 │   │   ├── devenv.yaml
@@ -20,7 +21,15 @@ my-monorepo/
 
 ## Shared Configuration
 
-Create a `shared/devenv.nix` with common settings:
+Create a `shared/devenv.yaml` with common settings:
+
+```yaml
+allowUnfree: true
+permittedInsecurePackages:
+  - "nodejs-16.20.2"
+```
+
+And `shared/devenv.nix` with common settings:
 
 ```nix
 { pkgs, ... }: {
@@ -135,10 +144,11 @@ devenv shell
 
 The API service will have access to:
 
+- Unfree packages permission from `shared/devenv.yaml`
 - All packages from `shared/devenv.nix` (git, curl, jq)
 - The PostgreSQL database service
 - Common environment variables (PROJECT_NAME, ENVIRONMENT, DATABASE_URL)
 - Its own specific settings (API_PORT, SERVICE_NAME)
 
-Similarly, the frontend service inherits the shared configuration while maintaining its own specific settings.
+Similarly, the frontend service inherits both YAML and Nix configurations from shared while maintaining its own specific settings.
 
