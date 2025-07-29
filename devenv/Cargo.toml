@@ -49,6 +49,7 @@ whoami.workspace = true
 xdg.workspace = true
 similar.workspace = true
 once_cell.workspace = true
+pathdiff.workspace = true
 shell-escape.workspace = true
 rmcp.workspace = true
 rmcp-macros.workspace = true

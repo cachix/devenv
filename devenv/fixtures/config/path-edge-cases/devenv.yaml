@@ -1,0 +1,4 @@
+imports:
+  - ./normal
+  - ./non-existent  # Should be silently ignored
+  - ./with-spaces in name  # Directory with spaces
