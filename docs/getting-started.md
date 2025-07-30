@@ -71,10 +71,17 @@
     nix profile install nixpkgs#devenv
     ```
 
-=== "NixOS/nix-darwin/home-manager"
+=== "NixOS/nix-darwin"
 
     ```nix title="configuration.nix"
     environment.systemPackages = [
+      pkgs.devenv
+    ];
+    ```
+=== "home-manager"
+
+    ```nix title="home.nix"
+    home.packages = [
       pkgs.devenv
     ];
     ```
