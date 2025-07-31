@@ -1,5 +1,5 @@
 use crate::{
-    ActivityProgress, LogMessage, NixActivityState, NixBuildInfo, NixDerivationInfo,
+    ActivityProgress, FetchTreeInfo, LogMessage, NixActivityState, NixBuildInfo, NixDerivationInfo,
     NixDownloadInfo, NixQueryInfo, Operation, OperationId, OperationResult, TuiEvent,
 };
 use std::collections::{HashMap, VecDeque};
@@ -23,6 +23,7 @@ struct TuiStateInner {
     nix_derivations: HashMap<u64, NixDerivationInfo>,
     nix_downloads: HashMap<u64, NixDownloadInfo>,
     nix_queries: HashMap<u64, NixQueryInfo>,
+    fetch_trees: HashMap<u64, FetchTreeInfo>,
     root_operations: Vec<OperationId>,
     build_logs: HashMap<u64, VecDeque<String>>,
     activity_progress: HashMap<u64, ActivityProgress>,
@@ -38,6 +39,7 @@ impl TuiState {
                 nix_derivations: HashMap::new(),
                 nix_downloads: HashMap::new(),
                 nix_queries: HashMap::new(),
+                fetch_trees: HashMap::new(),
                 root_operations: Vec::new(),
                 build_logs: HashMap::new(),
                 activity_progress: HashMap::new(),
@@ -266,6 +268,32 @@ impl TuiState {
                 }
                 // Clean up progress data
                 inner.activity_progress.remove(&activity_id);
+            }
+
+            TuiEvent::FetchTreeStart {
+                operation_id,
+                activity_id,
+                message,
+            } => {
+                let fetch_tree_info = FetchTreeInfo {
+                    operation_id,
+                    activity_id,
+                    message,
+                    start_time: std::time::Instant::now(),
+                    state: NixActivityState::Active,
+                };
+                inner.fetch_trees.insert(activity_id, fetch_tree_info);
+            }
+
+            TuiEvent::FetchTreeEnd {
+                operation_id: _,
+                activity_id,
+                success,
+            } => {
+                if let Some(fetch_tree_info) = inner.fetch_trees.get_mut(&activity_id) {
+                    let duration = fetch_tree_info.start_time.elapsed();
+                    fetch_tree_info.state = NixActivityState::Completed { success, duration };
+                }
             }
 
             TuiEvent::BuildLog { activity_id, line } => {
@@ -513,6 +541,17 @@ impl TuiState {
             .collect();
 
         (derivations, downloads, queries)
+    }
+
+    /// Get all FetchTree activities for an operation
+    pub fn get_fetch_trees_for_operation(&self, operation_id: &OperationId) -> Vec<FetchTreeInfo> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .fetch_trees
+            .values()
+            .filter(|info| &info.operation_id == operation_id)
+            .cloned()
+            .collect()
     }
 
     /// Clean up completed operations that are older than a certain threshold

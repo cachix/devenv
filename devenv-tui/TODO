@@ -1,4 +1,4 @@
-- parse "evaluating flake" to track begining/ending
-- hierarchy for builds
-- regression tests against nix
 - build logs get garbled if they have colors when switching
+- doesn't show the latest evaluated file
+- parse "evaluating flake" to track begining/ending of eval per flake
+- regression tests against nix for log parsing
