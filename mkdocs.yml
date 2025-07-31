@@ -73,8 +73,8 @@ plugins:
       as_update: date
 extra:
   social:
-    - icon: fontawesome/brands/twitter
-      link: https://twitter.com/cachix_org
+    - icon: fontawesome/brands/x-twitter
+      link: https://twitter.com/devenv_nix
     - icon: fontawesome/brands/github
       link: https://github.com/cachix/devenv
     - icon: fontawesome/brands/discord
