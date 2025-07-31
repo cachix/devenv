@@ -80,10 +80,10 @@ async fn main() -> Result<()> {
     let (_layer, state) = init_tui(DisplayMode::Ratatui);
     let nix_bridge = create_nix_bridge();
 
-    // Create a channel to send events directly to TUI
+    // Create a channel to send events to TUI
     let (tx, mut rx) = mpsc::unbounded_channel::<TuiEvent>();
 
-    // Spawn a task to handle TUI events
+    // Forward events to TUI state
     let state_clone = state.clone();
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {
@@ -109,15 +109,44 @@ async fn main() -> Result<()> {
     let start_time = Instant::now();
     let first_timestamp = entries[0].timestamp;
 
+    // Create a channel for cancellation
+    let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
+
+    // Spawn a task to handle Ctrl-C
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        let _ = cancel_tx.send(()).await;
+    });
+
     for (idx, entry) in entries.iter().enumerate() {
         // Calculate delay from first entry
         let time_offset = entry.timestamp.signed_duration_since(first_timestamp);
         let target_elapsed = Duration::from_millis(time_offset.num_milliseconds() as u64);
 
-        // Wait until we reach the target time
+        // Wait until we reach the target time, but also listen for Ctrl-C
         let current_elapsed = start_time.elapsed();
         if target_elapsed > current_elapsed {
-            sleep(target_elapsed - current_elapsed).await;
+            let sleep_duration = target_elapsed - current_elapsed;
+            tokio::select! {
+                _ = sleep(sleep_duration) => {
+                    // Continue with replay
+                }
+                _ = cancel_rx.recv() => {
+                    // Ctrl-C pressed, cleanup and exit
+                    tx.send(TuiEvent::LogMessage {
+                        level: LogLevel::Warn,
+                        message: "Replay interrupted by user".to_string(),
+                        source: LogSource::System,
+                        data: HashMap::new(),
+                    })?;
+
+                    // Give TUI a moment to display the message
+                    sleep(Duration::from_millis(100)).await;
+
+                    devenv_tui::cleanup_tui();
+                    return Ok(());
+                }
+            }
         }
 
         // Process the log entry based on source
@@ -167,10 +196,10 @@ async fn main() -> Result<()> {
         result: devenv_tui::OperationResult::Success,
     })?;
 
-    // Keep the TUI running for a bit to show final state
-    sleep(Duration::from_secs(2)).await;
+    // Give TUI a moment to display the final state
+    sleep(Duration::from_millis(100)).await;
 
-    // Cleanup
+    // Cleanup and exit
     devenv_tui::cleanup_tui();
 
     Ok(())

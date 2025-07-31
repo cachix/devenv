@@ -1,14 +1,18 @@
-use crate::{LogLevel, LogSource, OperationId, OperationResult, TuiEvent, TuiState};
+use crate::{
+    graph_display::GraphDisplay, LogLevel, OperationId, OperationResult, TuiEvent, TuiState,
+};
 use crossterm::{
-    cursor, execute,
+    cursor,
+    event::{Event, KeyCode},
+    execute,
     style::Stylize,
     terminal::{size, Clear, ClearType},
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Gauge, Paragraph, Widget, Wrap},
+    widgets::{Paragraph, Widget, Wrap},
     Frame, TerminalOptions, Viewport,
 };
 use std::collections::HashMap;
@@ -29,22 +33,15 @@ pub struct RatatuiDisplay {
     viewport_height: u16,
     min_viewport_height: u16,
     max_viewport_height: u16,
+    graph_display: GraphDisplay,
 }
 
 /// Widget information for an active operation
 #[derive(Debug, Clone)]
 struct OperationWidget {
-    id: OperationId,
     message: String,
     start_time: Instant,
-    parent: Option<OperationId>,
-    widget_type: OperationWidgetType,
-}
-
-#[derive(Debug, Clone)]
-enum OperationWidgetType {
-    Spinner,
-    Progress { current: u64, total: u64 },
+    _parent: Option<OperationId>,
 }
 
 /// Default TUI display implementation that mimics CLI behavior (kept for compatibility)
@@ -74,20 +71,39 @@ impl RatatuiDisplay {
         event_receiver: mpsc::UnboundedReceiver<TuiEvent>,
         state: Arc<TuiState>,
     ) -> io::Result<Self> {
-        // Initialize terminal manually without raw mode to allow signal propagation
+        // Initialize terminal with raw mode for proper keyboard handling
         use ratatui::{backend::CrosstermBackend, Terminal};
 
-        // Don't enable raw mode - we want signals to propagate normally
+        // Enable raw mode for proper keyboard input handling
+        crossterm::terminal::enable_raw_mode()?;
+
+        // Make sure cursor is visible before initialization
+        let _ = crossterm::execute!(std::io::stderr(), crossterm::cursor::Show);
+
+        // Create backend
         let backend = CrosstermBackend::new(std::io::BufWriter::new(std::io::stderr()));
-        let mut terminal = Terminal::with_options(
+
+        // Try to create terminal with inline viewport
+        let terminal = match Terminal::with_options(
             backend,
             TerminalOptions {
-                viewport: Viewport::Inline(3), // Start small, will resize dynamically
+                viewport: Viewport::Inline(20), // Fixed size to avoid cursor issues
             },
-        )?;
+        ) {
+            Ok(term) => {
+                // Don't clear - we want to preserve existing terminal content with inline viewport
+                term
+            }
+            Err(e) => {
+                // If inline viewport fails, return the error to trigger fallback
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Terminal initialization failed: {}", e),
+                ));
+            }
+        };
 
-        // Clear the terminal area without entering raw mode
-        terminal.clear()?;
+        let graph_display = GraphDisplay::new(state.clone());
 
         Ok(Self {
             event_receiver,
@@ -96,121 +112,50 @@ impl RatatuiDisplay {
             active_operations: HashMap::new(),
             spinner_frame: 0,
             last_spinner_update: Instant::now(),
-            viewport_height: 3,
-            min_viewport_height: 1,
-            max_viewport_height: 15,
+            viewport_height: 20,
+            min_viewport_height: 10,
+            max_viewport_height: 100,
+            graph_display,
         })
     }
 
     /// Calculate optimal viewport height based on active operations
     fn calculate_viewport_height(&self) -> u16 {
-        if self.active_operations.is_empty() {
-            return self.min_viewport_height.max(1);
+        // Get all activities (not just operations)
+        let activities = self.graph_display.get_all_activities();
+
+        if activities.is_empty() {
+            return self.min_viewport_height;
         }
 
-        // Calculate total lines needed for all operations (accounting for text wrapping)
-        let total_lines: usize = self
-            .active_operations
-            .values()
-            .map(|op| {
-                let line = Line::from(vec![
-                    Span::raw("⠋ "), // Spinner character (2 chars: spinner + space)
-                    Span::raw(&op.message),
-                ]);
-                let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
-                // Use actual terminal width for calculation
-                let width = crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80);
-                paragraph.line_count(width) as usize
-            })
-            .sum();
+        // Base height: activities + summary (5 lines)
+        let mut desired_height = activities.len() as u16 + 5;
 
-        let needed_height = total_lines.max(1) as u16;
-        needed_height
-            .max(self.min_viewport_height)
+        // Add space for logs if something is selected
+        if self.graph_display.has_selection() {
+            desired_height += 15; // Add space for log viewer
+        }
+
+        // Clamp to min/max bounds
+        desired_height
             .min(self.max_viewport_height)
+            .max(self.min_viewport_height)
     }
 
     /// Resize viewport if needed by creating a new terminal instance
     fn update_viewport_height(&mut self) -> io::Result<()> {
-        let new_height = self.calculate_viewport_height();
-        if new_height != self.viewport_height {
-            self.viewport_height = new_height;
-
-            // Create a new terminal with the updated viewport size
-            use ratatui::{backend::CrosstermBackend, Terminal};
-            let backend = CrosstermBackend::new(std::io::BufWriter::new(std::io::stderr()));
-            let mut new_terminal = Terminal::with_options(
-                backend,
-                TerminalOptions {
-                    viewport: Viewport::Inline(new_height),
-                },
-            )?;
-
-            // Clear the new terminal area
-            new_terminal.clear()?;
-
-            // Swap the terminal instance
-            self.terminal = new_terminal;
-        }
-        Ok(())
-    }
-
-    /// Print a log message above the active region
-    fn print_log_message(
-        &mut self,
-        message: &str,
-        level: LogLevel,
-        source: LogSource,
-    ) -> io::Result<()> {
-        let symbol = match level {
-            LogLevel::Error => "✖",
-            LogLevel::Warn => "•",
-            LogLevel::Info => "•",
-            LogLevel::Debug => "•",
-            LogLevel::Trace => "•",
-        };
-
-        let symbol_color = match level {
-            LogLevel::Error => Color::Red,
-            LogLevel::Warn => Color::Yellow,
-            LogLevel::Info => Color::Blue,
-            LogLevel::Debug => Color::Gray,
-            LogLevel::Trace => Color::DarkGray,
-        };
-
-        let source_prefix = match source {
-            LogSource::User => "",
-            LogSource::Tracing => "[trace] ",
-            LogSource::Nix => "[nix] ",
-            LogSource::System => "[sys] ",
-        };
-
-        // Create spans with proper coloring - only symbol is colored
-        let line = Line::from(vec![
-            Span::styled(symbol, Style::default().fg(symbol_color)),
-            Span::raw(format!(" {}{}", source_prefix, message)),
-        ]);
-
-        // Calculate how many lines this log message will need
-        let paragraph = Paragraph::new(line.clone()).wrap(Wrap { trim: true });
-        let width = crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80);
-        let line_count = paragraph.line_count(width);
-
-        self.terminal
-            .insert_before(line_count.try_into().unwrap_or(1), |buf| {
-                paragraph.render(buf.area, buf);
-            })?;
+        // The terminal will automatically resize during draw() based on content
+        // We just need to track the desired height for our calculations
+        self.viewport_height = self.calculate_viewport_height();
         Ok(())
     }
 
     /// Start a new operation widget
     fn start_operation(&mut self, id: OperationId, message: String, parent: Option<OperationId>) {
         let widget = OperationWidget {
-            id: id.clone(),
             message,
             start_time: Instant::now(),
-            parent,
-            widget_type: OperationWidgetType::Spinner,
+            _parent: parent,
         };
 
         self.active_operations.insert(id, widget);
@@ -261,206 +206,106 @@ impl RatatuiDisplay {
 
     /// Render the active region with current operations
     fn render_active_region(&mut self) -> io::Result<()> {
-        // Force viewport height recalculation before rendering
-        if let Err(e) = self.update_viewport_height() {
-            return Err(e);
-        }
-
-        let active_operations = &self.active_operations;
-        let spinner_frame = self.spinner_frame;
-
+        // Use the graph display for rendering
         self.terminal.draw(|frame| {
-            Self::draw_operations(frame, active_operations, spinner_frame);
+            self.graph_display.render(frame.area(), frame.buffer_mut());
         })?;
         Ok(())
-    }
-
-    /// Draw active operations in the viewport
-    fn draw_operations(
-        frame: &mut Frame,
-        active_operations: &HashMap<OperationId, OperationWidget>,
-        spinner_frame: usize,
-    ) {
-        let area = frame.area();
-
-        if active_operations.is_empty() {
-            // Show a minimal status line when no operations are active
-            let status = Paragraph::new("Ready").style(Style::default().fg(Color::Green));
-            frame.render_widget(status, area);
-            return;
-        }
-
-        // Create layout for operations - calculate lines needed for each
-        let mut operations: Vec<_> = active_operations.values().collect();
-        operations.sort_by_key(|op| &op.start_time);
-
-        let constraints: Vec<Constraint> = operations
-            .iter()
-            .map(|op| {
-                let line = Line::from(vec![
-                    Span::raw("⠋ "), // Spinner character (2 chars: spinner + space)
-                    Span::raw(&op.message),
-                ]);
-                let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
-                let lines = paragraph.line_count(area.width);
-                Constraint::Length(lines.try_into().unwrap_or(1))
-            })
-            .collect();
-
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(constraints)
-            .split(area);
-
-        // operations are already filtered and sorted above
-
-        for (i, operation) in operations.iter().enumerate() {
-            if i < layout.len() {
-                Self::draw_operation_widget(frame, layout[i], operation, spinner_frame);
-            }
-        }
-    }
-
-    /// Draw a single operation widget
-    fn draw_operation_widget(
-        frame: &mut Frame,
-        area: Rect,
-        operation: &OperationWidget,
-        spinner_frame: usize,
-    ) {
-        match operation.widget_type {
-            OperationWidgetType::Spinner => {
-                let spinner_char = SPINNER_FRAMES[spinner_frame % SPINNER_FRAMES.len()];
-
-                let line = Line::from(vec![
-                    Span::styled(spinner_char, Style::default().fg(Color::Blue)),
-                    Span::raw(format!(" {}", operation.message)),
-                ]);
-
-                let widget = Paragraph::new(line).wrap(Wrap { trim: true });
-
-                frame.render_widget(widget, area);
-            }
-            OperationWidgetType::Progress { current, total } => {
-                let progress = if total > 0 {
-                    current as f64 / total as f64
-                } else {
-                    0.0
-                };
-
-                let widget = Gauge::default()
-                    .block(Block::default().title(operation.message.clone()))
-                    .gauge_style(Style::default().fg(Color::Blue))
-                    .percent((progress * 100.0) as u16);
-
-                frame.render_widget(widget, area);
-            }
-        }
     }
 
     /// Main display loop
     pub async fn run(&mut self) -> io::Result<()> {
         let mut spinner_ticker = tokio::time::interval(Duration::from_millis(50));
 
-        // Set up signal handlers
-        #[cfg(unix)]
-        let mut sigint = {
-            use tokio::signal::unix::{signal, SignalKind};
-            signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler")
-        };
-        #[cfg(unix)]
-        let mut sigterm = {
-            use tokio::signal::unix::{signal, SignalKind};
-            signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler")
-        };
+        // Create keyboard event stream
+        use futures::StreamExt;
+        let mut event_stream = crossterm::event::EventStream::new();
+
+        // Set up signal handler for Ctrl-C
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigint =
+            signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler");
 
         let result = loop {
-            #[cfg(unix)]
-            {
-                tokio::select! {
-                    // Handle TUI events
-                    event = self.event_receiver.recv() => {
-                        match event {
-                            Some(TuiEvent::Shutdown) => {
-                                // Clean shutdown requested
-                                break Ok(());
-                            }
-                            Some(event) => {
-                                if let Err(e) = self.handle_tui_event(event.clone()) {
-                                    break Err(e);
-                                }
-                                self.state.handle_event(event);
-                            }
-                            None => break Ok(()), // Channel closed
+            tokio::select! {
+            // Handle TUI events
+            event = self.event_receiver.recv() => {
+                match event {
+                    Some(TuiEvent::Shutdown) => {
+                        // Clean shutdown requested - show interrupted operations
+                        self.show_interrupted_operations()?;
+                        break Ok(());
+                    }
+                    Some(event) => {
+                        if let Err(e) = self.handle_tui_event(event.clone()) {
+                            break Err(e);
                         }
+                        self.state.handle_event(event);
                     }
-                    // Handle signals with access to active operations
-                    _ = sigint.recv() => {
-                        self.show_interrupted_operations()?;
-                        crate::cleanup_tui();
-                        std::process::exit(130); // Standard exit code for SIGINT
-                    }
-                    _ = sigterm.recv() => {
-                        self.show_interrupted_operations()?;
-                        crate::cleanup_tui();
-                        std::process::exit(143); // Standard exit code for SIGTERM
-                    }
-                    // Update spinners and render periodically
-                    _ = spinner_ticker.tick() => {
-                        if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
-                            self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
-                            self.last_spinner_update = Instant::now();
-
-                            // Update viewport height if needed
-                            if let Err(e) = self.update_viewport_height() {
-                                break Err(e);
-                            }
-
-                            // Render the active region
+                    None => break Ok(()), // Channel closed
+                }
+            }
+            // Handle keyboard events
+            keyboard_event = event_stream.next() => {
+                if let Some(Ok(Event::Key(key))) = keyboard_event {
+                    match key.code {
+                        KeyCode::Up => {
+                            self.graph_display.select_previous();
                             if let Err(e) = self.render_active_region() {
                                 break Err(e);
                             }
                         }
+                        KeyCode::Down => {
+                            self.graph_display.select_next();
+                            if let Err(e) = self.render_active_region() {
+                                break Err(e);
+                            }
+                        }
+                        KeyCode::Esc => {
+                            // Clear selection instead of quitting
+                            self.graph_display.clear_selection();
+                            if let Err(e) = self.render_active_region() {
+                                break Err(e);
+                            }
+                        }
+                        KeyCode::Char('c') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+                            // Handle Ctrl-C as keyboard event
+                            self.show_interrupted_operations()?;
+                            // Send shutdown event to break out of the loop
+                            if let Ok(sender) = crate::GLOBAL_SENDER.lock() {
+                                if let Some(tx) = sender.as_ref() {
+                                    let _ = tx.send(TuiEvent::Shutdown);
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
-            #[cfg(not(unix))]
-            {
-                tokio::select! {
-                    // Handle TUI events
-                    event = self.event_receiver.recv() => {
-                        match event {
-                            Some(TuiEvent::Shutdown) => {
-                                // Clean shutdown requested
-                                break Ok(());
-                            }
-                            Some(event) => {
-                                if let Err(e) = self.handle_tui_event(event.clone()) {
-                                    break Err(e);
-                                }
-                                self.state.handle_event(event);
-                            }
-                            None => break Ok(()), // Channel closed
-                        }
+            // Handle Ctrl-C (SIGINT)
+            _ = sigint.recv() => {
+                // Disable raw mode first to ensure terminal is responsive
+                let _ = crossterm::terminal::disable_raw_mode();
+                self.show_interrupted_operations()?;
+                break Ok(());
+            }
+            // Update spinners and render periodically
+            _ = spinner_ticker.tick() => {
+                if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
+                    self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
+                    self.last_spinner_update = Instant::now();
+
+                    // Update viewport height if needed
+                    if let Err(e) = self.update_viewport_height() {
+                        break Err(e);
                     }
-                    // Update spinners and render periodically
-                    _ = spinner_ticker.tick() => {
-                        if self.last_spinner_update.elapsed() >= Duration::from_millis(50) {
-                            self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
-                            self.last_spinner_update = Instant::now();
 
-                            // Update viewport height if needed
-                            if let Err(e) = self.update_viewport_height() {
-                                break Err(e);
-                            }
-
-                            // Render the active region
-                            if let Err(e) = self.render_active_region() {
-                                break Err(e);
-                            }
-                        }
+                    // Render the active region
+                    if let Err(e) = self.render_active_region() {
+                        break Err(e);
                     }
                 }
+            }
             }
         };
 
@@ -543,99 +388,18 @@ impl RatatuiDisplay {
                 let success = matches!(result, OperationResult::Success);
                 self.complete_operation(&id, success)?;
             }
-            TuiEvent::LogMessage {
-                level,
-                message,
-                source,
-                ..
-            } => {
-                self.print_log_message(&message, level, source)?;
-            }
-            TuiEvent::NixDerivationStart {
-                derivation_name,
-                machine,
-                ..
-            } => {
-                let machine_text = machine.map(|m| format!(" on {}", m)).unwrap_or_default();
-                let message = format!("Building {}{}", derivation_name, machine_text);
-                self.print_log_message(&message, LogLevel::Info, LogSource::Nix)?;
-            }
-            TuiEvent::NixPhaseProgress { phase, .. } => {
-                let message = format!("Phase: {}", phase);
-                self.print_log_message(&message, LogLevel::Debug, LogSource::Nix)?;
-            }
-            TuiEvent::NixDerivationEnd { success, .. } => {
-                let message = if success {
-                    "Build completed"
-                } else {
-                    "Build failed"
-                };
-                let level = if success {
-                    LogLevel::Info
-                } else {
-                    LogLevel::Error
-                };
-                self.print_log_message(message, level, LogSource::Nix)?;
-            }
-            TuiEvent::NixDownloadStart {
-                package_name,
-                substituter,
-                ..
-            } => {
-                let message = format!("Downloading {} from {}", package_name, substituter);
-                self.print_log_message(&message, LogLevel::Info, LogSource::Nix)?;
-            }
-            TuiEvent::NixDownloadProgress {
-                bytes_downloaded,
-                total_bytes,
-                ..
-            } => {
-                let message = if let Some(total) = total_bytes {
-                    let percent = (bytes_downloaded as f64 / total as f64 * 100.0) as u32;
-                    format!(
-                        "Download progress: {}% ({}/{})",
-                        percent,
-                        format_bytes(bytes_downloaded),
-                        format_bytes(total)
-                    )
-                } else {
-                    format!("Downloaded: {}", format_bytes(bytes_downloaded))
-                };
-                self.print_log_message(&message, LogLevel::Debug, LogSource::Nix)?;
-            }
-            TuiEvent::NixDownloadEnd { success, .. } => {
-                let message = if success {
-                    "Download completed"
-                } else {
-                    "Download failed"
-                };
-                let level = if success {
-                    LogLevel::Info
-                } else {
-                    LogLevel::Error
-                };
-                self.print_log_message(message, level, LogSource::Nix)?;
-            }
-            TuiEvent::NixQueryStart {
-                package_name,
-                substituter,
-                ..
-            } => {
-                let message = format!("Querying {} on {}", package_name, substituter);
-                self.print_log_message(&message, LogLevel::Debug, LogSource::Nix)?;
-            }
-            TuiEvent::NixQueryEnd { success, .. } => {
-                let message = if success {
-                    "Query completed"
-                } else {
-                    "Query failed"
-                };
-                let level = if success {
-                    LogLevel::Debug
-                } else {
-                    LogLevel::Warn
-                };
-                self.print_log_message(message, level, LogSource::Nix)?;
+            // Don't print any log messages - they are shown in the TUI activity list
+            TuiEvent::LogMessage { .. } => {}
+            TuiEvent::NixDerivationStart { .. } => {}
+            TuiEvent::NixPhaseProgress { .. } => {}
+            TuiEvent::NixDerivationEnd { .. } => {}
+            TuiEvent::NixDownloadStart { .. } => {}
+            TuiEvent::NixDownloadProgress { .. } => {}
+            TuiEvent::NixDownloadEnd { .. } => {}
+            TuiEvent::NixQueryStart { .. } => {}
+            TuiEvent::NixQueryEnd { .. } => {}
+            TuiEvent::NixActivityProgress { .. } => {
+                // Progress is handled in the graph display, no need to do anything here
             }
             _ => {} // Handle other events as needed
         }
@@ -646,6 +410,7 @@ impl RatatuiDisplay {
 impl Drop for RatatuiDisplay {
     fn drop(&mut self) {
         // Ensure terminal is always restored
+        let _ = crossterm::terminal::disable_raw_mode();
         crate::cleanup_tui();
     }
 }
@@ -741,25 +506,6 @@ impl DefaultDisplay {
     }
 
     /// Clear only the spinner lines, not completed messages
-    fn clear_spinner_lines(&mut self) {
-        if self.active_lines == 0 {
-            return;
-        }
-
-        let mut stdout = io::stdout();
-
-        // Clear each line that contains spinner content
-        for i in 0..self.active_lines {
-            let _ = execute!(
-                stdout,
-                cursor::MoveDown(i as u16),
-                Clear(ClearType::CurrentLine),
-                cursor::MoveUp(i as u16)
-            );
-        }
-
-        let _ = stdout.flush();
-    }
 
     /// Clear all managed lines
     fn clear_active_lines(&mut self) {
@@ -886,22 +632,48 @@ impl DefaultDisplay {
                 self.print_message(&message, LogLevel::Info);
             }
             TuiEvent::NixDownloadProgress {
+                activity_id,
                 bytes_downloaded,
                 total_bytes,
                 ..
             } => {
-                let message = if let Some(total) = total_bytes {
-                    let percent = (bytes_downloaded as f64 / total as f64 * 100.0) as u32;
-                    format!(
-                        "Download progress: {}% ({}/{})",
-                        percent,
-                        format_bytes(bytes_downloaded),
-                        format_bytes(total)
-                    )
+                let download_info = self.state.get_nix_download(activity_id);
+
+                let message = if let Some(info) = download_info {
+                    if let Some(total) = total_bytes {
+                        let percent = (bytes_downloaded as f64 / total as f64 * 100.0) as u32;
+                        format!(
+                            "Download progress: {}% ({}/{}) - {}",
+                            percent,
+                            format_bytes(bytes_downloaded),
+                            format_bytes(total),
+                            format_speed(info.download_speed)
+                        )
+                    } else {
+                        format!(
+                            "Downloaded: {} - {}",
+                            format_bytes(bytes_downloaded),
+                            format_speed(info.download_speed)
+                        )
+                    }
                 } else {
-                    format!("Downloaded: {}", format_bytes(bytes_downloaded))
+                    // Fallback
+                    if let Some(total) = total_bytes {
+                        let percent = (bytes_downloaded as f64 / total as f64 * 100.0) as u32;
+                        format!(
+                            "Download progress: {}% ({}/{})",
+                            percent,
+                            format_bytes(bytes_downloaded),
+                            format_bytes(total)
+                        )
+                    } else {
+                        format!("Downloaded: {}", format_bytes(bytes_downloaded))
+                    }
                 };
                 self.print_message(&message, LogLevel::Debug);
+            }
+            TuiEvent::NixActivityProgress { .. } => {
+                // Progress updates are displayed in the spinners, no need for specific handling here
             }
             _ => {} // Handle other events as needed
         }
@@ -909,7 +681,7 @@ impl DefaultDisplay {
 }
 
 /// Format duration in human-readable format (matching current CLI)
-fn format_duration(duration: Duration) -> String {
+pub fn format_duration(duration: Duration) -> String {
     let mut t = duration.as_nanos() as f64;
     for unit in ["ns", "µs", "ms", "s"].iter() {
         if t < 10.0 {
@@ -925,7 +697,7 @@ fn format_duration(duration: Duration) -> String {
 }
 
 /// Format bytes in human-readable format
-fn format_bytes(bytes: u64) -> String {
+pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
     let mut size = bytes as f64;
     let mut unit_index = 0;
@@ -943,6 +715,32 @@ fn format_bytes(bytes: u64) -> String {
         format!("{:.1} {}", size, UNITS[unit_index])
     } else {
         format!("{:.0} {}", size, UNITS[unit_index])
+    }
+}
+
+/// Format download speed in human-readable format
+pub fn format_speed(bytes_per_sec: f64) -> String {
+    if bytes_per_sec <= 0.0 {
+        return "0 B/s".to_string();
+    }
+
+    const UNITS: &[&str] = &["B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s"];
+    let mut speed = bytes_per_sec;
+    let mut unit_index = 0;
+
+    while speed >= 1024.0 && unit_index < UNITS.len() - 1 {
+        speed /= 1024.0;
+        unit_index += 1;
+    }
+
+    if unit_index == 0 {
+        format!("{:.0} {}", speed, UNITS[unit_index])
+    } else if speed < 10.0 {
+        format!("{:.2} {}", speed, UNITS[unit_index])
+    } else if speed < 100.0 {
+        format!("{:.1} {}", speed, UNITS[unit_index])
+    } else {
+        format!("{:.0} {}", speed, UNITS[unit_index])
     }
 }
 

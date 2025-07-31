@@ -6,6 +6,7 @@ pub mod op;
 pub use command::{
     CachedCommand, EnvInputDesc, FileInputDesc, Input, Output, supports_eval_caching,
 };
+pub use op::Op;
 
 /// Integration tests for caching behavior with Nix evaluation.
 ///

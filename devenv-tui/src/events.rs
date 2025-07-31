@@ -111,6 +111,29 @@ pub enum TuiEvent {
         activity_id: u64,
         success: bool,
     },
+    /// Build log line for a specific activity
+    BuildLog { activity_id: u64, line: String },
+    /// File evaluation started
+    NixEvaluationStart {
+        operation_id: OperationId,
+        file_path: String,
+        total_files_evaluated: u64,
+    },
+    /// Multiple files evaluated (batch update)
+    NixEvaluationProgress {
+        operation_id: OperationId,
+        files: Vec<String>,
+        total_files_evaluated: u64,
+    },
+    /// Generic progress update for any activity
+    NixActivityProgress {
+        operation_id: OperationId,
+        activity_id: u64,
+        done: u64,
+        expected: u64,
+        running: u64,
+        failed: u64,
+    },
     /// Shutdown the TUI display
     Shutdown,
 }
@@ -261,6 +284,9 @@ pub struct NixDownloadInfo {
     pub total_bytes: Option<u64>,
     pub start_time: Instant,
     pub state: NixActivityState,
+    pub last_update_time: Instant,
+    pub last_bytes_downloaded: u64,
+    pub download_speed: f64, // bytes per second
 }
 
 /// Information about a Nix store query
@@ -288,5 +314,15 @@ pub enum NixActivityType {
     Build,
     Download,
     Query,
+    Evaluating,
     Unknown,
+}
+
+/// Progress information for an activity
+#[derive(Debug, Clone)]
+pub struct ActivityProgress {
+    pub done: u64,
+    pub expected: u64,
+    pub running: u64,
+    pub failed: u64,
 }
