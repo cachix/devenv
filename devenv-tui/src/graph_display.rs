@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{LineGauge, Paragraph, Widget},
+    widgets::{Block, Borders, LineGauge, Padding, Paragraph, Widget},
 };
 use std::sync::Arc;
 use std::time::Instant;
@@ -278,106 +278,35 @@ impl Widget for &mut GraphDisplay {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let activities = self.get_all_activities();
 
-        // Check if we should show logs (only for builds when selected)
-        let selected_build = if let Some(selected_idx) = self.selected_index {
-            if selected_idx < activities.len()
-                && activities[selected_idx].activity_type == NixActivityType::Build
-            {
-                Some(&activities[selected_idx])
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Layout: Always have 3 sections - logs (if selected), activities, and summary
-        // Use Min(1) for activities to allow it to use remaining space after summary
+        // Layout: Always have 2 sections - activities and summary
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints(if selected_build.is_some() {
-                vec![
-                    Constraint::Length(20), // Build logs area (reduced to 20 lines)
-                    Constraint::Min(1),     // Graph area uses remaining space
-                    Constraint::Length(1),  // Summary area (always visible, 1 line)
-                ]
-            } else {
-                vec![
-                    Constraint::Length(0), // No logs area
-                    Constraint::Min(1),    // Graph area uses remaining space
-                    Constraint::Length(1), // Summary area (always visible, 1 line)
-                ]
-            })
+            .constraints(vec![
+                Constraint::Min(1),    // Graph area uses remaining space
+                Constraint::Length(1), // Summary area (always visible, 1 line)
+            ])
             .split(area);
 
-        // Render build logs at the top if a build is selected
-        if let Some(build_activity) = selected_build {
-            if let Some(activity_id) = build_activity.activity_id {
-                let build_logs = self.state.get_build_logs(activity_id);
-
-                // Show up to 50 lines of logs (or however many fit in the area)
-                let log_area = chunks[0];
-                let max_lines = log_area.height as usize;
-                let log_lines: Vec<Line> = build_logs
-                    .iter()
-                    .rev()
-                    .take(max_lines)
-                    .rev()
-                    .map(|log| Line::from(log.as_str()))
-                    .collect();
-
-                if log_lines.is_empty() {
-                    let waiting_msg = Line::from(vec![Span::styled(
-                        "Waiting for build output...",
-                        Style::default()
-                            .fg(Color::DarkGray)
-                            .add_modifier(Modifier::ITALIC),
-                    )]);
-                    let paragraph = Paragraph::new(waiting_msg);
-                    paragraph.render(log_area, buf);
-                } else {
-                    let paragraph =
-                        Paragraph::new(log_lines).style(Style::default().fg(Color::Gray));
-                    paragraph.render(log_area, buf);
-                }
-
-                // Add separator after logs
-                if log_area.bottom() < area.bottom() {
-                    let separator = "─".repeat(area.width as usize);
-                    let separator_line = Line::from(Span::styled(
-                        separator,
-                        Style::default().fg(Color::DarkGray),
-                    ));
-                    let separator_area = Rect {
-                        x: area.x,
-                        y: log_area.bottom(),
-                        width: area.width,
-                        height: 1,
-                    };
-                    Paragraph::new(separator_line).render(separator_area, buf);
-                }
-            }
-        }
-
-        // Always render activities in the middle section (chunks[1])
+        // Render activities in the main area (chunks[0])
         // Store the visible height for scroll calculations
-        let activities_area = chunks[1];
+        let activities_area = chunks[0];
         self.activities_visible_height = activities_area.height;
 
         let graph_widget = GraphWidget {
             activities: &activities,
             selected_index: self.selected_index,
             scroll_offset: self.scroll_offset,
+            state: &self.state,
         };
         graph_widget.render(activities_area, buf);
 
-        // Always render summary at the bottom (chunks[2])
+        // Always render summary at the bottom (chunks[1])
         let summary = self.calculate_summary();
         let summary_widget = SummaryWidget {
             stats: summary,
             has_selection: self.selected_index.is_some(),
         };
-        summary_widget.render(chunks[2], buf);
+        summary_widget.render(chunks[1], buf);
     }
 }
 
@@ -386,6 +315,7 @@ struct GraphWidget<'a> {
     activities: &'a [ActivityInfo],
     selected_index: Option<usize>,
     scroll_offset: usize,
+    state: &'a Arc<TuiState>,
 }
 
 impl<'a> Widget for GraphWidget<'a> {
@@ -399,15 +329,6 @@ impl<'a> Widget for GraphWidget<'a> {
             height: area.height,
         };
 
-        // Calculate visible range
-        let visible_height = inner.height as usize;
-        let visible_activities = self
-            .activities
-            .iter()
-            .skip(self.scroll_offset)
-            .take(visible_height)
-            .enumerate();
-
         // Render each activity
         if self.activities.is_empty() {
             // Show a message when no activities are running
@@ -420,13 +341,95 @@ impl<'a> Widget for GraphWidget<'a> {
             let paragraph = Paragraph::new(no_activities_msg);
             paragraph.render(inner, buf);
         } else {
-            for (display_index, (actual_index, activity)) in visible_activities.enumerate() {
-                let y = inner.y + display_index as u16;
-                if y < inner.bottom() {
-                    let is_selected =
-                        self.selected_index == Some(actual_index + self.scroll_offset);
-                    activity.render_line(inner.x, y, inner.width, is_selected, buf);
+            let mut current_y = inner.y;
+            let mut activity_index = self.scroll_offset;
+
+            while current_y < inner.bottom() && activity_index < self.activities.len() {
+                let activity = &self.activities[activity_index];
+                let is_selected = self.selected_index == Some(activity_index);
+
+                // Render the activity line
+                let lines_used =
+                    activity.render_line(inner.x, current_y, inner.width, is_selected, buf);
+                current_y += lines_used;
+
+                // If this is a selected build, show logs below it
+                if is_selected && activity.activity_type == NixActivityType::Build {
+                    if let Some(activity_id) = activity.activity_id {
+                        let build_logs = self.state.get_build_logs(activity_id);
+
+                        // Show up to 10 recent log lines
+                        let max_log_lines = 10;
+                        let log_lines_to_show = build_logs.len().min(max_log_lines);
+                        let log_height = if log_lines_to_show > 0 {
+                            log_lines_to_show
+                        } else {
+                            1
+                        };
+
+                        // Check if we have enough space
+                        if current_y + log_height as u16 <= inner.bottom() {
+                            // Calculate same indent as the activity "Building" text
+                            // Activities start with 2 spaces for selection indicator, then depth indent
+                            let activity_indent = 2 + if activity.depth > 0 {
+                                (activity.depth * 2) + 3
+                            } else {
+                                0
+                            };
+
+                            // Position logs at same horizontal position as "Building" text
+                            let log_x = inner.x + activity_indent as u16;
+                            let log_width = inner.width.saturating_sub(activity_indent as u16);
+                            let log_area =
+                                Rect::new(log_x, current_y, log_width, log_height as u16);
+
+                            // Create block with only left border and padding
+                            let block = Block::default()
+                                .borders(Borders::LEFT)
+                                .border_style(Style::default().fg(Color::DarkGray))
+                                .padding(Padding {
+                                    left: 1, // Add space after the left border
+                                    right: 0,
+                                    top: 0,
+                                    bottom: 0,
+                                });
+
+                            // Prepare log content
+                            let log_content = if log_lines_to_show > 0 {
+                                // Get recent log lines
+                                let start_idx = build_logs.len().saturating_sub(log_lines_to_show);
+                                let lines: Vec<Line> = build_logs[start_idx..]
+                                    .iter()
+                                    .map(|log| {
+                                        Line::from(Span::styled(
+                                            log.as_str(),
+                                            Style::default().fg(Color::Gray),
+                                        ))
+                                    })
+                                    .collect();
+                                lines
+                            } else {
+                                // Show waiting message
+                                vec![Line::from(Span::styled(
+                                    "Waiting for build output...",
+                                    Style::default()
+                                        .fg(Color::DarkGray)
+                                        .add_modifier(Modifier::ITALIC),
+                                ))]
+                            };
+
+                            // Create paragraph with the log content and block
+                            let log_paragraph = Paragraph::new(log_content).block(block);
+
+                            // Render the logs with left border
+                            log_paragraph.render(log_area, buf);
+
+                            current_y += log_height as u16;
+                        }
+                    }
                 }
+
+                activity_index += 1;
             }
         }
     }
@@ -613,7 +616,7 @@ impl ActivityInfo {
     }
 
     /// Render a single line for this activity
-    fn render_line(&self, x: u16, y: u16, width: u16, is_selected: bool, buf: &mut Buffer) {
+    fn render_line(&self, x: u16, y: u16, width: u16, is_selected: bool, buf: &mut Buffer) -> u16 {
         let elapsed = self.start_time.elapsed();
         let elapsed_str = crate::display::format_duration(elapsed);
 
@@ -825,6 +828,8 @@ impl ActivityInfo {
             let timing_paragraph = Paragraph::new(timing_line);
             timing_paragraph.render(Rect::new(timing_x, y, elapsed_len, 1), buf);
         }
+
+        1 // Return height used (1 line for now, will update for logs)
     }
 }
 
