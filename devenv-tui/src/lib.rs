@@ -1,5 +1,6 @@
 pub mod display;
 pub mod events;
+pub mod graph_display;
 pub mod nix_bridge;
 pub mod state;
 pub mod tracing_layer;
@@ -35,8 +36,16 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
 
     // Store the sender globally for cleanup
     if let Ok(mut sender) = GLOBAL_SENDER.lock() {
-        *sender = Some(tx);
+        *sender = Some(tx.clone());
     }
+
+    // Set up a global Ctrl-C handler that sends shutdown event
+    let shutdown_tx = tx.clone();
+    tokio::spawn(async move {
+        // This will catch Ctrl-C if the display doesn't handle it
+        tokio::signal::ctrl_c().await.ok();
+        let _ = shutdown_tx.send(TuiEvent::Shutdown);
+    });
 
     // Spawn the display thread based on mode
     let display_state = state.clone();
@@ -50,10 +59,16 @@ pub fn init_tui(mode: DisplayMode) -> (DevenvTuiLayer, Arc<TuiState>) {
                         }
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Failed to create RatatuiDisplay: {}, falling back to console mode",
-                            e
+                        eprintln!("Failed to create RatatuiDisplay: {}", e);
+                        // For terminal initialization errors, try to clean up and fall back
+                        let _ = crossterm::terminal::disable_raw_mode();
+                        let _ = crossterm::execute!(
+                            std::io::stderr(),
+                            crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+                            crossterm::cursor::Show
                         );
+
+                        eprintln!("Falling back to console mode");
                         // Create a new channel for fallback since rx was moved
                         let (_fallback_tx, fallback_rx) = mpsc::unbounded_channel::<TuiEvent>();
                         let mut display = FallbackDisplay::new(fallback_rx, display_state);
@@ -113,6 +128,9 @@ pub fn cleanup_tui() {
             );
         }
     }
+
+    // Disable raw mode first
+    let _ = crossterm::terminal::disable_raw_mode();
 
     ratatui::restore();
 

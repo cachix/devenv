@@ -1,7 +1,9 @@
 use crate::{OperationId, TuiEvent};
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
-use std::collections::HashMap;
+use devenv_eval_cache::Op;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tokio::sync::mpsc;
 
 /// Bridge that converts Nix internal logs to TUI events
@@ -12,6 +14,19 @@ pub struct NixLogBridge {
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// Current parent operation ID for correlating Nix activities
     current_operation_id: Arc<Mutex<Option<OperationId>>>,
+    /// Evaluation tracking state
+    evaluation_state: Arc<Mutex<EvaluationState>>,
+}
+
+/// State for tracking file evaluations
+#[derive(Debug, Default)]
+struct EvaluationState {
+    /// Total number of files evaluated
+    total_files_evaluated: u64,
+    /// Recently evaluated files (for batching)
+    pending_files: VecDeque<String>,
+    /// Last time we sent an evaluation progress event
+    last_progress_update: Option<Instant>,
 }
 
 /// Information about an active Nix activity
@@ -19,7 +34,6 @@ pub struct NixLogBridge {
 struct NixActivityInfo {
     operation_id: OperationId,
     activity_type: ActivityType,
-    start_time: std::time::Instant,
 }
 
 impl NixLogBridge {
@@ -28,6 +42,7 @@ impl NixLogBridge {
             tui_sender,
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             current_operation_id: Arc::new(Mutex::new(None)),
+            evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
         }
     }
 
@@ -40,8 +55,45 @@ impl NixLogBridge {
 
     /// Clear the current operation ID
     pub fn clear_current_operation(&self) {
+        // First flush any pending evaluation updates before clearing the operation
+        // This ensures the operation_id is still available for the flush
+        self.flush_evaluation_updates();
+
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = None;
+        }
+
+        // Also reset the evaluation state for the next operation
+        if let Ok(mut state) = self.evaluation_state.lock() {
+            state.total_files_evaluated = 0;
+            state.pending_files.clear();
+            state.last_progress_update = None;
+        }
+    }
+
+    /// Flush any pending evaluation updates
+    fn flush_evaluation_updates(&self) {
+        if let Ok(mut state) = self.evaluation_state.lock() {
+            if !state.pending_files.is_empty() {
+                if let Ok(current) = self.current_operation_id.lock() {
+                    if let Some(operation_id) = current.as_ref() {
+                        let files: Vec<String> = state.pending_files.drain(..).collect();
+                        tracing::debug!("Flushing {} pending evaluation files", files.len());
+                        let _ = self.tui_sender.send(TuiEvent::NixEvaluationProgress {
+                            operation_id: operation_id.clone(),
+                            files,
+                            total_files_evaluated: state.total_files_evaluated,
+                        });
+                    } else {
+                        tracing::warn!(
+                            "No operation ID available for flushing {} pending files",
+                            state.pending_files.len()
+                        );
+                    }
+                } else {
+                    tracing::warn!("Failed to lock operation ID for flushing");
+                }
+            }
         }
     }
 
@@ -104,8 +156,16 @@ impl NixLogBridge {
                         }
                     }
                 }
-                InternalLog::Msg { level, msg, .. } => {
-                    // Handle log messages from Nix builds
+                InternalLog::Msg { level, ref msg, .. } => {
+                    // First check if this is a file evaluation message
+                    if let Some(op) = Op::from_internal_log(&log) {
+                        if let Op::EvaluatedFile { source } = op {
+                            self.handle_file_evaluation(operation_id.clone(), source);
+                            return;
+                        }
+                    }
+
+                    // Handle regular log messages from Nix builds
                     if level <= Verbosity::Warn {
                         let _ = self.tui_sender.send(TuiEvent::LogMessage {
                             level: match level {
@@ -113,7 +173,7 @@ impl NixLogBridge {
                                 Verbosity::Warn => crate::LogLevel::Warn,
                                 _ => crate::LogLevel::Info,
                             },
-                            message: msg,
+                            message: msg.clone(),
                             source: crate::LogSource::Nix,
                             data: HashMap::new(),
                         });
@@ -139,7 +199,6 @@ impl NixLogBridge {
                 NixActivityInfo {
                     operation_id: operation_id.clone(),
                     activity_type,
-                    start_time: std::time::Instant::now(),
                 },
             );
         }
@@ -169,13 +228,13 @@ impl NixLogBridge {
                     machine,
                 });
             }
-            ActivityType::Substitute => {
+            ActivityType::QueryPathInfo => {
                 if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
                     (fields.get(0), fields.get(1))
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let _ = self.tui_sender.send(TuiEvent::NixDownloadStart {
+                    let _ = self.tui_sender.send(TuiEvent::NixQueryStart {
                         operation_id,
                         activity_id,
                         store_path: store_path.clone(),
@@ -184,13 +243,14 @@ impl NixLogBridge {
                     });
                 }
             }
-            ActivityType::QueryPathInfo => {
+            ActivityType::CopyPath => {
+                // CopyPath is the actual download activity that shows byte progress
                 if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
                     (fields.get(0), fields.get(1))
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let _ = self.tui_sender.send(TuiEvent::NixQueryStart {
+                    let _ = self.tui_sender.send(TuiEvent::NixDownloadStart {
                         operation_id,
                         activity_id,
                         store_path: store_path.clone(),
@@ -210,6 +270,11 @@ impl NixLogBridge {
     fn handle_activity_stop(&self, activity_id: u64, success: bool) {
         if let Ok(mut activities) = self.active_activities.lock() {
             if let Some(activity_info) = activities.remove(&activity_id) {
+                // If this is the last activity, flush any pending evaluation updates
+                if activities.is_empty() {
+                    self.flush_evaluation_updates();
+                }
+
                 match activity_info.activity_type {
                     ActivityType::Build => {
                         let _ = self.tui_sender.send(TuiEvent::NixDerivationEnd {
@@ -218,7 +283,7 @@ impl NixLogBridge {
                             success,
                         });
                     }
-                    ActivityType::Substitute => {
+                    ActivityType::CopyPath => {
                         let _ = self.tui_sender.send(TuiEvent::NixDownloadEnd {
                             operation_id: activity_info.operation_id,
                             activity_id,
@@ -247,22 +312,49 @@ impl NixLogBridge {
     ) {
         match result_type {
             ResultType::Progress => {
-                // Handle download progress updates
-                if let (Some(Field::Int(downloaded)), total_opt) = (fields.get(0), fields.get(1)) {
-                    let total_bytes = match total_opt {
-                        Some(Field::Int(total)) => Some(*total),
-                        _ => None,
-                    };
-
-                    if let Ok(activities) = self.active_activities.lock() {
-                        if let Some(activity_info) = activities.get(&activity_id) {
-                            if activity_info.activity_type == ActivityType::Substitute {
-                                let _ = self.tui_sender.send(TuiEvent::NixDownloadProgress {
+                // Handle generic progress updates with format [done, expected, running, failed]
+                if fields.len() >= 4 {
+                    if let (
+                        Some(Field::Int(done)),
+                        Some(Field::Int(expected)),
+                        Some(Field::Int(running)),
+                        Some(Field::Int(failed)),
+                    ) = (fields.get(0), fields.get(1), fields.get(2), fields.get(3))
+                    {
+                        if let Ok(activities) = self.active_activities.lock() {
+                            if let Some(activity_info) = activities.get(&activity_id) {
+                                let _ = self.tui_sender.send(TuiEvent::NixActivityProgress {
                                     operation_id: activity_info.operation_id.clone(),
                                     activity_id,
-                                    bytes_downloaded: *downloaded,
-                                    total_bytes,
+                                    done: *done,
+                                    expected: *expected,
+                                    running: *running,
+                                    failed: *failed,
                                 });
+                            }
+                        }
+                    }
+                } else if fields.len() >= 2 {
+                    // Fallback to download progress format for backward compatibility
+                    if let (Some(Field::Int(downloaded)), total_opt) =
+                        (fields.get(0), fields.get(1))
+                    {
+                        let total_bytes = match total_opt {
+                            Some(Field::Int(total)) => Some(*total),
+                            _ => None,
+                        };
+
+                        if let Ok(activities) = self.active_activities.lock() {
+                            if let Some(activity_info) = activities.get(&activity_id) {
+                                // Only CopyPath activities have byte-based download progress
+                                if activity_info.activity_type == ActivityType::CopyPath {
+                                    let _ = self.tui_sender.send(TuiEvent::NixDownloadProgress {
+                                        operation_id: activity_info.operation_id.clone(),
+                                        activity_id,
+                                        bytes_downloaded: *downloaded,
+                                        total_bytes,
+                                    });
+                                }
                             }
                         }
                     }
@@ -288,12 +380,11 @@ impl NixLogBridge {
                 // Handle build log output
                 if let Some(Field::String(log_line)) = fields.get(0) {
                     if let Ok(activities) = self.active_activities.lock() {
-                        if let Some(activity_info) = activities.get(&activity_id) {
-                            let _ = self.tui_sender.send(TuiEvent::LogMessage {
-                                level: crate::LogLevel::Info,
-                                message: log_line.clone(),
-                                source: crate::LogSource::Nix,
-                                data: HashMap::new(),
+                        if let Some(_activity_info) = activities.get(&activity_id) {
+                            // Send BuildLog event instead of LogMessage
+                            let _ = self.tui_sender.send(TuiEvent::BuildLog {
+                                activity_id,
+                                line: log_line.clone(),
                             });
                         }
                     }
@@ -302,6 +393,48 @@ impl NixLogBridge {
             _ => {
                 // Handle other result types as needed
                 tracing::debug!("Unhandled Nix result type: {:?}", result_type);
+            }
+        }
+    }
+
+    /// Handle file evaluation events
+    fn handle_file_evaluation(&self, operation_id: OperationId, file_path: std::path::PathBuf) {
+        const BATCH_SIZE: usize = 5; // Reduced from 10 for more responsive updates
+        const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100); // Reduced from 200ms
+
+        if let Ok(mut state) = self.evaluation_state.lock() {
+            let file_path_str = file_path.display().to_string();
+
+            // If this is the first file, send a start event
+            if state.total_files_evaluated == 0 && state.pending_files.is_empty() {
+                let _ = self.tui_sender.send(TuiEvent::NixEvaluationStart {
+                    operation_id: operation_id.clone(),
+                    file_path: file_path_str.clone(),
+                    total_files_evaluated: 0,
+                });
+            }
+
+            // Add to pending files
+            state.pending_files.push_back(file_path_str);
+            state.total_files_evaluated += 1;
+
+            // Check if we should send a batch update
+            let now = Instant::now();
+            let should_send = state.pending_files.len() >= BATCH_SIZE
+                || (state.last_progress_update.is_some()
+                    && now.duration_since(state.last_progress_update.unwrap()) >= BATCH_TIMEOUT);
+
+            if should_send && !state.pending_files.is_empty() {
+                let files: Vec<String> = state.pending_files.drain(..).collect();
+                let _ = self.tui_sender.send(TuiEvent::NixEvaluationProgress {
+                    operation_id,
+                    files,
+                    total_files_evaluated: state.total_files_evaluated,
+                });
+                state.last_progress_update = Some(now);
+            } else if state.last_progress_update.is_none() {
+                // First file - set the timer
+                state.last_progress_update = Some(now);
             }
         }
     }

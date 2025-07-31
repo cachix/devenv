@@ -9,28 +9,17 @@ use tracing_subscriber::{layer::Context, Layer};
 /// Tracing layer that integrates with the TUI system
 pub struct DevenvTuiLayer {
     event_sender: mpsc::UnboundedSender<TuiEvent>,
-    state: Arc<TuiState>,
 }
 
 impl DevenvTuiLayer {
-    pub fn new(event_sender: mpsc::UnboundedSender<TuiEvent>, state: Arc<TuiState>) -> Self {
-        Self {
-            event_sender,
-            state,
-        }
+    pub fn new(event_sender: mpsc::UnboundedSender<TuiEvent>, _state: Arc<TuiState>) -> Self {
+        Self { event_sender }
     }
 
     fn send_event(&self, event: TuiEvent) {
         if self.event_sender.send(event).is_err() {
             // TUI receiver has been dropped, which is expected during shutdown
         }
-    }
-
-    /// Extract structured data from span/event fields
-    fn extract_fields(&self, fields: &span::Record<'_>) -> HashMap<String, String> {
-        let mut visitor = FieldVisitor::default();
-        fields.record(&mut visitor);
-        visitor.fields
     }
 }
 

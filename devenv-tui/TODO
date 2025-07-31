@@ -1,0 +1,4 @@
+- build logs widget doesn't show logs as they progress
+- parse "evaluating flake" to track begining/endingf
+- regression tests against nix
+- hierarchy for builds

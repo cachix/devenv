@@ -1,12 +1,15 @@
 use crate::{
-    LogMessage, NixActivityState, NixBuildInfo, NixDerivationInfo, NixDownloadInfo, NixQueryInfo,
-    Operation, OperationId, OperationResult, TuiEvent,
+    ActivityProgress, LogMessage, NixActivityState, NixBuildInfo, NixDerivationInfo,
+    NixDownloadInfo, NixQueryInfo, Operation, OperationId, OperationResult, TuiEvent,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 /// Maximum number of log messages to keep in memory
 const MAX_LOG_MESSAGES: usize = 1000;
+
+/// Maximum number of log lines to keep per build
+const MAX_LOG_LINES_PER_BUILD: usize = 1000;
 
 /// Central state management for the TUI
 pub struct TuiState {
@@ -21,6 +24,8 @@ struct TuiStateInner {
     nix_downloads: HashMap<u64, NixDownloadInfo>,
     nix_queries: HashMap<u64, NixQueryInfo>,
     root_operations: Vec<OperationId>,
+    build_logs: HashMap<u64, VecDeque<String>>,
+    activity_progress: HashMap<u64, ActivityProgress>,
 }
 
 impl TuiState {
@@ -34,6 +39,8 @@ impl TuiState {
                 nix_downloads: HashMap::new(),
                 nix_queries: HashMap::new(),
                 root_operations: Vec::new(),
+                build_logs: HashMap::new(),
+                activity_progress: HashMap::new(),
             })),
         }
     }
@@ -155,6 +162,12 @@ impl TuiState {
                     let duration = derivation_info.start_time.elapsed();
                     derivation_info.state = NixActivityState::Completed { success, duration };
                 }
+
+                // Clean up progress data
+                inner.activity_progress.remove(&activity_id);
+
+                // Clean up build logs for this activity (optional, could keep for review)
+                // inner.build_logs.remove(&activity_id);
             }
 
             TuiEvent::NixDownloadStart {
@@ -164,6 +177,7 @@ impl TuiState {
                 package_name,
                 substituter,
             } => {
+                let now = std::time::Instant::now();
                 let download_info = NixDownloadInfo {
                     operation_id,
                     activity_id,
@@ -172,8 +186,11 @@ impl TuiState {
                     substituter,
                     bytes_downloaded: 0,
                     total_bytes: None,
-                    start_time: std::time::Instant::now(),
+                    start_time: now,
                     state: NixActivityState::Active,
+                    last_update_time: now,
+                    last_bytes_downloaded: 0,
+                    download_speed: 0.0,
                 };
                 inner.nix_downloads.insert(activity_id, download_info);
             }
@@ -185,6 +202,20 @@ impl TuiState {
                 total_bytes,
             } => {
                 if let Some(download_info) = inner.nix_downloads.get_mut(&activity_id) {
+                    let now = std::time::Instant::now();
+                    let time_delta = now
+                        .duration_since(download_info.last_update_time)
+                        .as_secs_f64();
+
+                    if time_delta > 0.0 {
+                        let bytes_delta = bytes_downloaded
+                            .saturating_sub(download_info.last_bytes_downloaded)
+                            as f64;
+                        download_info.download_speed = bytes_delta / time_delta;
+                        download_info.last_update_time = now;
+                        download_info.last_bytes_downloaded = bytes_downloaded;
+                    }
+
                     download_info.bytes_downloaded = bytes_downloaded;
                     if total_bytes.is_some() {
                         download_info.total_bytes = total_bytes;
@@ -201,6 +232,8 @@ impl TuiState {
                     let duration = download_info.start_time.elapsed();
                     download_info.state = NixActivityState::Completed { success, duration };
                 }
+                // Clean up progress data
+                inner.activity_progress.remove(&activity_id);
             }
 
             TuiEvent::NixQueryStart {
@@ -231,6 +264,80 @@ impl TuiState {
                     let duration = query_info.start_time.elapsed();
                     query_info.state = NixActivityState::Completed { success, duration };
                 }
+                // Clean up progress data
+                inner.activity_progress.remove(&activity_id);
+            }
+
+            TuiEvent::BuildLog { activity_id, line } => {
+                // Store build log line for the activity
+                let logs = inner
+                    .build_logs
+                    .entry(activity_id)
+                    .or_insert_with(VecDeque::new);
+
+                // Add new line, removing oldest if at capacity
+                if logs.len() >= MAX_LOG_LINES_PER_BUILD {
+                    logs.pop_front();
+                }
+                logs.push_back(line);
+            }
+
+            TuiEvent::NixEvaluationStart {
+                operation_id,
+                file_path,
+                total_files_evaluated,
+            } => {
+                // Update operation message to show evaluation started
+                if let Some(operation) = inner.operations.get_mut(&operation_id) {
+                    operation.message = file_path.to_string();
+                    operation
+                        .data
+                        .insert("evaluation_file".to_string(), file_path);
+                    operation.data.insert(
+                        "evaluation_count".to_string(),
+                        total_files_evaluated.to_string(),
+                    );
+                }
+            }
+
+            TuiEvent::NixEvaluationProgress {
+                operation_id,
+                files,
+                total_files_evaluated,
+            } => {
+                // Update operation with latest evaluation progress
+                if let Some(operation) = inner.operations.get_mut(&operation_id) {
+                    // Since files are in evaluation order, the last one is the most recent
+                    if let Some(latest_file) = files.last() {
+                        operation.message = latest_file.to_string();
+                        operation
+                            .data
+                            .insert("evaluation_file".to_string(), latest_file.clone());
+                    }
+                    operation.data.insert(
+                        "evaluation_count".to_string(),
+                        total_files_evaluated.to_string(),
+                    );
+                }
+            }
+
+            TuiEvent::NixActivityProgress {
+                operation_id: _,
+                activity_id,
+                done,
+                expected,
+                running,
+                failed,
+            } => {
+                inner.activity_progress.insert(
+                    activity_id,
+                    ActivityProgress {
+                        done,
+                        expected,
+                        running,
+                        failed,
+                    },
+                );
             }
 
             TuiEvent::Shutdown => {
@@ -298,6 +405,28 @@ impl TuiState {
     pub fn get_nix_build(&self, operation_id: &OperationId) -> Option<NixBuildInfo> {
         let inner = self.inner.lock().unwrap();
         inner.nix_builds.get(operation_id).cloned()
+    }
+
+    /// Get Nix download info by activity ID
+    pub fn get_nix_download(&self, activity_id: u64) -> Option<NixDownloadInfo> {
+        let inner = self.inner.lock().unwrap();
+        inner.nix_downloads.get(&activity_id).cloned()
+    }
+
+    /// Get build logs for an activity
+    pub fn get_build_logs(&self, activity_id: u64) -> Vec<String> {
+        let inner = self.inner.lock().unwrap();
+        inner
+            .build_logs
+            .get(&activity_id)
+            .map(|logs| logs.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// Get progress information for an activity
+    pub fn get_activity_progress(&self, activity_id: u64) -> Option<ActivityProgress> {
+        let inner = self.inner.lock().unwrap();
+        inner.activity_progress.get(&activity_id).cloned()
     }
 
     /// Get all active Nix derivations for an operation
