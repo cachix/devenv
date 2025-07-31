@@ -346,19 +346,6 @@ impl RatatuiDisplay {
                 let success = matches!(result, OperationResult::Success);
                 self.complete_operation(&id, success)?;
             }
-            // Don't print any log messages - they are shown in the TUI activity list
-            TuiEvent::LogMessage { .. } => {}
-            TuiEvent::NixDerivationStart { .. } => {}
-            TuiEvent::NixPhaseProgress { .. } => {}
-            TuiEvent::NixDerivationEnd { .. } => {}
-            TuiEvent::NixDownloadStart { .. } => {}
-            TuiEvent::NixDownloadProgress { .. } => {}
-            TuiEvent::NixDownloadEnd { .. } => {}
-            TuiEvent::NixQueryStart { .. } => {}
-            TuiEvent::NixQueryEnd { .. } => {}
-            TuiEvent::NixActivityProgress { .. } => {
-                // Progress is handled in the graph display, no need to do anything here
-            }
             _ => {} // Handle other events as needed
         }
         Ok(())
