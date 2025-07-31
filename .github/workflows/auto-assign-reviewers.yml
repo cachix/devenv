@@ -1,13 +1,13 @@
 name: Auto Assign Reviewers
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize]
 
 jobs:
   assign-reviewers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Required for git blame
 
