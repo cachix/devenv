@@ -7,7 +7,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, LineGauge, Padding, Paragraph, Widget},
+    widgets::{LineGauge, Paragraph, Widget},
 };
 use std::sync::Arc;
 use std::time::Instant;
@@ -159,7 +159,6 @@ impl GraphDisplay {
                 progress: None,
                 generic_progress: None,
                 current_phase: None,
-                download_speed: None,
                 bytes_downloaded: None,
                 total_bytes: None,
                 depth,
@@ -172,10 +171,9 @@ impl GraphDisplay {
             .state
             .get_all_nix_activities_for_operation(&operation.id);
 
-        // Add active derivations or derivations with logs
+        // Add active derivations only
         for deriv in &derivations {
-            let has_logs = !self.state.get_build_logs(deriv.activity_id).is_empty();
-            if deriv.state == NixActivityState::Active || has_logs {
+            if deriv.state == NixActivityState::Active {
                 let mut activity = ActivityInfo::from_derivation(
                     deriv.clone(),
                     operation.parent.clone(),
@@ -247,7 +245,6 @@ impl GraphDisplay {
                 match download.state {
                     NixActivityState::Active => {
                         stats.downloads_running += 1;
-                        stats.total_download_speed += download.download_speed;
                     }
                     NixActivityState::Completed { success: true, .. } => {
                         stats.downloads_completed += 1
@@ -361,11 +358,8 @@ impl<'a> Widget for GraphWidget<'a> {
                         // Show up to 10 recent log lines
                         let max_log_lines = 10;
                         let log_lines_to_show = build_logs.len().min(max_log_lines);
-                        let log_height = if log_lines_to_show > 0 {
-                            log_lines_to_show
-                        } else {
-                            1
-                        };
+                        // Always use fixed height to ensure proper clearing
+                        let log_height = max_log_lines;
 
                         // Check if we have enough space
                         if current_y + log_height as u16 <= inner.bottom() {
@@ -383,48 +377,222 @@ impl<'a> Widget for GraphWidget<'a> {
                             let log_area =
                                 Rect::new(log_x, current_y, log_width, log_height as u16);
 
-                            // Create block with only left border and padding
-                            let block = Block::default()
-                                .borders(Borders::LEFT)
-                                .border_style(Style::default().fg(Color::DarkGray))
-                                .padding(Padding {
-                                    left: 1, // Add space after the left border
-                                    right: 0,
-                                    top: 0,
-                                    bottom: 0,
-                                });
+                            // We'll render the border and content manually for better control
 
-                            // Prepare log content
-                            let log_content = if log_lines_to_show > 0 {
+                            // Prepare log content with padding to fill the area
+                            let mut log_content = Vec::new();
+
+                            if log_lines_to_show > 0 {
                                 // Get recent log lines
                                 let start_idx = build_logs.len().saturating_sub(log_lines_to_show);
-                                let lines: Vec<Line> = build_logs[start_idx..]
-                                    .iter()
-                                    .map(|log| {
-                                        Line::from(Span::styled(
-                                            log.as_str(),
-                                            Style::default().fg(Color::Gray),
-                                        ))
-                                    })
-                                    .collect();
-                                lines
+                                for log in &build_logs[start_idx..] {
+                                    log_content.push(Line::from(Span::styled(
+                                        log.as_str(),
+                                        Style::default().fg(Color::Gray),
+                                    )));
+                                }
                             } else {
                                 // Show waiting message
-                                vec![Line::from(Span::styled(
+                                log_content.push(Line::from(Span::styled(
                                     "Waiting for build output...",
                                     Style::default()
                                         .fg(Color::DarkGray)
                                         .add_modifier(Modifier::ITALIC),
-                                ))]
+                                )));
+                            }
+
+                            // Pad with empty lines to fill the block
+                            while log_content.len() < max_log_lines {
+                                log_content.push(Line::from(""));
+                            }
+
+                            // Render logs manually to ensure proper clearing
+                            for (i, line) in log_content.iter().enumerate() {
+                                let y = log_area.y + i as u16;
+                                if y < log_area.bottom() {
+                                    // Clear the entire line first
+                                    for x in 0..log_area.width {
+                                        if let Some(cell) = buf.cell_mut((log_area.x + x, y)) {
+                                            cell.set_char(' ').set_style(Style::default());
+                                        }
+                                    }
+
+                                    // Draw the left border
+                                    if let Some(cell) = buf.cell_mut((log_area.x, y)) {
+                                        cell.set_char('│')
+                                            .set_style(Style::default().fg(Color::DarkGray));
+                                    }
+
+                                    // Render the log line with padding
+                                    let text_x = log_area.x + 2; // 1 for border, 1 for padding
+                                    let text_width = log_area.width.saturating_sub(2);
+
+                                    // Get the text content from the line
+                                    let text_content = line
+                                        .spans
+                                        .iter()
+                                        .map(|span| span.content.as_ref())
+                                        .collect::<String>();
+
+                                    // Render each character explicitly to ensure spaces are rendered
+                                    for (i, ch) in text_content.chars().enumerate() {
+                                        if i < text_width as usize {
+                                            if let Some(cell) = buf.cell_mut((text_x + i as u16, y))
+                                            {
+                                                cell.set_char(ch)
+                                                    .set_style(Style::default().fg(Color::Gray));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            current_y += max_log_lines as u16;
+                        }
+                    }
+                }
+
+                // If this is a download with progress, show progress bar below it
+                if activity.activity_type == NixActivityType::Download {
+                    // Calculate progress
+                    let progress_ratio = if let Some(progress) = activity.progress {
+                        Some(progress)
+                    } else if let Some(ref gp) = activity.generic_progress {
+                        if gp.expected > 0 {
+                            Some(gp.done as f64 / gp.expected as f64)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    if let Some(ratio) = progress_ratio {
+                        if current_y < inner.bottom() {
+                            // Draw tree structure with proper indentation
+                            let tree_indent = "  ".repeat(activity.depth + 1); // +1 for child indentation
+                            let tree_branch = "└─";
+
+                            let mut progress_spans = vec![];
+
+                            // Add selection indicator space
+                            progress_spans.push(Span::raw("  "));
+
+                            // Add tree structure
+                            progress_spans.push(Span::raw(&tree_indent));
+                            progress_spans.push(Span::styled(
+                                tree_branch,
+                                Style::default().fg(Color::DarkGray),
+                            ));
+
+                            // Add percentage (no space after tree)
+                            let percentage = format!("{:3.0}% ", ratio * 100.0);
+                            progress_spans
+                                .push(Span::styled(percentage, Style::default().fg(Color::White)));
+
+                            // Calculate position after prefix and percentage
+                            let prefix_width = 2 + tree_indent.len() + tree_branch.len() + 4; // 4 for "50% "
+
+                            // Render the prefix with percentage
+                            let prefix_line = Line::from(progress_spans);
+                            let prefix_paragraph = Paragraph::new(prefix_line);
+                            prefix_paragraph
+                                .render(Rect::new(inner.x, current_y, prefix_width as u16, 1), buf);
+
+                            // Calculate bytes text width to reserve space
+                            let bytes_text = if let Some(ref gp) = activity.generic_progress {
+                                // For downloads, generic progress contains byte counts
+                                if gp.expected > 1000 {
+                                    // Likely bytes, not package counts
+                                    format!(
+                                        "{} / {}",
+                                        crate::display::format_bytes(gp.done),
+                                        crate::display::format_bytes(gp.expected)
+                                    )
+                                } else if let (Some(downloaded), Some(total)) =
+                                    (activity.bytes_downloaded, activity.total_bytes)
+                                {
+                                    format!(
+                                        "{} / {}",
+                                        crate::display::format_bytes(downloaded),
+                                        crate::display::format_bytes(total)
+                                    )
+                                } else {
+                                    String::new()
+                                }
+                            } else if let (Some(downloaded), Some(total)) =
+                                (activity.bytes_downloaded, activity.total_bytes)
+                            {
+                                format!(
+                                    "{} / {}",
+                                    crate::display::format_bytes(downloaded),
+                                    crate::display::format_bytes(total)
+                                )
+                            } else {
+                                String::new()
                             };
+                            let bytes_text_width = bytes_text.len() as u16;
 
-                            // Create paragraph with the log content and block
-                            let log_paragraph = Paragraph::new(log_content).block(block);
+                            // Calculate exact position for bytes text (2 spaces from right)
+                            let bytes_x =
+                                inner.x + inner.width.saturating_sub(bytes_text_width + 2);
 
-                            // Render the logs with left border
-                            log_paragraph.render(log_area, buf);
+                            // Calculate gauge width to fill space between percentage and bytes
+                            let gauge_start = inner.x + prefix_width as u16;
+                            let gauge_end = bytes_x.saturating_sub(1); // 1 space before bytes
+                            let gauge_width = gauge_end.saturating_sub(gauge_start);
 
-                            current_y += log_height as u16;
+                            // Manually render the progress bar
+                            let filled_width = (gauge_width as f64 * ratio) as u16;
+                            let unfilled_width = gauge_width.saturating_sub(filled_width);
+
+                            // Draw filled portion
+                            if filled_width > 0 {
+                                let filled_bar = "━".repeat(filled_width as usize);
+                                let filled_span =
+                                    Span::styled(filled_bar, Style::default().fg(Color::Blue));
+                                let filled_line = Line::from(filled_span);
+                                let filled_paragraph = Paragraph::new(filled_line);
+                                filled_paragraph.render(
+                                    Rect::new(gauge_start, current_y, filled_width, 1),
+                                    buf,
+                                );
+                            }
+
+                            // Draw unfilled portion
+                            if unfilled_width > 0 {
+                                let unfilled_bar = "━".repeat(unfilled_width as usize);
+                                let unfilled_span = Span::styled(
+                                    unfilled_bar,
+                                    Style::default().fg(Color::DarkGray),
+                                );
+                                let unfilled_line = Line::from(unfilled_span);
+                                let unfilled_paragraph = Paragraph::new(unfilled_line);
+                                unfilled_paragraph.render(
+                                    Rect::new(
+                                        gauge_start + filled_width,
+                                        current_y,
+                                        unfilled_width,
+                                        1,
+                                    ),
+                                    buf,
+                                );
+                            }
+
+                            // Add download info aligned to the right (same as timing)
+                            if !bytes_text.is_empty() {
+                                let info_line = Line::from(Span::styled(
+                                    bytes_text,
+                                    Style::default().fg(Color::DarkGray),
+                                ));
+                                let info_paragraph = Paragraph::new(info_line);
+                                info_paragraph.render(
+                                    Rect::new(bytes_x, current_y, bytes_text_width, 1),
+                                    buf,
+                                );
+                            }
+
+                            current_y += 1;
                         }
                     }
                 }
@@ -454,29 +622,54 @@ impl Widget for SummaryWidget {
 
         // Left side: Summary stats in one line
         let mut spans = vec![];
+        let mut has_content = false;
 
-        // Add queries
-        spans.extend(self.format_summary(
-            "Queries",
-            self.stats.queries_running,
-            self.stats.queries_completed,
-        ));
-        spans.push(Span::styled("  │  ", Style::default().fg(Color::DarkGray)));
+        // Add queries if any activity
+        if self.stats.queries_running > 0 || self.stats.queries_completed > 0 {
+            if has_content {
+                spans.push(Span::styled("  │  ", Style::default().fg(Color::DarkGray)));
+            }
+            spans.extend(self.format_summary(
+                "Queries",
+                self.stats.queries_running,
+                self.stats.queries_completed,
+            ));
+            has_content = true;
+        }
 
-        // Add downloads
-        spans.extend(self.format_summary(
-            "Downloads",
-            self.stats.downloads_running,
-            self.stats.downloads_completed,
-        ));
-        spans.push(Span::styled("  │  ", Style::default().fg(Color::DarkGray)));
+        // Add downloads if any activity
+        if self.stats.downloads_running > 0 || self.stats.downloads_completed > 0 {
+            if has_content {
+                spans.push(Span::styled("  │  ", Style::default().fg(Color::DarkGray)));
+            }
+            spans.extend(self.format_summary(
+                "Downloads",
+                self.stats.downloads_running,
+                self.stats.downloads_completed,
+            ));
+            has_content = true;
+        }
 
-        // Add builds
-        spans.extend(self.format_summary(
-            "Builds",
-            self.stats.builds_running,
-            self.stats.builds_completed,
-        ));
+        // Add builds if any activity
+        if self.stats.builds_running > 0 || self.stats.builds_completed > 0 {
+            if has_content {
+                spans.push(Span::styled("  │  ", Style::default().fg(Color::DarkGray)));
+            }
+            spans.extend(self.format_summary(
+                "Builds",
+                self.stats.builds_running,
+                self.stats.builds_completed,
+            ));
+            has_content = true;
+        }
+
+        // If no activity at all, show a simple message
+        if !has_content {
+            spans.push(Span::styled(
+                "No activity",
+                Style::default().fg(Color::DarkGray),
+            ));
+        }
 
         let summary_line = Line::from(spans);
         let summary_paragraph = Paragraph::new(vec![summary_line]);
@@ -512,19 +705,36 @@ impl SummaryWidget {
         // Category name
         spans.push(Span::raw(format!("{}: ", category)));
 
-        // Running count with blue color
-        spans.push(Span::styled(
-            format!("{}", running),
-            Style::default().fg(Color::Blue),
-        ));
-        spans.push(Span::raw(" running, "));
+        let mut parts = vec![];
 
-        // Done count with green color
-        spans.push(Span::styled(
-            format!("{}", done),
-            Style::default().fg(Color::Green),
-        ));
-        spans.push(Span::raw(" done"));
+        // Only show running if > 0
+        if running > 0 {
+            parts.push(vec![
+                Span::styled(format!("{}", running), Style::default().fg(Color::Blue)),
+                Span::raw(" running"),
+            ]);
+        }
+
+        // Only show done if > 0
+        if done > 0 {
+            parts.push(vec![
+                Span::styled(format!("{}", done), Style::default().fg(Color::Green)),
+                Span::raw(" done"),
+            ]);
+        }
+
+        // Join parts with comma
+        for (i, part) in parts.iter().enumerate() {
+            if i > 0 {
+                spans.push(Span::raw(", "));
+            }
+            spans.extend(part.clone());
+        }
+
+        // If both are 0 (shouldn't happen due to outer check, but just in case)
+        if parts.is_empty() {
+            spans.push(Span::styled("0", Style::default().fg(Color::DarkGray)));
+        }
 
         spans
     }
@@ -541,7 +751,6 @@ pub struct ActivityInfo {
     progress: Option<f64>,
     generic_progress: Option<ActivityProgress>, // New field for generic progress
     current_phase: Option<String>,
-    download_speed: Option<f64>,
     bytes_downloaded: Option<u64>,
     total_bytes: Option<u64>,
     depth: usize,
@@ -563,7 +772,6 @@ impl ActivityInfo {
             progress: None,
             generic_progress: None,
             current_phase: deriv.current_phase,
-            download_speed: None,
             bytes_downloaded: None,
             total_bytes: None,
             depth,
@@ -589,7 +797,6 @@ impl ActivityInfo {
             progress,
             generic_progress: None,
             current_phase: None,
-            download_speed: Some(download.download_speed),
             bytes_downloaded: Some(download.bytes_downloaded),
             total_bytes: download.total_bytes,
             depth,
@@ -607,7 +814,6 @@ impl ActivityInfo {
             progress: None,
             generic_progress: None,
             current_phase: None,
-            download_speed: None,
             bytes_downloaded: None,
             total_bytes: None,
             depth,
@@ -708,51 +914,18 @@ impl ActivityInfo {
             ));
         }
 
-        // Download stats - only show if we have actual byte data
-        if self.activity_type == NixActivityType::Download {
-            if let (Some(downloaded), Some(speed)) = (self.bytes_downloaded, self.download_speed) {
-                // Only show byte stats if we have actual download data (not just 0 bytes)
-                if downloaded > 0 || self.total_bytes.is_some() {
-                    spans.push(Span::raw(" - "));
-                    if let Some(total) = self.total_bytes {
-                        spans.push(Span::raw(format!(
-                            "{}/{} @ {}",
-                            crate::display::format_bytes(downloaded),
-                            crate::display::format_bytes(total),
-                            crate::display::format_speed(speed)
-                        )));
-                    } else {
-                        spans.push(Span::raw(format!(
-                            "{} @ {}",
-                            crate::display::format_bytes(downloaded),
-                            crate::display::format_speed(speed)
-                        )));
-                    }
-                }
-            }
-        }
+        // Download stats are now shown as a child progress bar, not inline
 
-        // Calculate progress value and label
-        let (progress_ratio, progress_label) = if let Some(progress) = self.progress {
+        // Calculate progress value and label (but don't show inline for downloads)
+        let (progress_ratio, progress_label) = if self.activity_type == NixActivityType::Download {
+            // Downloads show progress as a child, not inline
+            (None, None)
+        } else if let Some(progress) = self.progress {
             (Some(progress), None)
         } else if let Some(ref gp) = self.generic_progress {
             if gp.expected > 0 {
                 let ratio = gp.done as f64 / gp.expected as f64;
-                let label = if self.activity_type == NixActivityType::Download {
-                    // For downloads with bytes, format them nicely
-                    if gp.expected > 1000 {
-                        // These are bytes, not package counts
-                        format!(
-                            "{}/{}",
-                            crate::display::format_bytes(gp.done),
-                            crate::display::format_bytes(gp.expected)
-                        )
-                    } else if gp.done == 0 && gp.expected == 1 {
-                        "waiting".to_string()
-                    } else {
-                        format!("{}/{}", gp.done, gp.expected)
-                    }
-                } else if gp.running > 0 || gp.failed > 0 {
+                let label = if gp.running > 0 || gp.failed > 0 {
                     format!(
                         "{}/{} ({} running, {} failed)",
                         gp.done, gp.expected, gp.running, gp.failed
@@ -845,5 +1018,4 @@ struct SummaryStats {
     queries_running: usize,
     queries_completed: usize,
     queries_failed: usize,
-    total_download_speed: f64,
 }

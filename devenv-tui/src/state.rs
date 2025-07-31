@@ -166,8 +166,8 @@ impl TuiState {
                 // Clean up progress data
                 inner.activity_progress.remove(&activity_id);
 
-                // Clean up build logs for this activity (optional, could keep for review)
-                // inner.build_logs.remove(&activity_id);
+                // Clean up build logs for this activity
+                inner.build_logs.remove(&activity_id);
             }
 
             TuiEvent::NixDownloadStart {

@@ -1,4 +1,4 @@
-- build logs widget doesn't show logs as they progress
-- parse "evaluating flake" to track begining/endingf
-- regression tests against nix
+- parse "evaluating flake" to track begining/ending
 - hierarchy for builds
+- regression tests against nix
+- build logs get garbled if they have colors when switching
