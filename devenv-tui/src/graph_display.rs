@@ -2,6 +2,7 @@ use crate::{
     ActivityProgress, FetchTreeInfo, NixActivityState, NixActivityType, NixDerivationInfo,
     NixDownloadInfo, NixQueryInfo, OperationId, TuiState,
 };
+use ansi_to_tui::IntoText;
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -396,10 +397,28 @@ impl<'a> Widget for GraphWidget<'a> {
                                 // Get recent log lines
                                 let start_idx = build_logs.len().saturating_sub(log_lines_to_show);
                                 for log in &build_logs[start_idx..] {
-                                    log_content.push(Line::from(Span::styled(
-                                        log.as_str(),
-                                        Style::default().fg(Color::Gray),
-                                    )));
+                                    // Parse ANSI codes in the log line
+                                    match log.as_bytes().into_text() {
+                                        Ok(text) => {
+                                            // The text might have multiple lines, take the first one
+                                            if let Some(line) = text.lines.into_iter().next() {
+                                                log_content.push(line);
+                                            } else {
+                                                // If parsing resulted in no lines, show the raw text
+                                                log_content.push(Line::from(Span::styled(
+                                                    log.as_str(),
+                                                    Style::default().fg(Color::Gray),
+                                                )));
+                                            }
+                                        }
+                                        Err(_) => {
+                                            // If parsing fails, show the raw text
+                                            log_content.push(Line::from(Span::styled(
+                                                log.as_str(),
+                                                Style::default().fg(Color::Gray),
+                                            )));
+                                        }
+                                    }
                                 }
                             } else {
                                 // Show waiting message
@@ -416,17 +435,13 @@ impl<'a> Widget for GraphWidget<'a> {
                                 log_content.push(Line::from(""));
                             }
 
-                            // Render logs manually to ensure proper clearing
+                            // First, clear the log area using Ratatui's Clear widget
+                            ratatui::widgets::Clear.render(log_area, buf);
+
+                            // Now render the log content
                             for (i, line) in log_content.iter().enumerate() {
                                 let y = log_area.y + i as u16;
                                 if y < log_area.bottom() {
-                                    // Clear the entire line first
-                                    for x in 0..log_area.width {
-                                        if let Some(cell) = buf.cell_mut((log_area.x + x, y)) {
-                                            cell.set_char(' ').set_style(Style::default());
-                                        }
-                                    }
-
                                     // Draw the left border
                                     if let Some(cell) = buf.cell_mut((log_area.x, y)) {
                                         cell.set_char('│')
@@ -437,23 +452,9 @@ impl<'a> Widget for GraphWidget<'a> {
                                     let text_x = log_area.x + 2; // 1 for border, 1 for padding
                                     let text_width = log_area.width.saturating_sub(2);
 
-                                    // Get the text content from the line
-                                    let text_content = line
-                                        .spans
-                                        .iter()
-                                        .map(|span| span.content.as_ref())
-                                        .collect::<String>();
-
-                                    // Render each character explicitly to ensure spaces are rendered
-                                    for (i, ch) in text_content.chars().enumerate() {
-                                        if i < text_width as usize {
-                                            if let Some(cell) = buf.cell_mut((text_x + i as u16, y))
-                                            {
-                                                cell.set_char(ch)
-                                                    .set_style(Style::default().fg(Color::Gray));
-                                            }
-                                        }
-                                    }
+                                    // Render the line using Paragraph widget to handle styled spans properly
+                                    let paragraph = Paragraph::new(line.clone());
+                                    paragraph.render(Rect::new(text_x, y, text_width, 1), buf);
                                 }
                             }
 

@@ -38,6 +38,9 @@ devenv-eval-cache = { path = "../devenv-eval-cache" }
 once_cell = { workspace = true }
 chrono = { workspace = true }
 
+# ANSI parsing
+ansi-to-tui = "7.0"
+
 [[bin]]
 name = "tui-replay"
 path = "src/bin/tui-replay.rs"
