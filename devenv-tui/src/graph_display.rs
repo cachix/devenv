@@ -223,10 +223,10 @@ impl GraphDisplay {
     fn calculate_summary(&self) -> SummaryStats {
         let mut stats = SummaryStats::default();
 
-        // Get all activities across all operations
-        let operations = self.state.get_active_operations();
+        // Get ALL operations (not just active ones) to include completed activities
+        let all_operations = self.state.get_all_operations();
 
-        for op in &operations {
+        for op in &all_operations {
             // Get all Nix activities for this operation
             let (derivations, downloads, queries) =
                 self.state.get_all_nix_activities_for_operation(&op.id);
@@ -299,13 +299,13 @@ impl Widget for &mut GraphDisplay {
                 vec![
                     Constraint::Length(20), // Build logs area (reduced to 20 lines)
                     Constraint::Min(1),     // Graph area uses remaining space
-                    Constraint::Length(5),  // Summary area (always visible, fixed height)
+                    Constraint::Length(1),  // Summary area (always visible, 1 line)
                 ]
             } else {
                 vec![
                     Constraint::Length(0), // No logs area
                     Constraint::Min(1),    // Graph area uses remaining space
-                    Constraint::Length(5), // Summary area (always visible, fixed height)
+                    Constraint::Length(1), // Summary area (always visible, 1 line)
                 ]
             })
             .split(area);
@@ -440,80 +440,60 @@ struct SummaryWidget {
 
 impl Widget for SummaryWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // No borders for a cleaner look
-        // Add a separator line at the top
-        if area.height > 0 {
-            let separator = "─".repeat(area.width as usize);
-            let separator_line = Line::from(Span::styled(
-                separator,
-                Style::default().fg(Color::DarkGray),
-            ));
-            let separator_area = Rect {
-                x: area.x,
-                y: area.y,
-                width: area.width,
-                height: 1,
-            };
-            Paragraph::new(separator_line).render(separator_area, buf);
-        }
-
-        // Render summary content below separator
-        let content_area = Rect {
-            x: area.x + 1,
-            y: area.y + 1,
-            width: area.width.saturating_sub(1),
-            height: area.height.saturating_sub(1),
-        };
-
-        // Split the content area into left (summary) and right (help) sections
+        // Split the area into left (summary) and right (help) sections
         let split = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Min(50),    // Summary stats
                 Constraint::Length(40), // Help text
             ])
-            .split(content_area);
+            .split(area);
 
-        // Left side: Summary stats
-        let summary_lines = vec![
-            self.format_summary_line(
-                "Queries",
-                self.stats.queries_running,
-                self.stats.queries_completed,
-            ),
-            self.format_summary_line(
-                "Downloads",
-                self.stats.downloads_running,
-                self.stats.downloads_completed,
-            ),
-            self.format_summary_line(
-                "Builds",
-                self.stats.builds_running,
-                self.stats.builds_completed,
-            ),
-        ];
+        // Left side: Summary stats in one line
+        let mut spans = vec![];
 
-        let summary_paragraph = Paragraph::new(summary_lines);
+        // Add queries
+        spans.extend(self.format_summary(
+            "Queries",
+            self.stats.queries_running,
+            self.stats.queries_completed,
+        ));
+        spans.push(Span::styled("  │  ", Style::default().fg(Color::DarkGray)));
+
+        // Add downloads
+        spans.extend(self.format_summary(
+            "Downloads",
+            self.stats.downloads_running,
+            self.stats.downloads_completed,
+        ));
+        spans.push(Span::styled("  │  ", Style::default().fg(Color::DarkGray)));
+
+        // Add builds
+        spans.extend(self.format_summary(
+            "Builds",
+            self.stats.builds_running,
+            self.stats.builds_completed,
+        ));
+
+        let summary_line = Line::from(spans);
+        let summary_paragraph = Paragraph::new(vec![summary_line]);
         summary_paragraph.render(split[0], buf);
 
         // Right side: Help text
         if split.len() > 1 && split[1].width > 10 {
             let help_lines = if self.has_selection {
-                vec![
-                    Line::from(vec![
-                        Span::styled("↑↓", Style::default().fg(Color::Yellow)),
-                        Span::raw(" navigate"),
-                    ]),
-                    Line::from(vec![
-                        Span::styled("Esc", Style::default().fg(Color::Yellow)),
-                        Span::raw(" deselect"),
-                    ]),
-                ]
-            } else {
+                // When showing build logs, only show the deselect option
+                vec![Line::from(vec![
+                    Span::styled("Esc", Style::default().fg(Color::Yellow)),
+                    Span::raw(" deselect"),
+                ])]
+            } else if self.stats.builds_running > 0 {
                 vec![Line::from(vec![
                     Span::styled("↑↓", Style::default().fg(Color::Yellow)),
                     Span::raw(" show build logs"),
                 ])]
+            } else {
+                vec![]
             };
 
             let help_paragraph = Paragraph::new(help_lines).alignment(Alignment::Right);
@@ -523,42 +503,27 @@ impl Widget for SummaryWidget {
 }
 
 impl SummaryWidget {
-    fn format_summary_line(&self, category: &str, running: usize, done: usize) -> Line {
+    fn format_summary(&self, category: &str, running: usize, done: usize) -> Vec<Span> {
         let mut spans = vec![];
 
-        // Calculate max width needed for each column
-        let max_running = self
-            .stats
-            .queries_running
-            .max(self.stats.downloads_running)
-            .max(self.stats.builds_running);
-        let max_done = self
-            .stats
-            .queries_completed
-            .max(self.stats.downloads_completed)
-            .max(self.stats.builds_completed);
+        // Category name
+        spans.push(Span::raw(format!("{}: ", category)));
 
-        let running_width = max_running.to_string().len().max(1);
-        let done_width = max_done.to_string().len().max(1);
+        // Running count with blue color
+        spans.push(Span::styled(
+            format!("{}", running),
+            Style::default().fg(Color::Blue),
+        ));
+        spans.push(Span::raw(" running, "));
 
-        // Category name (right-padded to 10 chars for alignment)
-        spans.push(Span::raw(format!("{:>10}: ", category)));
+        // Done count with green color
+        spans.push(Span::styled(
+            format!("{}", done),
+            Style::default().fg(Color::Green),
+        ));
+        spans.push(Span::raw(" done"));
 
-        // Running count with blue color (right-aligned)
-        spans.push(Span::raw(format!(
-            "{:>width$} ",
-            running,
-            width = running_width
-        )));
-        spans.push(Span::styled("running", Style::default().fg(Color::Blue)));
-
-        spans.push(Span::raw(" "));
-
-        // Done count with green color (right-aligned)
-        spans.push(Span::raw(format!("{:>width$} ", done, width = done_width)));
-        spans.push(Span::styled("done", Style::default().fg(Color::Green)));
-
-        Line::from(spans)
+        spans
     }
 }
 
@@ -731,8 +696,13 @@ impl ActivityInfo {
 
         // Current phase for builds
         if let Some(phase) = &self.current_phase {
-            spans.push(Span::raw(" - "));
-            spans.push(Span::styled(phase, Style::default().fg(Color::Magenta)));
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(
+                phase,
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(style_modifier),
+            ));
         }
 
         // Download stats - only show if we have actual byte data

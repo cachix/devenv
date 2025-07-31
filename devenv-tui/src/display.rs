@@ -316,61 +316,19 @@ impl RatatuiDisplay {
 
     /// Show interrupted state for all active operations
     fn show_interrupted_operations(&mut self) -> io::Result<()> {
-        if self.active_operations.is_empty() {
-            return Ok(());
-        }
+        // Show final summary instead of active operations
+        let graph_display = &mut self.graph_display;
 
         self.terminal.draw(|frame| {
-            Self::draw_interrupted_operations(frame, &self.active_operations);
+            let area = frame.area();
+
+            // Clear the screen
+            frame.render_widget(ratatui::widgets::Clear, area);
+
+            // Render the full graph display which will show the summary
+            graph_display.render(area, frame.buffer_mut());
         })?;
         Ok(())
-    }
-
-    /// Draw interrupted operations with gray pause icons
-    fn draw_interrupted_operations(
-        frame: &mut Frame,
-        active_operations: &HashMap<OperationId, OperationWidget>,
-    ) {
-        let area = frame.area();
-
-        if active_operations.is_empty() {
-            return;
-        }
-
-        // Create layout for operations - same logic as normal rendering
-        let mut operations: Vec<_> = active_operations.values().collect();
-        operations.sort_by_key(|op| &op.start_time);
-
-        let constraints: Vec<Constraint> = operations
-            .iter()
-            .map(|op| {
-                let line = Line::from(vec![
-                    Span::raw("⏸ "), // Interrupted icon
-                    Span::raw(&op.message),
-                ]);
-                let paragraph = Paragraph::new(line).wrap(Wrap { trim: true });
-                let lines = paragraph.line_count(area.width);
-                Constraint::Length(lines.try_into().unwrap_or(1))
-            })
-            .collect();
-
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(constraints)
-            .split(area);
-
-        for (i, operation) in operations.iter().enumerate() {
-            if i < layout.len() {
-                // Render with interrupted icon
-                let line = Line::from(vec![
-                    Span::styled("⏸", Style::default().fg(Color::Yellow)),
-                    Span::raw(format!(" {}", operation.message)),
-                ]);
-
-                let widget = Paragraph::new(line).wrap(Wrap { trim: true });
-                frame.render_widget(widget, layout[i]);
-            }
-        }
     }
 
     /// Handle individual TUI events
