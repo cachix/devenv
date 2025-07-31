@@ -9,11 +9,11 @@ use crossterm::{
     terminal::{size, Clear, ClearType},
 };
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::Rect,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Paragraph, Widget, Wrap},
-    Frame, TerminalOptions, Viewport,
+    TerminalOptions, Viewport,
 };
 use std::collections::HashMap;
 use std::io::{self, Write};
