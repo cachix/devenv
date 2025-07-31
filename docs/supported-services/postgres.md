@@ -277,6 +277,18 @@ list of (submodule)
 SQL commands to run on this specific database during it’s initialization\.
 Multiple SQL expressions can be separated by semicolons\.
 
+**Note**: `initialSQL` runs with superuser privileges\. By default, any tables or objects
+created will be owned by the PostgreSQL superuser, not the specified `user`\.
+
+So you need to transfer ownership explicitly in your `initialSQL`:
+
+```
+CREATE TABLE users (id SERIAL PRIMARY KEY, name TEXT);
+ALTER TABLE users OWNER TO myuser;
+
+-- Or use schema options, which will run with the specified `user`'s permissions
+```
+
 
 
 *Type:*

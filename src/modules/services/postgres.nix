@@ -67,11 +67,6 @@ let
             if [ 1 -ne "$dbAlreadyExists" ]; then
               echo "Creating database: ${database.name}"
               echo 'CREATE DATABASE "${database.name}";' | psql --dbname postgres
-              if [ ${q database.initialSQL} != null ]
-              then
-                echo "Running initial SQL on database ${database.name}"
-                echo ${q database.initialSQL} | psql --dbname ${database.name}
-              fi
               ${lib.optionalString (database.user != null && database.pass != null) ''
               echo "Creating role ${database.user}..."
               psql --dbname postgres <<'EOF'
@@ -86,6 +81,11 @@ let
               GRANT ALL PRIVILEGES ON SCHEMA public TO "${database.user}";
               EOF
             ''}
+              if [ ${q database.initialSQL} != null ]
+              then
+                echo "Running initial SQL on database ${database.name}"
+                echo ${q database.initialSQL} | psql --dbname ${database.name}
+              fi
               ${lib.optionalString (database.schema != null) ''
               echo "Applying database schema on ${database.name}"
               if [ -f "${database.schema}" ]
