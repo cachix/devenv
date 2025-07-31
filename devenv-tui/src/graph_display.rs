@@ -1,6 +1,6 @@
 use crate::{
-    ActivityProgress, NixActivityState, NixActivityType, NixDerivationInfo, NixDownloadInfo,
-    NixQueryInfo, OperationId, TuiState,
+    ActivityProgress, FetchTreeInfo, NixActivityState, NixActivityType, NixDerivationInfo,
+    NixDownloadInfo, NixQueryInfo, OperationId, TuiState,
 };
 use ratatui::{
     buffer::Buffer,
@@ -170,8 +170,18 @@ impl GraphDisplay {
         let (derivations, downloads, queries) = self
             .state
             .get_all_nix_activities_for_operation(&operation.id);
+        let fetch_trees = self.state.get_fetch_trees_for_operation(&operation.id);
 
-        // Add active derivations only
+        // Add active fetch tree activities
+        for ft in &fetch_trees {
+            if matches!(ft.state, NixActivityState::Active) {
+                let activity =
+                    ActivityInfo::from_fetch_tree(ft.clone(), operation.parent.clone(), depth + 1);
+                activities.push(activity);
+            }
+        }
+
+        // Add active derivations
         for deriv in &derivations {
             if deriv.state == NixActivityState::Active {
                 let mut activity = ActivityInfo::from_derivation(
@@ -731,7 +741,7 @@ impl SummaryWidget {
             spans.extend(part.clone());
         }
 
-        // If both are 0 (shouldn't happen due to outer check, but just in case)
+        // If all are 0 (shouldn't happen due to outer check, but just in case)
         if parts.is_empty() {
             spans.push(Span::styled("0", Style::default().fg(Color::DarkGray)));
         }
@@ -766,7 +776,7 @@ impl ActivityInfo {
         Self {
             activity_type: NixActivityType::Build,
             activity_id: Some(deriv.activity_id),
-            name: deriv.derivation_name,
+            name: deriv.derivation_name.clone(),
             details: String::new(), // Remove machine info
             start_time: deriv.start_time,
             progress: None,
@@ -821,6 +831,27 @@ impl ActivityInfo {
         }
     }
 
+    fn from_fetch_tree(
+        fetch_tree: FetchTreeInfo,
+        _parent: Option<OperationId>,
+        depth: usize,
+    ) -> Self {
+        Self {
+            activity_type: NixActivityType::FetchTree,
+            activity_id: Some(fetch_tree.activity_id),
+            name: fetch_tree.message.clone(),
+            details: String::new(),
+            start_time: fetch_tree.start_time,
+            progress: None,
+            generic_progress: None,
+            current_phase: None,
+            bytes_downloaded: None,
+            total_bytes: None,
+            depth,
+            evaluation_count: None,
+        }
+    }
+
     /// Render a single line for this activity
     fn render_line(&self, x: u16, y: u16, width: u16, is_selected: bool, buf: &mut Buffer) -> u16 {
         let elapsed = self.start_time.elapsed();
@@ -832,9 +863,10 @@ impl ActivityInfo {
             NixActivityType::Download => "Downloading",
             NixActivityType::Query => "Querying",
             NixActivityType::Evaluating => "Evaluating",
+            NixActivityType::FetchTree => "Fetching",
             NixActivityType::Unknown => "Processing",
         };
-        let color = Color::Blue; // All in-progress activities are blue
+        let color = Color::Blue;
 
         // Build the line with indentation for hierarchy
         let mut spans = vec![];

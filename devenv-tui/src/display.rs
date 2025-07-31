@@ -9,7 +9,6 @@ use crossterm::{
     terminal::{size, Clear, ClearType},
 };
 use ratatui::{
-    layout::Rect,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Paragraph, Widget, Wrap},

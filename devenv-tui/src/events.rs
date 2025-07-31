@@ -111,6 +111,18 @@ pub enum TuiEvent {
         activity_id: u64,
         success: bool,
     },
+    /// Fetch tree activity started
+    FetchTreeStart {
+        operation_id: OperationId,
+        activity_id: u64,
+        message: String,
+    },
+    /// Fetch tree activity ended
+    FetchTreeEnd {
+        operation_id: OperationId,
+        activity_id: u64,
+        success: bool,
+    },
     /// Build log line for a specific activity
     BuildLog { activity_id: u64, line: String },
     /// File evaluation started
@@ -301,6 +313,16 @@ pub struct NixQueryInfo {
     pub state: NixActivityState,
 }
 
+/// Information about a fetch tree activity
+#[derive(Debug, Clone)]
+pub struct FetchTreeInfo {
+    pub operation_id: OperationId,
+    pub activity_id: u64,
+    pub message: String,
+    pub start_time: Instant,
+    pub state: NixActivityState,
+}
+
 /// State of a Nix activity
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NixActivityState {
@@ -315,6 +337,7 @@ pub enum NixActivityType {
     Download,
     Query,
     Evaluating,
+    FetchTree,
     Unknown,
 }
 

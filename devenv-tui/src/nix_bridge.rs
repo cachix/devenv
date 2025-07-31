@@ -259,6 +259,16 @@ impl NixLogBridge {
                     });
                 }
             }
+            ActivityType::FetchTree => {
+                // FetchTree activities show when fetching Git repos, tarballs, etc.
+                let message = text.clone();
+
+                let _ = self.tui_sender.send(TuiEvent::FetchTreeStart {
+                    operation_id,
+                    activity_id,
+                    message,
+                });
+            }
             _ => {
                 // For other activity types, we can add support as needed
                 tracing::debug!("Unhandled Nix activity type: {:?}", activity_type);
@@ -292,6 +302,13 @@ impl NixLogBridge {
                     }
                     ActivityType::QueryPathInfo => {
                         let _ = self.tui_sender.send(TuiEvent::NixQueryEnd {
+                            operation_id: activity_info.operation_id,
+                            activity_id,
+                            success,
+                        });
+                    }
+                    ActivityType::FetchTree => {
+                        let _ = self.tui_sender.send(TuiEvent::FetchTreeEnd {
                             operation_id: activity_info.operation_id,
                             activity_id,
                             success,
