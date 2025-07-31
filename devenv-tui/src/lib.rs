@@ -105,7 +105,6 @@ pub fn create_nix_bridge() -> Option<Arc<NixLogBridge>> {
 
 /// Cleanup TUI terminal state
 pub fn cleanup_tui() {
-    use ratatui::{backend::CrosstermBackend, Terminal};
     use std::io::Write;
 
     // First, send shutdown event to gracefully close the TUI event loop
@@ -118,16 +117,6 @@ pub fn cleanup_tui() {
     // Give the TUI loop a moment to process the shutdown event
     // TODO: avoid using a sleep. Use a different approach.
     std::thread::sleep(std::time::Duration::from_millis(50));
-
-    // Move cursor to the bottom of the active region
-    if let Ok(terminal) = Terminal::new(CrosstermBackend::new(std::io::stderr())) {
-        if let Ok(size) = terminal.size() {
-            let _ = crossterm::execute!(
-                std::io::stderr(),
-                crossterm::cursor::MoveTo(0, size.height - 1)
-            );
-        }
-    }
 
     // Disable raw mode first
     let _ = crossterm::terminal::disable_raw_mode();

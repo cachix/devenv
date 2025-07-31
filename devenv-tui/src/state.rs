@@ -357,6 +357,12 @@ impl TuiState {
             .collect()
     }
 
+    /// Get all operations (including completed ones)
+    pub fn get_all_operations(&self) -> Vec<Operation> {
+        let inner = self.inner.lock().unwrap();
+        inner.operations.values().cloned().collect()
+    }
+
     /// Get all root operations (operations without parents)
     pub fn get_root_operations(&self) -> Vec<Operation> {
         let inner = self.inner.lock().unwrap();
