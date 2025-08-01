@@ -691,7 +691,7 @@ impl Widget for SummaryWidget {
             let help_lines = if self.has_selection {
                 vec![Line::from(vec![
                     Span::styled("Esc", Style::default().fg(Color::Yellow)),
-                    Span::raw(" hide builg log"),
+                    Span::raw(" hide build log"),
                 ])]
             } else if self.stats.builds_running > 0 {
                 vec![Line::from(vec![
