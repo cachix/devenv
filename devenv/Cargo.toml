@@ -53,7 +53,8 @@ shell-escape.workspace = true
 rmcp.workspace = true
 rmcp-macros.workspace = true
 async-trait.workspace = true
-secretspec = "0.2.0"
+secretspec = "0.3.1"
+secrecy = "0.10"
 
 # Optional snix dependencies
 snix-eval = { git = "https://github.com/cachix/snix", optional = true }
@@ -67,4 +68,12 @@ nix-compat-derive = { git = "https://github.com/cachix/snix", optional = true }
 [features]
 default = []
 integration-tests = []
-snix = ["dep:snix-eval", "dep:snix-glue", "dep:snix-castore", "dep:snix-store", "dep:snix-build", "dep:nix-compat", "dep:nix-compat-derive"]
+snix = [
+    "dep:snix-eval",
+    "dep:snix-glue",
+    "dep:snix-castore",
+    "dep:snix-store",
+    "dep:snix-build",
+    "dep:nix-compat",
+    "dep:nix-compat-derive",
+]

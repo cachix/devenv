@@ -7,6 +7,7 @@ use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
 use miette::{bail, miette, Context, IntoDiagnostic, Result};
 use once_cell::sync::Lazy;
+use secrecy::ExposeSecret;
 use secretspec;
 use serde::Deserialize;
 use serde_json;
@@ -1248,8 +1249,19 @@ impl Devenv {
                 match secrets.validate()? {
                     Ok(validated_secrets) => {
                         // Store resolved secrets in OnceCell for Nix to use
+                        let resolved = secretspec::Resolved {
+                            secrets: validated_secrets
+                                .resolved
+                                .secrets
+                                .into_iter()
+                                .map(|(k, v)| (k, v.expose_secret().to_string()))
+                                .collect(),
+                            provider: validated_secrets.resolved.provider,
+                            profile: validated_secrets.resolved.profile,
+                        };
+
                         self.secretspec_resolved
-                            .set(validated_secrets.resolved)
+                            .set(resolved)
                             .map_err(|_| miette!("Secretspec resolved already set"))?;
                     }
                     Err(validation_errors) => {
