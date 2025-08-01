@@ -366,14 +366,25 @@ impl<'a> Widget for GraphWidget<'a> {
                     if let Some(activity_id) = activity.activity_id {
                         let build_logs = self.state.get_build_logs(activity_id);
 
-                        // Show up to 10 recent log lines
-                        let max_log_lines = 10;
-                        let log_lines_to_show = build_logs.len().min(max_log_lines);
-                        // Always use fixed height to ensure proper clearing
+                        // Calculate available space for logs
+                        let min_log_lines = 10;
+
+                        // Count remaining activities that need to be displayed
+                        let remaining_activities =
+                            self.activities.len().saturating_sub(activity_index + 1);
+                        // Reserve at least 2 lines per remaining activity (1 for the activity + 1 for spacing)
+                        let space_for_activities = remaining_activities * 2;
+
+                        let total_available = inner.bottom().saturating_sub(current_y);
+                        let available_for_logs =
+                            total_available.saturating_sub(space_for_activities as u16);
+                        let max_log_lines = available_for_logs.max(min_log_lines);
+                        let log_lines_to_show = build_logs.len().min(max_log_lines as usize);
+                        // Use calculated space but at least the minimum
                         let log_height = max_log_lines;
 
                         // Check if we have enough space
-                        if current_y + log_height as u16 <= inner.bottom() {
+                        if current_y + log_height <= inner.bottom() {
                             // Calculate same indent as the activity "Building" text
                             // Activities start with 2 spaces for selection indicator, then depth indent
                             let activity_indent = 2 + if activity.depth > 0 {
@@ -385,8 +396,7 @@ impl<'a> Widget for GraphWidget<'a> {
                             // Position logs at same horizontal position as "Building" text
                             let log_x = inner.x + activity_indent as u16;
                             let log_width = inner.width.saturating_sub(activity_indent as u16);
-                            let log_area =
-                                Rect::new(log_x, current_y, log_width, log_height as u16);
+                            let log_area = Rect::new(log_x, current_y, log_width, log_height);
 
                             // We'll render the border and content manually for better control
 
@@ -431,7 +441,7 @@ impl<'a> Widget for GraphWidget<'a> {
                             }
 
                             // Pad with empty lines to fill the block
-                            while log_content.len() < max_log_lines {
+                            while log_content.len() < max_log_lines as usize {
                                 log_content.push(Line::from(""));
                             }
 
@@ -458,7 +468,7 @@ impl<'a> Widget for GraphWidget<'a> {
                                 }
                             }
 
-                            current_y += max_log_lines as u16;
+                            current_y += log_height;
                         }
                     }
                 }
