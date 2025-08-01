@@ -689,10 +689,9 @@ impl Widget for SummaryWidget {
         // Right side: Help text
         if split.len() > 1 && split[1].width > 10 {
             let help_lines = if self.has_selection {
-                // When showing build logs, only show the deselect option
                 vec![Line::from(vec![
                     Span::styled("Esc", Style::default().fg(Color::Yellow)),
-                    Span::raw(" deselect"),
+                    Span::raw(" hide builg log"),
                 ])]
             } else if self.stats.builds_running > 0 {
                 vec![Line::from(vec![
