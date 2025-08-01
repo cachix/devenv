@@ -1,9 +1,8 @@
 [package]
 name = "devenv-cache-core"
-version = "0.1.0"
-edition = "2021"
-description = "Core utilities for file tracking and caching in devenv"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 # Database
