@@ -12,6 +12,7 @@
 , pkg-config
 , glibcLocalesUtf8
 , build_tasks ? false
+,
 }:
 
 rustPlatform.buildRustPackage {
@@ -36,16 +37,14 @@ rustPlatform.buildRustPackage {
   ];
 
   cargoBuildFlags =
-    if build_tasks
-    then [ "-p devenv-tasks" ]
-    else [ "-p devenv -p devenv-run-tests" ];
+    if build_tasks then [ "-p devenv-tasks" ] else [ "-p devenv -p devenv-run-tests" ];
 
   doCheck = !build_tasks;
 
   cargoLock = {
     lockFile = ./Cargo.lock;
     outputHashes = {
-      "nix-compat-0.1.0" = "sha256-ito4pvET2NEZpiVgEF95HH6VJewQ7p3mJLzPT86o4EA=";
+      "nix-compat-0.1.0" = "sha256-Wc3bQCZWrjFdXp9r/IRBpsfz/IYSXQLXxzeJ27YZfsU=";
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
     };
   };
@@ -57,11 +56,13 @@ rustPlatform.buildRustPackage {
     protobuf
   ];
 
-  buildInputs = [
-    openssl
-  ] ++ lib.optional stdenv.isDarwin apple-sdk_11
-  # secretspec
-  ++ lib.optional (!stdenv.isDarwin) dbus;
+  buildInputs =
+    [
+      openssl
+    ]
+    ++ lib.optional stdenv.isDarwin apple-sdk_11
+    # secretspec
+    ++ lib.optional (!stdenv.isDarwin) dbus;
 
   # Fix proto files for snix dependencies
   preBuild = ''
@@ -72,21 +73,20 @@ rustPlatform.buildRustPackage {
     # Create proto directory structure that snix expects
     cd "$NIX_BUILD_TOP/cargo-vendor-dir"
     mkdir -p snix/{castore,store,build}/protos
-    
+
     # Link proto files to the expected locations
     [ -d snix-castore-*/protos ] && cp snix-castore-*/protos/*.proto snix/castore/protos/ 2>/dev/null || true
-    [ -d snix-store-*/protos ] && cp snix-store-*/protos/*.proto snix/store/protos/ 2>/dev/null || true  
+    [ -d snix-store-*/protos ] && cp snix-store-*/protos/*.proto snix/store/protos/ 2>/dev/null || true
     [ -d snix-build-*/protos ] && cp snix-build-*/protos/*.proto snix/build/protos/ 2>/dev/null || true
-    
+
     cd - > /dev/null
   '';
 
   postInstall =
     let
-      setDefaultLocaleArchive =
-        lib.optionalString (glibcLocalesUtf8 != null) ''
-          --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
-        '';
+      setDefaultLocaleArchive = lib.optionalString (glibcLocalesUtf8 != null) ''
+        --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
+      '';
     in
     lib.optionalString (!build_tasks) ''
       wrapProgram $out/bin/devenv \

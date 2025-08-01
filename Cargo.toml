@@ -10,6 +10,7 @@ members = [
     "nix-conf-parser",
     "xtask",
     "devenv-cache-core",
+    "devenv-shell-hook",
 ]
 
 [workspace.package]
@@ -25,6 +26,7 @@ devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-tasks = { path = "devenv-tasks" }
 devenv-cache-core = { path = "devenv-cache-core" }
+devenv-shell-hook = { path = "devenv-shell-hook" }
 http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }

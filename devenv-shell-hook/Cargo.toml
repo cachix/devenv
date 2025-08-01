@@ -1,0 +1,21 @@
+[package]
+name = "devenv-shell-hook"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+which.workspace = true
+tempfile.workspace = true
+xdg.workspace = true
+miette.workspace = true
+shell-escape.workspace = true
+thiserror.workspace = true
+devenv-eval-cache.workspace = true
+devenv-cache-core.workspace = true
+sqlx.workspace = true

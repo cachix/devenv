@@ -1407,6 +1407,59 @@ impl Devenv {
 
         Ok(DevEnv { output: env.stdout })
     }
+
+    /// Get environment activation script for shell hooks
+    pub async fn get_activation_script(&self, immediate: bool) -> Result<String> {
+        if immediate {
+            // Try to get cached environment immediately
+            match self.get_dev_environment(false).await {
+                Ok(env) => {
+                    let bash_script = String::from_utf8(env.output).into_diagnostic()?;
+                    Ok(format!("# Immediate activation\n{}", bash_script))
+                }
+                Err(_) => {
+                    // If not cached, return a message and trigger background build
+                    info!("Starting background build");
+                    Ok("echo 'Building devenv environment in background...' >&2".to_string())
+                }
+            }
+        } else {
+            // Always build the environment
+            let env = self.get_dev_environment(false).await?;
+            let bash_script = String::from_utf8(env.output).into_diagnostic()?;
+            Ok(bash_script)
+        }
+    }
+
+    /// Handle shell hook integration - main entry point for shell hooks
+    pub async fn handle_shell_hook(&self, pwd: &Path, _options: Vec<String>) -> Result<String> {
+        // For now, simplified logic - check if we're in a devenv project
+        let devenv_nix = self.devenv_root.join("devenv.nix");
+        let devenv_yaml = self.devenv_root.join("devenv.yaml");
+
+        if !devenv_nix.exists() && !devenv_yaml.exists() {
+            // No project found
+            debug!("No devenv project found in {:?}", pwd);
+            return Ok(String::new());
+        }
+
+        // Check if we're in the right directory
+        if !pwd.starts_with(&self.devenv_root) {
+            // We're outside the project, return deactivation script
+            info!("Left devenv project");
+            return Ok("echo 'Left devenv project' >&2".to_string());
+        }
+
+        // We're in a devenv project, get the activation script
+        info!("Environment needs update for {:?}", self.devenv_root);
+        let activation_script = self.get_activation_script(true).await?;
+
+        // Format for shell hook usage
+        Ok(format!(
+            "# devenv shell hook activation\n{}",
+            activation_script
+        ))
+    }
 }
 
 fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
@@ -1444,7 +1497,7 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
 }
 
 pub struct DevEnv {
-    output: Vec<u8>,
+    pub output: Vec<u8>,
 }
 
 #[derive(Deserialize)]

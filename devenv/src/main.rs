@@ -30,7 +30,36 @@ async fn main() -> Result<()> {
     let command = match cli.command {
         None | Some(Commands::Version) => return print_version(),
         Some(Commands::Direnvrc) => {
+            eprintln!("⚠️  Warning: direnv support is deprecated and will be removed in a future version.");
+            eprintln!("   Please use the new shell-hook integration instead.");
+            eprintln!(
+                "   See https://devenv.sh/automatic-shell-activation for migration instructions."
+            );
+            eprintln!();
             print!("{}", *devenv::DIRENVRC);
+            return Ok(());
+        }
+        Some(Commands::ShellInit { shell }) => {
+            let shell_type = shell
+                .map(|s| s.parse())
+                .transpose()
+                .map_err(|e| miette::miette!("Invalid shell type: {}", e))?;
+            let script = devenv_shell_hook::init_shell(shell_type)?;
+            print!("{}", script);
+            return Ok(());
+        }
+        Some(Commands::ShellHookEval { pwd }) => {
+            // Get all args after "shell-hook-eval"
+            let args: Vec<String> = env::args().skip(2).collect();
+            let (parsed_pwd, options) = devenv_shell_hook::parse_options(&args);
+            let final_pwd = parsed_pwd.unwrap_or(&pwd);
+
+            // Use the new shell hook integration
+            let integration = devenv::shell_hook::ShellHookIntegration::new().await?;
+            let output = integration
+                .handle_directory_change(final_pwd, options)
+                .await?;
+            print!("{}", output);
             return Ok(());
         }
         Some(cmd) => cmd,
@@ -226,6 +255,8 @@ async fn main() -> Result<()> {
             devenv::mcp::run_mcp_server(config).await
         }
         Commands::Direnvrc => unreachable!(),
+        Commands::ShellInit { .. } => unreachable!(),
+        Commands::ShellHookEval { .. } => unreachable!(),
         Commands::Version => unreachable!(),
     }
 }

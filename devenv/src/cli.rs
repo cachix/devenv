@@ -324,6 +324,21 @@ pub enum Commands {
     )]
     Direnvrc,
 
+    #[command(about = "Initialize shell integration for automatic environment activation")]
+    ShellInit {
+        #[arg(
+            long,
+            help = "Shell type (bash, zsh, fish). Auto-detected if not specified"
+        )]
+        shell: Option<String>,
+    },
+
+    #[command(hide = true, about = "Internal command called by shell hooks")]
+    ShellHookEval {
+        #[arg(long)]
+        pwd: std::path::PathBuf,
+    },
+
     #[command(about = "Print the version of devenv.")]
     Version,
 

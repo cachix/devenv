@@ -5,6 +5,7 @@ pub mod log;
 pub mod mcp;
 pub(crate) mod nix;
 pub mod nix_backend;
+pub mod shell_hook;
 #[cfg(feature = "snix")]
 pub(crate) mod snix_backend;
 mod util;
