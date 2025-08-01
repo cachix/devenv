@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use devenv_eval_cache::internal_log::InternalLog;
 use devenv_tui::{
-    create_nix_bridge, init_tui, DisplayMode, LogLevel, LogSource, OperationId, TuiEvent,
+    create_nix_bridge, get_event_sender, init_tui, LogLevel, LogSource, OperationId, TuiEvent,
 };
 use std::collections::HashMap;
 use std::fs::File;
@@ -77,19 +77,11 @@ async fn main() -> Result<()> {
     }
 
     // Initialize TUI
-    let (_layer, state) = init_tui(DisplayMode::Ratatui);
+    let _layer = init_tui();
     let nix_bridge = create_nix_bridge();
 
-    // Create a channel to send events to TUI
-    let (tx, mut rx) = mpsc::unbounded_channel::<TuiEvent>();
-
-    // Forward events to TUI state
-    let state_clone = state.clone();
-    tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            state_clone.handle_event(event);
-        }
-    });
+    // Get access to the global sender for TUI events
+    let tx = get_event_sender().expect("TUI not initialized properly");
 
     // Create main operation
     let main_op_id = OperationId::new("replay");

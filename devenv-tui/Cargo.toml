@@ -11,9 +11,9 @@ repository.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
 futures = { workspace = true }
 
-# TUI library
-ratatui = { version = "0.29", features = ["scrolling-regions", "unstable-rendered-line-info"] }
-crossterm = { version = "0.28", features = ["event-stream"] }
+# TUI library - using PR #1964 for extended inline mode
+ratatui = { git = "https://github.com/ratatui/ratatui", rev = "fd8e0f024847af467129e0a166390d7e291c1b2e", features = ["crossterm", "underline-color", "all-widgets", "macros"] }
+crossterm = { version = "0.29", features = ["event-stream"] }
 
 # Tracing integration
 tracing = { workspace = true }
@@ -38,8 +38,11 @@ devenv-eval-cache = { path = "../devenv-eval-cache" }
 once_cell = { workspace = true }
 chrono = { workspace = true }
 
-# ANSI parsing
-ansi-to-tui = "7.0"
+# ANSI parsing - using branch with ratatui 0.30 support
+ansi-to-tui = { git = "https://github.com/ratatui/ansi-to-tui", branch = "jm/ratatui-0.30" }
+
+# Human-readable formatting
+human-repr = "1.1"
 
 [[bin]]
 name = "tui-replay"
