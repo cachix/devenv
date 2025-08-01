@@ -1,6 +1,5 @@
-use crate::{LogLevel, LogSource, OperationId, OperationResult, TuiEvent, TuiState};
+use crate::{LogLevel, LogSource, OperationId, OperationResult, TuiEvent};
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{field::Visit, span, Subscriber};
 use tracing_core::{Event, Field};
@@ -12,7 +11,7 @@ pub struct DevenvTuiLayer {
 }
 
 impl DevenvTuiLayer {
-    pub fn new(event_sender: mpsc::UnboundedSender<TuiEvent>, _state: Arc<TuiState>) -> Self {
+    pub fn new(event_sender: mpsc::UnboundedSender<TuiEvent>) -> Self {
         Self { event_sender }
     }
 
