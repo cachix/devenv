@@ -5,14 +5,29 @@
 , ...
 }:
 {
-  env.DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix-cli;
-  # ignore annoying browserlists warning that breaks pre-commit hooks
-  env.BROWSERSLIST_IGNORE_OLD_DATA = "1";
-  env.RUST_LOG = "devenv=debug";
-  env.RUST_LOG_SPAN_EVENTS = "full";
-  env.DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
+  env = {
+    DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix-cli;
+    # ignore annoying browserlists warning that breaks pre-commit hooks
+    BROWSERSLIST_IGNORE_OLD_DATA = "1";
+    RUST_LOG = "devenv=debug";
+    RUST_LOG_SPAN_EVENTS = "full";
+    DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
+  };
 
   apple.sdk = if pkgs.stdenv.isDarwin then pkgs.apple-sdk_11 else null;
+
+
+  claude.code = {
+    enable = true;
+    permissions = {
+      WebFetch = {
+        allow = [ "domain:github.com" "domain:docs.rs" "domain:docs.anthropic.com" ];
+      };
+      Bash = {
+        allow = [ "rg:*" "cargo test:*" "nix search:*" "devenv-run-tests:*" "nix-instantiate:*" ];
+      };
+    };
+  };
 
   packages = [
     pkgs.cairo
@@ -31,23 +46,33 @@
     pkgs.dbus # secretspec
   ];
 
-  languages.nix.enable = true;
-  # for cli
-  languages.rust.enable = true;
-  # for docs
-  languages.python.enable = true;
-  # it breaks glibc
-  languages.python.manylinux.enable = false;
-  # speed it up
-  languages.python.uv.enable = true;
-  languages.python.venv.enable = true;
-  languages.python.venv.requirements = ./requirements.txt;
-  languages.javascript.enable = true;
-  languages.javascript.npm.enable = true;
-  languages.javascript.npm.install.enable = true;
+  languages = {
+    nix.enable = true;
+    # for cli
+    rust.enable = true;
+    # for docs
+    python = {
+      enable = true;
+      # speed it up
+      uv.enable = true;
+      venv = {
+        enable = true;
+        requirements = ./requirements.txt;
+      };
+    };
+    javascript = {
+      enable = true;
+      npm = {
+        enable = true;
+        install.enable = true;
+      };
+    };
+  };
 
-  devcontainer.enable = true;
-  devcontainer.settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
+  devcontainer = {
+    enable = true;
+    settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
+  };
   difftastic.enable = true;
 
   processes = {
@@ -253,12 +278,14 @@
   git-hooks.hooks = {
     nixpkgs-fmt.enable = true;
     rustfmt.enable = true;
-    markdownlint.settings.configuration = {
-      MD013 = {
-        line_length = 120;
+    markdownlint = {
+      settings.configuration = {
+        MD013 = {
+          line_length = 120;
+        };
+        MD033 = false;
+        MD034 = false;
       };
-      MD033 = false;
-      MD034 = false;
     };
     generate-doc-css = {
       enable = true;

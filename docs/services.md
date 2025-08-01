@@ -1,7 +1,6 @@
 # Services
 
-[processes](processes.md) are a low-level interface to starting a tool,
-while services provide a higher level configuration.
+Services are a higher-level abstraction over [processes](processes.md). While processes provide low-level control for running any command, services offer pre-configured interfaces for existing software like databases.
 
 Here's an example starting PostgreSQL with a few extensions:
 

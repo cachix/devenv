@@ -15,7 +15,106 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument};
+
+/// Builder for Tasks configuration
+pub struct TasksBuilder {
+    config: Config,
+    verbosity: VerbosityLevel,
+    db_path: Option<PathBuf>,
+    cancellation_token: Option<CancellationToken>,
+}
+
+impl TasksBuilder {
+    /// Create a new builder with required configuration
+    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+        Self {
+            config,
+            verbosity,
+            db_path: None,
+            cancellation_token: None,
+        }
+    }
+
+    /// Set the database path
+    pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
+        self.db_path = Some(db_path);
+        self
+    }
+
+    /// Set the cancellation token for shutdown support
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Build the Tasks instance
+    pub async fn build(self) -> Result<Tasks, Error> {
+        let cache = if let Some(db_path) = self.db_path {
+            TaskCache::with_db_path(db_path).await.map_err(|e| {
+                Error::IoError(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to initialize task cache: {}", e),
+                ))
+            })?
+        } else {
+            TaskCache::new().await.map_err(|e| {
+                Error::IoError(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to initialize task cache: {}", e),
+                ))
+            })?
+        };
+
+        let mut graph = DiGraph::new();
+        let mut task_indices = HashMap::new();
+        let mut longest_task_name = 0;
+
+        for task in self.config.tasks {
+            let name = task.name.clone();
+            longest_task_name = longest_task_name.max(name.len());
+            if !task.name.contains(':')
+                || task.name.split(':').count() < 2
+                || task.name.starts_with(':')
+                || task.name.ends_with(':')
+                || !task
+                    .name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-')
+            {
+                return Err(Error::InvalidTaskName(name));
+            }
+            if task.status.is_some() && task.command.is_none() {
+                return Err(Error::MissingCommand(name));
+            }
+            let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
+                task,
+                self.verbosity,
+                self.cancellation_token.clone(),
+            ))));
+            task_indices.insert(name, index);
+        }
+
+        let roots = Tasks::resolve_namespace_roots(&self.config.roots, &task_indices)?;
+        let mut tasks = Tasks {
+            roots,
+            root_names: self.config.roots,
+            longest_task_name,
+            graph,
+            notify_finished: Arc::new(Notify::new()),
+            notify_ui: Arc::new(Notify::new()),
+            tasks_order: vec![],
+            run_mode: self.config.run_mode,
+            cache,
+            cancellation_token: self.cancellation_token,
+        };
+
+        tasks.resolve_dependencies(task_indices).await?;
+        tasks.tasks_order = tasks.schedule().await?;
+        Ok(tasks)
+    }
+}
 
 #[derive(Debug)]
 pub struct Tasks {
@@ -29,36 +128,13 @@ pub struct Tasks {
     pub notify_ui: Arc<Notify>,
     pub run_mode: RunMode,
     pub cache: TaskCache,
+    pub cancellation_token: Option<CancellationToken>,
 }
 
 impl Tasks {
-    pub async fn new(config: Config, verbosity: VerbosityLevel) -> Result<Self, Error> {
-        // Initialize the task cache using the environment variable
-        let cache = TaskCache::new().await.map_err(|e| {
-            Error::IoError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to initialize task cache: {}", e),
-            ))
-        })?;
-
-        Self::new_with_config_and_cache(config, cache, verbosity).await
-    }
-
-    /// Create a new Tasks instance with a specific database path.
-    pub async fn new_with_db_path(
-        config: Config,
-        db_path: PathBuf,
-        verbosity: VerbosityLevel,
-    ) -> Result<Self, Error> {
-        // Initialize the task cache with a specific database path
-        let cache = TaskCache::with_db_path(db_path).await.map_err(|e| {
-            Error::IoError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to initialize task cache: {}", e),
-            ))
-        })?;
-
-        Self::new_with_config_and_cache(config, cache, verbosity).await
+    /// Create a new TasksBuilder for configuring Tasks
+    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksBuilder {
+        TasksBuilder::new(config, verbosity)
     }
 
     fn resolve_namespace_roots(
@@ -109,51 +185,6 @@ impl Tasks {
         }
 
         Ok(resolved_roots)
-    }
-
-    async fn new_with_config_and_cache(
-        config: Config,
-        cache: TaskCache,
-        verbosity: VerbosityLevel,
-    ) -> Result<Self, Error> {
-        let mut graph = DiGraph::new();
-        let mut task_indices = HashMap::new();
-        let mut longest_task_name = 0;
-        for task in config.tasks {
-            let name = task.name.clone();
-            longest_task_name = longest_task_name.max(name.len());
-            if !task.name.contains(':')
-                || task.name.split(':').count() < 2
-                || task.name.starts_with(':')
-                || task.name.ends_with(':')
-                || !task
-                    .name
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-')
-            {
-                return Err(Error::InvalidTaskName(name));
-            }
-            if task.status.is_some() && task.command.is_none() {
-                return Err(Error::MissingCommand(name));
-            }
-            let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(task, verbosity))));
-            task_indices.insert(name, index);
-        }
-        let roots = Self::resolve_namespace_roots(&config.roots, &task_indices)?;
-        let mut tasks = Self {
-            roots,
-            root_names: config.roots,
-            longest_task_name,
-            graph,
-            notify_finished: Arc::new(Notify::new()),
-            notify_ui: Arc::new(Notify::new()),
-            tasks_order: vec![],
-            run_mode: config.run_mode,
-            cache,
-        };
-        tasks.resolve_dependencies(task_indices).await?;
-        tasks.tasks_order = tasks.schedule().await?;
-        Ok(tasks)
     }
 
     async fn resolve_dependencies(

@@ -14,9 +14,12 @@
     initialDatabases = [
       {
         name = "testdb";
+        user = "testuser";
         pass = "testuserpass";
         initialSQL = ''
           CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
+          CREATE TABLE user_owned_table (id SERIAL PRIMARY KEY, name TEXT);
+          ALTER TABLE user_owned_table OWNER TO testuser;
         '';
       }
       {

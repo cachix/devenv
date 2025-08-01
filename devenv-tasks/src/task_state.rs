@@ -9,6 +9,7 @@ use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument};
 
 #[derive(Debug)]
@@ -16,14 +17,20 @@ pub struct TaskState {
     pub task: TaskConfig,
     pub status: TaskStatus,
     pub verbosity: VerbosityLevel,
+    pub cancellation_token: Option<CancellationToken>,
 }
 
 impl TaskState {
-    pub fn new(task: TaskConfig, verbosity: VerbosityLevel) -> Self {
+    pub fn new(
+        task: TaskConfig,
+        verbosity: VerbosityLevel,
+        cancellation_token: Option<CancellationToken>,
+    ) -> Self {
         Self {
             task,
             status: TaskStatus::Pending,
             verbosity,
+            cancellation_token,
         }
     }
 
@@ -66,6 +73,13 @@ impl TaskState {
     ) -> Result<(Command, tempfile::NamedTempFile)> {
         let mut command = Command::new(cmd);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        // Create a new process group for better signal handling
+        // This ensures that signals sent to the parent are propagated to all children
+        #[cfg(unix)]
+        {
+            command.process_group(0);
+        }
 
         // Set DEVENV_TASK_INPUTS
         if let Some(inputs) = &self.task.inputs {
@@ -289,35 +303,83 @@ impl TaskState {
             let mut stdout_lines = Vec::new();
             let mut stderr_lines = Vec::new();
 
+            // Track EOF status for stdout and stderr streams
+            let mut stdout_closed = false;
+            let mut stderr_closed = false;
+
+            // Check if this is a process task (always show output for processes)
+            let is_process = self.task.name.starts_with("devenv:processes:");
+
             loop {
                 tokio::select! {
-                    result = stdout_reader.next_line() => {
+                    // Check for cancellation from shared signal handler
+                    _ = async {
+                        if let Some(ref token) = self.cancellation_token {
+                            token.cancelled().await
+                        } else {
+                            std::future::pending::<()>().await
+                        }
+                    } => {
+                        eprintln!("Task {} received shutdown signal, terminating child process", self.task.name);
+
+                        // Kill the child process and its process group
+                        #[cfg(unix)]
+                        if let Some(pid) = child.id() {
+                            use ::nix::sys::signal::{self, Signal};
+                            use ::nix::unistd::Pid;
+
+                            // Send SIGTERM to the process group first for graceful shutdown
+                            let _ = signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
+
+                            // Wait a bit for graceful shutdown
+                            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                            if child.try_wait().unwrap_or(None).is_none() {
+                                // Force kill if still running
+                                let _ = signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);
+                            }
+                        }
+
+                        #[cfg(not(unix))]
+                        {
+                            // On non-Unix systems, try to kill the child process directly
+                            let _ = child.kill().await;
+                        }
+
+                        return Ok(TaskCompleted::Cancelled(now.elapsed()));
+                    }
+                    result = stdout_reader.next_line(), if !stdout_closed => {
                         match result {
                             Ok(Some(line)) => {
-                                if self.verbosity == VerbosityLevel::Verbose {
+                                if self.verbosity == VerbosityLevel::Verbose || is_process {
                                     eprintln!("[{}] {}", self.task.name, line);
                                 }
                                 stdout_lines.push((std::time::Instant::now(), line));
                             },
-                            Ok(None) => {},
+                            Ok(None) => {
+                                stdout_closed = true;
+                            },
                             Err(e) => {
                                 error!("Error reading stdout: {}", e);
                                 stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                                stdout_closed = true;
                             },
                         }
                     }
-                    result = stderr_reader.next_line() => {
+                    result = stderr_reader.next_line(), if !stderr_closed => {
                         match result {
                             Ok(Some(line)) => {
-                                if self.verbosity == VerbosityLevel::Verbose {
+                                if self.verbosity == VerbosityLevel::Verbose || is_process {
                                     eprintln!("[{}] {}", self.task.name, line);
                                 }
                                 stderr_lines.push((std::time::Instant::now(), line));
                             },
-                            Ok(None) => {},
+                            Ok(None) => {
+                                stderr_closed = true;
+                            },
                             Err(e) => {
                                 error!("Error reading stderr: {}", e);
                                 stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                                stderr_closed = true;
                             },
                         }
                     }

@@ -163,6 +163,7 @@ in
       default = { };
       description = ''
         Custom Claude Code slash commands to create in the project.
+        Commands are invoked with `/command-name` in Claude Code.
       '';
       example = lib.literalExpression ''
         {
@@ -181,6 +182,73 @@ in
             nixfmt **/*.nix
             ```
           ''';
+        }
+      '';
+    };
+
+    agents = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            description = lib.mkOption {
+              type = lib.types.str;
+              description = "What the sub-agent does";
+            };
+            proactive = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Whether Claude should use this sub-agent automatically";
+            };
+            tools = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "List of allowed tools for this sub-agent";
+            };
+            prompt = lib.mkOption {
+              type = lib.types.lines;
+              description = "The system prompt for the sub-agent";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Custom Claude Code sub-agents to create in the project.
+        Sub-agents are specialized AI assistants that handle specific tasks
+        with their own context window and can be invoked automatically or explicitly.
+        
+        For more details, see: https://docs.anthropic.com/en/docs/claude-code/sub-agents
+      '';
+      example = lib.literalExpression ''
+        {
+          code-reviewer = {
+            description = "Expert code review specialist that checks for quality, security, and best practices";
+            proactive = true;
+            tools = [ "Read" "Grep" "TodoWrite" ];
+            prompt = '''
+              You are an expert code reviewer. When reviewing code, check for:
+              - Code readability and maintainability
+              - Proper error handling
+              - Security vulnerabilities
+              - Performance issues
+              - Adherence to project conventions
+              
+              Provide constructive feedback with specific suggestions for improvement.
+            ''';
+          };
+          
+          test-writer = {
+            description = "Specialized in writing comprehensive test suites";
+            proactive = false;
+            tools = [ "Read" "Write" "Edit" "Bash" ];
+            prompt = '''
+              You are a test writing specialist. Create comprehensive test suites that:
+              - Cover edge cases and error conditions
+              - Follow the project's testing conventions
+              - Include unit, integration, and property-based tests where appropriate
+              - Have clear test names that describe what is being tested
+            ''';
+          };
         }
       '';
     };
@@ -295,6 +363,25 @@ in
           };
         })
         cfg.commands)
+
+      # Sub-agent files
+      (lib.mapAttrs'
+        (name: agent: {
+          name = ".claude/agents/${name}.md";
+          value = {
+            text = ''
+              ---
+              name: ${name}
+              description: ${agent.description}
+              proactive: ${lib.boolToString agent.proactive}
+              ${lib.optionalString (agent.tools != []) "tools:\n${lib.concatMapStringsSep "\n" (tool: "  - ${tool}") agent.tools}"}
+              ---
+
+              ${agent.prompt}
+            '';
+          };
+        })
+        cfg.agents)
     ];
 
     # Add a message about the integration
@@ -306,6 +393,11 @@ in
         ${lib.optionalString (cfg.commands != { })
           "- Project commands: ${
             lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
+          }"
+        }
+        ${lib.optionalString (cfg.agents != { })
+          "- Sub-agents: ${
+            lib.concatStringsSep ", " (lib.attrNames cfg.agents)
           }"
         }
       ''

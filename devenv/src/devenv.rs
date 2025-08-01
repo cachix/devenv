@@ -48,7 +48,7 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
         .unwrap_or(0)
 });
 // project vars
-const DEVENV_FLAKE: &str = ".devenv.flake.nix";
+pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
 #[derive(Default, Debug)]
 pub struct DevenvOptions {
@@ -457,6 +457,11 @@ impl Devenv {
         Ok(())
     }
 
+    #[instrument(
+        name = "building_container",
+        skip(self),
+        fields(devenv.user_message = format!("Building {name} container"))
+    )]
     pub async fn container_build(&self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
             bail!(
@@ -464,32 +469,22 @@ impl Devenv {
             );
         }
 
-        let span = info_span!(
-            "building_container",
-            devenv.user_message = format!("Building {name} container")
-        );
+        self.assemble(false).await?;
 
-        async move {
-            self.assemble(false).await?;
-
-            let sanitized_name = sanitize_container_name(name);
-            let gc_root = self
-                .devenv_dot_gc
-                .join(format!("container-{sanitized_name}-derivation"));
-            let paths = self
-                .nix
-                .build(
-                    &[&format!("devenv.containers.{name}.derivation")],
-                    None,
-                    Some(&gc_root),
-                )
-                .await?;
-            let container_store_path = &paths[0].to_string_lossy();
-            println!("{}", container_store_path);
-            Ok(container_store_path.to_string())
-        }
-        .instrument(span)
-        .await
+        let sanitized_name = sanitize_container_name(name);
+        let gc_root = self
+            .devenv_dot_gc
+            .join(format!("container-{sanitized_name}-derivation"));
+        let paths = self
+            .nix
+            .build(
+                &[&format!("devenv.containers.{name}.derivation")],
+                None,
+                Some(&gc_root),
+            )
+            .await?;
+        let container_store_path = &paths[0].to_string_lossy();
+        Ok(container_store_path.to_string())
     }
 
     pub async fn container_copy(
@@ -500,12 +495,7 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        // TODO: No newline
-        let span = info_span!(
-            "copying_container",
-            devenv.user_message = format!("Copying {name} container")
-        );
-
+        let span = info_span!("copying_container");
         async move {
             let sanitized_name = sanitize_container_name(name);
             let gc_root = self
@@ -528,7 +518,7 @@ impl Devenv {
                 .chain(copy_args.iter().map(|s| s.to_string()))
                 .collect();
 
-            info!("Running {copy_script_string} {}", command_args.join(" "));
+            debug!("Running {copy_script_string} {}", command_args.join(" "));
 
             let status = process::Command::new(copy_script)
                 .args(command_args)
@@ -560,38 +550,25 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        let span = info_span!(
-            "running_container",
-            devenv.user_message = format!("Running {name} container")
-        );
+        info!(devenv.is_user_message = true, "Running container {name}",);
 
-        async move {
-            let sanitized_name = sanitize_container_name(name);
-            let gc_root = self
-                .devenv_dot_gc
-                .join(format!("container-{sanitized_name}-run"));
-            let paths = self
-                .nix
-                .build(
-                    &[&format!("devenv.containers.{name}.dockerRun")],
-                    None,
-                    Some(&gc_root),
-                )
-                .await?;
+        let sanitized_name = sanitize_container_name(name);
+        let gc_root = self
+            .devenv_dot_gc
+            .join(format!("container-{sanitized_name}-run"));
+        let paths = self
+            .nix
+            .build(
+                &[&format!("devenv.containers.{name}.dockerRun")],
+                None,
+                Some(&gc_root),
+            )
+            .await?;
 
-            let status = process::Command::new(&paths[0])
-                .status()
-                .await
-                .expect("Failed to run container script");
+        let err = process::Command::new(&paths[0]).into_std().exec();
 
-            if !status.success() {
-                bail!("Failed to run container")
-            } else {
-                Ok(())
-            }
-        }
-        .instrument(span)
-        .await
+        // If exec fails, we return an error.
+        bail!("Failed to run container: {}", err);
     }
 
     pub async fn repl(&self) -> Result<()> {
@@ -805,7 +782,7 @@ impl Devenv {
             serde_json::to_string_pretty(&config).unwrap()
         );
 
-        let mut tui = tasks::TasksUi::new(config, verbosity).await?;
+        let mut tui = tasks::TasksUi::builder(config, verbosity).build().await?;
         let (tasks_status, outputs) = tui.run().await?;
 
         if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {

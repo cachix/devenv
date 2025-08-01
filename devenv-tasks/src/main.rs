@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{Config, RunMode, TaskConfig, TasksUi, VerbosityLevel};
+use devenv_tasks::{
+    signal_handler::SignalHandler, Config, RunMode, TaskConfig, TasksUi, VerbosityLevel,
+};
 use std::env;
 
 #[derive(Parser)]
@@ -60,8 +62,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 run_mode: mode,
             };
 
-            // Pass verbosity level directly to TasksUi
-            let mut tasks_ui = TasksUi::new(config, verbosity).await?;
+            // Create shared signal handler
+            let signal_handler = SignalHandler::start();
+            let cancellation_token = signal_handler.cancellation_token();
+
+            let mut tasks_ui = TasksUi::builder(config, verbosity)
+                .with_cancellation_token(cancellation_token)
+                .build()
+                .await?;
             let (status, _outputs) = tasks_ui.run().await?;
 
             if status.failed + status.dependency_failed > 0 {

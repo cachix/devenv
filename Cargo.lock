@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "async-trait",
  "clap",
@@ -1162,7 +1162,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "blake3",
  "devenv-cache-core",
@@ -1182,7 +1182,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "binaryornot",
  "clap",
@@ -1203,7 +1203,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "clap",
  "devenv",
@@ -1216,13 +1216,14 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "1.8.1"
+version = "1.8.2"
 dependencies = [
  "blake3",
  "clap",
  "console",
  "devenv-cache-core",
  "miette",
+ "nix 0.29.0",
  "petgraph 0.7.1",
  "pretty_assertions",
  "serde",
@@ -1232,6 +1233,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
+ "tokio-util",
  "tracing",
  "walkdir",
 ]
