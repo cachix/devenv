@@ -71,14 +71,6 @@ plugins:
     date_from_meta:
       as_creation: date
       as_update: date
-extra:
-  social:
-    - icon: fontawesome/brands/twitter
-      link: https://twitter.com/cachix_org
-    - icon: fontawesome/brands/github
-      link: https://github.com/cachix/devenv
-    - icon: fontawesome/brands/discord
-      link: https://discord.gg/naMgvexb6q
 
 markdown_extensions:
   - tables

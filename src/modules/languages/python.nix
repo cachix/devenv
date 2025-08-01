@@ -1,4 +1,8 @@
-{ pkgs, config, lib, ... }:
+{ pkgs
+, config
+, lib
+, ...
+}:
 
 let
   cfg = config.languages.python;
@@ -13,24 +17,29 @@ let
   package = pkgs.callPackage ../../python-wrapper.nix {
     python = cfg.package;
     requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
-    makeWrapperArgs = [
-      "--prefix"
-      "LD_LIBRARY_PATH"
-      ":"
-      libraries
-    ] ++ lib.optionals pkgs.stdenv.isDarwin [
-      "--prefix"
-      "DYLD_LIBRARY_PATH"
-      ":"
-      libraries
-    ];
+    makeWrapperArgs =
+      [
+        "--prefix"
+        "LD_LIBRARY_PATH"
+        ":"
+        libraries
+      ]
+      ++ lib.optionals pkgs.stdenv.isDarwin [
+        "--prefix"
+        "DYLD_LIBRARY_PATH"
+        ":"
+        libraries
+      ];
   };
 
-  requirements = pkgs.writeText "requirements.txt" (toString (
-    if lib.isPath cfg.venv.requirements
-    then builtins.readFile cfg.venv.requirements
-    else cfg.venv.requirements
-  ));
+  requirements = pkgs.writeText "requirements.txt" (
+    toString (
+      if lib.isPath cfg.venv.requirements then
+        builtins.readFile cfg.venv.requirements
+      else
+        cfg.venv.requirements
+    )
+  );
 
   nixpkgs-python = config.lib.getInput {
     name = "nixpkgs-python";
@@ -39,66 +48,75 @@ let
     follows = [ "nixpkgs" ];
   };
 
-  initVenvScript =
-    ''
-      pushd "${cfg.directory}"
+  initVenvScript = ''
+    pushd "${cfg.directory}"
 
-      # Make sure any tools are not attempting to use the Python interpreter from any
-      # existing virtual environment. For instance if devenv was started within an venv.
-      unset VIRTUAL_ENV
+    # Make sure any tools are not attempting to use the Python interpreter from any
+    # existing virtual environment. For instance if devenv was started within an venv.
+    unset VIRTUAL_ENV
 
-      VENV_PATH="${config.env.DEVENV_STATE}/venv"
+    VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-      profile_python="$(${readlink} ${package.interpreter})"
-      devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
-      venv_python="$(${readlink} "$devenv_interpreter_path")"
+    profile_python="$(${readlink} ${package.interpreter})"
+    devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
+    venv_python="$(${readlink} "$devenv_interpreter_path")"
 
-      requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
+    requirements="${lib.optionalString (cfg.venv.requirements != null) ''${requirements}''}"
 
-      # recreate venv if necessary
-      if [ -z $venv_python ] || [ $profile_python != $venv_python ]
-      then
-        echo "Python interpreter changed, rebuilding Python venv..."
-        ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
-        ${lib.optionalString cfg.poetry.enable ''
-          [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
-        ''}
-        ${if cfg.uv.enable then ''
-          echo uv venv -p ${package.interpreter} "$VENV_PATH"
-          uv venv -p ${package.interpreter} "$VENV_PATH"
-        ''
-        else ''
-            echo ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
-            ${package.interpreter} -m venv ${if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""} "$VENV_PATH"
+    # recreate venv if necessary
+    if [ -z $venv_python ] || [ $profile_python != $venv_python ]
+    then
+      echo "Python interpreter changed, rebuilding Python venv..."
+      ${pkgs.coreutils}/bin/rm -rf "$VENV_PATH"
+      ${lib.optionalString cfg.poetry.enable ''
+        [ -f "${config.env.DEVENV_STATE}/poetry.lock.checksum" ] && rm ${config.env.DEVENV_STATE}/poetry.lock.checksum
+      ''}
+      ${
+        if cfg.uv.enable then
           ''
-        }
-        echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
-      fi
+            echo uv venv -p ${package.interpreter} "$VENV_PATH"
+            uv venv -p ${package.interpreter} "$VENV_PATH"
+          ''
+        else
+          ''
+            echo ${package.interpreter} -m venv ${
+              if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
+            } "$VENV_PATH"
+            ${package.interpreter} -m venv ${
+              if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
+            } "$VENV_PATH"
+          ''
+      }
+      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+    fi
 
-      source "$VENV_PATH"/bin/activate
+    source "$VENV_PATH"/bin/activate
 
-      # reinstall requirements if necessary
-      if [ -n "$requirements" ]
-        then
-          devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| echo false )"
-          devenv_requirements="$(${readlink} "$devenv_requirements_path")"
-          if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
-            then
-              echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
-              ${if cfg.uv.enable then ''
-                echo "Requirements changed, running uv pip install -r ${requirements}..."
-                ${cfg.uv.package}/bin/uv pip install --python "$VENV_PATH/bin/python" -r ${requirements}
-              ''
-              else ''
+    # reinstall requirements if necessary
+    if [ -n "$requirements" ]
+      then
+        devenv_requirements_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_requirements" 2> /dev/null|| echo false )"
+        devenv_requirements="$(${readlink} "$devenv_requirements_path")"
+        if [ -z $devenv_requirements ] || [ $devenv_requirements != $requirements ]
+          then
+            echo "${requirements}" > "$VENV_PATH/.devenv_requirements"
+            ${
+              if cfg.uv.enable then
+                ''
+                  echo "Requirements changed, running uv pip install -r ${requirements}..."
+                  ${cfg.uv.package}/bin/uv pip install --python "$VENV_PATH/bin/python" -r ${requirements}
+                ''
+              else
+                ''
                   echo "Requirements changed, running pip install -r ${requirements}..."
                   "$VENV_PATH"/bin/pip install -r ${requirements}
                 ''
-              }
-         fi
-      fi
+            }
+       fi
+    fi
 
-      popd
-    '';
+    popd
+  '';
 
   initUvScript = ''
     pushd "${cfg.directory}"
@@ -417,7 +435,12 @@ in
           description = "Whether to install all extras. See `--all-extras`.";
         };
         verbosity = lib.mkOption {
-          type = lib.types.enum [ "no" "little" "more" "debug" ];
+          type = lib.types.enum [
+            "no"
+            "little"
+            "more"
+            "debug"
+          ];
           default = "no";
           description = "What level of verbosity the output of `poetry install` should have.";
         };
@@ -439,48 +462,66 @@ in
   config = lib.mkIf cfg.enable {
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
-      lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root" ++
-      lib.optional (!cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage) "--no-root" ++
-      lib.optional cfg.poetry.install.compile "--compile" ++
-      lib.optional cfg.poetry.install.quiet "--quiet" ++
-      lib.optionals (cfg.poetry.install.groups != [ ]) [ "--with" ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"'' ] ++
-      lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [ "--without" ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"'' ] ++
-      lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [ "--only" ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"'' ] ++
-      lib.optional cfg.poetry.install.allGroups "--all-groups" ++
-      lib.optionals (cfg.poetry.install.extras != [ ]) [ "--extras" ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"'' ] ++
-      lib.optional cfg.poetry.install.allExtras "--all-extras" ++
-      lib.optional (cfg.poetry.install.verbosity == "little") "-v" ++
-      lib.optional (cfg.poetry.install.verbosity == "more") "-vv" ++
-      lib.optional (cfg.poetry.install.verbosity == "debug") "-vvv";
+      lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root"
+      ++ lib.optional
+        (
+          !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
+        ) "--no-root"
+      ++ lib.optional cfg.poetry.install.compile "--compile"
+      ++ lib.optional cfg.poetry.install.quiet "--quiet"
+      ++ lib.optionals (cfg.poetry.install.groups != [ ]) [
+        "--with"
+        ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"''
+      ]
+      ++ lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [
+        "--without"
+        ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"''
+      ]
+      ++ lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [
+        "--only"
+        ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"''
+      ]
+      ++ lib.optional cfg.poetry.install.allGroups "--all-groups"
+      ++ lib.optionals (cfg.poetry.install.extras != [ ]) [
+        "--extras"
+        ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"''
+      ]
+      ++ lib.optional cfg.poetry.install.allExtras "--all-extras"
+      ++ lib.optional (cfg.poetry.install.verbosity == "little") "-v"
+      ++ lib.optional (cfg.poetry.install.verbosity == "more") "-vv"
+      ++ lib.optional (cfg.poetry.install.verbosity == "debug") "-vvv";
 
     languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
 
     languages.python.package = lib.mkMerge [
-      (lib.mkIf (cfg.version != null)
-        (nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version} or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")))
+      (lib.mkIf (cfg.version != null) (
+        nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version}
+          or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")
+      ))
     ];
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
-    packages = [ package ]
+    packages =
+      [ package ]
       ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
       ++ (lib.optional cfg.uv.enable cfg.uv.package);
 
-    env = (lib.optionalAttrs cfg.uv.enable {
-      # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
-      UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
-      # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
-      UV_PYTHON_DOWNLOADS = "never";
-      # Force uv to always use the correct python interpreter.
-      UV_PYTHON = "${package.interpreter}";
-    }) // (lib.optionalAttrs cfg.poetry.enable {
-      # Make poetry use DEVENV_ROOT/.venv
-      POETRY_VIRTUALENVS_IN_PROJECT = "true";
-      # Make poetry create the local virtualenv when it does not exist.
-      POETRY_VIRTUALENVS_CREATE = "true";
-      # Make poetry stop accessing any other virtualenvs in $HOME.
-      POETRY_VIRTUALENVS_PATH = "/var/empty";
-    });
+    env =
+      (lib.optionalAttrs cfg.uv.enable {
+        # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
+        UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
+        # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
+        UV_PYTHON_DOWNLOADS = "never";
+      })
+      // (lib.optionalAttrs cfg.poetry.enable {
+        # Make poetry use DEVENV_ROOT/.venv
+        POETRY_VIRTUALENVS_IN_PROJECT = "true";
+        # Make poetry create the local virtualenv when it does not exist.
+        POETRY_VIRTUALENVS_CREATE = "true";
+        # Make poetry stop accessing any other virtualenvs in $HOME.
+        POETRY_VIRTUALENVS_PATH = "/var/empty";
+      });
 
     assertions = [
       {
@@ -493,7 +534,10 @@ in
       "devenv:python:virtualenv" = lib.mkIf (cfg.venv.enable && !cfg.uv.sync.enable) {
         description = "Initialize Python virtual environment";
         exec = initVenvScript;
-        exports = [ "PATH" "VIRTUAL_ENV" ];
+        exports = [
+          "PATH"
+          "VIRTUAL_ENV"
+        ];
         before = [ "devenv:enterShell" ];
       };
 
@@ -501,14 +545,16 @@ in
         description = "Initialize Poetry";
         exec = initPoetryScript;
         exports = [ "PATH" ] ++ lib.optional cfg.poetry.activate.enable "VIRTUAL_ENV";
-        before = [ "devenv:enterShell" ]
-          ++ lib.optional cfg.venv.enable "devenv:python:virtualenv";
+        before = [ "devenv:enterShell" ] ++ lib.optional cfg.venv.enable "devenv:python:virtualenv";
       };
 
       "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
         description = "Initialize uv sync";
         exec = initUvScript;
-        exports = [ "PATH" "VIRTUAL_ENV" ];
+        exports = [
+          "PATH"
+          "VIRTUAL_ENV"
+        ];
         before = [ "devenv:enterShell" ];
       };
     };
