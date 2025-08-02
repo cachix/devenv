@@ -6,6 +6,9 @@ Running `devenv test` will build your environment and run the tests defined in `
 
 If you have [processes](processes.md) defined in your environment, they will be started and stopped for you.
 
+!!! tip "Consider using tasks for tests"
+    For more complex test setups with dependencies and better control, consider using [tasks with the `before` attribute](tasks.md#entershell--entertest). Tasks can be configured to run before `devenv:enterTest` and provide better parallelization and dependency management.
+
 ## Writing your first test
 
 A simple test would look like:
