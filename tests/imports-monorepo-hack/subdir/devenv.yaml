@@ -1,6 +1,2 @@
-inputs:
-  root:
-    url: git+file://../
-    flake: false
 imports:
-  - root/common
+  - /tests/imports-monorepo-hack/common
