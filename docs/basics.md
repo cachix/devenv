@@ -22,7 +22,10 @@ Given a hello world example, click on the end of each line to get an explanation
 4. Values can refer to the inputs. See [Inputs](inputs.md) for how to define inputs.
 
 
-``enterShell`` allows you to execute bash code once the shell activates, while ``env`` allows you to set environment variables:
+``enterShell`` allows you to execute bash code once the shell activates, while ``env`` allows you to set environment variables.
+
+!!! tip "Consider using tasks instead"
+    For more complex setup operations, consider using [tasks](tasks.md#entershell--entertest) instead of `enterShell`. Tasks provide better control over execution order, dependencies, and can run in parallel:
 
 ```shell-session
 $ devenv shell
