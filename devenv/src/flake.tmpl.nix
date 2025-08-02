@@ -73,21 +73,25 @@
                 devenv.root = devenv_root;
                 devenv.dotfile = devenv_root + "/" + devenv_dotfile_string;
               }
-              (pkgs.lib.optionalAttrs (inputs.devenv.isTmpDir or false) {
-                devenv.tmpdir = devenv_tmpdir;
-                devenv.runtime = devenv_runtime;
-              })
-              (pkgs.lib.optionalAttrs (inputs.devenv.hasIsTesting or false) {
-                devenv.isTesting = devenv_istesting;
+              ({ options, ... }: {
+                config.devenv = lib.mkMerge [
+                  (pkgs.lib.optionalAttrs (builtins.hasAttr "tmpdir" options.devenv) {
+                    tmpdir = devenv_tmpdir;
+                  })
+                  (pkgs.lib.optionalAttrs (builtins.hasAttr "isTesting" options.devenv) {
+                    isTesting = devenv_istesting;
+                  })
+                  (pkgs.lib.optionalAttrs (builtins.hasAttr "runtime" options.devenv) {
+                    runtime = devenv_runtime;
+                  })
+                  (pkgs.lib.optionalAttrs (builtins.hasAttr "direnvrcLatestVersion" options.devenv) {
+                    direnvrcLatestVersion = devenv_direnvrc_latest_version;
+                  })
+                ];
               })
               (pkgs.lib.optionalAttrs (container_name != null) {
                 container.isBuilding = pkgs.lib.mkForce true;
                 containers.${container_name}.isBuilding = true;
-              })
-              ({ options, ... }: {
-                config.devenv = pkgs.lib.optionalAttrs (builtins.hasAttr "direnvrcLatestVersion" options.devenv) {
-                  direnvrcLatestVersion = devenv_direnvrc_latest_version;
-                };
               })
             ] ++ (map importModule (devenv.imports or [ ])) ++ [
               (if builtins.pathExists ./devenv.nix then ./devenv.nix else { })
