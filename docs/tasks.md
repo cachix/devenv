@@ -122,6 +122,8 @@ You can specify a list of files to monitor with `execIfModified`. The task will 
         "package.json" # Specific file
         "src"          # Entire directory
       ];
+      # Optionally run the build in a specific directory
+      cwd = "./frontend";
     };
   };
 }

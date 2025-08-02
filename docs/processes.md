@@ -11,6 +11,11 @@ Devenv uses [process-compose](https://github.com/F1bonacc1/process-compose) to m
   processes = {
     silly-example.exec = "while true; do echo hello && sleep 1; done";
     ping.exec = "ping localhost";
+    # Process that runs in a specific directory
+    server = {
+      exec = "python -m http.server";
+      cwd = "./public";
+    };
   };
 }
 ```

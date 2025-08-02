@@ -9,6 +9,12 @@ let
         description = "Bash code to run the process.";
       };
 
+      cwd = lib.mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Working directory to run the process in. If not specified, the current working directory will be used.";
+      };
+
       process-compose = lib.mkOption {
         # TODO: type up as a submodule for discoverability
         type = (pkgs.formats.yaml { }).type;
@@ -143,6 +149,7 @@ in
         name = "devenv:processes:${name}";
         value = {
           exec = process.exec;
+          cwd = process.cwd;
         };
       })
       config.processes;
