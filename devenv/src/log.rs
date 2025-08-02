@@ -1,8 +1,9 @@
 use console::style;
+use once_cell::sync::OnceCell;
 use std::collections::HashSet;
 use std::fmt;
 use std::io::{self, IsTerminal};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
@@ -18,6 +19,9 @@ use tracing_subscriber::{
     registry::LookupSpan,
     EnvFilter, Layer,
 };
+
+// Global storage for TUI state to enable cleanup before exec
+static TUI_STATE: OnceCell<Arc<devenv_tui::TuiState>> = OnceCell::new();
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
@@ -47,6 +51,8 @@ pub enum LogFormat {
     /// The default human-readable log format used in the CLI.
     #[default]
     Cli,
+    /// Enhanced TUI interface with operations and logs.
+    Tui,
     /// A verbose structured log format used for debugging.
     TracingFull,
     /// A pretty human-readable log format used for debugging.
@@ -55,6 +61,12 @@ pub enum LogFormat {
 
 pub fn init_tracing_default() {
     init_tracing(Level::default(), LogFormat::default());
+}
+
+/// Cleanup TUI before exec to prevent terminal corruption
+pub fn cleanup_before_exec() {
+    // Force cleanup of any active TUI display to prevent terminal corruption
+    devenv_tui::cleanup_tui();
 }
 
 pub fn init_tracing(level: Level, log_format: LogFormat) {
@@ -89,6 +101,19 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
                 .with(filter)
                 .with(stderr_layer)
                 .with(devenv_layer)
+                .init();
+        }
+        LogFormat::Tui => {
+            // Initialize the enhanced TUI system with ratatui inline viewport
+            let (tui_layer, state) = devenv_tui::init_tui(devenv_tui::DisplayMode::Ratatui);
+
+            // Store the TUI state globally so we can clean it up before exec
+            let _ = TUI_STATE.set(state);
+
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(devenv_layer)
+                .with(tui_layer)
                 .init();
         }
         LogFormat::Cli => {
