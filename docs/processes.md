@@ -3,16 +3,17 @@
 Starting with a simple example:
 
 ```nix title="devenv.nix"
-{ pkgs, ... }:
+{ pkgs, config, ... }:
 
 {
   processes = {
     silly-example.exec = "while true; do echo hello && sleep 1; done";
     ping.exec = "ping localhost";
-    # Process that runs in a specific directory
+    # Process that runs in a specific directory relative to git root
+    # Useful in monorepos where devenv might be in a subdirectory
     server = {
       exec = "python -m http.server";
-      cwd = "./public";
+      cwd = "${config.git.root}/public";
     };
   };
 }

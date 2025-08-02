@@ -96,6 +96,15 @@ imports:
     dev.exec = "npm run dev";
     test.exec = "npm test";
   };
+
+  # Processes that reference paths relative to the repository root
+  processes = {
+    # Run the frontend build watcher from the API service
+    frontend-watch = {
+      exec = "npm run watch";
+      cwd = "${config.git.root}/services/frontend";
+    };
+  };
 }
 ```
 

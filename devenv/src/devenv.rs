@@ -1340,6 +1340,20 @@ impl Devenv {
             }
         }
 
+        // Get git root if available
+        let git_root = process::Command::new("git")
+            .arg("rev-parse")
+            .arg("--show-toplevel")
+            .current_dir(&self.devenv_root)
+            .output()
+            .await
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .map(|s| format!("\"{}\"", s))
+            .unwrap_or_else(|| "null".to_string());
+
         // create flake.devenv.nix
         let vars = indoc::formatdoc!(
             "version = \"{}\";
@@ -1352,6 +1366,7 @@ impl Devenv {
             devenv_runtime = \"{}\";
             devenv_istesting = {};
             devenv_direnvrc_latest_version = {};
+            git_root = {};
             ",
             crate_version!(),
             self.global_options.system,
@@ -1365,7 +1380,8 @@ impl Devenv {
             self.devenv_tmp,
             self.devenv_runtime.display(),
             is_testing,
-            DIRENVRC_VERSION.to_string()
+            DIRENVRC_VERSION.to_string(),
+            git_root
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);

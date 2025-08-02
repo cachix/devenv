@@ -85,6 +85,7 @@
                 devenv.cliVersion = version;
                 devenv.root = devenv_root;
                 devenv.dotfile = devenv_root + "/" + devenv_dotfile_string;
+                git.root = git_root;
               }
               ({ options, ... }: {
                 config.devenv = lib.mkMerge [
