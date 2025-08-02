@@ -2,7 +2,8 @@
 let
   lib = pkgs.lib;
   version = lib.fileContents ./modules/latest-version;
-  shellPrefix = shellName: if shellName == "default" then "" else "${shellName}-";
+  shellName = config._module.args.name or "default";
+  shellPrefix = lib.toUpper shellName;
 in
 pkgs.writeScriptBin "devenv" ''
   #!/usr/bin/env bash
@@ -19,20 +20,20 @@ pkgs.writeScriptBin "devenv" ''
 
   case $command in
     up)
-      procfilescript=$(nix build '.#${shellPrefix (config._module.args.name or "default")}devenv-up' --no-link --print-out-paths --no-pure-eval)
+      procfilescript="$DEVENV_${shellPrefix}_UP"
       if [ "$(cat $procfilescript|tail -n +2)" = "" ]; then
         echo "No 'processes' option defined: https://devenv.sh/processes/"
         exit 1
       else
-        exec $procfilescript "$@"
+        exec nix develop .#${shellName} --impure $NIX_FLAGS -c "$procfilescript" -- "$@"
       fi
       ;;
 
     test)
-      testscript=$(nix build '.#${shellPrefix (config._module.args.name or "default")}devenv-test' --no-link --print-out-paths --no-pure-eval)    
-      exec $testscript "$@"
+      testscript="$DEVENV_${shellPrefix}_TEST"
+      exec nix develop .#${shellName} --impure $NIX_FLAGS -c "$testscript" -- "$@"
       ;;
-  
+
     version)
       echo "devenv: ${version}"
       ;;
