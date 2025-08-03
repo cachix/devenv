@@ -392,10 +392,10 @@ impl Nix {
                         // Process the InternalLog directly instead of serializing it
                         bridge.process_internal_log(log.clone());
                     }
- 
+
                     // Original tracing-based logging
                     if let Some(log) = log.filter_by_level(target_log_level)
-                        && let Some(msg) = log.get_msg() 
+                        && let Some(msg) = log.get_msg()
                     {
                         use devenv_eval_cache::internal_log::InternalLog;
                         match log {
@@ -405,11 +405,9 @@ impl Nix {
                                 Verbosity::Talkative => debug!("{msg}"),
                                 _ => info!("{msg}"),
                             },
-                                _ => info!("{msg}"),
-                            },
                             _ => info!("{msg}"),
                         }
-                    };
+                    }
                 });
             }
 

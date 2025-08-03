@@ -91,6 +91,9 @@ pub struct UiState {
     /// Whether to show detailed view
     pub show_details: bool,
 
+    /// Whether to show expanded logs (all logs vs just 10 lines)
+    pub show_expanded_logs: bool,
+
     /// Height available for activities display
     pub activities_visible_height: u16,
 }
@@ -162,6 +165,7 @@ impl Model {
                 activity_scroll_offset: 0,
                 activity_scroll_position: 0,
                 show_details: false,
+                show_expanded_logs: false,
                 activities_visible_height: 5,
             },
             app_state: AppState::Running,
@@ -215,11 +219,17 @@ impl Model {
     /// Get all activities as a flat list for display
     pub fn get_all_activities(&self) -> Vec<ActivityInfo> {
         let mut activities = Vec::new();
+        let mut processed_operations = std::collections::HashSet::new();
 
         // Start with root operations
         for root_id in &self.root_operations {
             if let Some(operation) = self.operations.get(root_id) {
-                self.add_operation_activities(&mut activities, operation, 0);
+                self.add_operation_activities(
+                    &mut activities,
+                    operation,
+                    0,
+                    &mut processed_operations,
+                );
             }
         }
 
@@ -240,28 +250,59 @@ impl Model {
         activities: &mut Vec<ActivityInfo>,
         operation: &Operation,
         depth: usize,
+        processed_operations: &mut std::collections::HashSet<OperationId>,
     ) {
-        // Always show the operation itself if it's active (matching original)
+        // Skip if we've already processed this operation
+        if !processed_operations.insert(operation.id.clone()) {
+            return;
+        }
+        // Only show evaluation activity for operations that are actually evaluating
         if matches!(operation.state, OperationState::Active) {
-            activities.push(ActivityInfo {
-                activity_type: NixActivityType::Evaluating,
-                activity_id: None,
-                operation_id: operation.id.clone(),
-                name: operation.message.clone(),
-                short_name: operation.message.clone(),
-                parent: operation.parent.clone(),
-                depth,
-                start_time: operation.start_time,
-                state: NixActivityState::Active,
-                current_phase: None,
-                generic_progress: None,
-                bytes_downloaded: None,
-                total_bytes: None,
-                download_speed: None,
-                substituter: None,
-                operation_parent: operation.parent.clone(),
-                evaluation_count: operation.data.get("evaluation_count").cloned(),
-            });
+            // Check if this operation has evaluation data
+            let has_evaluation_data = operation.data.contains_key("evaluation_count")
+                || operation.data.contains_key("evaluation_file");
+
+            // Only create an evaluating activity if:
+            // 1. The operation has evaluation data, OR
+            // 2. The operation has no other specific activities (derivations, downloads, etc.)
+            let has_other_activities = self
+                .nix_derivations
+                .values()
+                .any(|d| &d.operation_id == &operation.id)
+                || self
+                    .nix_downloads
+                    .values()
+                    .any(|d| &d.operation_id == &operation.id)
+                || self
+                    .nix_queries
+                    .values()
+                    .any(|q| &q.operation_id == &operation.id)
+                || self
+                    .fetch_trees
+                    .values()
+                    .any(|f| &f.operation_id == &operation.id);
+
+            if has_evaluation_data || !has_other_activities {
+                activities.push(ActivityInfo {
+                    activity_type: NixActivityType::Evaluating,
+                    activity_id: None,
+                    operation_id: operation.id.clone(),
+                    name: operation.message.clone(),
+                    short_name: operation.message.clone(),
+                    parent: operation.parent.clone(),
+                    depth,
+                    start_time: operation.start_time,
+                    state: NixActivityState::Active,
+                    current_phase: None,
+                    generic_progress: None,
+                    bytes_downloaded: None,
+                    total_bytes: None,
+                    download_speed: None,
+                    substituter: None,
+                    operation_parent: operation.parent.clone(),
+                    evaluation_count: operation.data.get("evaluation_count").cloned(),
+                });
+            }
         }
 
         // Get all Nix activities for this operation
@@ -326,7 +367,7 @@ impl Model {
         // Recursively add children
         for child_id in &operation.children {
             if let Some(child) = self.operations.get(child_id) {
-                self.add_operation_activities(activities, child, depth + 1);
+                self.add_operation_activities(activities, child, depth + 1, processed_operations);
             }
         }
     }
@@ -353,17 +394,29 @@ impl Model {
                 }
             }
 
-            // Count downloads
+            // Count downloads by state
             for download in self.nix_downloads.values() {
-                if &download.operation_id == &op.id && download.state == NixActivityState::Active {
-                    summary.active_downloads += 1;
+                if &download.operation_id == &op.id {
+                    match download.state {
+                        NixActivityState::Active => summary.active_downloads += 1,
+                        NixActivityState::Completed { success: true, .. } => {
+                            summary.completed_downloads += 1;
+                        }
+                        _ => {}
+                    }
                 }
             }
 
-            // Count queries
+            // Count queries by state
             for query in self.nix_queries.values() {
-                if &query.operation_id == &op.id && query.state == NixActivityState::Active {
-                    summary.active_queries += 1;
+                if &query.operation_id == &op.id {
+                    match query.state {
+                        NixActivityState::Active => summary.active_queries += 1,
+                        NixActivityState::Completed { success: true, .. } => {
+                            summary.completed_queries += 1;
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
@@ -380,6 +433,18 @@ impl Model {
 
         Some(Instant::now().duration_since(earliest_start))
     }
+
+    /// Get the currently selected activity
+    pub fn get_selected_activity(&self) -> Option<ActivityInfo> {
+        let index = self.ui.selected_activity_index?;
+        let activities = self.get_active_activities();
+        activities.get(index).cloned()
+    }
+
+    /// Get build logs for an activity
+    pub fn get_build_logs(&self, activity_id: u64) -> Option<&VecDeque<String>> {
+        self.build_logs.get(&activity_id)
+    }
 }
 
 /// Summary statistics for activities
@@ -390,7 +455,9 @@ pub struct ActivitySummary {
     pub failed_builds: usize,
     pub total_builds: usize,
     pub active_downloads: usize,
+    pub completed_downloads: usize,
     pub active_queries: usize,
+    pub completed_queries: usize,
 }
 
 impl ActivityInfo {

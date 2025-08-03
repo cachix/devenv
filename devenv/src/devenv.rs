@@ -1015,7 +1015,7 @@ impl Devenv {
             "test",
             devenv.user_message = "Running tests",
             devenv.no_spinner = true,
-+           tui.op = true,
+            tui.op = true,
             test_script = %test_script
         );
         let result = async {

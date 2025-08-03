@@ -4,8 +4,7 @@ use crate::{
     ActivityProgress, FetchTreeInfo, LogMessage, NixActivityState, NixActivityType, NixBuildInfo,
     NixDerivationInfo, NixDownloadInfo, NixQueryInfo, Operation, OperationResult, TuiEvent,
 };
-use crossterm::event::Event as TermEvent;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Update function following The Elm Architecture
 /// Takes the current model and a message, updates the model, and optionally returns a new message
@@ -13,7 +12,7 @@ pub fn update(model: &mut Model, msg: Message) -> Option<Message> {
     match msg {
         Message::TuiEvent(event) => handle_tui_event(model, event),
 
-        Message::TerminalEvent(event) => handle_terminal_event(model, event),
+        Message::KeyEvent(key) => Some(key_event_to_message(key)),
 
         Message::UpdateSpinner => {
             let now = Instant::now();
@@ -37,6 +36,11 @@ pub fn update(model: &mut Model, msg: Message) -> Option<Message> {
 
         Message::ToggleDetails => {
             model.ui.show_details = !model.ui.show_details;
+            None
+        }
+
+        Message::ToggleExpandedLogs => {
+            model.ui.show_expanded_logs = !model.ui.show_expanded_logs;
             None
         }
 
@@ -160,8 +164,10 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
                     parent_op.children.push(id.clone());
                 }
             } else {
-                // Root operation
-                model.root_operations.push(id.clone());
+                // Root operation - check if already exists
+                if !model.root_operations.contains(&id) {
+                    model.root_operations.push(id.clone());
+                }
             }
 
             model.operations.insert(id, operation);
@@ -462,19 +468,37 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             files,
             total_files_evaluated,
         } => {
-            // Update operation with latest evaluation progress
-            if let Some(operation) = model.operations.get_mut(&operation_id) {
-                // Since files are in evaluation order, the last one is the most recent
-                if let Some(latest_file) = files.last() {
-                    operation.message = latest_file.to_string();
-                    operation
-                        .data
-                        .insert("evaluation_file".to_string(), latest_file.clone());
+            // Debounce evaluation updates to prevent rendering issues
+            const EVALUATION_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
+            static mut LAST_EVALUATION_UPDATE: Option<Instant> = None;
+
+            let now = Instant::now();
+            let should_update = unsafe {
+                match LAST_EVALUATION_UPDATE {
+                    None => true,
+                    Some(last) => now.duration_since(last) >= EVALUATION_UPDATE_INTERVAL,
                 }
-                operation.data.insert(
-                    "evaluation_count".to_string(),
-                    total_files_evaluated.to_string(),
-                );
+            };
+
+            if should_update {
+                unsafe {
+                    LAST_EVALUATION_UPDATE = Some(now);
+                }
+
+                // Update operation with latest evaluation progress
+                if let Some(operation) = model.operations.get_mut(&operation_id) {
+                    // Since files are in evaluation order, the last one is the most recent
+                    if let Some(latest_file) = files.last() {
+                        operation.message = latest_file.to_string();
+                        operation
+                            .data
+                            .insert("evaluation_file".to_string(), latest_file.clone());
+                    }
+                    operation.data.insert(
+                        "evaluation_count".to_string(),
+                        total_files_evaluated.to_string(),
+                    );
+                }
             }
             None
         }
@@ -503,15 +527,6 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             model.app_state = AppState::Shutdown;
             None
         }
-    }
-}
-
-/// Handle terminal events (keyboard, mouse, resize)
-fn handle_terminal_event(_model: &mut Model, event: TermEvent) -> Option<Message> {
-    match event {
-        TermEvent::Key(key) => Some(key_event_to_message(key)),
-        TermEvent::Resize(_, height) => Some(Message::ResizeViewport(height)),
-        _ => None,
     }
 }
 

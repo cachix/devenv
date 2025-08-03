@@ -1,5 +1,5 @@
 use crate::{OperationId, TuiEvent};
-use crossterm::event::{Event, KeyCode, KeyEvent};
+use iocraft::prelude::*;
 
 /// Messages that drive state changes in the application
 /// Following The Elm Architecture pattern
@@ -8,8 +8,8 @@ pub enum Message {
     /// A TUI event was received (from the existing event system)
     TuiEvent(TuiEvent),
 
-    /// Terminal event (keyboard, mouse, resize)
-    TerminalEvent(Event),
+    /// Keyboard event
+    KeyEvent(KeyEvent),
 
     /// Update spinner animation
     UpdateSpinner,
@@ -22,6 +22,9 @@ pub enum Message {
 
     /// Toggle detailed view
     ToggleDetails,
+
+    /// Toggle expanded logs view
+    ToggleExpandedLogs,
 
     /// Select next activity
     SelectNextActivity,
@@ -60,25 +63,22 @@ impl From<TuiEvent> for Message {
     }
 }
 
-impl From<Event> for Message {
-    fn from(event: Event) -> Self {
-        Message::TerminalEvent(event)
+impl From<KeyEvent> for Message {
+    fn from(event: KeyEvent) -> Self {
+        Message::KeyEvent(event)
     }
 }
 
 /// Convert keyboard events to messages
 pub fn key_event_to_message(key: KeyEvent) -> Message {
     match key.code {
-        KeyCode::Char('c')
-            if key
-                .modifiers
-                .contains(crossterm::event::KeyModifiers::CONTROL) =>
-        {
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Message::RequestShutdown
         }
         KeyCode::Down => Message::SelectNextActivity,
         KeyCode::Up => Message::SelectPreviousActivity,
         KeyCode::Esc => Message::ClearSelection,
+        KeyCode::Char('e') => Message::ToggleExpandedLogs,
         _ => Message::None,
     }
 }

@@ -1,9 +1,12 @@
 use crate::{LogLevel, LogSource, OperationId, OperationResult, TuiEvent};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
-use tracing::{field::Visit, span, Subscriber};
-use tracing_core::{Event, Field};
-use tracing_subscriber::{layer::Context, Layer};
+use tracing::{
+    Event, Subscriber,
+    field::{Field, Visit},
+    span,
+};
+use tracing_subscriber::{Layer, layer::Context};
 
 /// Tracing layer that integrates with the TUI system
 pub struct DevenvTuiLayer {
