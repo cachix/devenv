@@ -341,6 +341,19 @@ pub enum NixActivityType {
     Unknown,
 }
 
+impl std::fmt::Display for NixActivityType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NixActivityType::Build => write!(f, "building"),
+            NixActivityType::Download => write!(f, "downloading"),
+            NixActivityType::Query => write!(f, "querying"),
+            NixActivityType::Evaluating => write!(f, "evaluating"),
+            NixActivityType::FetchTree => write!(f, "fetching"),
+            NixActivityType::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
 /// Progress information for an activity
 #[derive(Debug, Clone)]
 pub struct ActivityProgress {
