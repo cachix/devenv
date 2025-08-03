@@ -4,7 +4,7 @@
   # Verify that env.COMMON is set correctly
   enterTest = ''
     if [ -z "$COMMON" ]; then
-      echo "COMMON is not set. The /tests/imports-monorepo-hack/common/devenv.nix was not loaded correctly."
+      echo "COMMON is not set. The /tests/monorepo/common/devenv.nix was not loaded correctly."
       exit 1
     fi
 
@@ -14,7 +14,7 @@
     # Check if the process wrote the correct working directory
     if [ -f "$DEVENV_STATE/process-cwd.txt" ]; then
       PROCESS_CWD=$(cat "$DEVENV_STATE/process-cwd.txt")
-      EXPECTED_CWD="${config.git.root}/tests/imports-monorepo-hack/subdir"
+      EXPECTED_CWD="${config.git.root}/tests/monorepo/subdir"
       
       if [ "$PROCESS_CWD" = "$EXPECTED_CWD" ]; then
         echo "SUCCESS: Process is running from the correct directory"
@@ -37,7 +37,7 @@
       exec = ''
         pwd > $DEVENV_STATE/process-cwd.txt
       '';
-      cwd = "${config.git.root}/tests/imports-monorepo-hack/subdir";
+      cwd = "${config.git.root}/tests/monorepo/subdir";
     };
   };
 }

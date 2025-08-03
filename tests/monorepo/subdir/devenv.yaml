@@ -1,2 +1,2 @@
 imports:
-  - /tests/imports-monorepo-hack/common
+  - /tests/monorepo/common

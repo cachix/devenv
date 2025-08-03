@@ -1,0 +1,3 @@
+allowBroken: true
+imports:
+  - /tests/fixtures/config/import-order/d

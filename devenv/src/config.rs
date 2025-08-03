@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn test_devenv_yaml_import_merging() {
-        let fixture_path = Path::new("../tests/fixtures/config/import-merging");
+        let fixture_path = Path::new("fixtures/config/import-merging");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         assert!(config.allow_unfree);
@@ -567,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_relative_import_paths() {
-        let fixture_path = Path::new("../tests/fixtures/config/relative-imports");
+        let fixture_path = Path::new("fixtures/config/relative-imports");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         assert!(config.allow_unfree);
@@ -576,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_circular_import_prevention() {
-        let fixture_path = Path::new("../tests/fixtures/config/circular-imports");
+        let fixture_path = Path::new("fixtures/config/circular-imports");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         assert!(config.allow_unfree);
@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn test_nixpkgs_config_merging() {
-        let fixture_path = Path::new("../tests/fixtures/config/nixpkgs-merging");
+        let fixture_path = Path::new("fixtures/config/nixpkgs-merging");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         let nixpkgs = config.nixpkgs.expect("nixpkgs should be present");
@@ -610,7 +610,7 @@ mod tests {
 
     #[test]
     fn test_nested_imports() {
-        let fixture_path = Path::new("../tests/fixtures/config/nested-imports");
+        let fixture_path = Path::new("fixtures/config/nested-imports");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         assert!(config.allow_unfree);
@@ -625,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_duplicate_imports() {
-        let fixture_path = Path::new("../tests/fixtures/config/duplicate-imports");
+        let fixture_path = Path::new("fixtures/config/duplicate-imports");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         // Test that shared is imported multiple times but allowUnfree is still true
@@ -661,7 +661,7 @@ mod tests {
 
     #[test]
     fn test_boolean_merging_last_wins() {
-        let fixture_path = Path::new("../tests/fixtures/config/boolean-merging");
+        let fixture_path = Path::new("fixtures/config/boolean-merging");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         // With replace strategy, last import wins
@@ -673,7 +673,7 @@ mod tests {
 
     #[test]
     fn test_array_duplicates_behavior() {
-        let fixture_path = Path::new("../tests/fixtures/config/array-duplicates");
+        let fixture_path = Path::new("fixtures/config/array-duplicates");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         let nixpkgs = config.nixpkgs.expect("nixpkgs should be present");
@@ -703,7 +703,7 @@ mod tests {
 
     #[test]
     fn test_complex_nixpkgs_merging() {
-        let fixture_path = Path::new("../tests/fixtures/config/complex-nixpkgs");
+        let fixture_path = Path::new("fixtures/config/complex-nixpkgs");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         let nixpkgs = config.nixpkgs.expect("nixpkgs should be present");
@@ -729,7 +729,7 @@ mod tests {
 
     #[test]
     fn test_path_edge_cases() {
-        let fixture_path = Path::new("../tests/fixtures/config/path-edge-cases");
+        let fixture_path = Path::new("fixtures/config/path-edge-cases");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         // Should load normal and "with-spaces in name" but silently ignore non-existent
@@ -739,7 +739,7 @@ mod tests {
 
     #[test]
     fn test_empty_configs() {
-        let fixture_path = Path::new("../tests/fixtures/config/empty-configs");
+        let fixture_path = Path::new("fixtures/config/empty-configs");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         // Empty base config with imports should still work
@@ -753,7 +753,7 @@ mod tests {
 
     #[test]
     fn test_import_order_diamond_pattern() {
-        let fixture_path = Path::new("../tests/fixtures/config/import-order");
+        let fixture_path = Path::new("fixtures/config/import-order");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         // All imports should be processed despite diamond pattern
@@ -771,7 +771,7 @@ mod tests {
 
     #[test]
     fn test_optional_configs_merging() {
-        let fixture_path = Path::new("../tests/fixtures/config/optional-configs");
+        let fixture_path = Path::new("fixtures/config/optional-configs");
         let config = Config::load_from(fixture_path).expect("Failed to load config");
 
         // Clean config should be overridden (replace strategy for nested Option)
@@ -788,10 +788,10 @@ mod tests {
 
     #[test]
     fn test_path_traversal_prevention() {
-        let fixture_path = Path::new("../tests/fixtures/config/path-traversal");
+        let fixture_path = Path::new("fixtures/config/path-traversal");
         let result = Config::load_from(fixture_path);
 
-        assert!(result.is_err());
+        assert!(result.is_err(), "Expected error but got: {:?}", result);
         let error_message = result.unwrap_err().to_string();
         assert!(
             error_message.contains("contains '../' which is not allowed"),
@@ -802,7 +802,7 @@ mod tests {
 
     #[test]
     fn test_missing_import_file_error() {
-        let fixture_path = Path::new("../tests/fixtures/config/empty-configs");
+        let fixture_path = Path::new("fixtures/config/empty-configs");
         // This test works because empty-configs has imports to non-existent directories
         // which are silently ignored (no devenv.yaml file exists)
         let config = Config::load_from(fixture_path)
