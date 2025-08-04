@@ -528,40 +528,42 @@ impl Nix {
                         ]);
                     }
 
-                    // Configure netrc file for auth token if available
+                    // Configure a netrc file with the auth token if available
                     if !cachix_caches.caches.pull.is_empty() {
                         if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
-                            let _ = self
+                            let netrc_path = self
                                 .netrc_path
-                                .get_or_init(|| async {
+                                .get_or_try_init(|| async {
                                     let netrc_path = self.paths.dotfile.join("netrc");
                                     let netrc_path_str = netrc_path.to_string_lossy().to_string();
 
-                                    if let Err(e) = self
-                                        .create_netrc_file(
-                                            &netrc_path,
-                                            &cachix_caches.caches.pull,
-                                            &auth_token,
-                                        )
-                                        .await
-                                    {
-                                        warn!(
-                                            "Failed to create netrc file in {netrc_path_str}: {e}",
-                                        );
-                                    }
+                                    self.create_netrc_file(
+                                        &netrc_path,
+                                        &cachix_caches.caches.pull,
+                                        &auth_token,
+                                    )
+                                    .await?;
 
-                                    netrc_path_str
+                                    Ok::<String, miette::Report>(netrc_path_str)
                                 })
                                 .await;
+
+                            match netrc_path {
+                                Ok(netrc_path) => {
+                                    final_args.extend_from_slice(&[
+                                        "--option",
+                                        "netrc-file",
+                                        netrc_path,
+                                    ]);
+                                }
+                                Err(e) => {
+                                    warn!("${e}")
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-
-        // Add netrc file option if available
-        if let Some(ref netrc_path) = self.netrc_path.get() {
-            final_args.extend_from_slice(&["--option", "netrc-file", netrc_path]);
         }
 
         final_args.extend(args.iter().copied());
@@ -993,8 +995,30 @@ impl Nix {
             .await.cloned()
     }
 
+    /// Clean up the netrc file if it was created during this session.
+    ///
+    /// This method safely removes the netrc file containing auth tokens,
+    /// handling race conditions where the file might already be removed.
+    /// Only attempts cleanup if a netrc file was actually created.
+    fn cleanup_netrc(&self) {
+        if let Some(netrc_path_str) = self.netrc_path.get() {
+            let netrc_path = Path::new(netrc_path_str);
+            match std::fs::remove_file(netrc_path) {
+                Ok(()) => debug!("Removed netrc file: {}", netrc_path_str),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => warn!("Failed to remove netrc file {}: {}", netrc_path_str, e),
+            }
+        }
+    }
+
     fn name(&self) -> &'static str {
         "nix"
+    }
+}
+
+impl Drop for Nix {
+    fn drop(&mut self) {
+        self.cleanup_netrc();
     }
 }
 
