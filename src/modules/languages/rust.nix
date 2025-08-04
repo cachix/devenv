@@ -165,7 +165,6 @@ in
               else pkgs.rustPlatform.rustLibSrc;
             RUSTFLAGS = optionalEnv (moldFlags != "" || cfg.rustflags != "") (lib.concatStringsSep " " (lib.filter (x: x != "") [ moldFlags cfg.rustflags ]));
             RUSTDOCFLAGS = optionalEnv (moldFlags != "") moldFlags;
-            CFLAGS = lib.optionalString pkgs.stdenv.isDarwin "-iframework ${config.devenv.profile}/Library/Frameworks";
           };
 
         git-hooks.tools =
