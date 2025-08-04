@@ -20,6 +20,7 @@ pub struct SharedAppState {
 #[component]
 fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let app_state = hooks.use_context::<Arc<Mutex<SharedAppState>>>();
+    let (terminal_width, _terminal_height) = hooks.use_terminal_size();
 
     // Force re-render on state changes
     let mut render_tick = hooks.use_state(|| 0);
@@ -76,10 +77,15 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     });
 
     // Render the view
-    let result = if let Ok(state) = app_state.lock() {
-        view(&state.model).into()
+    let app_state_clone = app_state.clone();
+    let result = if let Ok(state) = app_state_clone.lock() {
+        element! {
+            View(width: terminal_width) {
+                #(vec![view(&state.model).into()])
+            }
+        }
     } else {
-        element!(View).into()
+        element!(View(width: terminal_width))
     };
     result
 }
