@@ -180,6 +180,7 @@ fn render_activity_owned(
                 None,
                 is_selected,
                 &elapsed_str,
+                activity.depth,
             );
         }
         NixActivityType::Download => {
@@ -242,6 +243,7 @@ fn render_activity_owned(
                         from_suffix.as_deref(),
                         is_selected,
                         &elapsed_str,
+                        activity.depth,
                     );
                 }
             } else {
@@ -256,6 +258,7 @@ fn render_activity_owned(
                     from_suffix.as_deref(),
                     is_selected,
                     &elapsed_str,
+                    activity.depth,
                 );
             }
         }
@@ -270,6 +273,7 @@ fn render_activity_owned(
                 Some(&format!("on {}", substituter)),
                 is_selected,
                 &elapsed_str,
+                activity.depth,
             );
         }
         NixActivityType::FetchTree => {
@@ -282,6 +286,7 @@ fn render_activity_owned(
                 None,
                 is_selected,
                 &elapsed_str,
+                activity.depth,
             );
         }
         NixActivityType::Evaluating => {
@@ -298,6 +303,7 @@ fn render_activity_owned(
                 suffix.as_deref(),
                 is_selected,
                 &elapsed_str,
+                activity.depth,
             );
         }
         NixActivityType::Unknown => {
@@ -556,19 +562,26 @@ fn DownloadProgress(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 /// Render activity with colored action word
 fn render_colored_activity(
     indent: String,
-    _spinner: &str,
+    spinner: &str,
     action: &str,
     _action_color: Color,
     name: &str,
     suffix: Option<&str>,
     is_selected: bool,
     elapsed: &str,
+    depth: usize,
 ) -> AnyElement<'static> {
     let mut left_children = vec![element!(Text(content: format!("{}", indent))).into_any()];
 
     // Add hierarchy indicator if indented
     if !indent.is_empty() {
         left_children.push(element!(Text(content: "└─ ", color: COLOR_HIERARCHY)).into_any());
+    }
+
+    // Show spinner for all top-level items (depth == 0)
+    if depth == 0 {
+        left_children
+            .push(element!(Text(content: format!("{} ", spinner), color: COLOR_ACTIVE)).into_any());
     }
 
     left_children.extend(vec![
