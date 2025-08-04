@@ -580,6 +580,12 @@ impl Nix {
         flags.push("eval-cache");
         flags.push("false");
 
+        // Always allow substitutes to ensure Nix can download dependencies
+        // See https://github.com/NixOS/nix/issues/4442
+        flags.push("--option");
+        flags.push("always-allow-substitutes");
+        flags.push("true");
+
         // handle --nix-option key value
         for chunk in self.global_options.nix_option.chunks_exact(2) {
             flags.push("--option");
