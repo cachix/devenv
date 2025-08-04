@@ -1,8 +1,8 @@
 use crate::{
     message::{key_event_to_message, Message},
-    model::{AppState, Model},
-    ActivityProgress, FetchTreeInfo, LogMessage, NixActivityState, NixBuildInfo, NixDerivationInfo,
-    NixDownloadInfo, NixQueryInfo, Operation, OperationResult, TuiEvent,
+    model::{Activity, AppState, Model},
+    ActivityProgress, LogMessage, NixActivityState, NixActivityType, Operation, OperationResult,
+    TuiEvent,
 };
 use std::time::Instant;
 
@@ -23,30 +23,35 @@ pub fn update(model: &mut Model, msg: Message) -> Option<Message> {
             None
         }
 
-        Message::SelectOperation(id) => {
-            model.ui.selected_operation = Some(id);
+        Message::SelectOperation(_id) => {
+            // TODO: Update selection logic for activities
             None
         }
 
         Message::ClearSelection => {
-            model.ui.selected_operation = None;
-            model.ui.selected_activity_index = None;
+            model.ui.selected_activity = None;
             None
         }
 
         Message::ToggleDetails => {
-            model.ui.show_details = !model.ui.show_details;
+            model.ui.view_options.show_details = !model.ui.view_options.show_details;
             None
         }
 
         Message::ToggleExpandedLogs => {
-            model.ui.show_expanded_logs = !model.ui.show_expanded_logs;
+            model.ui.view_options.show_expanded_logs = !model.ui.view_options.show_expanded_logs;
             None
         }
 
-        Message::SelectNextActivity => None,
+        Message::SelectNextActivity => {
+            model.select_next_build();
+            None
+        }
 
-        Message::SelectPreviousActivity => None,
+        Message::SelectPreviousActivity => {
+            model.select_previous_build();
+            None
+        }
 
         Message::RequestShutdown => {
             model.app_state = AppState::Shutdown;
@@ -120,38 +125,9 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             None
         }
 
-        TuiEvent::NixBuildStart {
-            operation_id,
-            derivation,
-            machine: _,
-        } => {
-            let build_info = NixBuildInfo {
-                operation_id: operation_id.clone(),
-                derivation,
-                current_phase: None,
-                start_time: Instant::now(),
-            };
-            model.nix_builds.insert(operation_id, build_info);
-            None
-        }
-
-        TuiEvent::NixBuildProgress {
-            operation_id,
-            phase,
-        } => {
-            if let Some(build_info) = model.nix_builds.get_mut(&operation_id) {
-                build_info.current_phase = Some(phase);
-            }
-            None
-        }
-
-        TuiEvent::NixBuildEnd {
-            operation_id,
-            success: _,
-        } => {
-            model.nix_builds.remove(&operation_id);
-            None
-        }
+        TuiEvent::NixBuildStart { .. } => None,
+        TuiEvent::NixBuildProgress { .. } => None,
+        TuiEvent::NixBuildEnd { .. } => None,
 
         TuiEvent::NixDerivationStart {
             operation_id,
@@ -160,17 +136,27 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             derivation_name,
             machine,
         } => {
-            let derivation_info = NixDerivationInfo {
-                operation_id,
-                activity_id,
-                derivation_path,
-                derivation_name,
-                machine,
-                current_phase: None,
+            let mut data = std::collections::HashMap::new();
+            if let Some(machine) = machine {
+                data.insert("machine".to_string(), machine);
+            }
+
+            let activity = Activity {
+                id: activity_id,
+                activity_type: NixActivityType::Build,
+                operation_id: operation_id.clone(),
+                name: derivation_path,
+                short_name: derivation_name,
+                parent_operation: model
+                    .operations
+                    .get(&operation_id)
+                    .and_then(|op| op.parent.clone()),
                 start_time: Instant::now(),
                 state: NixActivityState::Active,
+                progress: None,
+                data,
             };
-            model.nix_derivations.insert(activity_id, derivation_info);
+            model.activities.insert(activity_id, activity);
             None
         }
 
@@ -179,8 +165,8 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             activity_id,
             phase,
         } => {
-            if let Some(derivation_info) = model.nix_derivations.get_mut(&activity_id) {
-                derivation_info.current_phase = Some(phase);
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                activity.data.insert("phase".to_string(), phase);
             }
             None
         }
@@ -190,9 +176,9 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             activity_id,
             success,
         } => {
-            if let Some(derivation_info) = model.nix_derivations.get_mut(&activity_id) {
-                let duration = derivation_info.start_time.elapsed();
-                derivation_info.state = NixActivityState::Completed { success, duration };
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                let duration = activity.start_time.elapsed();
+                activity.state = NixActivityState::Completed { success, duration };
 
                 // Print completion message
                 use std::io::Write;
@@ -206,13 +192,10 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
                     color,
                     symbol,
                     reset,
-                    derivation_info.derivation_name,
+                    activity.short_name,
                     duration_str
                 );
             }
-
-            // Clean up progress data
-            model.activity_progress.remove(&activity_id);
 
             // Clean up build logs for this activity
             model.build_logs.remove(&activity_id);
@@ -226,22 +209,32 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             package_name,
             substituter,
         } => {
-            let now = Instant::now();
-            let download_info = NixDownloadInfo {
-                operation_id,
-                activity_id,
-                store_path,
-                package_name,
-                substituter,
-                bytes_downloaded: 0,
-                total_bytes: None,
-                start_time: now,
+            let mut data = std::collections::HashMap::new();
+            data.insert("substituter".to_string(), substituter);
+            data.insert("bytes_downloaded".to_string(), "0".to_string());
+            data.insert("download_speed".to_string(), "0.0".to_string());
+            data.insert(
+                "last_update_time".to_string(),
+                format!("{:?}", Instant::now()),
+            );
+            data.insert("last_bytes_downloaded".to_string(), "0".to_string());
+
+            let activity = Activity {
+                id: activity_id,
+                activity_type: NixActivityType::Download,
+                operation_id: operation_id.clone(),
+                name: store_path,
+                short_name: package_name,
+                parent_operation: model
+                    .operations
+                    .get(&operation_id)
+                    .and_then(|op| op.parent.clone()),
+                start_time: Instant::now(),
                 state: NixActivityState::Active,
-                last_update_time: now,
-                last_bytes_downloaded: 0,
-                download_speed: 0.0,
+                progress: None,
+                data,
             };
-            model.nix_downloads.insert(activity_id, download_info);
+            model.activities.insert(activity_id, activity);
             None
         }
 
@@ -251,24 +244,40 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             bytes_downloaded,
             total_bytes,
         } => {
-            if let Some(download_info) = model.nix_downloads.get_mut(&activity_id) {
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
                 let now = Instant::now();
-                let time_delta = now
-                    .duration_since(download_info.last_update_time)
-                    .as_secs_f64();
 
-                if time_delta > 0.0 {
-                    let bytes_delta =
-                        bytes_downloaded.saturating_sub(download_info.last_bytes_downloaded) as f64;
-                    download_info.download_speed = bytes_delta / time_delta;
-                    download_info.last_update_time = now;
-                    download_info.last_bytes_downloaded = bytes_downloaded;
+                // Calculate download speed
+                if let (Some(_last_time_str), Some(last_bytes_str)) = (
+                    activity.data.get("last_update_time"),
+                    activity.data.get("last_bytes_downloaded"),
+                ) {
+                    // Simple time delta calculation (approximation)
+                    if let Ok(last_bytes) = last_bytes_str.parse::<u64>() {
+                        let time_delta = 0.1; // Assume ~100ms between updates
+                        let bytes_delta = bytes_downloaded.saturating_sub(last_bytes) as f64;
+                        let speed = bytes_delta / time_delta;
+                        activity
+                            .data
+                            .insert("download_speed".to_string(), format!("{:.0}", speed));
+                    }
                 }
 
-                download_info.bytes_downloaded = bytes_downloaded;
-                if total_bytes.is_some() {
-                    download_info.total_bytes = total_bytes;
+                activity
+                    .data
+                    .insert("bytes_downloaded".to_string(), bytes_downloaded.to_string());
+                if let Some(total) = total_bytes {
+                    activity
+                        .data
+                        .insert("total_bytes".to_string(), total.to_string());
                 }
+                activity
+                    .data
+                    .insert("last_update_time".to_string(), format!("{:?}", now));
+                activity.data.insert(
+                    "last_bytes_downloaded".to_string(),
+                    bytes_downloaded.to_string(),
+                );
             }
             None
         }
@@ -278,12 +287,10 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             activity_id,
             success,
         } => {
-            if let Some(download_info) = model.nix_downloads.get_mut(&activity_id) {
-                let duration = download_info.start_time.elapsed();
-                download_info.state = NixActivityState::Completed { success, duration };
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                let duration = activity.start_time.elapsed();
+                activity.state = NixActivityState::Completed { success, duration };
             }
-            // Clean up progress data
-            model.activity_progress.remove(&activity_id);
             None
         }
 
@@ -294,16 +301,25 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             package_name,
             substituter,
         } => {
-            let query_info = NixQueryInfo {
-                operation_id,
-                activity_id,
-                store_path,
-                package_name,
-                substituter,
+            let mut data = std::collections::HashMap::new();
+            data.insert("substituter".to_string(), substituter);
+
+            let activity = Activity {
+                id: activity_id,
+                activity_type: NixActivityType::Query,
+                operation_id: operation_id.clone(),
+                name: store_path,
+                short_name: package_name,
+                parent_operation: model
+                    .operations
+                    .get(&operation_id)
+                    .and_then(|op| op.parent.clone()),
                 start_time: Instant::now(),
                 state: NixActivityState::Active,
+                progress: None,
+                data,
             };
-            model.nix_queries.insert(activity_id, query_info);
+            model.activities.insert(activity_id, activity);
             None
         }
 
@@ -312,12 +328,10 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             activity_id,
             success,
         } => {
-            if let Some(query_info) = model.nix_queries.get_mut(&activity_id) {
-                let duration = query_info.start_time.elapsed();
-                query_info.state = NixActivityState::Completed { success, duration };
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                let duration = activity.start_time.elapsed();
+                activity.state = NixActivityState::Completed { success, duration };
             }
-            // Clean up progress data
-            model.activity_progress.remove(&activity_id);
             None
         }
 
@@ -326,14 +340,22 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             activity_id,
             message,
         } => {
-            let fetch_tree_info = FetchTreeInfo {
-                operation_id,
-                activity_id,
-                message,
+            let activity = Activity {
+                id: activity_id,
+                activity_type: NixActivityType::FetchTree,
+                operation_id: operation_id.clone(),
+                name: message.clone(),
+                short_name: message,
+                parent_operation: model
+                    .operations
+                    .get(&operation_id)
+                    .and_then(|op| op.parent.clone()),
                 start_time: Instant::now(),
                 state: NixActivityState::Active,
+                progress: None,
+                data: std::collections::HashMap::new(),
             };
-            model.fetch_trees.insert(activity_id, fetch_tree_info);
+            model.activities.insert(activity_id, activity);
             None
         }
 
@@ -342,9 +364,9 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             activity_id,
             success,
         } => {
-            if let Some(fetch_tree_info) = model.fetch_trees.get_mut(&activity_id) {
-                let duration = fetch_tree_info.start_time.elapsed();
-                fetch_tree_info.state = NixActivityState::Completed { success, duration };
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                let duration = activity.start_time.elapsed();
+                activity.state = NixActivityState::Completed { success, duration };
             }
             None
         }
@@ -402,15 +424,14 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             running,
             failed,
         } => {
-            model.activity_progress.insert(
-                activity_id,
-                ActivityProgress {
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                activity.progress = Some(ActivityProgress {
                     done,
                     expected,
                     running,
                     failed,
-                },
-            );
+                });
+            }
             None
         }
 

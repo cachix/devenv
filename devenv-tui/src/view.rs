@@ -33,23 +33,19 @@ const COLOR_HIERARCHY: Color = Color::AnsiValue(242); // Medium grey for hierarc
 
 /// Main view function that creates the UI
 pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
-    let active_activities = model.get_active_activities();
+    let active_activities = model.get_active_activity_infos();
 
     let summary = model.calculate_summary();
-    let has_selection = model.ui.selected_activity_index.is_some();
+    let has_selection = model.ui.selected_activity.is_some();
     let spinner_frame = model.ui.spinner_frame;
-    let selected_index = model.ui.selected_activity_index;
+    let selected_id = model.ui.selected_activity;
 
     // Create owned activity elements
     let activity_elements: Vec<_> = active_activities
         .iter()
-        .enumerate()
-        .map(|(idx, activity)| {
-            render_activity_owned(
-                activity.clone(),
-                idx == selected_index.unwrap_or(usize::MAX),
-                spinner_frame,
-            )
+        .map(|activity| {
+            let is_selected = selected_id.map_or(false, |id| activity.activity_id == Some(id));
+            render_activity_owned(activity.clone(), is_selected, spinner_frame)
         })
         .collect();
 
@@ -58,17 +54,17 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let build_logs = selected_activity
         .as_ref()
         .filter(|a| matches!(a.activity_type, NixActivityType::Build))
-        .and_then(|a| a.activity_id)
+        .and_then(|a| Some(a.id))
         .and_then(|id| model.get_build_logs(id));
 
     let summary_view = build_summary_view(
         &summary,
         has_selection,
-        model.ui.show_expanded_logs,
+        model.ui.view_options.show_expanded_logs,
         build_logs.is_some(),
     );
 
-    let show_expanded_logs = model.ui.show_expanded_logs;
+    let show_expanded_logs = model.ui.view_options.show_expanded_logs;
 
     // Calculate dynamic height based on number of activities
     // Count activities that need extra height (downloads with progress)
