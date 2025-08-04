@@ -688,23 +688,28 @@ impl Nix {
             ));
         }
 
-        fs::write(netrc_path, netrc_content)
-            .await
-            .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to write netrc file to {}", netrc_path.display()))?;
-
-        // Set restrictive permissions (600) on the netrc file for security
-        #[cfg(unix)]
+        // Create netrc file with restrictive permissions (600)
         {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(netrc_path)
+            use tokio::io::AsyncWriteExt;
+
+            let mut file = tokio::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(netrc_path)
                 .await
-                .into_diagnostic()?
-                .permissions();
-            perms.set_mode(0o600);
-            fs::set_permissions(netrc_path, perms)
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!("Failed to create netrc file at {}", netrc_path.display())
+                })?;
+
+            file.write_all(netrc_content.as_bytes())
                 .await
-                .into_diagnostic()?;
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!("Failed to write netrc content to {}", netrc_path.display())
+                })?;
         }
 
         Ok(())
