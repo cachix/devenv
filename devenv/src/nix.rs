@@ -30,6 +30,7 @@ pub struct Nix {
     config: config::Config,
     global_options: cli::GlobalOptions,
     cachix_caches: Arc<OnceCell<CachixCaches>>,
+    netrc_path: Arc<OnceCell<String>>,
     paths: nix_backend::DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
 }
@@ -41,7 +42,6 @@ impl Nix {
         paths: nix_backend::DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
     ) -> Result<Self> {
-        let cachix_caches = Arc::new(OnceCell::new());
         let options = nix_backend::Options::default();
 
         let database_url = format!(
@@ -55,7 +55,8 @@ impl Nix {
             database_url,
             config,
             global_options,
-            cachix_caches,
+            cachix_caches: Arc::new(OnceCell::new()),
+            netrc_path: Arc::new(OnceCell::new()),
             paths,
             secretspec_resolved,
         })
@@ -485,7 +486,6 @@ impl Nix {
         let mut final_args = Vec::new();
         let known_keys_str;
         let pull_caches_str;
-        let mut netrc_path_str: Option<String> = None;
         let mut push_cache = None;
 
         if !self.global_options.offline {
@@ -531,22 +531,28 @@ impl Nix {
                     // Configure netrc file for auth token if available
                     if !cachix_caches.caches.pull.is_empty() {
                         if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
-                            let netrc_path = self.paths.dotfile.join("netrc");
-                            match self
-                                .create_netrc_file(
-                                    &netrc_path,
-                                    &cachix_caches.caches.pull,
-                                    &auth_token,
-                                )
-                                .await
-                            {
-                                Ok(()) => {
-                                    netrc_path_str = Some(netrc_path.to_string_lossy().to_string());
-                                }
-                                Err(e) => {
-                                    warn!("Failed to create netrc file: {}", e);
-                                }
-                            }
+                            let _ = self
+                                .netrc_path
+                                .get_or_init(|| async {
+                                    let netrc_path = self.paths.dotfile.join("netrc");
+                                    let netrc_path_str = netrc_path.to_string_lossy().to_string();
+
+                                    if let Err(e) = self
+                                        .create_netrc_file(
+                                            &netrc_path,
+                                            &cachix_caches.caches.pull,
+                                            &auth_token,
+                                        )
+                                        .await
+                                    {
+                                        warn!(
+                                            "Failed to create netrc file in {netrc_path_str}: {e}",
+                                        );
+                                    }
+
+                                    netrc_path_str
+                                })
+                                .await;
                         }
                     }
                 }
@@ -554,7 +560,7 @@ impl Nix {
         }
 
         // Add netrc file option if available
-        if let Some(ref netrc_path) = netrc_path_str {
+        if let Some(ref netrc_path) = self.netrc_path.get() {
             final_args.extend_from_slice(&["--option", "netrc-file", netrc_path]);
         }
 
