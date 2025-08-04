@@ -70,7 +70,7 @@ pub struct UiState {
     /// Minimum viewport height
     pub min_viewport_height: u16,
 
-    /// Maximum viewport height  
+    /// Maximum viewport height
     pub max_viewport_height: u16,
 
     /// Selected operation ID (if any)
@@ -156,7 +156,7 @@ impl Model {
             ui: UiState {
                 spinner_frame: 0,
                 last_spinner_update: Instant::now(),
-                viewport_height: 20,
+                viewport_height: 10,
                 min_viewport_height: 10,
                 max_viewport_height: 40,
                 selected_operation: None,
