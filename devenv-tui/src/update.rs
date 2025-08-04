@@ -468,37 +468,18 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             files,
             total_files_evaluated,
         } => {
-            // Debounce evaluation updates to prevent rendering issues
-            const EVALUATION_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
-            static mut LAST_EVALUATION_UPDATE: Option<Instant> = None;
-
-            let now = Instant::now();
-            let should_update = unsafe {
-                match LAST_EVALUATION_UPDATE {
-                    None => true,
-                    Some(last) => now.duration_since(last) >= EVALUATION_UPDATE_INTERVAL,
+            if let Some(operation) = model.operations.get_mut(&operation_id) {
+                // Since files are in evaluation order, the last one is the most recent
+                if let Some(latest_file) = files.last() {
+                    operation.message = latest_file.to_string();
+                    operation
+                        .data
+                        .insert("evaluation_file".to_string(), latest_file.clone());
                 }
-            };
-
-            if should_update {
-                unsafe {
-                    LAST_EVALUATION_UPDATE = Some(now);
-                }
-
-                // Update operation with latest evaluation progress
-                if let Some(operation) = model.operations.get_mut(&operation_id) {
-                    // Since files are in evaluation order, the last one is the most recent
-                    if let Some(latest_file) = files.last() {
-                        operation.message = latest_file.to_string();
-                        operation
-                            .data
-                            .insert("evaluation_file".to_string(), latest_file.clone());
-                    }
-                    operation.data.insert(
-                        "evaluation_count".to_string(),
-                        total_files_evaluated.to_string(),
-                    );
-                }
+                operation.data.insert(
+                    "evaluation_count".to_string(),
+                    total_files_evaluated.to_string(),
+                );
             }
             None
         }
