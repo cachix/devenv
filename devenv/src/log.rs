@@ -1,9 +1,8 @@
 use console::style;
-use once_cell::sync::OnceCell;
 use std::collections::HashSet;
 use std::fmt;
 use std::io::{self, IsTerminal};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
@@ -19,9 +18,6 @@ use tracing_subscriber::{
     prelude::*,
     registry::LookupSpan,
 };
-
-// Global storage for TUI state to enable cleanup before exec
-static TUI_STATE: OnceCell<Arc<devenv_tui::TuiState>> = OnceCell::new();
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
@@ -104,11 +100,8 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
                 .init();
         }
         LogFormat::Tui => {
-            // Initialize the enhanced TUI system with ratatui inline viewport
-            let (tui_layer, state) = devenv_tui::init_tui(devenv_tui::DisplayMode::Ratatui);
-
-            // Store the TUI state globally so we can clean it up before exec
-            let _ = TUI_STATE.set(state);
+            // Initialize the TUI system
+            let tui_layer = devenv_tui::init_tui();
 
             tracing_subscriber::registry()
                 .with(filter)
