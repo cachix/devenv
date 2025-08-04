@@ -485,6 +485,7 @@ impl Nix {
         let mut final_args = Vec::new();
         let known_keys_str;
         let pull_caches_str;
+        let mut netrc_path_str: Option<String> = None;
         let mut push_cache = None;
 
         if !self.global_options.offline {
@@ -526,8 +527,35 @@ impl Nix {
                             &known_keys_str,
                         ]);
                     }
+
+                    // Configure netrc file for auth token if available
+                    if !cachix_caches.caches.pull.is_empty() {
+                        if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
+                            let netrc_path = self.paths.dotfile.join("netrc");
+                            match self
+                                .create_netrc_file(
+                                    &netrc_path,
+                                    &cachix_caches.caches.pull,
+                                    &auth_token,
+                                )
+                                .await
+                            {
+                                Ok(()) => {
+                                    netrc_path_str = Some(netrc_path.to_string_lossy().to_string());
+                                }
+                                Err(e) => {
+                                    warn!("Failed to create netrc file: {}", e);
+                                }
+                            }
+                        }
+                    }
                 }
             }
+        }
+
+        // Add netrc file option if available
+        if let Some(ref netrc_path) = netrc_path_str {
+            final_args.extend_from_slice(&["--option", "netrc-file", netrc_path]);
         }
 
         final_args.extend(args.iter().copied());
@@ -644,6 +672,42 @@ impl Nix {
         let raw_conf = self.run_nix("nix", &["config", "show"], &options).await?;
         let nix_conf = NixConf::parse_stdout(&raw_conf.stdout)?;
         Ok(nix_conf)
+    }
+
+    async fn create_netrc_file(
+        &self,
+        netrc_path: &Path,
+        pull_caches: &[String],
+        auth_token: &str,
+    ) -> Result<()> {
+        let mut netrc_content = String::new();
+
+        for cache in pull_caches {
+            netrc_content.push_str(&format!(
+                "machine {cache}.cachix.org\nlogin token\npassword {auth_token}\n\n",
+            ));
+        }
+
+        fs::write(netrc_path, netrc_content)
+            .await
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to write netrc file to {}", netrc_path.display()))?;
+
+        // Set restrictive permissions (600) on the netrc file for security
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(netrc_path)
+                .await
+                .into_diagnostic()?
+                .permissions();
+            perms.set_mode(0o600);
+            fs::set_permissions(netrc_path, perms)
+                .await
+                .into_diagnostic()?;
+        }
+
+        Ok(())
     }
 
     async fn get_cachix_caches(&self) -> Result<CachixCaches> {
