@@ -3,9 +3,11 @@ use crate::{
     NixActivityType,
 };
 use human_repr::{HumanCount, HumanDuration, HumanThroughput};
+use iocraft::components::ContextProvider;
 use iocraft::prelude::*;
+use iocraft::Context;
 use std::collections::VecDeque;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Spinner animation frames (matching current CLI)
 const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -40,11 +42,11 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
 
     // Create owned activity elements
     let activity_elements: Vec<_> = active_activities
-        .into_iter()
+        .iter()
         .enumerate()
         .map(|(idx, activity)| {
             render_activity_owned(
-                activity,
+                activity.clone(),
                 idx == selected_index.unwrap_or(usize::MAX),
                 spinner_frame,
             )
@@ -69,10 +71,23 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let show_expanded_logs = model.ui.show_expanded_logs;
 
     // Calculate dynamic height based on number of activities
-    let activity_count = activity_elements.len();
+    // Count activities that need extra height (downloads with progress)
+    let mut total_height = 0;
+    for activity in &active_activities {
+        total_height += 1; // Base height for activity
+                           // Add extra line for downloads with progress
+        if matches!(activity.activity_type, NixActivityType::Download) {
+            if activity.bytes_downloaded.is_some() && activity.total_bytes.is_some() {
+                total_height += 1; // Extra line for progress bar
+            } else if let Some(progress) = &activity.generic_progress {
+                if progress.expected > 0 {
+                    total_height += 1; // Extra line for progress bar
+                }
+            }
+        }
+    }
     let min_height = 3; // Minimum height to show at least a few items
-    let max_height = 20; // Maximum height to prevent taking too much screen
-    let mut dynamic_height = activity_count.clamp(min_height, max_height) as u32;
+    let mut dynamic_height = total_height.max(min_height) as u32;
 
     // Add height for logs if showing
     if let Some(logs) = &build_logs {
@@ -92,8 +107,8 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     if build_logs.is_some() {
         children.push(
             element! {
-                View(margin_left: 1) {
-                    View(flex_direction: FlexDirection::Column) {
+                View(margin_left: 1, width: 100pct) {
+                    View(flex_direction: FlexDirection::Column, width: 100pct) {
                         #(activity_elements)
                     }
                 }
@@ -103,8 +118,8 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     } else {
         children.push(
             element! {
-                View(flex_grow: 1.0, margin_left: 1) {
-                    View(flex_direction: FlexDirection::Column) {
+                View(flex_grow: 1.0, margin_left: 1, width: 100pct) {
+                    View(flex_direction: FlexDirection::Column, width: 100pct) {
                         #(activity_elements)
                     }
                 }
@@ -133,7 +148,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     );
 
     element! {
-        View(flex_direction: FlexDirection::Column, height: dynamic_height + 1) {
+        View(flex_direction: FlexDirection::Column, height: dynamic_height + 1, width: 100pct) {
             #(children)
         }
     }
@@ -148,6 +163,10 @@ fn render_activity_owned(
     let spinner = SPINNER_FRAMES[spinner_frame];
     let indent = "  ".repeat(activity.depth);
 
+    // Calculate elapsed time
+    let elapsed = Instant::now().duration_since(activity.start_time);
+    let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
+
     // Build the activity text
     let activity_text = match &activity.activity_type {
         NixActivityType::Build => {
@@ -160,12 +179,15 @@ fn render_activity_owned(
                 &activity.short_name,
                 None,
                 is_selected,
+                &elapsed_str,
             );
         }
         NixActivityType::Download => {
+            // Check if we have byte-level progress
             if let (Some(downloaded), Some(total)) =
                 (activity.bytes_downloaded, activity.total_bytes)
             {
+                // Use byte-level progress if available
                 let percent = (downloaded as f64 / total as f64 * 100.0) as u8;
                 let human_downloaded = downloaded.human_count_bytes().to_string();
                 let human_total = total.human_count_bytes().to_string();
@@ -176,27 +198,64 @@ fn render_activity_owned(
                     .to_string();
 
                 // Return early to render with progress bar
-                return render_download_with_progress(
-                    activity,
-                    indent,
-                    spinner,
-                    downloaded,
-                    total,
-                    percent,
-                    human_downloaded,
-                    human_total,
-                    speed,
-                    is_selected,
-                );
+                return element! {
+                    ContextProvider(value: Context::owned(DownloadProgressContext {
+                        activity,
+                        indent,
+                        percent,
+                        human_downloaded,
+                        human_total,
+                        speed,
+                        is_selected,
+                    })) {
+                        DownloadProgress
+                    }
+                }
+                .into();
+            } else if let Some(progress) = &activity.generic_progress {
+                // Use generic progress if available
+                if progress.expected > 0 {
+                    return element! {
+                        ContextProvider(value: Context::owned(DownloadGenericProgressContext {
+                            activity: activity.clone(),
+                            indent,
+                            done: progress.done,
+                            expected: progress.expected,
+                            is_selected,
+                        })) {
+                            DownloadGenericProgress
+                        }
+                    }
+                    .into();
+                } else {
+                    // Show generic progress without percentage
+                    let from_suffix = activity
+                        .substituter
+                        .as_ref()
+                        .map(|s| format!("from {} [{}]", s, progress.done.human_count_bytes()));
+                    return render_colored_activity(
+                        indent,
+                        spinner,
+                        "downloading",
+                        COLOR_ACTIVE,
+                        &activity.short_name,
+                        from_suffix.as_deref(),
+                        is_selected,
+                        &elapsed_str,
+                    );
+                }
             } else {
+                // No progress data available
+                let from_suffix = activity.substituter.as_ref().map(|s| format!("from {}", s));
                 return render_colored_activity(
                     indent,
                     spinner,
                     "downloading",
                     COLOR_ACTIVE,
                     &activity.short_name,
-                    None,
+                    from_suffix.as_deref(),
                     is_selected,
+                    &elapsed_str,
                 );
             }
         }
@@ -210,6 +269,7 @@ fn render_activity_owned(
                 &activity.short_name,
                 Some(&format!("on {}", substituter)),
                 is_selected,
+                &elapsed_str,
             );
         }
         NixActivityType::FetchTree => {
@@ -221,6 +281,7 @@ fn render_activity_owned(
                 &activity.name,
                 None,
                 is_selected,
+                &elapsed_str,
             );
         }
         NixActivityType::Evaluating => {
@@ -236,6 +297,7 @@ fn render_activity_owned(
                 &activity.name,
                 suffix.as_deref(),
                 is_selected,
+                &elapsed_str,
             );
         }
         NixActivityType::Unknown => {
@@ -379,46 +441,116 @@ fn build_summary_view(
     }).into_any()
 }
 
-/// Render download with progress bar
-fn render_download_with_progress(
+/// Context for download progress data
+#[derive(Clone)]
+struct DownloadProgressContext {
     activity: ActivityInfo,
     indent: String,
-    _spinner: &str,
-    _downloaded: u64,
-    _total: u64,
     percent: u8,
     human_downloaded: String,
     human_total: String,
     speed: String,
     is_selected: bool,
-) -> AnyElement<'static> {
-    // Create progress bar using box drawing characters
-    let bar_width = 20;
-    let filled = (bar_width * percent as usize) / 100;
-    let empty = bar_width - filled;
-    let progress_bar = format!("{}{}", "█".repeat(filled), "░".repeat(empty));
+}
 
-    let mut children = vec![element!(Text(content: format!("{}", indent))).into_any()];
+/// Download progress component
+#[component]
+fn DownloadProgress(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let (terminal_width, _) = hooks.use_terminal_size();
+    let ctx = hooks.use_context::<DownloadProgressContext>();
+    let DownloadProgressContext {
+        activity,
+        indent,
+        percent,
+        human_downloaded,
+        human_total,
+        speed,
+        is_selected,
+    } = &*ctx;
+    // Calculate elapsed time
+    let elapsed = Instant::now().duration_since(activity.start_time);
+    let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
 
-    // Add hierarchy indicator if indented
+    // Progress calculation is done below with dynamic width
+
+    // Create a two-line display
+    let mut elements = vec![];
+
+    // First line: activity name
+    let mut line1_children = vec![element!(Text(content: format!("{}", indent))).into_any()];
+
     if !indent.is_empty() {
-        children.push(element!(Text(content: "└─ ", color: COLOR_HIERARCHY)).into_any());
+        line1_children.push(element!(Text(content: "└─ ", color: COLOR_HIERARCHY)).into_any());
     }
 
-    children.extend(vec![
+    line1_children.extend(vec![
         element!(Text(content: "Downloading ", color: COLOR_ACTIVE, weight: Weight::Bold)).into_any(),
-        element!(Text(content: format!("{} ", activity.short_name), color: if is_selected { COLOR_INTERACTIVE } else { Color::Reset })).into_any(),
-        element!(Text(content: "[")).into_any(),
-        element!(Text(content: progress_bar, color: COLOR_ACTIVE)).into_any(),
-        element!(Text(content: format!("] {}/{} {}% at {}", human_downloaded, human_total, percent, speed))).into_any(),
+        element!(Text(content: format!("{} ", activity.short_name), color: if *is_selected { COLOR_INTERACTIVE } else { Color::Reset })).into_any(),
     ]);
 
+    if let Some(substituter) = &activity.substituter {
+        line1_children.push(
+            element!(Text(content: format!("from {}", substituter), color: COLOR_HIERARCHY))
+                .into_any(),
+        );
+    }
+
+    elements.push(
+        element! {
+            View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
+                View(flex_direction: FlexDirection::Row, width: 100pct) {
+                    #(line1_children)
+                }
+                View(padding_right: 1) {
+                    Text(content: elapsed_str, color: Color::AnsiValue(242))
+                }
+            }
+        }
+        .into_any()
+    );
+
+    // Second line: progress bar (indented more)
+    let progress_indent = format!("{}    ", indent); // Extra indentation for child
+
+    // Calculate space for progress bar - leave room for size info and speed
+    let size_info = format!("{} / {} at {}", human_downloaded, human_total, speed);
+    let prefix_len = progress_indent.len();
+    let size_info_len = size_info.len() + 2; // +2 for spaces
+
+    // Calculate available width for progress bar
+    let available_width = (terminal_width as usize)
+        .saturating_sub(prefix_len)
+        .saturating_sub(size_info_len)
+        .saturating_sub(4); // Some padding
+    let bar_width = available_width.clamp(10, 100); // Min 10, max 100 chars
+
+    let filled = (bar_width * *percent as usize) / 100;
+    let empty = bar_width - filled;
+
+    // Split progress bar into filled and empty parts for coloring
+    let filled_bar = "─".repeat(filled);
+    let empty_bar = "─".repeat(empty);
+
+    elements.push(
+        element! {
+            View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
+                View(flex_direction: FlexDirection::Row) {
+                    Text(content: progress_indent)
+                    Text(content: filled_bar, color: COLOR_ACTIVE)
+                    Text(content: empty_bar, color: Color::AnsiValue(238))
+                }
+                Text(content: size_info, color: Color::AnsiValue(242))
+            }
+        }
+        .into_any()
+    );
+
     element! {
-        View(height: 1, flex_direction: FlexDirection::Row) {
-            #(children)
+        View(flex_direction: FlexDirection::Column) {
+            #(elements)
         }
     }
-    .into()
+    .into_any()
 }
 
 /// Render activity with colored action word
@@ -430,28 +562,34 @@ fn render_colored_activity(
     name: &str,
     suffix: Option<&str>,
     is_selected: bool,
+    elapsed: &str,
 ) -> AnyElement<'static> {
-    let mut children = vec![element!(Text(content: format!("{}", indent))).into_any()];
+    let mut left_children = vec![element!(Text(content: format!("{}", indent))).into_any()];
 
     // Add hierarchy indicator if indented
     if !indent.is_empty() {
-        children.push(element!(Text(content: "└─ ", color: COLOR_HIERARCHY)).into_any());
+        left_children.push(element!(Text(content: "└─ ", color: COLOR_HIERARCHY)).into_any());
     }
 
-    children.extend(vec![
+    left_children.extend(vec![
         element!(Text(content: format!("{} ", action.chars().next().unwrap_or_default().to_uppercase().collect::<String>() + &action[1..]), color: COLOR_ACTIVE, weight: Weight::Bold)).into_any(),
         element!(Text(content: name.to_string(), color: if is_selected { COLOR_INTERACTIVE } else { Color::Reset })).into_any(),
     ]);
 
     if let Some(suffix_text) = suffix {
-        children.push(
+        left_children.push(
             element!(Text(content: format!(" {}", suffix_text), color: COLOR_HIERARCHY)).into_any(),
         );
     }
 
     element! {
-        View(height: 1, flex_direction: FlexDirection::Row) {
-            #(children)
+        View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
+            View(flex_direction: FlexDirection::Row, width: 100pct) {
+                #(left_children)
+            }
+            View(padding_right: 1) {
+                Text(content: elapsed.to_string(), color: Color::AnsiValue(242))
+            }
         }
     }
     .into()
@@ -498,6 +636,122 @@ fn render_build_logs(logs: &VecDeque<String>, expanded: bool) -> AnyElement<'sta
     element! {
         View(height: total_height, flex_direction: FlexDirection::Column) {
             #(log_elements)
+        }
+    }
+    .into_any()
+}
+
+/// Context for download generic progress data
+#[derive(Clone)]
+struct DownloadGenericProgressContext {
+    activity: ActivityInfo,
+    indent: String,
+    done: u64,
+    expected: u64,
+    is_selected: bool,
+}
+
+/// Download with generic progress component (from type 105 events)
+#[component]
+fn DownloadGenericProgress(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let (terminal_width, _) = hooks.use_terminal_size();
+    let ctx = hooks.use_context::<DownloadGenericProgressContext>();
+    let DownloadGenericProgressContext {
+        activity,
+        indent,
+        done,
+        expected,
+        is_selected,
+    } = &*ctx;
+    // Calculate elapsed time
+    let elapsed = Instant::now().duration_since(activity.start_time);
+    let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
+
+    // Calculate progress
+    let percent = (*done as f64 / *expected as f64 * 100.0) as u8;
+    let bar_width = 20;
+    let filled = (bar_width * percent as usize) / 100;
+    let _empty = bar_width - filled;
+
+    // Format bytes
+    let human_done = done.human_count_bytes().to_string();
+    let human_expected = expected.human_count_bytes().to_string();
+
+    // Create a two-line display
+    let mut elements = vec![];
+
+    // First line: activity name
+    let mut line1_children = vec![element!(Text(content: format!("{}", indent))).into_any()];
+
+    if !indent.is_empty() {
+        line1_children.push(element!(Text(content: "└─ ", color: COLOR_HIERARCHY)).into_any());
+    }
+
+    line1_children.extend(vec![
+        element!(Text(content: "Downloading ", color: COLOR_ACTIVE, weight: Weight::Bold)).into_any(),
+        element!(Text(content: format!("{} ", activity.short_name), color: if *is_selected { COLOR_INTERACTIVE } else { Color::Reset })).into_any(),
+    ]);
+
+    if let Some(substituter) = &activity.substituter {
+        line1_children.push(
+            element!(Text(content: format!("from {}", substituter), color: COLOR_HIERARCHY))
+                .into_any(),
+        );
+    }
+
+    elements.push(
+        element! {
+            View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
+                View(flex_direction: FlexDirection::Row, width: 100pct) {
+                    #(line1_children)
+                }
+                View(padding_right: 1) {
+                    Text(content: elapsed_str, color: Color::AnsiValue(242))
+                }
+            }
+        }
+        .into_any()
+    );
+
+    // Second line: progress bar (indented more)
+    let progress_indent = format!("{}    ", indent); // Extra indentation for child
+
+    // Calculate space for progress bar - leave room for size info
+    let size_info = format!("{} / {}", human_done, human_expected);
+    let prefix_len = progress_indent.len();
+    let size_info_len = size_info.len() + 2; // +2 for spaces
+
+    // Calculate available width for progress bar
+    let available_width = (terminal_width as usize)
+        .saturating_sub(prefix_len)
+        .saturating_sub(size_info_len)
+        .saturating_sub(4); // Some padding
+    let bar_width = available_width.clamp(10, 100); // Min 10, max 100 chars
+
+    let filled = (bar_width * percent as usize) / 100;
+    let empty = bar_width - filled;
+
+    // Split progress bar into filled and empty parts for coloring
+    let filled_bar = "─".repeat(filled);
+    let empty_bar = "─".repeat(empty);
+
+    elements.push(
+        element! {
+            View(height: 1, flex_direction: FlexDirection::Row, justify_content: JustifyContent::SpaceBetween, width: 100pct) {
+                View(flex_direction: FlexDirection::Row) {
+                    Text(content: progress_indent)
+                    Text(content: filled_bar, color: COLOR_ACTIVE)
+                    Text(content: empty_bar, color: Color::AnsiValue(238))
+                }
+                Text(content: size_info, color: Color::AnsiValue(242))
+            }
+        }
+        .into_any()
+    );
+
+    element! {
+        View(flex_direction: FlexDirection::Column) {
+            #(elements)
         }
     }
     .into_any()
