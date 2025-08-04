@@ -92,8 +92,7 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
 /// Create and run the TUI application
 pub async fn run_app(event_receiver: mpsc::UnboundedReceiver<TuiEvent>) -> std::io::Result<()> {
-    let mut model = Model::new();
-    model.ui.viewport_height = 20;
+    let model = Model::new();
 
     let app_state = Arc::new(Mutex::new(SharedAppState {
         model,

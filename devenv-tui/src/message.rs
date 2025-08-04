@@ -32,24 +32,6 @@ pub enum Message {
     /// Select previous activity
     SelectPreviousActivity,
 
-    /// Select specific activity by index
-    SelectActivity(usize),
-
-    /// Scroll logs up
-    ScrollLogsUp(usize),
-
-    /// Scroll logs down  
-    ScrollLogsDown(usize),
-
-    /// Reset log scroll
-    ResetLogScroll,
-
-    /// Resize viewport
-    ResizeViewport(u16),
-
-    /// Adjust viewport height to fit content
-    AdjustViewportHeight,
-
     /// Request shutdown
     RequestShutdown,
 

@@ -1,10 +1,10 @@
 use crate::{
     message::{key_event_to_message, Message},
     model::{AppState, Model},
-    ActivityProgress, FetchTreeInfo, LogMessage, NixActivityState, NixActivityType, NixBuildInfo,
-    NixDerivationInfo, NixDownloadInfo, NixQueryInfo, Operation, OperationResult, TuiEvent,
+    ActivityProgress, FetchTreeInfo, LogMessage, NixActivityState, NixBuildInfo, NixDerivationInfo,
+    NixDownloadInfo, NixQueryInfo, Operation, OperationResult, TuiEvent,
 };
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Update function following The Elm Architecture
 /// Takes the current model and a message, updates the model, and optionally returns a new message
@@ -44,99 +44,9 @@ pub fn update(model: &mut Model, msg: Message) -> Option<Message> {
             None
         }
 
-        Message::SelectNextActivity => {
-            let activities = model.get_active_activities();
-            if !activities.is_empty() {
-                // Find the next build activity (matching original behavior)
-                let start_index = model.ui.selected_activity_index.map(|i| i + 1).unwrap_or(0);
+        Message::SelectNextActivity => None,
 
-                // Search forward from current position
-                for i in start_index..activities.len() {
-                    if activities[i].activity_type == NixActivityType::Build {
-                        model.ui.selected_activity_index = Some(i);
-                        update_scroll_for_selection(model, activities.len());
-                        return None;
-                    }
-                }
-
-                // If no build found after current position, wrap to the beginning
-                if model.ui.selected_activity_index.is_some() {
-                    for i in 0..start_index.min(activities.len()) {
-                        if activities[i].activity_type == NixActivityType::Build {
-                            model.ui.selected_activity_index = Some(i);
-                            update_scroll_for_selection(model, activities.len());
-                            return None;
-                        }
-                    }
-                }
-            }
-            None
-        }
-
-        Message::SelectPreviousActivity => {
-            let activities = model.get_active_activities();
-            if !activities.is_empty() {
-                // Find the previous build activity (matching original behavior)
-                let start_index = model.ui.selected_activity_index.unwrap_or(activities.len());
-
-                // Search backwards from current position
-                for i in (0..start_index).rev() {
-                    if activities[i].activity_type == NixActivityType::Build {
-                        model.ui.selected_activity_index = Some(i);
-                        update_scroll_for_selection(model, activities.len());
-                        return None;
-                    }
-                }
-
-                // If no build found before current position, wrap to the end and search backwards
-                if model.ui.selected_activity_index.is_some() {
-                    for i in (start_index..activities.len()).rev() {
-                        if activities[i].activity_type == NixActivityType::Build {
-                            model.ui.selected_activity_index = Some(i);
-                            update_scroll_for_selection(model, activities.len());
-                            return None;
-                        }
-                    }
-                }
-            }
-            None
-        }
-
-        Message::SelectActivity(idx) => {
-            let activities = model.get_active_activities();
-            if idx < activities.len() {
-                model.ui.selected_activity_index = Some(idx);
-                update_scroll_for_selection(model, activities.len());
-            }
-            None
-        }
-
-        Message::ScrollLogsUp(lines) => {
-            model.ui.log_scroll_offset = model.ui.log_scroll_offset.saturating_sub(lines);
-            None
-        }
-
-        Message::ScrollLogsDown(lines) => {
-            model.ui.log_scroll_offset = model.ui.log_scroll_offset.saturating_add(lines);
-            None
-        }
-
-        Message::ResetLogScroll => {
-            model.ui.log_scroll_offset = 0;
-            None
-        }
-
-        Message::ResizeViewport(height) => {
-            model.ui.viewport_height = height
-                .max(model.ui.min_viewport_height)
-                .min(model.ui.max_viewport_height);
-            None
-        }
-
-        Message::AdjustViewportHeight => {
-            // For now, just return None since we can't dynamically resize without terminal access
-            None
-        }
+        Message::SelectPreviousActivity => None,
 
         Message::RequestShutdown => {
             model.app_state = AppState::Shutdown;
@@ -508,27 +418,5 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             model.app_state = AppState::Shutdown;
             None
         }
-    }
-}
-
-/// Update scroll position to ensure selected activity is visible
-fn update_scroll_for_selection(model: &mut Model, total_activities: usize) {
-    if let Some(selected_idx) = model.ui.selected_activity_index {
-        let visible_height = model.ui.activities_visible_height as usize;
-
-        // If selected item is above visible area, scroll up
-        if selected_idx < model.ui.activity_scroll_position {
-            model.ui.activity_scroll_position = selected_idx;
-        }
-        // If selected item is below visible area, scroll down
-        else if selected_idx >= model.ui.activity_scroll_position + visible_height {
-            model.ui.activity_scroll_position = selected_idx.saturating_sub(visible_height - 1);
-        }
-
-        // Ensure scroll position is valid
-        model.ui.activity_scroll_position = model
-            .ui
-            .activity_scroll_position
-            .min(total_activities.saturating_sub(visible_height));
     }
 }
