@@ -586,6 +586,11 @@ impl Nix {
         flags.push("always-allow-substitutes");
         flags.push("true");
 
+        // Set http-connections to 100 for better parallelism
+        flags.push("--option");
+        flags.push("http-connections");
+        flags.push("100");
+
         // handle --nix-option key value
         for chunk in self.global_options.nix_option.chunks_exact(2) {
             flags.push("--option");
