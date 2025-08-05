@@ -30,6 +30,7 @@ pub struct Nix {
     config: config::Config,
     global_options: cli::GlobalOptions,
     cachix_caches: Arc<OnceCell<CachixCaches>>,
+    netrc_path: Arc<OnceCell<String>>,
     paths: nix_backend::DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
 }
@@ -41,7 +42,6 @@ impl Nix {
         paths: nix_backend::DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
     ) -> Result<Self> {
-        let cachix_caches = Arc::new(OnceCell::new());
         let options = nix_backend::Options::default();
 
         let database_url = format!(
@@ -55,7 +55,8 @@ impl Nix {
             database_url,
             config,
             global_options,
-            cachix_caches,
+            cachix_caches: Arc::new(OnceCell::new()),
+            netrc_path: Arc::new(OnceCell::new()),
             paths,
             secretspec_resolved,
         })
@@ -526,6 +527,41 @@ impl Nix {
                             &known_keys_str,
                         ]);
                     }
+
+                    // Configure a netrc file with the auth token if available
+                    if !cachix_caches.caches.pull.is_empty() {
+                        if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
+                            let netrc_path = self
+                                .netrc_path
+                                .get_or_try_init(|| async {
+                                    let netrc_path = self.paths.dotfile.join("netrc");
+                                    let netrc_path_str = netrc_path.to_string_lossy().to_string();
+
+                                    self.create_netrc_file(
+                                        &netrc_path,
+                                        &cachix_caches.caches.pull,
+                                        &auth_token,
+                                    )
+                                    .await?;
+
+                                    Ok::<String, miette::Report>(netrc_path_str)
+                                })
+                                .await;
+
+                            match netrc_path {
+                                Ok(netrc_path) => {
+                                    final_args.extend_from_slice(&[
+                                        "--option",
+                                        "netrc-file",
+                                        netrc_path,
+                                    ]);
+                                }
+                                Err(e) => {
+                                    warn!("${e}")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -655,6 +691,47 @@ impl Nix {
         let raw_conf = self.run_nix("nix", &["config", "show"], &options).await?;
         let nix_conf = NixConf::parse_stdout(&raw_conf.stdout)?;
         Ok(nix_conf)
+    }
+
+    async fn create_netrc_file(
+        &self,
+        netrc_path: &Path,
+        pull_caches: &[String],
+        auth_token: &str,
+    ) -> Result<()> {
+        let mut netrc_content = String::new();
+
+        for cache in pull_caches {
+            netrc_content.push_str(&format!(
+                "machine {cache}.cachix.org\nlogin token\npassword {auth_token}\n\n",
+            ));
+        }
+
+        // Create netrc file with restrictive permissions (600)
+        {
+            use tokio::io::AsyncWriteExt;
+
+            let mut file = tokio::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(netrc_path)
+                .await
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!("Failed to create netrc file at {}", netrc_path.display())
+                })?;
+
+            file.write_all(netrc_content.as_bytes())
+                .await
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    format!("Failed to write netrc content to {}", netrc_path.display())
+                })?;
+        }
+
+        Ok(())
     }
 
     async fn get_cachix_caches(&self) -> Result<CachixCaches> {
@@ -929,8 +1006,30 @@ impl Nix {
             .await.cloned()
     }
 
+    /// Clean up the netrc file if it was created during this session.
+    ///
+    /// This method safely removes the netrc file containing auth tokens,
+    /// handling race conditions where the file might already be removed.
+    /// Only attempts cleanup if a netrc file was actually created.
+    fn cleanup_netrc(&self) {
+        if let Some(netrc_path_str) = self.netrc_path.get() {
+            let netrc_path = Path::new(netrc_path_str);
+            match std::fs::remove_file(netrc_path) {
+                Ok(()) => debug!("Removed netrc file: {}", netrc_path_str),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => warn!("Failed to remove netrc file {}: {}", netrc_path_str, e),
+            }
+        }
+    }
+
     fn name(&self) -> &'static str {
         "nix"
+    }
+}
+
+impl Drop for Nix {
+    fn drop(&mut self) {
+        self.cleanup_netrc();
     }
 }
 
