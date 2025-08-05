@@ -7,11 +7,27 @@ use devenv_cache_core::{
     file::TrackedFile,
     time,
 };
+use glob::glob;
 use serde_json::Value;
 use sqlx::Row;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use tracing::{debug, warn};
+
+/// Expand glob patterns into actual file paths
+pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
+    patterns
+        .iter()
+        .flat_map(|pattern| {
+            glob(pattern)
+                .ok()
+                .into_iter()
+                .flatten()
+                .filter_map(|path| path.ok())
+                .filter_map(|path| path.to_str().map(String::from))
+        })
+        .collect()
+}
 
 // Create a constant for embedded migrations
 pub const MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!();
@@ -63,22 +79,22 @@ impl TaskCache {
             return Ok(false);
         }
 
-        debug!(
-            "Checking modified files for task '{}': {:?}",
-            task_name, files
-        );
+        // Expand all patterns using glob and collect results
+        let expanded_paths = expand_glob_patterns(files);
 
-        // Check each file for modifications
-        for path in files {
+        // Check all files and track if any are modified
+        // Important: We need to check ALL files, not return early,
+        // so that all files get recorded in the database
+        let mut any_modified = false;
+        for path in &expanded_paths {
             let modified = self.is_file_modified(task_name, path).await?;
             if modified {
-                debug!("File {} has been modified for task {}", path, task_name);
-                return Ok(true);
+                any_modified = true;
+                // Continue checking other files instead of returning early
             }
         }
 
-        debug!("No files modified for task '{}'", task_name);
-        Ok(false)
+        Ok(any_modified)
     }
 
     /// Get current Unix timestamp
@@ -346,6 +362,97 @@ mod tests {
         // Another check should see it as unmodified again
         assert!(!cache
             .check_modified_files(task_name, &[path_str])
+            .await
+            .unwrap());
+    }
+
+    #[sqlx::test]
+    async fn test_glob_pattern_support() {
+        let db_temp_dir = TempDir::new().unwrap();
+        let db_path = db_temp_dir.path().join("tasks-glob.db");
+
+        let cache = TaskCache::with_db_path(db_path).await.unwrap();
+        let test_temp_dir = TempDir::new().unwrap();
+
+        // Create test files
+        let file1_path = test_temp_dir.path().join("test1.txt");
+        let file2_path = test_temp_dir.path().join("test2.txt");
+        let file3_path = test_temp_dir.path().join("other.log");
+
+        {
+            let mut file1 = File::create(&file1_path).await.unwrap();
+            file1.write_all(b"content1").await.unwrap();
+            file1.sync_all().await.unwrap();
+
+            let mut file2 = File::create(&file2_path).await.unwrap();
+            file2.write_all(b"content2").await.unwrap();
+            file2.sync_all().await.unwrap();
+
+            let mut file3 = File::create(&file3_path).await.unwrap();
+            file3.write_all(b"content3").await.unwrap();
+            file3.sync_all().await.unwrap();
+        }
+
+        let task_name = "test_glob_task";
+        let pattern = format!("{}/*.txt", test_temp_dir.path().to_str().unwrap());
+
+        // First check should consider files modified (initial run)
+        assert!(cache
+            .check_modified_files(task_name, &[pattern.clone()])
+            .await
+            .unwrap());
+
+        // Second check should consider them unmodified
+        assert!(!cache
+            .check_modified_files(task_name, &[pattern.clone()])
+            .await
+            .unwrap());
+
+        // Modify one of the matched files
+        {
+            let mut file1 = File::create(&file1_path).await.unwrap();
+            file1.write_all(b"modified content1").await.unwrap();
+            file1.sync_all().await.unwrap();
+
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(1);
+            file1.into_std().await.set_modified(new_time).unwrap();
+        }
+
+        // Check should detect the modification
+        assert!(cache
+            .check_modified_files(task_name, &[pattern.clone()])
+            .await
+            .unwrap());
+
+        // Test with multiple patterns
+        let pattern2 = format!("{}/*.log", test_temp_dir.path().to_str().unwrap());
+        let patterns = vec![pattern.clone(), pattern2];
+
+        // First check with new pattern should detect the .log file as modified (not tracked before)
+        assert!(cache
+            .check_modified_files(task_name, &patterns)
+            .await
+            .unwrap());
+
+        // Second check should consider all files unmodified
+        assert!(!cache
+            .check_modified_files(task_name, &patterns)
+            .await
+            .unwrap());
+
+        // Modify the .log file
+        {
+            let mut file3 = File::create(&file3_path).await.unwrap();
+            file3.write_all(b"modified log content").await.unwrap();
+            file3.sync_all().await.unwrap();
+
+            let new_time = std::time::SystemTime::now() + std::time::Duration::from_secs(2);
+            file3.into_std().await.set_modified(new_time).unwrap();
+        }
+
+        // Check should detect the modification in .log file
+        assert!(cache
+            .check_modified_files(task_name, &patterns)
             .await
             .unwrap());
     }
