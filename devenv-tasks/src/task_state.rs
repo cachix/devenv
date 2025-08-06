@@ -1,5 +1,5 @@
 use crate::config::TaskConfig;
-use crate::task_cache::TaskCache;
+use crate::task_cache::{expand_glob_patterns, TaskCache};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use miette::{Context, IntoDiagnostic, Result};
 use std::collections::BTreeMap;
@@ -388,8 +388,9 @@ impl TaskState {
                             Ok(status) => {
                                 // Update the file states to capture any changes the task made,
                                 // regardless of whether the task succeeded or failed
-                                for path in &self.task.exec_if_modified {
-                                    cache.update_file_state(&self.task.name, path).await?;
+                                let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
+                                for path in expanded_paths {
+                                    cache.update_file_state(&self.task.name, &path).await?;
                                 }
 
                                 if status.success() {
