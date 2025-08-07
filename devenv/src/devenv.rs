@@ -474,10 +474,23 @@ impl Devenv {
         let gc_root = self
             .devenv_dot_gc
             .join(format!("container-{sanitized_name}-derivation"));
+        let host_arch = env!("TARGET_ARCH");
+        let host_os = env!("TARGET_OS");
+        let target_system = if host_os == "macos" {
+            match host_arch {
+                "aarch64" => "aarch64-linux",
+                "x86_64" => "x86_64-linux",
+                _ => bail!("Unsupported container architecture for macOS: {host_arch}"),
+            }
+        } else {
+            &self.global_options.system
+        };
         let paths = self
             .nix
             .build(
-                &[&format!("devenv.containers.{name}.derivation")],
+                &[&format!(
+                    "devenv.perSystem.{target_system}.config.containers.{name}.derivation"
+                )],
                 None,
                 Some(&gc_root),
             )
@@ -503,7 +516,7 @@ impl Devenv {
             let paths = self
                 .nix
                 .build(
-                    &[&format!("devenv.containers.{name}.copyScript")],
+                    &[&format!("devenv.config.containers.{name}.copyScript")],
                     None,
                     Some(&gc_root),
                 )
@@ -558,7 +571,7 @@ impl Devenv {
         let paths = self
             .nix
             .build(
-                &[&format!("devenv.containers.{name}.dockerRun")],
+                &[&format!("devenv.config.containers.{name}.dockerRun")],
                 None,
                 Some(&gc_root),
             )
@@ -716,7 +729,7 @@ impl Devenv {
         let value = self
             .has_processes
             .get_or_try_init(|| async {
-                let processes = self.nix.eval(&["devenv.processes"]).await?;
+                let processes = self.nix.eval(&["devenv.config.processes"]).await?;
                 Ok::<bool, miette::Report>(processes.trim() != "{}")
             })
             .await?;
@@ -728,7 +741,7 @@ impl Devenv {
             let span = info_span!("load_tasks", devenv.user_message = "Evaluating tasks");
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
-                .build(&["devenv.task.config"], None, Some(&gc_root))
+                .build(&["devenv.config.task.config"], None, Some(&gc_root))
                 .instrument(span)
                 .await?
         };
@@ -894,7 +907,7 @@ impl Devenv {
             let gc_root = self.devenv_dot_gc.join("test");
             let test_script = self
                 .nix
-                .build(&["devenv.test"], None, Some(&gc_root))
+                .build(&["devenv.config.test"], None, Some(&gc_root))
                 .instrument(span)
                 .await?;
             test_script[0].to_string_lossy().to_string()
@@ -969,7 +982,7 @@ impl Devenv {
                                         flatten_object(&format!("{}.{}", prefix, k), v)
                                     })
                                     .collect(),
-                                _ => vec![format!("devenv.{}", prefix)],
+                                _ => vec![format!("devenv.config.{}", prefix)],
                             }
                         }
                         flatten_object(key, value)
@@ -978,7 +991,7 @@ impl Devenv {
             } else {
                 attributes
                     .iter()
-                    .map(|attr| format!("devenv.{}", attr))
+                    .map(|attr| format!("devenv.config.{}", attr))
                     .collect()
             };
             let paths = self
