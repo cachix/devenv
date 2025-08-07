@@ -468,7 +468,6 @@ impl Devenv {
         // This container name is passed to the flake as an argument and tells the module system
         // that we're 1. building a container 2. which container we're building.
         self.container_name = Some(name.to_string());
-
         self.assemble(false).await?;
 
         let sanitized_name = sanitize_container_name(name);
