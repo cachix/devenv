@@ -50,7 +50,7 @@ pub struct TaskFailure {
 #[derive(Debug, Clone)]
 pub enum Skipped {
     Cached(Output),
-    NotImplemented,
+    NoCommand,
 }
 
 #[derive(Debug, Clone)]
