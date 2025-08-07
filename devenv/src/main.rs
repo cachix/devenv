@@ -108,8 +108,6 @@ async fn main() -> Result<()> {
             name,
             command,
         } => {
-            devenv.container_name = name.clone();
-
             // Backwards compatibility for the legacy container flags:
             //   `devenv container <name> --copy` is now `devenv container copy <name>`
             //   `devenv container <name> --docker-run` is now `devenv container run <name>`
