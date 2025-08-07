@@ -30,6 +30,12 @@ let
           description = "Description of the script.";
           default = "";
         };
+        packages = lib.mkOption {
+          type = types.listOf types.package;
+          description = "Packages to be available in PATH when the script runs.";
+          default = [ ];
+          defaultText = lib.literalExpression "[]";
+        };
         scriptPackage = lib.mkOption {
           internal = true;
           type = types.package;
@@ -44,9 +50,20 @@ let
             else pkgs.lib.getExe config.package;
         in
         lib.hiPrioSet (
-          pkgs.writeScriptBin name ''
-            #!${binary}
-            ${config.exec}
+          pkgs.runCommand name
+            {
+              buildInputs = config.packages;
+              text = ''
+                #!${binary}
+                ${config.exec}
+              '';
+              passAsFile = [ "text" ];
+              meta.mainProgram = name;
+            } ''
+            target="$out/bin/${name}"
+            mkdir -p "$(dirname "$target")"
+            mv "$textPath" "$target"
+            chmod +x "$target"
           ''
         );
     }

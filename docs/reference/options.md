@@ -17705,6 +17705,27 @@ package
 
 
 
+## scripts.\<name>.packages
+
+
+
+Packages to be available in PATH when the script runs.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
+
+
+
 ## scripts.\<name>.binary
 
 
