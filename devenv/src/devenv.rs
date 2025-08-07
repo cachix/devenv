@@ -463,13 +463,16 @@ impl Devenv {
         skip(self),
         fields(devenv.user_message = format!("Building {name} container"))
     )]
-    pub async fn container_build(&self, name: &str) -> Result<String> {
+    pub async fn container_build(&mut self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
             bail!(
                 "Containers are not supported on macOS yet: https://github.com/cachix/devenv/issues/430"
             );
         }
 
+        // This container name is passed to the flake as an argument and tells the module system
+        // that we're 1. building a container 2. which container we're building.
+        self.container_name = Some(name.to_string());
         self.assemble(false).await?;
 
         let sanitized_name = sanitize_container_name(name);
@@ -489,7 +492,7 @@ impl Devenv {
     }
 
     pub async fn container_copy(
-        &self,
+        &mut self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
@@ -540,7 +543,7 @@ impl Devenv {
     }
 
     pub async fn container_run(
-        &self,
+        &mut self,
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
