@@ -39,9 +39,30 @@ scripts.foo.exec = ''
 '';
 ```
 
+## Runtime packages
+
+Sometimes you need packages available only when a specific script runs, without adding them to the global environment. You can specify runtime packages using the `packages` attribute:
+
+```nix title="devenv.nix"
+{ pkgs, ... }:
+
+{
+  scripts.analyze-json = {
+    exec = ''
+      # Both curl and jq are available when this script runs
+      curl "https://httpbin.org/get?$1" | jq '.args'
+    '';
+    packages = [ pkgs.curl pkgs.jq ];
+    description = "Fetch and analyze JSON";
+  };
+}
+```
+
+The `packages` attribute ensures these tools are available in the script's PATH without polluting the global development environment.
+
 ## Pinning packages inside scripts
 
-Sometimes we don't want to expose the tools to the shell but still make sure they are pinned in a script:
+Alternatively, you can directly reference package paths in your script:
 
 ```nix title="devenv.nix"
 { pkgs, ... }:

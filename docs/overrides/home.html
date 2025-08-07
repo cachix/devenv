@@ -215,9 +215,10 @@ ncdu 2.3
                                 </div>
                             </div>
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
-  packages = [ pkgs.yarn ];
-
-  scripts.build.exec = "yarn build";
+  scripts.build = {
+    exec = "yarn build";
+    packages = [ pkgs.yarn ];
+  };
 
   tasks."myapp:build" = {
     exec = "build";
@@ -274,8 +275,8 @@ $
                             </dt>
                             <dd class="inline">
                                 Define scripts that can be invoked inside the
-                                environment, using all the packages and
-                                environment variables.
+                                environment, with optional runtime packages that
+                                are only available when the script runs.
                             </dd>
                         </div>
                         <div class="relative lg:pl-3">
