@@ -421,7 +421,7 @@ impl TaskState {
                 }
             }
         } else {
-            return Ok(TaskCompleted::Skipped(Skipped::NotImplemented));
+            return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
         }
     }
 }

@@ -123,7 +123,7 @@ impl TasksUi {
                     tasks_status.skipped += 1;
                     let status = match skipped {
                         Skipped::Cached(_) => "Cached",
-                        Skipped::NotImplemented => "Not implemented",
+                        Skipped::NoCommand => "No command",
                     };
                     (console::style(format!("{:17}", status)).blue().bold(), None)
                 }
@@ -350,9 +350,9 @@ impl TasksUi {
                                     console::style("Cached").blue().bold(),
                                     "".to_string(),
                                 ),
-                                TaskCompleted::Skipped(Skipped::NotImplemented) => (
-                                    "Not implemented".to_string(),
-                                    console::style("Not implemented").blue().bold(),
+                                TaskCompleted::Skipped(Skipped::NoCommand) => (
+                                    "No command".to_string(),
+                                    console::style("No command").blue().bold(),
                                     "".to_string(),
                                 ),
                                 TaskCompleted::Failed(duration, _) => (

@@ -149,7 +149,7 @@ Succeeded         devenv:enterShell         4ms
 • Testing ...
 Running tasks     devenv:enterTest
 Succeeded         devenv:git-hooks:run     474ms
-Not implemented   devenv:enterTest
+No command        devenv:enterTest
 1 Skipped, 1 Succeeded                      474.62ms
 ```
 
