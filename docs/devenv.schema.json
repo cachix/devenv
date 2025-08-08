@@ -150,6 +150,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "permittedUnfreePackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -172,6 +178,12 @@
           "type": "boolean"
         },
         "permittedInsecurePackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "permittedUnfreePackages": {
           "type": "array",
           "items": {
             "type": "string"
