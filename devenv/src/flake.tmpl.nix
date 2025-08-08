@@ -28,6 +28,7 @@
                   input.overlays.${overlay} or (throw "Input `${inputName}` has no overlay called `${overlay}`. Supported overlays: ${nixpkgs.lib.concatStringsSep ", " (builtins.attrNames input.overlays)}"))
               inputAttrs.overlays or [ ];
           overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.inputs or { }));
+          permittedUnfreePackages = devenv.nixpkgs.per-platform."${system}".permittedUnfreePackages or devenv.nixpkgs.permittedUnfreePackages or [ ];
           pkgs = import nixpkgs {
             inherit system;
             config = {
@@ -36,6 +37,7 @@
               cudaSupport = devenv.nixpkgs.per-platform."${system}".cudaSupport or devenv.nixpkgs.cudaSupport or false;
               cudaCapabilities = devenv.nixpkgs.per-platform."${system}".cudaCapabilities or devenv.nixpkgs.cudaCapabilities or [ ];
               permittedInsecurePackages = devenv.nixpkgs.per-platform."${system}".permittedInsecurePackages or devenv.nixpkgs.permittedInsecurePackages or devenv.permittedInsecurePackages or [ ];
+              allowUnfreePredicate = if permittedUnfreePackages != [ ] then (pkg: builtins.elem (lib.getName pkg) permittedUnfreePackages) else null;
             };
             inherit overlays;
           };

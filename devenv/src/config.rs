@@ -30,6 +30,8 @@ pub struct NixpkgsConfig {
     pub cuda_capabilities: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub permitted_insecure_packages: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub permitted_unfree_packages: Vec<String>,
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
