@@ -268,6 +268,7 @@ in
     ./tests.nix
     ./cachix.nix
     ./tasks.nix
+    ./flake-compat.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
@@ -302,9 +303,6 @@ in
     env.DEVENV_RUNTIME = config.devenv.runtime;
     env.DEVENV_DOTFILE = config.devenv.dotfile;
     env.DEVENV_ROOT = config.devenv.root;
-
-    env."DEVENV_${lib.toUpper (config._module.args.name or "default")}_UP" = config.procfileScript;
-    env."DEVENV_${lib.toUpper (config._module.args.name or "default")}_TEST" = config.test;
 
     packages = [
       # needed to make sure we can load libs
