@@ -60,7 +60,9 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
                 { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
               )
               devenv.containers
-            ) // {
+            ) 
+            # Deprecated packages
+            // {
               "${shellPrefix shellName}devenv-up" = devenv.procfileScript;
               "${shellPrefix shellName}devenv-test" = devenv.test;
             }
