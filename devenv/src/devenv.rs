@@ -213,7 +213,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            info!("Creating {}", filename);
+            info!(tui.log = true, file = %filename, "Creating file");
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -400,26 +400,99 @@ impl Devenv {
         self.exec_in_shell(None, &[]).await
     }
 
-    /// Execute a command by replacing the current process using exec.
+    /// Execute a command by spawning it as a child process and waiting for completion.
     ///
     /// This method accepts `Option<String>` for the command to support both:
     /// - Interactive shell: `exec_in_shell(None, &[])`
     /// - Command execution: `exec_in_shell(Some(cmd), args)`
     ///
-    /// **Important**: This function never returns `Ok(())` on success because `exec()`
-    /// replaces the current process. The `Result<()>` return type only represents
-    /// potential errors during setup or if `exec()` fails to start the new process.
-    /// On successful exec, this function never returns.
+    /// This function spawns the shell/command as a child process and properly handles
+    /// signals like Ctrl+C by forwarding them to the child process, allowing for
+    /// proper cleanup and termination.
     pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
-        let shell_cmd = self.prepare_shell(&cmd, args).await?;
+        let mut shell_cmd = self.prepare_shell(&cmd, args).await?;
         info!(devenv.is_user_message = true, "Entering shell");
-        let err = shell_cmd.into_std().exec();
 
-        let cmd_context = match &cmd {
-            Some(c) => format!("command '{}'", c),
-            None => "interactive shell".to_string(),
-        };
-        bail!("Failed to exec into shell with {}: {}", cmd_context, err);
+        // Clean up TUI before spawning to prevent terminal corruption
+        crate::log::cleanup_before_exec();
+
+        // Spawn the shell as a child process instead of exec
+        let mut child = shell_cmd.spawn().into_diagnostic().with_context(|| {
+            let cmd_context = match &cmd {
+                Some(c) => format!("command '{}'", c),
+                None => "interactive shell".to_string(),
+            };
+            format!("Failed to spawn {}", cmd_context)
+        })?;
+
+        // Set up signal handlers to forward signals to the child process
+        let child_id = child.id();
+        if let Some(pid) = child_id {
+            let child_pid = Pid::from_raw(pid as i32);
+
+            // Set up signal forwarding in a separate task
+            let _signal_task = tokio::spawn(async move {
+                let mut sigint =
+                    match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                    {
+                        Ok(signal) => signal,
+                        Err(e) => {
+                            debug!("Failed to setup SIGINT forwarding: {}", e);
+                            return;
+                        }
+                    };
+
+                let mut sigterm =
+                    match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    {
+                        Ok(signal) => signal,
+                        Err(e) => {
+                            debug!("Failed to setup SIGTERM forwarding: {}", e);
+                            return;
+                        }
+                    };
+
+                loop {
+                    tokio::select! {
+                        _ = sigint.recv() => {
+                            debug!("Forwarding SIGINT to child process {}", child_pid);
+                            if let Err(e) = signal::kill(child_pid, signal::Signal::SIGINT) {
+                                debug!("Failed to forward SIGINT to child: {}", e);
+                                break;
+                            }
+                        }
+                        _ = sigterm.recv() => {
+                            debug!("Forwarding SIGTERM to child process {}", child_pid);
+                            if let Err(e) = signal::kill(child_pid, signal::Signal::SIGTERM) {
+                                debug!("Failed to forward SIGTERM to child: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Wait for the child process to complete
+        let exit_status = child.wait().await.into_diagnostic().with_context(|| {
+            let cmd_context = match &cmd {
+                Some(c) => format!("command '{}'", c),
+                None => "interactive shell".to_string(),
+            };
+            format!("Failed to wait for {}", cmd_context)
+        })?;
+
+        // Exit with the same code as the child process
+        if let Some(code) = exit_status.code() {
+            if code != 0 {
+                std::process::exit(code);
+            }
+        } else {
+            // Child was terminated by a signal
+            std::process::exit(1);
+        }
+
+        Ok(())
     }
 
     /// Run a command and return the output.
@@ -452,7 +525,12 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let span = info_span!("update", devenv.user_message = msg);
+        let span = info_span!(
+            "update",
+            tui.op = true,
+            devenv.user_message = msg,
+            input = ?input_name
+        );
         self.nix.update(input_name).instrument(span).await?;
 
         Ok(())
@@ -895,7 +973,11 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let span = info_span!("test", devenv.user_message = "Building tests");
+            let span = info_span!(
+                "test_build",
+                tui.op = true,
+                devenv.user_message = "Building tests"
+            );
             let gc_root = self.devenv_dot_gc.join("test");
             self.nix
                 .build(&["devenv.test"], None, Some(&gc_root))
@@ -917,7 +999,11 @@ impl Devenv {
             self.up(vec![], &options).await?;
         }
 
-        let span = info_span!("test", devenv.user_message = "Running tests");
+        let span = info_span!(
+            "test_run",
+            tui.op = true,
+            devenv.user_message = "Running tests"
+        );
         let result = async {
             debug!("Running command: {test_script}");
             process::Command::new(&test_script)
@@ -955,7 +1041,12 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<()> {
-        let span = info_span!("build", devenv.user_message = "Building");
+        let span = info_span!(
+            "build",
+            tui.op = true,
+            devenv.user_message = "Building",
+            attributes = ?attributes
+        );
         async move {
             self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
