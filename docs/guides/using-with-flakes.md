@@ -61,13 +61,8 @@ This template will create:
 
 ### The `flake.nix` file
 
-Setting up `devenv` inside a flake requires wiring up a few outputs.
-
-Here's a minimal `flake.nix` to start you off that includes:
-
-* A `devShell` created with `devenv.lib.mkShell`.
-  See [the reference documentation](../reference/options.md) for the possible options to use here.
-* Two packages, `devenv-up` and `devenv-test`, that are needed for `devenv up` and `devenv test` to work inside the shell.
+Here's a minimal `flake.nix` to start you off that includes a `devShell` created with `devenv.lib.mkShell`.
+See [the reference documentation](../reference/options.md) for the possible options to use here.
 
 ```nix
 {
@@ -87,9 +82,6 @@ Here's a minimal `flake.nix` to start you off that includes:
       pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      packages.${system}.devenv-up = self.devShells.${system}.default.config.procfileScript;
-      packages.${system}.devenv-test = self.devShells.${system}.default.config.test;
-
       devShells.${system}.default = devenv.lib.mkShell {
         inherit inputs pkgs;
         modules = [
@@ -193,14 +185,6 @@ The `flake.nix` file contains multiple `devShells`. For example:
       pkgs = nixpkgs.legacyPackages.${system};
     in
     {
-      packages.${system} = {
-        projectA-devenv-up = self.devShells.${system}.projectA.config.procfileScript;
-        projectA-devenv-test = self.devShells.${system}.projectA.config.test;
-
-        projectB-devenv-up = self.devShells.${system}.projectB.config.procfileScript;
-        projectB-devenv-test = self.devShells.${system}.projectB.config.test;
-      };
-
       devShells.${system} = {
         projectA = devenv.lib.mkShell {
           inherit inputs pkgs;
