@@ -52,17 +52,21 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
       };
       config.devShells = lib.mapAttrs (_name: devenv: devenv.shell) config.devenv.shells;
 
+      # Deprecated packages
+      # These were used to wire up commands in the devenv shim and are no longer necessary.
       config.packages =
+        let
+          deprecate = name: value: lib.warn "The package '${name}' is deprecated. Use the corresponding `devenv <cmd>` commands." value;
+        in
         lib.concatMapAttrs
           (shellName: devenv:
             (lib.concatMapAttrs
               (containerName: container:
-                { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
+                let pkgName = "${shellPrefix shellName}container-${containerName}";
+                in { ${pkgName} = deprecate pkgName container.derivation; }
               )
               devenv.containers
-            ) 
-            # Deprecated packages
-            // {
+            ) // lib.mapAttrs deprecate {
               "${shellPrefix shellName}devenv-up" = devenv.procfileScript;
               "${shellPrefix shellName}devenv-test" = devenv.test;
             }
