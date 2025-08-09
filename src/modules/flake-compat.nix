@@ -11,8 +11,17 @@ let
   nixFlags = "--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes";
 
   # Helper function to wrap commands with nix develop
+  #
+  # This is skipped if the user is already in a shell launched by direnv.
+  # We trust that direnv will handle reloads.
   wrapWithNixDevelop =
-    command: args: "exec nix develop .#${shellName} --impure ${nixFlags} -c ${command} ${args}";
+    command: args: ''
+      if [[ -n "$IN_NIX_SHELL" && -n "$DIRENV_FILE" ]]; then
+        exec ${command} ${args}
+      else
+        exec nix develop .#${shellName} --impure ${nixFlags} -c ${command} ${args}
+      fi
+    '';
 
   # Flake integration wrapper for devenv CLI
   devenvFlakeWrapper = pkgs.writeScriptBin "devenv" ''
