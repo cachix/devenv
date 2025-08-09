@@ -743,7 +743,7 @@ impl Nix {
         };
 
         // Run Nix evaluation and file I/O concurrently
-        let cachix_eval_future = self.eval(&["devenv.cachix"]);
+        let cachix_eval_future = self.eval(&["devenv.config.cachix"]);
         let trusted_keys_path = self.paths.cachix_trusted_keys.clone();
         let known_keys_future = tokio::fs::read_to_string(&trusted_keys_path);
 
