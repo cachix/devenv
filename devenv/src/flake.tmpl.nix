@@ -30,16 +30,15 @@
           overlays = nixpkgs.lib.flatten (nixpkgs.lib.mapAttrsToList getOverlays (devenv.inputs or { }));
           permittedUnfreePackages = devenv.nixpkgs.per-platform."${system}".permittedUnfreePackages or devenv.nixpkgs.permittedUnfreePackages or [ ];
           pkgs = import nixpkgs {
-            inherit system;
+            inherit overlays system;
             config = {
               allowUnfree = devenv.nixpkgs.per-platform."${system}".allowUnfree or devenv.nixpkgs.allowUnfree or devenv.allowUnfree or false;
               allowBroken = devenv.nixpkgs.per-platform."${system}".allowBroken or devenv.nixpkgs.allowBroken or devenv.allowBroken or false;
               cudaSupport = devenv.nixpkgs.per-platform."${system}".cudaSupport or devenv.nixpkgs.cudaSupport or false;
               cudaCapabilities = devenv.nixpkgs.per-platform."${system}".cudaCapabilities or devenv.nixpkgs.cudaCapabilities or [ ];
               permittedInsecurePackages = devenv.nixpkgs.per-platform."${system}".permittedInsecurePackages or devenv.nixpkgs.permittedInsecurePackages or devenv.permittedInsecurePackages or [ ];
-              allowUnfreePredicate = if permittedUnfreePackages != [ ] then (pkg: builtins.elem (lib.getName pkg) permittedUnfreePackages) else null;
+              allowUnfreePredicate = if (permittedUnfreePackages != [ ]) then (pkg: builtins.elem (nixpkgs.lib.getName pkg) permittedUnfreePackages) else (_: false)
             };
-            inherit overlays;
           };
           lib = pkgs.lib;
           importModule = path:
