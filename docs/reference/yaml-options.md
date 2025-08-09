@@ -2,8 +2,6 @@
 
 | Key                                                           | Value                                                                         |
 |---------------------------------------------------------------|-------------------------------------------------------------------------------|
-| allowBroken                                                   | (deprecated) Allow packages marked as broken. Defaults to `false`.            |
-| allowUnfree                                                   | (deprecated) Allow unfree packages. Defaults to `false`.                      |
 | clean.enabled                                                 | Clean the environment when entering the shell. Defaults to `false`.           |
 | clean.keep                                                    | A list of environment variables to keep when cleaning the environment.        |
 | imports                                                       | A list of relative paths or references to inputs to import ``devenv.nix``.    |
@@ -13,7 +11,6 @@
 | inputs.&lt;name&gt;.flake                                     | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
 | inputs.&lt;name&gt;.overlays                                  | A list of overlays to include from the input.                                 |
 | inputs.&lt;name&gt;.url                                       | URI specification of the input, see below for possible values.                |
-| permittedInsecurePackages                                     | (deprecated) A list of insecure permitted packages.                           |
 |                                                               |                                                                               |
 | nixpkgs.allowBroken                                           | Allow packages marked as broken. Defaults to `false`.                         |
 | nixpkgs.allowUnfree                                           | Allow unfree packages. Defaults to `false`.                                   |
