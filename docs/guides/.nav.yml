@@ -1,4 +1,5 @@
 nav:
+   - Monorepo: monorepo.md
    - Profiles: profiles.md
    - Using with Flakes: using-with-flakes.md
    - Using with flake.parts: using-with-flake-parts.md

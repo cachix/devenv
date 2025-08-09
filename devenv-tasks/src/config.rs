@@ -15,6 +15,8 @@ pub struct TaskConfig {
     pub exec_if_modified: Vec<String>,
     #[serde(default)]
     pub inputs: Option<serde_json::Value>,
+    #[serde(default)]
+    pub cwd: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, clap::ValueEnum)]

@@ -1,0 +1,7 @@
+allowUnfree: false
+allowBroken: false
+impure: false
+imports:
+  - ./first
+  - ./second
+  - ./third

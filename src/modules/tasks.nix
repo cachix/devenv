@@ -78,6 +78,7 @@ let
               command = config.command;
               input = config.input;
               exec_if_modified = config.execIfModified;
+              cwd = config.cwd;
             };
             description = "Internal configuration for the task.";
           };
@@ -113,6 +114,11 @@ let
             type = types.attrsOf types.anything;
             default = { };
             description = "Input values for the task, encoded as JSON.";
+          };
+          cwd = lib.mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Working directory to run the task in. If not specified, the current working directory will be used.";
           };
         };
       });
