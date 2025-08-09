@@ -268,6 +268,7 @@ in
     ./tests.nix
     ./cachix.nix
     ./tasks.nix
+    ./flake-compat.nix
   ]
   ++ (listEntries ./languages)
   ++ (listEntries ./services)
