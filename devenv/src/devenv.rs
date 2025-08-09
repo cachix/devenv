@@ -5,7 +5,7 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use include_dir::{include_dir, Dir};
-use miette::{bail, miette, Context, IntoDiagnostic, Result};
+use miette::{bail, miette, IntoDiagnostic, Result, WrapErr};
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
 use secretspec;
@@ -819,7 +819,7 @@ impl Devenv {
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
         let temp_dir = tempfile::TempDir::with_prefix("devenv-env")
             .into_diagnostic()
-            .context("Failed to create temporary directory for environment capture")?;
+            .wrap_err("Failed to create temporary directory for environment capture")?;
 
         let script_path = temp_dir.path().join("script");
         let env_path = temp_dir.path().join("env");
@@ -828,17 +828,16 @@ impl Devenv {
         fs::write(&script_path, script)
             .await
             .into_diagnostic()
-            .context(format!(
-                "Failed to write script to {}",
-                script_path.display()
-            ))?;
+            .wrap_err_with(|| format!("Failed to write script to {}", script_path.display()))?;
         fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
             .await
             .into_diagnostic()
-            .context(format!(
-                "Failed to set execute permissions on {}",
-                script_path.display()
-            ))?;
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to set execute permissions on {}",
+                    script_path.display()
+                )
+            })?;
 
         // Run script and capture its environment exports
         self.prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
@@ -847,20 +846,19 @@ impl Devenv {
             .stdout(Stdio::inherit())
             .spawn()
             .into_diagnostic()
-            .context("Failed to execute environment capture script")?
+            .wrap_err("Failed to execute environment capture script")?
             .wait()
             .await
             .into_diagnostic()
-            .context("Failed to wait for environment capture script to complete")?;
+            .wrap_err("Failed to wait for environment capture script to complete")?;
 
         // Parse the environment variables
         let file = File::open(&env_path)
             .await
             .into_diagnostic()
-            .context(format!(
-                "Failed to open environment file at {}",
-                env_path.display()
-            ))?;
+            .wrap_err_with(|| {
+                format!("Failed to open environment file at {}", env_path.display())
+            })?;
         let reader = BufReader::new(file);
         let mut shell_envs = Vec::new();
         let mut lines = reader.lines();
@@ -927,14 +925,11 @@ impl Devenv {
                 .envs(envs)
                 .spawn()
                 .into_diagnostic()
-                .context(format!(
-                    "Failed to spawn test process using {}",
-                    test_script
-                ))?
+                .wrap_err_with(|| format!("Failed to spawn test process using {}", test_script))?
                 .wait_with_output()
                 .await
                 .into_diagnostic()
-                .context("Failed to get output from test process")
+                .wrap_err("Failed to get output from test process")
         }
         .instrument(span)
         .await?;

@@ -1,7 +1,7 @@
 use crate::config::TaskConfig;
 use crate::task_cache::TaskCache;
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
-use miette::{Context, IntoDiagnostic, Result};
+use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::process::Stdio;
 use tokio::fs::File;
@@ -85,14 +85,14 @@ impl TaskState {
         if let Some(inputs) = &self.task.inputs {
             let inputs_json = serde_json::to_string(inputs)
                 .into_diagnostic()
-                .context("Failed to serialize task inputs to JSON")?;
+                .wrap_err("Failed to serialize task inputs to JSON")?;
             command.env("DEVENV_TASK_INPUT", inputs_json);
         }
 
         // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
         let outputs_file = tempfile::NamedTempFile::new()
             .into_diagnostic()
-            .context("Failed to create temporary file for task output")?;
+            .wrap_err("Failed to create temporary file for task output")?;
         command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
 
         // Set environment variables from task outputs
@@ -119,7 +119,7 @@ impl TaskState {
         // Set DEVENV_TASKS_OUTPUTS
         let outputs_json = serde_json::to_string(outputs)
             .into_diagnostic()
-            .context("Failed to serialize task outputs to JSON")?;
+            .wrap_err("Failed to serialize task outputs to JSON")?;
         command.env("DEVENV_TASKS_OUTPUTS", outputs_json);
 
         Ok((command, outputs_file))
@@ -173,7 +173,7 @@ impl TaskState {
 
             let (mut command, _) = self
                 .prepare_command(cmd, outputs)
-                .context("Failed to prepare status command")?;
+                .wrap_err("Failed to prepare status command")?;
 
             // Use spawn and wait with output to properly handle status script execution
             match command.output().await {
@@ -249,12 +249,12 @@ impl TaskState {
         if let Some(cmd) = &self.task.command {
             let (mut command, outputs_file) = self
                 .prepare_command(cmd, outputs)
-                .context("Failed to prepare task command")?;
+                .wrap_err("Failed to prepare task command")?;
 
             let result = command
                 .spawn()
                 .into_diagnostic()
-                .with_context(|| format!("Failed to spawn command for {}", cmd));
+                .wrap_err_with(|| format!("Failed to spawn command for {}", cmd));
 
             let mut child = match result {
                 Ok(c) => c,
