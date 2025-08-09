@@ -30,6 +30,10 @@
 | secretspec.profile                                            | Secretspec profile name to use.                                               |
 | secretspec.provider                                           | Secretspec provider to use.                                                   |
 
+!!! note "Added in 1.9"
+
+    - nixpkgs.permittedUnfreePackages
+
 !!! note "Added in 1.8"
 
     - `secretspec`
