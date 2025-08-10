@@ -1398,7 +1398,6 @@ impl Devenv {
             system = \"{}\";
             devenv_root = \"{}\";
             devenv_dotfile = \"{}\";
-            devenv_dotfile_string = \"{}\";
             container_name = {};
             devenv_tmpdir = \"{}\";
             devenv_runtime = \"{}\";
@@ -1409,7 +1408,6 @@ impl Devenv {
             self.global_options.system,
             self.devenv_root.display(),
             self.devenv_dotfile.display(),
-            self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
             self.container_name
                 .as_deref()
                 .map(|s| format!("\"{}\"", s))
