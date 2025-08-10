@@ -897,14 +897,13 @@ impl Devenv {
         let test_script = {
             let span = info_span!("test", devenv.user_message = "Building tests");
             let gc_root = self.devenv_dot_gc.join("test");
-            self.nix
+            let test_script = self
+                .nix
                 .build(&["devenv.test"], None, Some(&gc_root))
                 .instrument(span)
-                .await?
+                .await?;
+            test_script[0].to_string_lossy().to_string()
         };
-        let test_script_path = &test_script[0];
-
-        let test_script = test_script_path.to_string_lossy().to_string();
 
         let envs = self.capture_shell_environment().await?;
 
