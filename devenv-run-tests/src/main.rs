@@ -288,12 +288,12 @@ async fn main() -> Result<ExitCode> {
             ),
         ),
         (
-            "HOME", 
-            env::var("HOME").unwrap_or_else(|_| "/tmp".to_string())
+            "HOME",
+            env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()),
         ),
         (
-            "USER", 
-            env::var("USER").unwrap_or_else(|_| "nobody".to_string())
+            "USER",
+            env::var("USER").unwrap_or_else(|_| "nobody".to_string()),
         ),
     ];
 
