@@ -158,7 +158,7 @@ impl SpanTimings {
     }
 }
 
-struct HumanReadableDuration(Duration);
+pub struct HumanReadableDuration(pub Duration);
 
 impl std::fmt::Display for HumanReadableDuration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
