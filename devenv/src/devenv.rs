@@ -1,4 +1,4 @@
-use super::{cli, config, nix_backend, tasks, util};
+use super::{cli, config, log::HumanReadableDuration, nix_backend, tasks, util};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
@@ -1168,9 +1168,9 @@ impl Devenv {
                 Err(nix::errno::Errno::ESRCH) => {
                     // ESRCH means "No such process" - it has shut down
                     debug!(
-                        "Process {} has shut down after {:?}",
+                        "Process {} has shut down after {}",
                         pid,
-                        start_time.elapsed()
+                        HumanReadableDuration(start_time.elapsed())
                     );
                     break;
                 }
