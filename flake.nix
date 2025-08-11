@@ -328,12 +328,12 @@
             moduleInputs = {
               inherit git-hooks;
             } // inputs;
-            project = inputs.nixpkgs.lib.evalModules {
+            project = nixpkgs.lib.evalModules {
               specialArgs = moduleInputs // {
                 inputs = moduleInputs;
               };
               modules = [
-                { config._module.args.pkgs = inputs.nixpkgs.lib.mkDefault pkgs; }
+                { config._module.args.pkgs = nixpkgs.lib.mkDefault pkgs; }
                 (self.modules + /top-level.nix)
                 (
                   { config, ... }:
