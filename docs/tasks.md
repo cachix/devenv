@@ -118,6 +118,9 @@ You can specify a list of files to monitor with `execIfModified`. The task will 
         "package.json" # Specific file
         "src"          # Entire directory
       ];
+      # Optionally run the build in a specific directory
+      # Can use relative paths or absolute paths with git.root
+      cwd = "${config.git.root}/frontend";
     };
   };
 }

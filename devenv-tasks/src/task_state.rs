@@ -74,6 +74,11 @@ impl TaskState {
         let mut command = Command::new(cmd);
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
+        // Set working directory if specified
+        if let Some(cwd) = &self.task.cwd {
+            command.current_dir(cwd);
+        }
+
         // Create a new process group for better signal handling
         // This ensures that signals sent to the parent are propagated to all children
         #[cfg(unix)]

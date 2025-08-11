@@ -9,6 +9,12 @@ let
         description = "Bash code to run the process.";
       };
 
+      cwd = lib.mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Working directory to run the process in. If not specified, the current working directory will be used.";
+      };
+
       process-compose = lib.mkOption {
         type = types.attrs; # TODO: type this explicitly?
         default = { };
@@ -142,6 +148,7 @@ in
         name = "devenv:processes:${name}";
         value = {
           exec = process.exec;
+          cwd = process.cwd;
         };
       })
       config.processes;
