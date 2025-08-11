@@ -71,7 +71,7 @@ Entering shell ...
 Scripts can also execute using a package and have a description, which can be useful in your `enterShell`.
 
 !!! tip "Consider using tasks for shell initialization"
-    For operations that need to run when entering the shell, consider using [tasks with the `before` attribute](tasks.md#entershell--entertest) instead of `enterShell`. Tasks provide better control over execution order and dependencies.
+    For operations that need to run when entering the shell, consider using [tasks with the `before` attribute](tasks.md#entershell-entertest) instead of `enterShell`. Tasks provide better control over execution order and dependencies.
 
 ```nix title="devenv.nix"
 { pkgs, config, lib, ... }:

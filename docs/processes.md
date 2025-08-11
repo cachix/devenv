@@ -1,6 +1,8 @@
 # Processes
 
-Starting with a simple example:
+Devenv uses [process-compose](https://github.com/F1bonacc1/process-compose) to manage and orchestrate processes in your development environment. Process-compose provides process supervision, dependency management, health checks, and a TUI interface for monitoring your processes.
+
+## Basic example
 
 ```nix title="devenv.nix"
 { pkgs, ... }:

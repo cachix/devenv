@@ -38,5 +38,5 @@ nav:
   - Reference: reference
   - Recipes: common-patterns.md
   - Blog: blog
-  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/
+  - Roadmap: blog/posts/devenv-is-switching-its-nix-implementation-to-tvix.md
   - Community: community
