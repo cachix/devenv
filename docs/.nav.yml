@@ -38,5 +38,6 @@ nav:
   - Reference: reference
   - Recipes: common-patterns.md
   - Blog: blog
-  - Roadmap: blog/posts/devenv-is-switching-its-nix-implementation-to-tvix.md
+  # XXX: we're using absolute path so that the title stays Roadmap
+  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/
   - Community: community
