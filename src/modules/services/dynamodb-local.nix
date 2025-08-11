@@ -39,10 +39,13 @@ in
       exec = "${startScript}";
       process-compose = {
         readiness_probe = {
-          exec.command = "${pkgs.curl}/bin/curl -f -k http://127.0.0.1:${toString cfg.port}";
-          initial_delay_seconds = 1;
+          exec.command = ''
+            AWS_ACCESS_KEY_ID=dummy AWS_SECRET_ACCESS_KEY=dummy AWS_DEFAULT_REGION=us-east-1 \
+            ${pkgs.awscli2}/bin/aws dynamodb list-tables --endpoint-url http://127.0.0.1:${toString cfg.port} --output text --no-cli-pager >/dev/null 2>&1
+          '';
+          initial_delay_seconds = 2;
           period_seconds = 10;
-          timeout_seconds = 2;
+          timeout_seconds = 5;
           success_threshold = 1;
           failure_threshold = 5;
         };

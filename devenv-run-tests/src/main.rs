@@ -176,13 +176,7 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                 config,
                 devenv_root: Some(devenv_root.clone()),
                 devenv_dotfile: Some(devenv_dotfile),
-                global_options: Some(devenv::GlobalOptions {
-                    // Avoid caching between setup and shell.
-                    // Because setup runs inside the shell, we can cache the shell before it's fully set up (e.g. dotenv test)
-                    // TODO(sander): remove once `pathExists` can be cache-busted
-                    eval_cache: false,
-                    ..Default::default()
-                }),
+                global_options: Some(devenv::GlobalOptions::default()),
             };
             let devenv = Devenv::new(options).await;
 
@@ -293,9 +287,33 @@ async fn main() -> Result<ExitCode> {
                 env::var("PATH").unwrap_or_default()
             ),
         ),
-        ("HOME", env::var("HOME").unwrap_or_default()),
+        (
+            "HOME",
+            env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()),
+        ),
+        (
+            "USER",
+            env::var("USER").unwrap_or_else(|_| "nobody".to_string()),
+        ),
     ];
 
+    // Pass through optional environment variables only if they exist
+    // TERM is essential for many programs, provide a safe default if not set
+    env.push((
+        "TERM",
+        env::var("TERM").unwrap_or_else(|_| "dumb".to_string()),
+    ));
+    // SHELL is needed by many programs that spawn subshells
+    env.push((
+        "SHELL",
+        env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()),
+    ));
+    if let Ok(lang) = env::var("LANG") {
+        env.push(("LANG", lang));
+    }
+    if let Ok(lc_all) = env::var("LC_ALL") {
+        env.push(("LC_ALL", lc_all));
+    }
     if let Ok(tzdir) = env::var("TZDIR") {
         env.push(("TZDIR", tzdir));
     }

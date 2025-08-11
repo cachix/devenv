@@ -1,4 +1,4 @@
-use super::{cli, config, nix_backend, tasks, util};
+use super::{cli, config, log::HumanReadableDuration, nix_backend, tasks, util};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
@@ -897,14 +897,13 @@ impl Devenv {
         let test_script = {
             let span = info_span!("test", devenv.user_message = "Building tests");
             let gc_root = self.devenv_dot_gc.join("test");
-            self.nix
+            let test_script = self
+                .nix
                 .build(&["devenv.test"], None, Some(&gc_root))
                 .instrument(span)
-                .await?
+                .await?;
+            test_script[0].to_string_lossy().to_string()
         };
-        let test_script_path = &test_script[0];
-
-        let test_script = test_script_path.to_string_lossy().to_string();
 
         let envs = self.capture_shell_environment().await?;
 
@@ -1106,24 +1105,79 @@ impl Devenv {
 
     pub async fn down(&self) -> Result<()> {
         if !PathBuf::from(&self.processes_pid()).exists() {
-            error!("No processes running.");
             bail!("No processes running");
         }
 
         let pid = fs::read_to_string(self.processes_pid())
             .await
-            .expect("Failed to read PROCESSES_PID")
+            .into_diagnostic()
+            .wrap_err("Failed to read processes.pid file")?
+            .trim()
             .parse::<i32>()
-            .expect("Failed to parse PROCESSES_PID");
+            .into_diagnostic()
+            .wrap_err("Invalid PID in processes.pid file")
+            .map(Pid::from_raw)?;
 
         info!("Stopping process with PID {}", pid);
 
-        let pid = Pid::from_raw(pid);
         match signal::kill(pid, signal::Signal::SIGTERM) {
             Ok(_) => {}
             Err(_) => {
-                error!("Process with PID {} not found.", pid);
-                bail!("Process not found");
+                bail!("Process with PID {} not found.", pid);
+            }
+        }
+
+        // Wait for the process to actually shut down using exponential backoff
+        let start_time = std::time::Instant::now();
+        let max_wait = std::time::Duration::from_secs(30);
+        let mut wait_interval = std::time::Duration::from_millis(10);
+        const MAX_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+
+        loop {
+            // Check if process is still running by sending signal 0 (null signal)
+            match signal::kill(pid, None) {
+                Ok(_) => {
+                    // Process still exists
+                    let elapsed = start_time.elapsed();
+                    if elapsed >= max_wait {
+                        warn!("Process {} did not shut down gracefully within {} seconds, sending SIGKILL to process group", pid, max_wait.as_secs());
+
+                        // Send SIGKILL to the entire process group
+                        // Negative PID means send to process group
+                        let pgid = Pid::from_raw(-pid.as_raw());
+                        match signal::kill(pgid, signal::Signal::SIGKILL) {
+                            Ok(_) => info!("Sent SIGKILL to process group {}", pid.as_raw()),
+                            Err(e) => warn!(
+                                "Failed to send SIGKILL to process group {}: {}",
+                                pid.as_raw(),
+                                e
+                            ),
+                        }
+
+                        // Give it a moment to die after SIGKILL
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        break;
+                    }
+
+                    tokio::time::sleep(wait_interval).await;
+
+                    // Exponential backoff: double the interval up to MAX_INTERVAL
+                    wait_interval = wait_interval.mul_f64(1.5).min(MAX_INTERVAL);
+                }
+                Err(nix::errno::Errno::ESRCH) => {
+                    // ESRCH means "No such process" - it has shut down
+                    debug!(
+                        "Process {} has shut down after {}",
+                        pid,
+                        HumanReadableDuration(start_time.elapsed())
+                    );
+                    break;
+                }
+                Err(e) => {
+                    // Some other error occurred
+                    warn!("Error checking process {}: {}", pid, e);
+                    break;
+                }
             }
         }
 
