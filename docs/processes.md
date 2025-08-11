@@ -39,3 +39,6 @@ A set of common services are also available, such as [services.postgres.enable](
 ## Running tasks before/after the process
 
 Processes are automatically available as tasks, allowing you to define pre and post hooks. See the [Processes as tasks](tasks.md#processes-as-tasks) section for details on how to run tasks before a process starts or after it stops.
+
+!!! note
+    Currently, tasks are spawned per process instance. This means if you have multiple instances of a process running, tasks will run for each instance separately. See [issue #2037](https://github.com/cachix/devenv/issues/2037) for planned improvements to this behavior.
