@@ -14,6 +14,7 @@ use serde_json;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ffi::OsStr;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::path::{Path, PathBuf};
@@ -1392,30 +1393,46 @@ impl Devenv {
             }
         }
 
-        // create flake.devenv.nix
+        // Create flake.devenv.nix
+        //
+        // `devenv_root` is an absolute string path to the root of the project directory.
+        // `devenv_dotfile` is an absolute string path to the devenv dotfile directory.
+        // `devenv_dotfile_path` is a relative Nix path to the dotfile directory.
+        //  This is used to load in additional files from the dotfile directory.
+        // `devenv_tmpdir` is an absolute string path to the temporary directory for this shell.
+        // `devenv_runtime` is an absolute string path to the runtime directory for this shell.
+        // `devenv_istesting` is a boolean indicating if the shell is being assembled for testing.
+        // `container_name` indicates the name of the container being built, copied, or run, if any.
         let vars = indoc::formatdoc!(
-            "version = \"{}\";
-            system = \"{}\";
-            devenv_root = \"{}\";
-            devenv_dotfile = \"{}\";
-            container_name = {};
-            devenv_tmpdir = \"{}\";
-            devenv_runtime = \"{}\";
-            devenv_istesting = {};
-            devenv_direnvrc_latest_version = {};
+            "version = \"{version}\";
+            system = \"{system}\";
+            devenv_root = \"{devenv_root}\";
+            devenv_dotfile = \"{devenv_dotfile}\";
+            devenv_dotfile_path = ./{devenv_dotfile_name};
+            devenv_tmpdir = \"{devenv_tmpdir}\";
+            devenv_runtime = \"{devenv_runtime}\";
+            devenv_istesting = {devenv_istesting};
+            devenv_direnvrc_latest_version = {direnv_version};
+            container_name = {container_name};
             ",
-            crate_version!(),
-            self.global_options.system,
-            self.devenv_root.display(),
-            self.devenv_dotfile.display(),
-            self.container_name
+            version = crate_version!(),
+            system = self.global_options.system,
+            devenv_root = self.devenv_root.display(),
+            devenv_dotfile = self.devenv_dotfile.display(),
+            devenv_dotfile_name = self
+                .devenv_dotfile
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap(),
+            container_name = self
+                .container_name
                 .as_deref()
                 .map(|s| format!("\"{}\"", s))
                 .unwrap_or_else(|| "null".to_string()),
-            self.devenv_tmp,
-            self.devenv_runtime.display(),
-            is_testing,
-            DIRENVRC_VERSION.to_string()
+            devenv_tmpdir = self.devenv_tmp,
+            devenv_runtime = self.devenv_runtime.display(),
+            devenv_istesting = is_testing,
+            direnv_version = DIRENVRC_VERSION.to_string()
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
