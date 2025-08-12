@@ -1397,8 +1397,7 @@ impl Devenv {
             "version = \"{}\";
             system = \"{}\";
             devenv_root = \"{}\";
-            devenv_dotfile = ./{};
-            devenv_dotfile_string = \"{}\";
+            devenv_dotfile = \"{}\";
             container_name = {};
             devenv_tmpdir = \"{}\";
             devenv_runtime = \"{}\";
@@ -1408,8 +1407,7 @@ impl Devenv {
             crate_version!(),
             self.global_options.system,
             self.devenv_root.display(),
-            self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
-            self.devenv_dotfile.file_name().unwrap().to_str().unwrap(),
+            self.devenv_dotfile.display(),
             self.container_name
                 .as_deref()
                 .map(|s| format!("\"{}\"", s))
