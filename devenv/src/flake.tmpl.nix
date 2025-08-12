@@ -8,16 +8,16 @@
       pre-commit-hooks.follows = "git-hooks";
       nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
       devenv.url = "github:cachix/devenv?dir=src/modules";
-      } // (if builtins.pathExists (devenv_dotfile + "/flake.json")
-      then builtins.fromJSON (builtins.readFile (devenv_dotfile +  "/flake.json"))
+      } // (if builtins.pathExists (devenv_dotfile_path + "/flake.json")
+      then builtins.fromJSON (builtins.readFile (devenv_dotfile_path +  "/flake.json"))
       else { });
 
       outputs = { nixpkgs, ... }@inputs:
         let
           __DEVENV_VARS__
             devenv =
-            if builtins.pathExists (devenv_dotfile + "/devenv.json")
-            then builtins.fromJSON (builtins.readFile (devenv_dotfile + "/devenv.json"))
+            if builtins.pathExists (devenv_dotfile_path + "/devenv.json")
+            then builtins.fromJSON (builtins.readFile (devenv_dotfile_path + "/devenv.json"))
             else { };
           getOverlays = inputName: inputAttrs:
             map
@@ -98,7 +98,7 @@
               (if builtins.pathExists ./devenv.nix then ./devenv.nix else { })
               (devenv.devenv or { })
               (if builtins.pathExists ./devenv.local.nix then ./devenv.local.nix else { })
-              (if builtins.pathExists (devenv_dotfile + "/cli-options.nix") then import (devenv_dotfile + "/cli-options.nix") else { })
+              (if builtins.pathExists (devenv_dotfile_path + "/cli-options.nix") then import (devenv_dotfile_path + "/cli-options.nix") else { })
             ];
           };
           config = project.config;
