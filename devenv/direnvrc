@@ -102,13 +102,16 @@ _devenv_watches() {
 use_devenv() {
   _nix_direnv_preflight
 
+  # Capture all arguments passed to use_devenv for DEVENV_CMDLINE
+  export DEVENV_CMDLINE="$*"
+
   # Remaining parameters are passed as flags to devenv
   local devenv_cmd=("${DEVENV_BIN}")
   # Add all arguments passed to use_devenv
   if (( $# > 0 )); then
     devenv_cmd+=("$@")
   fi
-  
+
   devenv_dir=.
   env_deps_path="$devenv_dir/.devenv/input-paths.txt"
 
