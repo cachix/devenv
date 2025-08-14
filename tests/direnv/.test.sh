@@ -22,10 +22,13 @@ cat > $XDG_CONFIG_HOME/.config/direnv/direnv.toml << 'EOF'
 strict_env = true
 EOF
 
+# Define the devenv arguments
+DEVENV_ARGS="--verbose"
+
 # Initialize direnv
-cat > .envrc << 'EOF'
-  eval "$(devenv direnvrc)"
-  use devenv
+cat > .envrc << EOF
+  eval "\$(devenv direnvrc)"
+  use devenv $DEVENV_ARGS
 EOF
 
 # Load the environment
@@ -34,6 +37,13 @@ direnv_eval
 
 # Enter shell and capture initial watches
 DIRENV_WATCHES_BEFORE=$DIRENV_WATCHES
+
+# Verify DEVENV_CMDLINE matches the expected arguments
+if [[ "${DEVENV_CMDLINE:-}" != "$DEVENV_ARGS" ]]; then
+  echo "FAIL: DEVENV_CMDLINE is not set to '$DEVENV_ARGS', got: '${DEVENV_CMDLINE:-}'" >&2
+  exit 1
+fi
+echo "PASS: DEVENV_CMDLINE is correctly set to: $DEVENV_CMDLINE" >&2
 
 # Execute some operations that should not cause direnv to reload
 echo "Running commands that should not trigger direnv reload..." >&2
