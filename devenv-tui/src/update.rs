@@ -94,22 +94,6 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
                 let success = matches!(result, OperationResult::Success);
                 let duration = operation.start_time.elapsed();
                 operation.complete(success);
-
-                // Print completion message to stderr (above the TUI area)
-                use std::io::Write;
-                let symbol = if success { "✓" } else { "✖" };
-                let color = if success { "\x1b[32m" } else { "\x1b[31m" };
-                let reset = "\x1b[0m";
-                let duration_str = crate::view::format_duration(duration);
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "{}{}{} {} in {}",
-                    color,
-                    symbol,
-                    reset,
-                    operation.message,
-                    duration_str
-                );
             }
             None
         }
@@ -179,22 +163,6 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             if let Some(activity) = model.activities.get_mut(&activity_id) {
                 let duration = activity.start_time.elapsed();
                 activity.state = NixActivityState::Completed { success, duration };
-
-                // Print completion message
-                use std::io::Write;
-                let symbol = if success { "✓" } else { "✖" };
-                let color = if success { "\x1b[32m" } else { "\x1b[31m" };
-                let reset = "\x1b[0m";
-                let duration_str = crate::view::format_duration(duration);
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "{}{}{} Built {} in {}",
-                    color,
-                    symbol,
-                    reset,
-                    activity.short_name,
-                    duration_str
-                );
             }
 
             // Clean up build logs for this activity

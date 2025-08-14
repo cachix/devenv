@@ -4,6 +4,7 @@ pub mod tracing_layer;
 
 // The Elm Architecture modules
 pub mod app;
+pub mod components;
 pub mod message;
 pub mod model;
 pub mod update;
