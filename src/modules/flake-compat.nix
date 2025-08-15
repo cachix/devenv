@@ -1,8 +1,27 @@
-{ config, pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 let
   version = lib.fileContents ./latest-version;
   shellName = config._module.args.name or "default";
+
+  nixFlags = "--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes";
+
+  # Helper function to wrap commands with nix develop
+  #
+  # This is skipped if the user is already in a shell launched by direnv.
+  # We trust that direnv will handle reloads.
+  wrapWithNixDevelop = command: args: ''
+    if [[ -n "$IN_NIX_SHELL" && -n "$DIRENV_FILE" ]]; then
+      exec ${command} ${args}
+    else
+      exec nix develop .#${shellName} --impure ${nixFlags} -c ${command} ${args}
+    fi
+  '';
 
   # Flake integration wrapper for devenv CLI
   devenvFlakeWrapper = pkgs.writeScriptBin "devenv" ''
@@ -10,8 +29,6 @@ let
 
     # we want subshells to fail the program
     set -e
-
-    NIX_FLAGS="--show-trace --extra-experimental-features nix-command --extra-experimental-features flakes"
 
     command=$1
     if [[ ! -z $command ]]; then
@@ -21,12 +38,12 @@ let
     case $command in
       up)
         # Re-enter the shell to ensure we use the latest configuration
-        exec nix develop .#${shellName} --impure $NIX_FLAGS -c devenv-flake-up "$@"
+        ${wrapWithNixDevelop "devenv-flake-up" "\"$@\""}
         ;;
 
       test)
         # Re-enter the shell to ensure we use the latest configuration
-        exec nix develop .#${shellName} --impure $NIX_FLAGS -c devenv-flake-test "$@"
+        ${wrapWithNixDevelop "devenv-flake-test" "\"$@\""}
         ;;
 
       version)
@@ -60,7 +77,7 @@ in
 
       # Add devenv-flake-up and devenv-flake-test scripts
       (pkgs.writeShellScriptBin "devenv-flake-up" ''
-        ${lib.optionalString (config.processes == {}) ''
+        ${lib.optionalString (config.processes == { }) ''
           echo "No 'processes' option defined: https://devenv.sh/processes/" >&2
           exit 1
         ''}
