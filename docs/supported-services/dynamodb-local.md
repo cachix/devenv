@@ -59,3 +59,23 @@ Listen address for the Dynamodb-local\.
 
 *Default:*
 ` 8000 `
+
+
+
+### services\.dynamodb-local\.sharedDb
+
+
+
+If true, enables the -sharedDb flag for DynamoDB Local\.
+When enabled, DynamoDB Local creates a single database file named shared-local-instance\.db\.
+Every program that connects to DynamoDB accesses this file\. If you delete the file, you lose any data stored in it\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
