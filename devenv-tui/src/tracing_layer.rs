@@ -97,6 +97,15 @@ where
         let mut visitor = FieldVisitor::default();
         attrs.record(&mut visitor);
 
+        // Handle task-related spans from devenv-tasks
+        if metadata.target().starts_with("devenv_tasks") {
+            // Check if this is a task execution span
+            if let Some(task_name) = visitor.fields.get("task_name") {
+                let task_name = task_name.trim_matches('"').to_string();
+                self.send_event(TuiEvent::TaskStart { task_name });
+            }
+        }
+
         // Handle spans marked with tui.op = true OR spans with devenv.user_message (legacy)
         let has_user_message = visitor.fields.contains_key("devenv.user_message");
         if visitor.is_tui_op || has_user_message {
@@ -164,6 +173,28 @@ where
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
+
+        // Handle task status updates from devenv-tasks
+        if event.metadata().target().starts_with("devenv_tasks") {
+            if let Some(task_name) = visitor.fields.get("task_name") {
+                let task_name = task_name.trim_matches('"').to_string();
+
+                // Check for task status updates
+                if let Some(status) = visitor.fields.get("status") {
+                    let status = status.trim_matches('"').to_string();
+                    let result = visitor
+                        .fields
+                        .get("result")
+                        .map(|r| r.trim_matches('"').to_string());
+
+                    self.send_event(TuiEvent::TaskUpdate {
+                        task_name,
+                        status,
+                        result,
+                    });
+                }
+            }
+        }
 
         // Handle log messages marked with tui.log = true
         if visitor.is_tui_log {

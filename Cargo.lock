@@ -1339,6 +1339,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "devenv-eval-cache",
+ "devenv-tasks",
  "futures",
  "human-repr",
  "indexmap 2.11.4",
@@ -1350,6 +1351,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]

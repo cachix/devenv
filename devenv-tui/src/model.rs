@@ -37,6 +37,11 @@ pub struct Model {
 
     /// Completed messages to print above the TUI area
     pub completed_messages: Vec<String>,
+
+    /// Task tracking
+    pub current_task: Option<String>,
+    pub task_start_time: Option<Instant>,
+    pub task_hierarchy: Vec<TaskInfo>,
 }
 
 /// Unified activity structure
@@ -106,6 +111,27 @@ pub enum AppState {
     Shutdown,
 }
 
+/// Task information for hierarchy display
+#[derive(Debug, Clone)]
+pub struct TaskInfo {
+    pub name: String,
+    pub status: TaskDisplayStatus,
+    pub start_time: Option<Instant>,
+    pub duration: Option<std::time::Duration>,
+    pub depth: usize,
+}
+
+/// Display status for tasks
+#[derive(Debug, Clone, PartialEq)]
+pub enum TaskDisplayStatus {
+    Pending,
+    Running,
+    Success,
+    Failed,
+    Skipped,
+    Cancelled,
+}
+
 impl Model {
     /// Create a new Model with default values
     pub fn new() -> Self {
@@ -136,7 +162,81 @@ impl Model {
             },
             app_state: AppState::Running,
             completed_messages: Vec::new(),
+            current_task: None,
+            task_start_time: None,
+            task_hierarchy: Vec::new(),
         }
+    }
+
+    /// Handle task start event
+    pub fn handle_task_start(&mut self, task_name: String, start_time: Instant) {
+        self.current_task = Some(task_name.clone());
+        self.task_start_time = Some(start_time);
+
+        // Add or update task in hierarchy
+        if let Some(task) = self.task_hierarchy.iter_mut().find(|t| t.name == task_name) {
+            task.status = TaskDisplayStatus::Running;
+            task.start_time = Some(start_time);
+        } else {
+            self.task_hierarchy.push(TaskInfo {
+                name: task_name,
+                status: TaskDisplayStatus::Running,
+                start_time: Some(start_time),
+                duration: None,
+                depth: 0, // TODO: Calculate proper depth from task dependencies
+            });
+        }
+    }
+
+    /// Handle task update event
+    pub fn handle_task_update(
+        &mut self,
+        task_name: String,
+        status: String,
+        result: Option<String>,
+    ) {
+        if let Some(task) = self.task_hierarchy.iter_mut().find(|t| t.name == task_name) {
+            task.status = match (status.as_str(), result.as_deref()) {
+                ("pending", _) => TaskDisplayStatus::Pending,
+                ("running", _) => TaskDisplayStatus::Running,
+                ("completed", Some("success")) => TaskDisplayStatus::Success,
+                ("completed", Some("failed")) => TaskDisplayStatus::Failed,
+                ("completed", Some("skipped")) => TaskDisplayStatus::Skipped,
+                ("completed", Some("cancelled")) => TaskDisplayStatus::Cancelled,
+                ("completed", _) => TaskDisplayStatus::Success, // Default to success if no result
+                _ => TaskDisplayStatus::Pending,
+            };
+        }
+    }
+
+    /// Handle task end event
+    pub fn handle_task_end(
+        &mut self,
+        task_name: String,
+        duration: std::time::Duration,
+        success: bool,
+        _error: Option<String>,
+    ) {
+        // Clear current task if this was it
+        if self.current_task.as_ref() == Some(&task_name) {
+            self.current_task = None;
+            self.task_start_time = None;
+        }
+
+        // Update task in hierarchy
+        if let Some(task) = self.task_hierarchy.iter_mut().find(|t| t.name == task_name) {
+            task.status = if success {
+                TaskDisplayStatus::Success
+            } else {
+                TaskDisplayStatus::Failed
+            };
+            task.duration = Some(duration);
+        }
+    }
+
+    /// Get current task elapsed time
+    pub fn get_current_task_duration(&self) -> Option<std::time::Duration> {
+        self.task_start_time.map(|start| start.elapsed())
     }
 
     /// Add a log message to the message log, maintaining size limit

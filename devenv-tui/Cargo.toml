@@ -15,6 +15,7 @@ tokio = { workspace = true, features = [
   "time",
   "signal",
 ] }
+tokio-util = { workspace = true }
 futures = { workspace = true }
 
 # TUI library
@@ -38,6 +39,9 @@ serde_json = { workspace = true }
 # Nix log parsing
 devenv-eval-cache = { path = "../devenv-eval-cache" }
 
+# Task system integration
+devenv-tasks = { path = "../devenv-tasks" }
+
 # Time handling
 once_cell = { workspace = true }
 chrono = { workspace = true }
@@ -51,4 +55,3 @@ path = "src/bin/tui-replay.rs"
 [dev-dependencies]
 pretty_assertions = { workspace = true }
 tempfile = { workspace = true }
-
