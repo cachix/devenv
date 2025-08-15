@@ -13,7 +13,12 @@ let
 
     cd "${baseDir}"
 
-    ${config.services.dynamodb-local.package}/bin/dynamodb-local -port ${toString cfg.port} -dbPath ${baseDir} -disableTelemetry
+    extraFlags=""
+    if [[ "${toString cfg.sharedDb}" ]]; then
+      extraFlags+="-sharedDb"
+    fi
+
+    ${config.services.dynamodb-local.package}/bin/dynamodb-local -port ${toString cfg.port} -dbPath ${baseDir} -disableTelemetry $extraFlags
   '';
 in
 {
@@ -31,6 +36,15 @@ in
       type = types.port;
       description = "Listen address for the Dynamodb-local.";
       default = 8000;
+    };
+    sharedDb = lib.mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        If true, enables the -sharedDb flag for DynamoDB Local.
+        When enabled, DynamoDB Local creates a single database file named shared-local-instance.db.
+        Every program that connects to DynamoDB accesses this file. If you delete the file, you lose any data stored in it.
+      '';
     };
   };
 
