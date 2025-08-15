@@ -19143,6 +19143,29 @@ Listen address for the Dynamodb-local.
 
 
 
+## services.dynamodb-local.sharedDb
+
+
+
+If true, enables the -sharedDb flag for DynamoDB Local.
+When enabled, DynamoDB Local creates a single database file named shared-local-instance.db.
+Every program that connects to DynamoDB accesses this file. If you delete the file, you lose any data stored in it.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
+
+
 ## services.elasticmq.enable
 
 
