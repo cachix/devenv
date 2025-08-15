@@ -15860,7 +15860,7 @@ null or absolute path
 *Example:*
 
 ```
-./ruby-version
+./.ruby-version
 
 ```
 
