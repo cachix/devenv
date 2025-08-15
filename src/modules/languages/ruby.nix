@@ -38,13 +38,13 @@ in
         The .ruby-version file path to extract the Ruby version from.
         This automatically sets the `languages.ruby.package` using [nixpkgs-ruby](https://github.com/bobvanderlinden/nixpkgs-ruby).
         When the `.ruby-version` file exists in the same directory as the devenv configuration, you can use:
-        
+
         ```nix
         languages.ruby.versionFile = ./.ruby-version;
         ```
       '';
       example = lib.literalExpression ''
-        ./ruby-version
+        ./.ruby-version
       '';
     };
 
