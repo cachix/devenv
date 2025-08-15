@@ -3,7 +3,7 @@ use crate::{
     model::{ActivityInfo, ActivitySummary, Model},
     NixActivityType,
 };
-use human_repr::{HumanCount, HumanDuration, HumanThroughput};
+use human_repr::{HumanCount, HumanDuration};
 use iocraft::components::ContextProvider;
 use iocraft::prelude::*;
 use iocraft::Context;
@@ -18,17 +18,39 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let has_selection = model.ui.selected_activity.is_some();
     let spinner_frame = model.ui.spinner_frame;
     let selected_id = model.ui.selected_activity;
+    let show_expanded_logs = model.ui.view_options.show_expanded_logs;
+
+    // Check if we have a selected build activity with logs FIRST
+    let selected_activity = model.get_selected_activity();
+    let build_logs = selected_activity
+        .as_ref()
+        .filter(|a| matches!(a.activity_type, NixActivityType::Build))
+        .and_then(|a| model.get_build_logs(a.id));
+
+    // Show all activities (including the selected build activity with inline logs)
+    let activities_to_show: Vec<_> = active_activities.iter().collect();
 
     // Create owned activity elements
-    let activity_elements: Vec<_> = active_activities
+    let activity_elements: Vec<_> = activities_to_show
         .iter()
         .map(|activity| {
             let is_selected = selected_id.map_or(false, |id| activity.activity_id == Some(id));
+
+            // Pass build logs if this is the selected build activity
+            let activity_build_logs =
+                if is_selected && matches!(activity.activity_type, NixActivityType::Build) {
+                    build_logs.cloned()
+                } else {
+                    None
+                };
+
             element! {
                 ContextProvider(value: Context::owned(ActivityRenderContext {
-                    activity: activity.clone(),
+                    activity: (*activity).clone(),
                     is_selected: is_selected,
                     spinner_frame: spinner_frame,
+                    build_logs: activity_build_logs,
+                    expanded_logs: show_expanded_logs,
                 })) {
                     ActivityItem
                 }
@@ -36,14 +58,6 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
             .into_any()
         })
         .collect();
-
-    // Check if we have a selected build activity with logs
-    let selected_activity = model.get_selected_activity();
-    let build_logs = selected_activity
-        .as_ref()
-        .filter(|a| matches!(a.activity_type, NixActivityType::Build))
-        .and_then(|a| Some(a.id))
-        .and_then(|id| model.get_build_logs(id));
 
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
@@ -57,14 +71,14 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     }
     .into_any();
 
-    let show_expanded_logs = model.ui.view_options.show_expanded_logs;
-
-    // Calculate dynamic height based on number of activities
-    // Count activities that need extra height (downloads with progress)
+    // Calculate dynamic height based on all activities (including inline logs)
     let mut total_height = 0;
-    for activity in &active_activities {
+    for activity in &activities_to_show {
         total_height += 1; // Base height for activity
-                           // Add extra line for downloads with progress
+
+        let is_selected = selected_id.map_or(false, |id| activity.activity_id == Some(id));
+
+        // Add extra line for downloads with progress
         if matches!(activity.activity_type, NixActivityType::Download) {
             if activity.bytes_downloaded.is_some() && activity.total_bytes.is_some() {
                 total_height += 1; // Extra line for progress bar
@@ -74,58 +88,31 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                 }
             }
         }
+
+        // Build activities use early return with custom height - account for it
+        if is_selected && matches!(activity.activity_type, NixActivityType::Build) {
+            if let Some(logs) = build_logs.as_ref() {
+                let build_logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
+                total_height += build_logs_component.calculate_height(); // Add actual log height
+            }
+        }
     }
     let min_height = 3; // Minimum height to show at least a few items
-    let mut dynamic_height = total_height.max(min_height) as u32;
-
-    // Add height for logs if showing
-    let build_logs_height = if let Some(logs) = &build_logs {
-        let lines_to_show = if show_expanded_logs {
-            logs.len().min(50) // Cap at 50 lines even when expanded
-        } else {
-            10
-        };
-        // Calculate actual lines that will be shown (same as BuildLogs)
-        let actual_log_lines = logs.iter().rev().take(lines_to_show).count();
-        // Total height is separator (1) + actual log lines
-        1 + actual_log_lines
-    } else {
-        0
-    };
-
-    dynamic_height += build_logs_height as u32;
+    let dynamic_height = total_height.max(min_height) as u32;
 
     let mut children = vec![];
 
-    // Activity list - only use flex_grow when no logs are shown
-    if build_logs.is_some() {
-        children.push(
-            element! {
-                View(width: 100pct) {
-                    View(flex_direction: FlexDirection::Column, width: 100pct) {
-                        #(activity_elements)
-                    }
+    // Activity list (with inline logs)
+    children.push(
+        element! {
+            View(flex_grow: 1.0, width: 100pct) {
+                View(flex_direction: FlexDirection::Column, width: 100pct) {
+                    #(activity_elements)
                 }
             }
-            .into_any(),
-        );
-    } else {
-        children.push(
-            element! {
-                View(flex_grow: 1.0, width: 100pct) {
-                    View(flex_direction: FlexDirection::Column, width: 100pct) {
-                        #(activity_elements)
-                    }
-                }
-            }
-            .into_any(),
-        );
-    }
-
-    // Add build logs if a build is selected
-    if let Some(logs) = build_logs {
-        children.push(render_build_logs(logs, show_expanded_logs));
-    }
+        }
+        .into_any(),
+    );
 
     // Summary line at bottom
     children.push(
@@ -141,7 +128,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         .into_any(),
     );
 
-    // Total height: activities + build logs + summary line (1) + small buffer
+    // Total height: activities (with inline logs) + summary line (1) + small buffer
     let total_height = dynamic_height + 2; // +1 for summary, +1 buffer to prevent overflow
 
     element! {
@@ -157,6 +144,8 @@ struct ActivityRenderContext {
     activity: ActivityInfo,
     is_selected: bool,
     spinner_frame: usize,
+    build_logs: Option<VecDeque<String>>,
+    expanded_logs: bool,
 }
 
 /// Render a single activity (owned version)
@@ -168,6 +157,8 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         activity,
         is_selected,
         spinner_frame,
+        build_logs,
+        expanded_logs,
     } = &*ctx;
     let spinner = SPINNER_FRAMES[*spinner_frame];
     let indent = "  ".repeat(activity.depth);
@@ -179,6 +170,43 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // Build the activity text
     let activity_text = match &activity.activity_type {
         NixActivityType::Build => {
+            // For selected build activities, use custom multi-line rendering
+            if *is_selected {
+                let phase = activity.current_phase.as_deref().unwrap_or("building");
+                let prefix = HierarchyPrefixComponent::new(indent, activity.depth)
+                    .with_spinner(*spinner_frame)
+                    .render();
+
+                let main_line = ActivityTextComponent::new(
+                    "building".to_string(),
+                    activity.short_name.clone(),
+                    elapsed_str,
+                )
+                .with_suffix(Some(phase.to_string()))
+                .with_selection(*is_selected)
+                .render(terminal_width, activity.depth, prefix);
+
+                // Create multi-line element with build logs
+                let mut build_elements = vec![main_line];
+
+                // Add build logs using the component
+                let build_logs_component =
+                    BuildLogsComponent::new(build_logs.as_ref(), *expanded_logs);
+                let log_elements = build_logs_component.render();
+                build_elements.extend(log_elements);
+
+                // Calculate total height: 1 (main line) + actual log viewport height
+                let log_viewport_height = build_logs_component.calculate_height();
+                let total_height = (1 + log_viewport_height).min(50) as u32; // Cap total height to prevent overflow
+                return element! {
+                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                        #(build_elements)
+                    }
+                }
+                .into_any();
+            }
+
+            // Non-selected build activities use normal rendering
             let phase = activity.current_phase.as_deref().unwrap_or("building");
             let prefix = HierarchyPrefixComponent::new(indent, activity.depth)
                 .with_spinner(*spinner_frame)
@@ -195,19 +223,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
         NixActivityType::Download => {
             // Check if we have byte-level progress
-            if let (Some(downloaded), Some(total)) =
+            if let (Some(_downloaded), Some(_total)) =
                 (activity.bytes_downloaded, activity.total_bytes)
             {
-                // Use byte-level progress if available
-                let percent = (downloaded as f64 / total as f64 * 100.0) as u8;
-                let human_downloaded = downloaded.human_count_bytes().to_string();
-                let human_total = total.human_count_bytes().to_string();
-                let speed = activity
-                    .download_speed
-                    .unwrap_or(0.0)
-                    .human_throughput_bytes()
-                    .to_string();
-
                 // Return early to render with progress bar
                 return DownloadActivityComponent::new(
                     activity.clone(),
@@ -314,6 +332,9 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     };
 
+    // Build the main activity element
+    let mut elements = vec![];
+
     // Add selection highlight
     let color = if *is_selected {
         COLOR_INTERACTIVE
@@ -321,9 +342,21 @@ fn ActivityItem(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         Color::Reset
     };
 
+    // Main activity line
+    elements.push(
+        element! {
+            View(height: 1) {
+                Text(content: activity_text, color: color)
+            }
+        }
+        .into_any(),
+    );
+
+    let total_height = elements.len() as u32;
+
     element! {
-        View(height: 1) {
-            Text(content: activity_text, color: color)
+        View(height: total_height, flex_direction: FlexDirection::Column) {
+            #(elements)
         }
     }
     .into()
@@ -373,36 +406,36 @@ fn build_summary_view_impl(
     // Determine display mode based on terminal width
     let use_symbols = terminal_width < 60; // Use unicode symbols for very narrow terminals
 
-    // Queries - show if there are any queries (active or done)
-    if summary.active_queries > 0 || summary.completed_queries > 0 {
+    // Builds - only show if there are any builds (active, completed, or failed)
+    if summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0 {
         if has_content {
             children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
                 Text(content: "│", color: COLOR_HIERARCHY)
             }).into_any());
         }
-        let total_queries = summary.active_queries + summary.completed_queries;
+        let total_builds = summary.active_builds + summary.completed_builds + summary.failed_builds;
 
-        // Format: "5 of 9 queries" or "5/9 queries" - protect numbers from truncation
+        // Format: "2 of 4 builds" or "2/4 builds" - protect numbers from truncation
         if use_symbols {
             children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_queries), color: COLOR_COMPLETED, weight: Weight::Bold)
-                Text(content: format!("/{}", total_queries))
+                Text(content: format!("{}", summary.completed_builds), color: COLOR_COMPLETED, weight: Weight::Bold)
+                Text(content: format!("/{}", total_builds))
             }).into_any());
         } else {
             children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_queries), color: COLOR_COMPLETED, weight: Weight::Bold)
+                Text(content: format!("{}", summary.completed_builds), color: COLOR_COMPLETED, weight: Weight::Bold)
             }).into_any());
             children.push(
                 element!(View(margin_right: 1, flex_shrink: 0.0) {
-                    Text(content: format!("of {}", total_queries))
+                    Text(content: format!("of {}", total_builds))
                 })
                 .into_any(),
             );
         }
 
         children.push(
-            element!(View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
-                Text(content: "queries")
+            element!(View(flex_shrink: 0.0) {
+                Text(content: "builds")
             })
             .into_any(),
         );
@@ -437,7 +470,7 @@ fn build_summary_view_impl(
         }
 
         children.push(
-            element!(View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
+            element!(View(flex_shrink: 0.0) {
                 Text(content: "downloads")
             })
             .into_any(),
@@ -445,36 +478,36 @@ fn build_summary_view_impl(
         has_content = true;
     }
 
-    // Builds - only show if there are any builds (active, completed, or failed)
-    if summary.active_builds > 0 || summary.completed_builds > 0 || summary.failed_builds > 0 {
+    // Queries - show if there are any queries (active or done)
+    if summary.active_queries > 0 || summary.completed_queries > 0 {
         if has_content {
             children.push(element!(View(margin_left: if use_symbols { 1 } else { 2 }, margin_right: if use_symbols { 1 } else { 2 }, flex_shrink: 0.0) {
                 Text(content: "│", color: COLOR_HIERARCHY)
             }).into_any());
         }
-        let total_builds = summary.active_builds + summary.completed_builds + summary.failed_builds;
+        let total_queries = summary.active_queries + summary.completed_queries;
 
-        // Format: "2 of 4 builds" or "2/4 builds" - protect numbers from truncation
+        // Format: "5 of 9 queries" or "5/9 queries" - protect numbers from truncation
         if use_symbols {
             children.push(element!(View(margin_right: 1, flex_direction: FlexDirection::Row, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_builds), color: COLOR_COMPLETED, weight: Weight::Bold)
-                Text(content: format!("/{}", total_builds))
+                Text(content: format!("{}", summary.completed_queries), color: COLOR_COMPLETED, weight: Weight::Bold)
+                Text(content: format!("/{}", total_queries))
             }).into_any());
         } else {
             children.push(element!(View(margin_right: 1, flex_shrink: 0.0) {
-                Text(content: format!("{}", summary.completed_builds), color: COLOR_COMPLETED, weight: Weight::Bold)
+                Text(content: format!("{}", summary.completed_queries), color: COLOR_COMPLETED, weight: Weight::Bold)
             }).into_any());
             children.push(
                 element!(View(margin_right: 1, flex_shrink: 0.0) {
-                    Text(content: format!("of {}", total_builds))
+                    Text(content: format!("of {}", total_queries))
                 })
                 .into_any(),
             );
         }
 
         children.push(
-            element!(View(flex_grow: 1.0, min_width: 0, overflow: Overflow::Hidden) {
-                Text(content: "builds")
+            element!(View(flex_shrink: 0.0) {
+                Text(content: "queries")
             })
             .into_any(),
         );
@@ -677,77 +710,6 @@ fn DownloadProgress(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     element! {
         View(flex_direction: FlexDirection::Column) {
             #(elements)
-        }
-    }
-    .into_any()
-}
-
-/// Context for build logs rendering
-#[derive(Clone)]
-struct BuildLogsContext {
-    logs: VecDeque<String>,
-    expanded: bool,
-}
-
-/// Render build logs
-#[component]
-fn BuildLogs(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let ctx = hooks.use_context::<BuildLogsContext>();
-    let BuildLogsContext { logs, expanded } = &*ctx;
-    let (terminal_width, _) = hooks.use_terminal_size();
-    let mut log_elements = vec![];
-
-    // Add separator with dynamic width
-    let separator_width = (terminal_width as usize).saturating_sub(2).max(1); // Account for padding
-    log_elements.push(
-        element!(
-            View(height: 1, padding_left: 1) {
-                Text(content: "─".repeat(separator_width), color: COLOR_HIERARCHY)
-            }
-        )
-        .into_any(),
-    );
-
-    // Determine how many lines to show
-    let lines_to_show = if *expanded {
-        logs.len().min(50) // Cap at 50 lines even when expanded
-    } else {
-        10
-    };
-
-    // Take last N lines of logs
-    let log_lines: Vec<_> = logs.iter().rev().take(lines_to_show).rev().collect();
-
-    // Add log lines
-    for line in log_lines {
-        log_elements.push(
-            element!(
-                View(height: 1, padding_left: 2) {
-                    Text(content: line.clone(), color: Color::AnsiValue(245))
-                }
-            )
-            .into_any(),
-        );
-    }
-
-    let total_height = log_elements.len() as u32;
-
-    element! {
-        View(height: total_height, flex_direction: FlexDirection::Column) {
-            #(log_elements)
-        }
-    }
-    .into_any()
-}
-
-/// Render build logs (wrapper function)
-fn render_build_logs(logs: &VecDeque<String>, expanded: bool) -> AnyElement<'static> {
-    element! {
-        ContextProvider(value: Context::owned(BuildLogsContext {
-            logs: logs.clone(),
-            expanded: expanded,
-        })) {
-            BuildLogs
         }
     }
     .into_any()

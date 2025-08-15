@@ -3,10 +3,17 @@
 use crate::model::ActivityInfo;
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
-use std::time::{Duration, Instant};
+use std::collections::VecDeque;
+use std::time::Instant;
 
 /// Spinner animation frames (matching current CLI)
 pub const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+/// Build logs viewport height when collapsed
+const LOG_VIEWPORT_COLLAPSED: usize = 10;
+
+/// Build logs viewport height when expanded
+const LOG_VIEWPORT_EXPANDED: usize = 100;
 
 /// Color constants for operations
 pub const COLOR_ACTIVE: Color = Color::Rgb {
@@ -49,16 +56,22 @@ impl HierarchyPrefixComponent {
     }
 
     pub fn render(&self) -> Vec<AnyElement<'static>> {
-        let mut prefix_children = vec![element!(Text(content: self.indent.clone())).into_any()];
+        let mut prefix_children = vec![];
 
         // Add hierarchy indicator if indented
         if self.depth > 0 {
+            // Show parent level indentation (depth-1) * 2 spaces
+            let parent_indent = "  ".repeat(self.depth - 1);
+            prefix_children.push(element!(Text(content: parent_indent)).into_any());
             prefix_children.push(
                 element!(View(margin_right: 1) {
-                    Text(content: "└─", color: COLOR_HIERARCHY)
+                    Text(content: "└──", color: COLOR_HIERARCHY)
                 })
                 .into_any(),
             );
+        } else {
+            // Top-level item, use the full indent
+            prefix_children.push(element!(Text(content: self.indent.clone())).into_any());
         }
 
         // Show spinner for top-level items (depth == 0)
@@ -122,7 +135,7 @@ impl ActivityTextComponent {
             depth,
         );
 
-        // Action word should never be truncated - reserve exact width
+        // Action word should be capitalized
         let action_text = format!(
             "{}{}",
             self.action
@@ -362,8 +375,12 @@ pub fn calculate_display_info(
     depth: usize,
 ) -> (String, bool) {
     // Calculate base width without suffix: padding + indent + hierarchy + action + margin + name + margin + elapsed
-    let indent_width = depth * 2; // "  " per level
-    let hierarchy_width = if depth > 0 { 3 } else { 0 }; // "└─" + margin_right: 1 for indented items
+    let indent_width = if depth > 0 {
+        (depth - 1) * 2
+    } else {
+        depth * 2
+    }; // parent levels only
+    let hierarchy_width = if depth > 0 { 4 } else { 0 }; // "└──" + margin_right: 1 for indented items
     let action_width = action.len() + 1; // action + margin_right
     let name_margin_width = 1; // margin_right after name
     let elapsed_width = elapsed.len();
@@ -451,5 +468,82 @@ fn shorten_store_path_aggressive(path: &str) -> String {
         }
     } else {
         path.to_string()
+    }
+}
+
+/// Component for rendering build logs inline below build activities
+pub struct BuildLogsComponent<'a> {
+    pub logs: Option<&'a VecDeque<String>>,
+    pub expanded: bool,
+}
+
+impl<'a> BuildLogsComponent<'a> {
+    pub fn new(logs: Option<&'a VecDeque<String>>, expanded: bool) -> Self {
+        Self { logs, expanded }
+    }
+
+    pub fn render(&self) -> Vec<AnyElement<'static>> {
+        let max_viewport_height = if self.expanded {
+            LOG_VIEWPORT_EXPANDED
+        } else {
+            LOG_VIEWPORT_COLLAPSED
+        };
+
+        if let Some(logs) = &self.logs {
+            if !logs.is_empty() {
+                // Take the last N lines that fit in viewport
+                let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
+
+                if !log_lines.is_empty() {
+                    // Use actual number of log lines, not fixed viewport height
+                    let actual_height = log_lines.len();
+
+                    // Create elements for all log lines
+                    let mut log_elements = vec![];
+                    for line in log_lines {
+                        log_elements.push(element! {
+                            View(height: 1, flex_direction: FlexDirection::Row, padding_left: 2, padding_right: 1) {
+                                Text(content: line.clone(), color: Color::AnsiValue(245))
+                            }
+                        }.into_any());
+                    }
+
+                    // Return a single container with actual height of log lines
+                    return vec![element! {
+                        View(height: actual_height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
+                            #(log_elements)
+                        }
+                    }.into_any()];
+                }
+            }
+        }
+
+        // Fallback: show "no logs" message with minimal height
+        vec![element! {
+            View(height: 1, flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 1) {
+                Text(content: "  → no build logs yet".to_string(), color: Color::AnsiValue(245))
+            }
+        }.into_any()]
+    }
+
+    /// Calculate the height this component will take
+    pub fn calculate_height(&self) -> usize {
+        let max_viewport_height = if self.expanded {
+            LOG_VIEWPORT_EXPANDED
+        } else {
+            LOG_VIEWPORT_COLLAPSED
+        };
+
+        if let Some(logs) = &self.logs {
+            if !logs.is_empty() {
+                let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
+                if !log_lines.is_empty() {
+                    return log_lines.len();
+                }
+            }
+        }
+
+        // Fallback: minimal height for "no logs" message
+        1
     }
 }

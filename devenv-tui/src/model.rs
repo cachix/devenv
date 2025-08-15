@@ -365,11 +365,31 @@ impl Model {
 
     /// Get only active activities as ActivityInfo for display
     pub fn get_active_activity_infos(&self) -> Vec<ActivityInfo> {
-        self.get_display_activities()
+        let mut activities: Vec<ActivityInfo> = self
+            .get_display_activities()
             .into_iter()
             .filter(|da| matches!(da.activity.state, NixActivityState::Active))
             .map(|da| ActivityInfo::from_activity(da.activity, da.depth))
-            .collect()
+            .collect();
+
+        // Sort by activity type priority: evaluating first, then builds, downloads, queries last
+        activities.sort_by(|a, b| {
+            activity_type_priority(&a.activity_type).cmp(&activity_type_priority(&b.activity_type))
+        });
+
+        activities
+    }
+}
+
+/// Get priority order for activity types (lower numbers = higher priority)
+fn activity_type_priority(activity_type: &crate::NixActivityType) -> u8 {
+    use crate::NixActivityType;
+    match activity_type {
+        NixActivityType::Evaluating => 0,
+        NixActivityType::Build => 1,
+        NixActivityType::Download => 2,
+        NixActivityType::Query => 3,
+        _ => 4, // Other types last
     }
 }
 
