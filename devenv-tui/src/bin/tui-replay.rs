@@ -1,9 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use devenv_eval_cache::internal_log::InternalLog;
-use devenv_tui::{
-    create_nix_bridge, get_event_sender, init_tui, LogLevel, LogSource, OperationId, TuiEvent,
-};
+use devenv_tui::{create_nix_bridge, init_tui, LogLevel, LogSource, OperationId, TuiEvent};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -77,11 +75,8 @@ async fn main() -> Result<()> {
     }
 
     // Initialize TUI
-    let _layer = init_tui();
-    let nix_bridge = create_nix_bridge();
-
-    // Get access to the global sender for TUI events
-    let tx = get_event_sender().expect("TUI not initialized properly");
+    let (_layer, tx) = init_tui();
+    let nix_bridge = create_nix_bridge(tx.clone());
 
     // Create main operation
     let main_op_id = OperationId::new("replay");
@@ -93,9 +88,7 @@ async fn main() -> Result<()> {
     })?;
 
     // Set current operation for Nix bridge
-    if let Some(bridge) = &nix_bridge {
-        bridge.set_current_operation(main_op_id.clone());
-    }
+    nix_bridge.set_current_operation(main_op_id.clone());
 
     // Replay log entries with timing
     let start_time = Instant::now();
@@ -135,7 +128,7 @@ async fn main() -> Result<()> {
                     // Give TUI a moment to display the message
                     sleep(Duration::from_millis(100)).await;
 
-                    devenv_tui::cleanup_tui();
+                    devenv_tui::cleanup_tui(&tx);
                     return Ok(());
                 }
             }
@@ -146,9 +139,7 @@ async fn main() -> Result<()> {
             "@nix" => {
                 // Try to parse as Nix internal log
                 if let Ok(internal_log) = serde_json::from_str::<InternalLog>(&entry.content) {
-                    if let Some(bridge) = &nix_bridge {
-                        bridge.process_internal_log(internal_log);
-                    }
+                    nix_bridge.process_internal_log(internal_log);
                 } else {
                     // Send as regular log message
                     tx.send(TuiEvent::LogMessage {
@@ -192,7 +183,7 @@ async fn main() -> Result<()> {
     sleep(Duration::from_millis(100)).await;
 
     // Cleanup and exit
-    devenv_tui::cleanup_tui();
+    devenv_tui::cleanup_tui(&tx);
 
     Ok(())
 }

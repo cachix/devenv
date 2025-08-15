@@ -183,6 +183,7 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                     eval_cache: false,
                     ..Default::default()
                 }),
+                tui_sender: None,
             };
             let devenv = Devenv::new(options).await;
 

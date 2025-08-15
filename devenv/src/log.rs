@@ -55,17 +55,24 @@ pub enum LogFormat {
     TracingPretty,
 }
 
-pub fn init_tracing_default() {
-    init_tracing(Level::default(), LogFormat::default());
+pub fn init_tracing_default() -> Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>> {
+    init_tracing(Level::default(), LogFormat::default())
 }
 
 /// Cleanup TUI before exec to prevent terminal corruption
-pub fn cleanup_before_exec() {
+pub fn cleanup_before_exec(
+    tui_sender: Option<&tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
+) {
     // Force cleanup of any active TUI display to prevent terminal corruption
-    devenv_tui::cleanup_tui();
+    if let Some(sender) = tui_sender {
+        devenv_tui::cleanup_tui(sender);
+    }
 }
 
-pub fn init_tracing(level: Level, log_format: LogFormat) {
+pub fn init_tracing(
+    level: Level,
+    log_format: LogFormat,
+) -> Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>> {
     let devenv_layer = DevenvLayer::new();
 
     let filter = EnvFilter::builder()
@@ -101,13 +108,14 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
         }
         LogFormat::Tui => {
             // Initialize the TUI system
-            let tui_layer = devenv_tui::init_tui();
+            let (tui_layer, sender) = devenv_tui::init_tui();
 
             tracing_subscriber::registry()
                 .with(filter)
                 .with(devenv_layer)
                 .with(tui_layer)
                 .init();
+            return Some(sender);
         }
         LogFormat::Cli => {
             use indicatif::ProgressStyle;
@@ -138,6 +146,7 @@ pub fn init_tracing(level: Level, log_format: LogFormat) {
                 .init();
         }
     }
+    None
 }
 
 /// A structure to capture span timings, similar to what is available internally in tracing_subscriber.
