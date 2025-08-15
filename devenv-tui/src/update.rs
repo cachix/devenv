@@ -92,7 +92,6 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
         TuiEvent::OperationEnd { id, result } => {
             if let Some(operation) = model.operations.get_mut(&id) {
                 let success = matches!(result, OperationResult::Success);
-                let duration = operation.start_time.elapsed();
                 operation.complete(success);
             }
             None
