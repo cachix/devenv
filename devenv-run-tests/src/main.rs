@@ -372,6 +372,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             devenv_root: Some(devenv_root.clone()),
             devenv_dotfile: Some(devenv_dotfile),
             global_options: Some(devenv::GlobalOptions::default()),
+            tui_sender: None,
         };
         let devenv = Devenv::new(options).await;
 

@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
         log::Level::default()
     };
 
-    log::init_tracing(level, cli.global_options.log_format);
+    let tui_sender = log::init_tracing(level, cli.global_options.log_format);
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
@@ -56,6 +56,7 @@ async fn main() -> Result<()> {
     let mut options = devenv::DevenvOptions {
         global_options: Some(cli.global_options),
         config,
+        tui_sender: tui_sender.clone(),
         ..Default::default()
     };
 

@@ -14,27 +14,46 @@ pub use events::*;
 pub use nix_bridge::NixLogBridge;
 pub use tracing_layer::DevenvTuiLayer;
 
-use std::sync::Mutex;
 use tokio::sync::mpsc;
 
-// Global sender to allow cleanup to send shutdown event
-static GLOBAL_SENDER: Mutex<Option<mpsc::UnboundedSender<TuiEvent>>> = Mutex::new(None);
-
-/// Initialize the TUI system
-pub fn init_tui() -> DevenvTuiLayer {
+/// Initialize the TUI system and return both the layer and event sender
+pub fn init_tui() -> (DevenvTuiLayer, mpsc::UnboundedSender<TuiEvent>) {
     let (tx, rx) = mpsc::unbounded_channel();
     let layer = DevenvTuiLayer::new(tx.clone());
 
-    // Store the sender globally for cleanup
-    if let Ok(mut sender) = GLOBAL_SENDER.lock() {
-        *sender = Some(tx.clone());
-    }
-
-    // Set up a global Ctrl-C handler that sends shutdown event
+    // Set up a Ctrl-C handler that sends shutdown event, but ignore errors if channel is closed
     let shutdown_tx = tx.clone();
     tokio::spawn(async move {
         // This will catch Ctrl-C if the display doesn't handle it
-        tokio::signal::ctrl_c().await.ok();
+        if tokio::signal::ctrl_c().await.is_ok() {
+            // Only try to send if the sender isn't closed
+            if !shutdown_tx.is_closed() {
+                let _ = shutdown_tx.send(TuiEvent::Shutdown);
+            }
+        }
+    });
+
+    // Spawn the display thread
+    tokio::spawn(async move {
+        if let Err(e) = app::run_app(rx).await {
+            eprintln!("TEA App error: {}", e);
+        }
+    });
+
+    (layer, tx)
+}
+
+/// Initialize TUI with cancellation token support for proper signal handling integration
+pub fn init_tui_with_cancellation(
+    cancellation_token: tokio_util::sync::CancellationToken,
+) -> (DevenvTuiLayer, mpsc::UnboundedSender<TuiEvent>) {
+    let (tx, rx) = mpsc::unbounded_channel();
+    let layer = DevenvTuiLayer::new(tx.clone());
+
+    // Set up cancellation handler that sends shutdown event
+    let shutdown_tx = tx.clone();
+    tokio::spawn(async move {
+        cancellation_token.cancelled().await;
         let _ = shutdown_tx.send(TuiEvent::Shutdown);
     });
 
@@ -45,36 +64,18 @@ pub fn init_tui() -> DevenvTuiLayer {
         }
     });
 
-    layer
+    (layer, tx)
 }
 
 /// Create a NixLogBridge that can be used to send Nix log events to the TUI
-pub fn create_nix_bridge() -> Option<std::sync::Arc<NixLogBridge>> {
-    if let Ok(sender) = GLOBAL_SENDER.lock() {
-        if let Some(tx) = sender.as_ref() {
-            return Some(std::sync::Arc::new(NixLogBridge::new(tx.clone())));
-        }
-    }
-    None
-}
-
-/// Get the global event sender for sending TUI events
-pub fn get_event_sender() -> Option<mpsc::UnboundedSender<TuiEvent>> {
-    if let Ok(sender) = GLOBAL_SENDER.lock() {
-        sender.clone()
-    } else {
-        None
-    }
+pub fn create_nix_bridge(sender: mpsc::UnboundedSender<TuiEvent>) -> std::sync::Arc<NixLogBridge> {
+    std::sync::Arc::new(NixLogBridge::new(sender))
 }
 
 /// Cleanup TUI terminal state
-pub fn cleanup_tui() {
+pub fn cleanup_tui(sender: &mpsc::UnboundedSender<TuiEvent>) {
     // First, send shutdown event to gracefully close the TUI event loop
-    if let Ok(sender) = GLOBAL_SENDER.lock() {
-        if let Some(tx) = sender.as_ref() {
-            let _ = tx.send(TuiEvent::Shutdown);
-        }
-    }
+    let _ = sender.send(TuiEvent::Shutdown);
 
     // Give the TUI loop a moment to process the shutdown event
     // TODO: avoid using a sleep. Use a different approach.

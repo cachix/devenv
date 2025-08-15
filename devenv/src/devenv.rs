@@ -56,6 +56,7 @@ pub struct DevenvOptions {
     pub global_options: Option<cli::GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
+    pub tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
 }
 
 #[derive(Default, Debug)]
@@ -97,6 +98,9 @@ pub struct Devenv {
     // TODO: make private.
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
+
+    // TUI event sender for cleanup and bridge creation
+    tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
 }
 
 impl Devenv {
@@ -161,6 +165,7 @@ impl Devenv {
                     global_options.clone(),
                     paths,
                     secretspec_resolved.clone(),
+                    options.tui_sender.clone(),
                 )
                 .await
                 .expect("Failed to initialize Nix backend"),
@@ -192,6 +197,7 @@ impl Devenv {
             has_processes: Arc::new(OnceCell::new()),
             secretspec_resolved,
             container_name: None,
+            tui_sender: options.tui_sender,
         }
     }
 
@@ -414,7 +420,7 @@ impl Devenv {
         info!(devenv.is_user_message = true, "Entering shell");
 
         // Clean up TUI before spawning to prevent terminal corruption
-        crate::log::cleanup_before_exec();
+        crate::log::cleanup_before_exec(self.tui_sender.as_ref());
 
         // Spawn the shell as a child process instead of exec
         let mut child = shell_cmd.spawn().into_diagnostic().with_context(|| {

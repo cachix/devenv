@@ -31,6 +31,7 @@ pub struct Nix {
     netrc_path: Arc<OnceCell<String>>,
     paths: nix_backend::DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
+    tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
 }
 
 impl Nix {
@@ -39,6 +40,7 @@ impl Nix {
         global_options: cli::GlobalOptions,
         paths: nix_backend::DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
+        tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
     ) -> Result<Self> {
         let options = nix_backend::Options::default();
 
@@ -57,6 +59,7 @@ impl Nix {
             netrc_path: Arc::new(OnceCell::new()),
             paths,
             secretspec_resolved,
+            tui_sender,
         })
     }
 
@@ -375,7 +378,10 @@ impl Nix {
             }
 
             // Try to get TUI bridge for enhanced log processing
-            let nix_bridge = devenv_tui::create_nix_bridge();
+            let nix_bridge = self
+                .tui_sender
+                .as_ref()
+                .map(|sender| devenv_tui::create_nix_bridge(sender.clone()));
 
             if options.logging && !self.global_options.quiet {
                 // Show eval and build logs only in verbose mode
