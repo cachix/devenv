@@ -60,10 +60,12 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
         in
         lib.concatMapAttrs
           (shellName: devenv:
+            # TODO(sander): container support is undocumented and is specific to flake-parts, ie. the CLI shim doesn't support this.
+            # Official support is complicated by `getInput` throwing errors and Nix not being able to properly try/catch errors with `tryEval`.
+            # Until this is fixed, these outputs will remain.
             (lib.concatMapAttrs
               (containerName: container:
-                let pkgName = "${shellPrefix shellName}container-${containerName}";
-                in { ${pkgName} = deprecate pkgName container.derivation; }
+                { "${shellPrefix shellName}container-${containerName}" = container.derivation; }
               )
               devenv.containers
             ) // lib.mapAttrs deprecate {
