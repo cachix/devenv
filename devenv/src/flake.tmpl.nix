@@ -137,11 +137,12 @@
                       if builtins.elem typeName [ "output" "outputOf" ] then
                         { ${name} = config.${name}; }
                       else { }
-                    else
+                    else if builtins.isAttrs option && !lib.isDerivation option then
                       let v = build option config.${name};
                       in if v != { } then {
                         ${name} = v;
                       } else { }
+                    else { }
                   )
                   options;
             in
