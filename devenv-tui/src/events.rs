@@ -146,6 +146,21 @@ pub enum TuiEvent {
         running: u64,
         failed: u64,
     },
+    /// Task started
+    TaskStart { task_name: String },
+    /// Task status update
+    TaskUpdate {
+        task_name: String,
+        status: String,         // "pending", "running", "completed"
+        result: Option<String>, // "success", "failed", "skipped", "cancelled"
+    },
+    /// Task completed
+    TaskEnd {
+        task_name: String,
+        duration: Duration,
+        success: bool,
+        error: Option<String>,
+    },
     /// Shutdown the TUI display
     Shutdown,
 }

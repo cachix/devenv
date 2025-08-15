@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 # Core async runtime
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
+tokio-util = { workspace = true }
 futures = { workspace = true }
 
 # TUI library
@@ -32,6 +33,9 @@ serde_json = { workspace = true }
 
 # Nix log parsing
 devenv-eval-cache = { path = "../devenv-eval-cache" }
+
+# Task system integration
+devenv-tasks = { path = "../devenv-tasks" }
 
 # Time handling
 once_cell = { workspace = true }

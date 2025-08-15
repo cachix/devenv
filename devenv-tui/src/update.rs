@@ -402,6 +402,30 @@ fn handle_tui_event(model: &mut Model, event: TuiEvent) -> Option<Message> {
             None
         }
 
+        TuiEvent::TaskStart { task_name } => {
+            model.handle_task_start(task_name, std::time::Instant::now());
+            None
+        }
+
+        TuiEvent::TaskUpdate {
+            task_name,
+            status,
+            result,
+        } => {
+            model.handle_task_update(task_name, status, result);
+            None
+        }
+
+        TuiEvent::TaskEnd {
+            task_name,
+            duration,
+            success,
+            error,
+        } => {
+            model.handle_task_end(task_name, duration, success, error);
+            None
+        }
+
         TuiEvent::Shutdown => {
             model.app_state = AppState::Shutdown;
             None

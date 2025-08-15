@@ -1,6 +1,6 @@
 use crate::{
     components::*,
-    model::{ActivityInfo, ActivitySummary, Model},
+    model::{ActivityInfo, ActivitySummary, Model, TaskDisplayStatus, TaskInfo},
     NixActivityType,
 };
 use human_repr::{HumanCount, HumanDuration};
@@ -102,6 +102,33 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
 
     let mut children = vec![];
 
+    // Task summary bar at the top (if we have task info)
+    if model.current_task.is_some() || !model.task_hierarchy.is_empty() {
+        let task_summary = element! {
+            ContextProvider(value: Context::owned(TaskSummaryContext {
+                current_task: model.current_task.clone(),
+                task_duration: model.get_current_task_duration(),
+                task_hierarchy: model.task_hierarchy.clone(),
+            })) {
+                TaskSummaryBar
+            }
+        }
+        .into_any();
+
+        children.push(
+            element! {
+                View(
+                    height: 1,
+                    padding_left: 1,
+                    padding_right: 1
+                ) {
+                    #(task_summary)
+                }
+            }
+            .into_any(),
+        );
+    }
+
     // Activity list (with inline logs)
     children.push(
         element! {
@@ -128,8 +155,13 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         .into_any(),
     );
 
-    // Total height: activities (with inline logs) + summary line (1) + small buffer
-    let total_height = dynamic_height + 2; // +1 for summary, +1 buffer to prevent overflow
+    // Total height: task bar + activities (with inline logs) + summary line + buffer
+    let task_bar_height = if model.current_task.is_some() || !model.task_hierarchy.is_empty() {
+        1
+    } else {
+        0
+    };
+    let total_height = dynamic_height + task_bar_height + 2; // +1 for summary, +1 buffer to prevent overflow
 
     element! {
         View(flex_direction: FlexDirection::Column, height: total_height, width: 100pct) {
@@ -718,4 +750,141 @@ fn DownloadProgress(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 /// Format a duration in a human-readable way
 pub fn format_duration(duration: Duration) -> String {
     duration.human_duration().to_string()
+}
+
+/// Context for task summary bar
+#[derive(Clone)]
+struct TaskSummaryContext {
+    current_task: Option<String>,
+    task_duration: Option<std::time::Duration>,
+    task_hierarchy: Vec<TaskInfo>,
+}
+
+/// Task summary bar component
+#[component]
+fn TaskSummaryBar(hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let ctx = hooks.use_context::<TaskSummaryContext>();
+    let TaskSummaryContext {
+        current_task,
+        task_duration,
+        task_hierarchy,
+    } = &*ctx;
+
+    let mut children = vec![];
+
+    // Show current task if available
+    if let Some(task_name) = current_task {
+        // Task icon
+        children.push(
+            element!(Text(content: "⚡", color: COLOR_ACTIVE, weight: Weight::Bold)).into_any(),
+        );
+
+        // Task name
+        children.push(
+            element!(View(margin_left: 1, margin_right: 1) {
+                Text(content: task_name.clone(), color: COLOR_ACTIVE, weight: Weight::Bold)
+            })
+            .into_any(),
+        );
+
+        // Duration if available
+        if let Some(duration) = task_duration {
+            let elapsed_str = format!("{}s", duration.as_secs());
+            children.push(element!(Text(content: elapsed_str, color: COLOR_HIERARCHY)).into_any());
+        }
+    }
+
+    // Show task summary counts
+    let (running, pending, completed, failed) =
+        task_hierarchy
+            .iter()
+            .fold((0, 0, 0, 0), |(r, p, c, f), task| match task.status {
+                TaskDisplayStatus::Running => (r + 1, p, c, f),
+                TaskDisplayStatus::Pending => (r, p + 1, c, f),
+                TaskDisplayStatus::Success => (r, p, c + 1, f),
+                TaskDisplayStatus::Failed => (r, p, c, f + 1),
+                TaskDisplayStatus::Skipped => (r, p, c + 1, f), // Count skipped as completed
+                TaskDisplayStatus::Cancelled => (r, p, c, f + 1), // Count cancelled as failed
+            });
+
+    if running + pending + completed + failed > 0 {
+        // Add separator if we have both current task and hierarchy
+        if current_task.is_some() {
+            children.push(
+                element!(View(margin_left: 2, margin_right: 2) {
+                    Text(content: "│", color: COLOR_HIERARCHY)
+                })
+                .into_any(),
+            );
+        }
+
+        // Running tasks
+        if running > 0 {
+            children.push(
+                element!(View(margin_right: 1) {
+                    Text(content: format!("{}", running), color: COLOR_ACTIVE, weight: Weight::Bold)
+                })
+                .into_any(),
+            );
+            children.push(
+                element!(View(margin_right: 2) {
+                    Text(content: "running")
+                })
+                .into_any(),
+            );
+        }
+
+        // Completed tasks
+        if completed > 0 {
+            children.push(
+                element!(View(margin_right: 1) {
+                    Text(content: format!("{}", completed), color: COLOR_COMPLETED, weight: Weight::Bold)
+                })
+                .into_any(),
+            );
+            children.push(
+                element!(View(margin_right: 2) {
+                    Text(content: "done")
+                })
+                .into_any(),
+            );
+        }
+
+        // Failed tasks
+        if failed > 0 {
+            children.push(
+                element!(View(margin_right: 1) {
+                    Text(content: format!("{}", failed), color: Color::Red, weight: Weight::Bold)
+                })
+                .into_any(),
+            );
+            children.push(
+                element!(View(margin_right: 2) {
+                    Text(content: "failed")
+                })
+                .into_any(),
+            );
+        }
+
+        // Pending tasks
+        if pending > 0 {
+            children.push(
+                element!(View(margin_right: 1) {
+                    Text(content: format!("{}", pending), color: COLOR_HIERARCHY, weight: Weight::Bold)
+                })
+                .into_any(),
+            );
+            children.push(
+                element!(View(margin_right: 2) {
+                    Text(content: "pending")
+                })
+                .into_any(),
+            );
+        }
+    }
+
+    element!(View(flex_direction: FlexDirection::Row, width: 100pct) {
+        #(children)
+    })
+    .into_any()
 }
