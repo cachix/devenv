@@ -312,33 +312,46 @@
 
       lib = {
         mkConfig =
-          args@{ pkgs
-          , inputs
+          args@{ inputs
           , modules
+          , pkgs ? null
+          , system ? null
           ,
           }:
           (self.lib.mkEval args).config;
         mkEval =
-          { pkgs
-          , inputs
+          { inputs
           , modules
+          , pkgs ? null
+          , system ? null
           ,
           }:
           let
+            # If the user passed a nixpkg we use it to do the evaluation.
+            # By default we take the nixpkgs with which devenv was tested.
+            moduleLib = if nixpkgs.lib.hasAttr "nixpkgs" inputs then inputs.nixpkgs.lib else nixpkgs.lib;
+            # If the user passed a `pkgs` we used it.
+            # By default we take the pkgs which devenv was tested against.
+            modulePkgs =
+              if pkgs == null then
+                assert system != null "System must be specified when no `pkgs` argument is used.";
+                moduleLib.legacyPackages.${system} else pkgs;
+
             moduleInputs = {
               inherit git-hooks;
             } // inputs;
-            project = inputs.nixpkgs.lib.evalModules {
+
+            project = moduleLib.evalModules {
               specialArgs = moduleInputs // {
                 inputs = moduleInputs;
               };
               modules = [
-                { config._module.args.pkgs = inputs.nixpkgs.lib.mkDefault pkgs; }
+                ({ lib, ... }: { config._module.args.pkgs = lib.mkDefault modulePkgs; })
                 (self.modules + /top-level.nix)
                 (
-                  { config, ... }:
+                  { config, lib, ... }:
                   {
-                    packages = pkgs.lib.mkBefore [
+                    packages = lib.mkBefore [
                       (mkDevShellPackage config pkgs)
                     ];
                     devenv.warnOnNewVersion = false;
