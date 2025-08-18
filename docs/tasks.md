@@ -174,7 +174,7 @@ All processes defined in `processes` are automatically available as tasks with t
   };
 
   # Define a task that runs before the process
-  tasks."setup-data" = {
+  tasks."app:setup-data" = {
     exec = "echo 'Setting up data...'";
     before = [ "devenv:processes:web-server" ];
   };
