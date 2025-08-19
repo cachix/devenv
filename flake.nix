@@ -73,7 +73,6 @@
           }
           // attrs
         );
-      mkDevShellPackage = config: pkgs: import ./src/devenv-devShell.nix { inherit config pkgs; };
       mkDocOptions =
         pkgs:
         let
@@ -338,9 +337,6 @@
                 (
                   { config, ... }:
                   {
-                    packages = pkgs.lib.mkBefore [
-                      (mkDevShellPackage config pkgs)
-                    ];
                     devenv.warnOnNewVersion = false;
                     devenv.flakesIntegration = true;
                   }
