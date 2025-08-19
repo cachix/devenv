@@ -1,8 +1,7 @@
-{
-  config,
-  pkgs,
-  lib,
-  ...
+{ config
+, pkgs
+, lib
+, ...
 }:
 
 let
@@ -16,7 +15,7 @@ let
   # This is skipped if the user is already in a shell launched by direnv.
   # We trust that direnv will handle reloads.
   wrapWithNixDevelop = command: args: ''
-    if [[ -n "$IN_NIX_SHELL" && -n "$DIRENV_FILE" ]]; then
+    if [[ -n "$IN_NIX_SHELL" && "$DEVENV_IN_DIRENV_SHELL" == "true" ]]; then
       exec ${command} ${args}
     else
       exec nix develop .#${shellName} --impure ${nixFlags} -c ${command} ${args}
