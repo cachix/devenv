@@ -2,11 +2,6 @@
 inputs:
   nixpkgs:
     url: github:NixOS/nixpkgs/nixpkgs-unstable
-  rust-overlay:
-    url: github:oxalica/rust-overlay
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
   nix:
     url: github:cachix/nix/devenv-2.30
   devenv:

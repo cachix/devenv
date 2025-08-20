@@ -1255,6 +1255,7 @@ dependencies = [
 name = "devenv-tasks"
 version = "1.8.2"
 dependencies = [
+ "async-trait",
  "blake3",
  "clap",
  "console",
@@ -1280,13 +1281,17 @@ name = "devenv-tui"
 version = "1.8.2"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
+ "console",
+ "devenv-cache-core",
  "devenv-eval-cache",
  "devenv-tasks",
  "futures",
  "human-repr",
  "indexmap 2.9.0",
  "iocraft",
+ "miette",
  "once_cell",
  "pretty_assertions",
  "serde",

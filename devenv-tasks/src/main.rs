@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use devenv_tasks::{
-    signal_handler::SignalHandler, Config, RunMode, TaskConfig, TasksUi, VerbosityLevel,
+    signal_handler::SignalHandler, Config, RunMode, TaskConfig, Tasks, VerbosityLevel,
 };
 use std::env;
 
@@ -66,13 +66,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let signal_handler = SignalHandler::start();
             let cancellation_token = signal_handler.cancellation_token();
 
-            let mut tasks_ui = TasksUi::builder(config, verbosity)
+            // Create Tasks instance with cancellation token support
+            let tasks = Tasks::builder(config, verbosity)
                 .with_cancellation_token(cancellation_token)
                 .build()
-                .await?;
-            let (status, _outputs) = tasks_ui.run().await?;
+                .await
+                .map_err(|e| format!("Failed to create tasks: {}", e))?;
 
-            if status.failed + status.dependency_failed > 0 {
+            // Run tasks and check completion status
+            let _outputs = tasks.run().await;
+
+            // Check task completion status and exit with appropriate code
+            let status = tasks.get_completion_status().await;
+            if status.has_failures() {
                 std::process::exit(1);
             }
         }
@@ -90,10 +96,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            if !output.as_object().unwrap().contains_key("devenv") {
+            if !output
+                .as_object()
+                .ok_or_else(|| miette::miette!("Output is not a JSON object"))?
+                .contains_key("devenv")
+            {
                 output["devenv"] = serde_json::json!({});
             }
-            if !output["devenv"].as_object().unwrap().contains_key("env") {
+            if !output["devenv"]
+                .as_object()
+                .ok_or_else(|| miette::miette!("devenv field is not a JSON object"))?
+                .contains_key("env")
+            {
                 output["devenv"]["env"] = serde_json::json!({});
             }
             output["devenv"]["env"] = serde_json::Value::Object(

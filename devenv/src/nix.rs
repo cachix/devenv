@@ -454,17 +454,75 @@ impl Nix {
 
             output
         } else {
+            // Try to get TUI bridge for enhanced log processing even in non-cached mode
+            let nix_bridge = self
+                .tui_sender
+                .as_ref()
+                .map(|sender| devenv_tui::create_nix_bridge(sender.clone()));
+
             let pretty_cmd = display_command(&cmd);
             let span = debug_span!(
                 "Running command",
                 command = pretty_cmd.as_str(),
                 devenv.user_message = format!("Running command: {}", pretty_cmd)
             );
-            let output = span.in_scope(|| {
-                cmd.output()
+
+            // Set current operation for Nix log correlation
+            if let Some(bridge) = &nix_bridge {
+                if let Some(span_id) = span.id() {
+                    let operation_id = devenv_tui::OperationId::new(format!("{:?}", span_id));
+                    bridge.set_current_operation(operation_id);
+                }
+            }
+
+            let output = if let Some(bridge) = &nix_bridge {
+                // Use bridge to process stderr with real-time streaming
+                use std::process::Stdio;
+
+                let (stderr_recv, stderr_send) = std::io::pipe()
                     .into_diagnostic()
-                    .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))
-            })?;
+                    .wrap_err("Failed to create stderr pipe")?;
+
+                let child = cmd
+                    .stdin(Stdio::inherit())
+                    .stdout(if options.logging_stdout {
+                        Stdio::inherit()
+                    } else {
+                        Stdio::piped()
+                    })
+                    .stderr(stderr_send)
+                    .spawn()
+                    .into_diagnostic()
+                    .wrap_err_with(|| {
+                        format!("Failed to spawn command `{}`", display_command(&cmd))
+                    })?;
+
+                // Process stderr through the bridge
+                if let Err(e) = bridge.process_stderr(stderr_recv, options.logging) {
+                    tracing::warn!("Failed to process stderr through bridge: {}", e);
+                }
+
+                // Wait for command completion
+                child
+                    .wait_with_output()
+                    .into_diagnostic()
+                    .wrap_err_with(|| {
+                        format!("Failed to wait for command `{}`", display_command(&cmd))
+                    })?
+            } else {
+                // Fallback to simple execution without bridge processing
+                cmd.output().into_diagnostic().wrap_err_with(|| {
+                    format!("Failed to run command `{}`", display_command(&cmd))
+                })?
+            };
+
+            let output =
+                span.in_scope(|| -> Result<std::process::Output, miette::Report> { Ok(output) })?;
+
+            // Clear current operation after command completion
+            if let Some(bridge) = &nix_bridge {
+                bridge.clear_current_operation();
+            }
 
             devenv_eval_cache::Output {
                 status: output.status,

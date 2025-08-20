@@ -167,7 +167,7 @@ impl ActivityTextComponent {
                     Text(content: shortened_name, color: if self.is_selected { COLOR_INTERACTIVE } else { Color::Reset })
                     #(if show_suffix && self.suffix.is_some() {
                         vec![element!(View(margin_left: 1) {
-                            Text(content: self.suffix.as_ref().unwrap(), color: COLOR_HIERARCHY)
+                            Text(content: self.suffix.as_ref().expect("suffix should be Some when show_suffix is true"), color: COLOR_HIERARCHY)
                         }).into_any()]
                     } else {
                         vec![]
