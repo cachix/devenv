@@ -2,10 +2,11 @@ use super::{cli, config, log::HumanReadableDuration, nix_backend, tasks, util};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
-use cli_table::Table;
-use cli_table::{WithTitle, print_stderr};
+use cli_table::{Table, WithTitle, print_stderr};
+use devenv_tasks::{Config as TasksConfig, Tasks, VerbosityLevel};
+use devenv_tui;
 use include_dir::{Dir, include_dir};
-use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
+use miette::{Context, IntoDiagnostic, Result, WrapErr, bail, miette};
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -862,14 +863,14 @@ impl Devenv {
 
         // Convert global options to verbosity level
         let verbosity = if self.global_options.quiet {
-            tasks::VerbosityLevel::Quiet
+            VerbosityLevel::Quiet
         } else if self.global_options.verbose {
-            tasks::VerbosityLevel::Verbose
+            VerbosityLevel::Verbose
         } else {
-            tasks::VerbosityLevel::Normal
+            VerbosityLevel::Normal
         };
 
-        let config = tasks::Config {
+        let config = TasksConfig {
             roots,
             tasks,
             run_mode,
@@ -880,11 +881,27 @@ impl Devenv {
             serde_json::to_string_pretty(&config).unwrap()
         );
 
-        let mut tui = tasks::TasksUi::builder(config, verbosity).build().await?;
-        let (tasks_status, outputs) = tui.run().await?;
+        // Create Tasks instance using devenv-tasks execution engine
+        let tasks = Tasks::builder(config, verbosity)
+            .build()
+            .await
+            .wrap_err("Failed to create tasks")?;
 
-        if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
-            miette::bail!("Some tasks failed");
+        // Run tasks directly - TUI will observe via tracing events
+        let outputs = tasks.run().await;
+
+        // Check for task failures by examining completion status
+        let completion_status = tasks.get_completion_status().await;
+        if completion_status.failed > 0 || completion_status.dependency_failed > 0 {
+            error!(
+                "Tasks failed: {} failed, {} dependency failed",
+                completion_status.failed, completion_status.dependency_failed
+            );
+            bail!(
+                "Task execution failed: {} tasks failed, {} tasks had dependency failures",
+                completion_status.failed,
+                completion_status.dependency_failed
+            );
         }
 
         println!(

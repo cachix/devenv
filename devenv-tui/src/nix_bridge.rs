@@ -116,6 +116,30 @@ impl NixLogBridge {
         self.handle_internal_log(log);
     }
 
+    /// Process stderr from a pipe, reading line by line and feeding to the bridge
+    pub fn process_stderr<R: std::io::Read>(
+        &self,
+        stderr: R,
+        logging: bool,
+    ) -> std::io::Result<()> {
+        use std::io::{BufRead, BufReader};
+
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            let line = line?;
+
+            // Feed line to bridge for structured log processing
+            self.process_log_line(&line);
+
+            // Also output to terminal if logging is enabled
+            if logging {
+                eprintln!("{}", line);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Handle a parsed InternalLog entry
     fn handle_internal_log(&self, log: InternalLog) {
         let current_op_id = self
@@ -439,7 +463,11 @@ impl NixLogBridge {
             let now = Instant::now();
             let should_send = state.pending_files.len() >= BATCH_SIZE
                 || (state.last_progress_update.is_some()
-                    && now.duration_since(state.last_progress_update.unwrap()) >= BATCH_TIMEOUT);
+                    && now.duration_since(
+                        state
+                            .last_progress_update
+                            .expect("last_progress_update should be Some when is_some() is true"),
+                    ) >= BATCH_TIMEOUT);
 
             if should_send && !state.pending_files.is_empty() {
                 let files: Vec<String> = state.pending_files.drain(..).collect();

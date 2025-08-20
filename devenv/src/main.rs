@@ -41,6 +41,24 @@ async fn main() -> Result<()> {
 
     let tui_sender = log::init_tracing(level, cli.global_options.log_format);
 
+    // Set up signal handling for TUI mode to ensure proper cleanup
+    if let Some(ref sender) = tui_sender {
+        let cleanup_sender = sender.clone();
+        tokio::spawn(async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                // Send shutdown event to TUI first
+                let _ = cleanup_sender.send(devenv_tui::TuiEvent::Shutdown);
+
+                // Give TUI a moment to clean up
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+                // Final cleanup
+                log::cleanup_before_exec(Some(&cleanup_sender));
+                std::process::exit(130); // Standard exit code for SIGINT
+            }
+        });
+    }
+
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
         config

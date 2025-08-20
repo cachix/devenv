@@ -174,7 +174,7 @@ where
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
 
-        // Handle task status updates from devenv-tasks
+        // Handle task events from devenv-tasks
         if event.metadata().target().starts_with("devenv_tasks") {
             if let Some(task_name) = visitor.fields.get("task_name") {
                 let task_name = task_name.trim_matches('"').to_string();
@@ -188,9 +188,30 @@ where
                         .map(|r| r.trim_matches('"').to_string());
 
                     self.send_event(TuiEvent::TaskUpdate {
-                        task_name,
+                        task_name: task_name.clone(),
                         status,
                         result,
+                    });
+                }
+
+                // Check for task completion events (with duration and success)
+                if let (Some(duration_secs), Some(success)) = (
+                    visitor.fields.get("duration_secs"),
+                    visitor.fields.get("success"),
+                ) {
+                    let duration_secs: f64 = duration_secs.trim_matches('"').parse().unwrap_or(0.0);
+                    let duration = std::time::Duration::from_secs_f64(duration_secs);
+                    let success = success.trim_matches('"') == "true";
+                    let error = visitor
+                        .fields
+                        .get("error")
+                        .map(|e| e.trim_matches('"').to_string());
+
+                    self.send_event(TuiEvent::TaskEnd {
+                        task_name,
+                        duration,
+                        success,
+                        error,
                     });
                 }
             }

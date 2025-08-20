@@ -17,6 +17,7 @@ tokio = { workspace = true, features = [
 ] }
 tokio-util = { workspace = true }
 futures = { workspace = true }
+async-trait = { workspace = true }
 
 # TUI library
 iocraft = { version = "0.7.10" }
@@ -31,6 +32,7 @@ indexmap = { workspace = true }
 # Error handling
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+miette = { workspace = true }
 
 # Serialization
 serde = { workspace = true }
@@ -39,7 +41,10 @@ serde_json = { workspace = true }
 # Nix log parsing
 devenv-eval-cache = { path = "../devenv-eval-cache" }
 
-# Task system integration
+# Shared task types
+devenv-cache-core = { path = "../devenv-cache-core" }
+
+# Task execution engine
 devenv-tasks = { path = "../devenv-tasks" }
 
 # Time handling
@@ -48,6 +53,10 @@ chrono = { workspace = true }
 
 # Human-readable formatting
 human-repr = "1.1"
+
+
+# Terminal UI components
+console = { workspace = true }
 [[bin]]
 name = "tui-replay"
 path = "src/bin/tui-replay.rs"

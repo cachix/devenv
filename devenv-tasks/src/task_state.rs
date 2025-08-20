@@ -196,9 +196,21 @@ impl TaskState {
                 .prepare_command(cmd, outputs)
                 .wrap_err("Failed to prepare status command")?;
 
+            // Emit tracing event for status command start
+            crate::tracing_events::emit_command_start(&self.task.name, cmd);
+
             // Use spawn and wait with output to properly handle status script execution
             match command.output().await {
                 Ok(output) => {
+                    let exit_code = output.status.code();
+                    let success = output.status.success();
+                    crate::tracing_events::emit_command_end(
+                        &self.task.name,
+                        cmd,
+                        exit_code,
+                        success,
+                    );
+
                     if output.status.success() {
                         let output = Output(cached_output);
                         tracing::debug!("Task {} skipped with output: {:?}", task_name, output);
@@ -206,6 +218,8 @@ impl TaskState {
                     }
                 }
                 Err(e) => {
+                    crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
+
                     // TODO: stdout, stderr
                     return Ok(TaskCompleted::Failed(
                         now.elapsed(),
@@ -268,6 +282,9 @@ impl TaskState {
             }
         }
         if let Some(cmd) = &self.task.command {
+            // Emit tracing event for command start
+            crate::tracing_events::emit_command_start(&self.task.name, cmd);
+
             let (mut command, outputs_file) = self
                 .prepare_command(cmd, outputs)
                 .wrap_err("Failed to prepare task command")?;
@@ -280,6 +297,10 @@ impl TaskState {
             let mut child = match result {
                 Ok(c) => c,
                 Err(err) => {
+                    // Emit tracing event for command spawn failure
+                    let cmd = self.task.command.as_ref().unwrap();
+                    crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
+
                     return Ok(TaskCompleted::Failed(
                         now.elapsed(),
                         TaskFailure {
@@ -400,6 +421,12 @@ impl TaskState {
                     result = child.wait() => {
                         match result {
                             Ok(status) => {
+                                // Emit tracing event for command completion
+                                let cmd = self.task.command.as_ref().unwrap(); // Safe since we're in the command branch
+                                let exit_code = status.code();
+                                let success = status.success();
+                                crate::tracing_events::emit_command_end(&self.task.name, cmd, exit_code, success);
+
                                 // Update the file states to capture any changes the task made,
                                 // regardless of whether the task succeeded or failed
                                 let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
@@ -421,6 +448,10 @@ impl TaskState {
                                 }
                             },
                             Err(e) => {
+                                // Emit tracing event for command error
+                                let cmd = self.task.command.as_ref().unwrap(); // Safe since we're in the command branch
+                                crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
+
                                 error!("{}> Error waiting for command: {}", self.task.name, e);
                                 return Ok(TaskCompleted::Failed(
                                     now.elapsed(),
