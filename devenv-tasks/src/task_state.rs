@@ -90,7 +90,10 @@ impl TaskState {
         }
 
         // Create a temporary file for DEVENV_TASK_OUTPUT_FILE
-        let outputs_file = tempfile::NamedTempFile::new()
+        let outputs_file = tempfile::Builder::new()
+            .prefix("devenv_task_output")
+            .suffix(".json")
+            .tempfile()
             .into_diagnostic()
             .wrap_err("Failed to create temporary file for task output")?;
         command.env("DEVENV_TASK_OUTPUT_FILE", outputs_file.path());
