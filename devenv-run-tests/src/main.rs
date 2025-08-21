@@ -275,6 +275,27 @@ async fn main() -> Result<ExitCode> {
     // Otherwise, run the tests in a subprocess with a fresh environment.
     let executable_path = env::current_exe().into_diagnostic()?;
     let executable_dir = executable_path.parent().unwrap();
+    let cwd = env::current_dir().into_diagnostic()?;
+
+    // Create a wrapper for devenv that adds --override-input
+    let wrapper_dir = TempDir::new().into_diagnostic()?;
+    let devenv_wrapper_path = wrapper_dir.path().join("devenv");
+    let devenv_override_input = format!("path:{}?dir=src/modules", cwd.display());
+
+    let wrapper_content = format!(
+        r#"#!/usr/bin/env bash
+exec "{}/devenv" --override-input devenv "{}" "$@"
+"#,
+        executable_dir.display(),
+        devenv_override_input
+    );
+
+    fs::write(&devenv_wrapper_path, wrapper_content).into_diagnostic()?;
+    Command::new("chmod")
+        .arg("+x")
+        .arg(&devenv_wrapper_path)
+        .status()
+        .into_diagnostic()?;
 
     let mut env = vec![
         ("DEVENV_RUN_TESTS", "1".to_string()),
@@ -283,7 +304,7 @@ async fn main() -> Result<ExitCode> {
             "PATH",
             format!(
                 "{}:{}",
-                executable_dir.display(),
+                wrapper_dir.path().display(),
                 env::var("PATH").unwrap_or_default()
             ),
         ),
