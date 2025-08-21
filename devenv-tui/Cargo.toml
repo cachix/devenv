@@ -15,7 +15,7 @@ tokio = { workspace = true, features = [
   "time",
   "signal",
 ] }
-tokio-util = { workspace = true }
+tokio-graceful = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
 

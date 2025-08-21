@@ -1,7 +1,7 @@
 use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
+use tokio_graceful::WeakShutdownGuard;
 
 use crate::types::{Skipped, TaskCompleted, TaskStatus, TasksStatus};
 use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
@@ -11,7 +11,7 @@ pub struct TasksUiBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    cancellation_token: Option<CancellationToken>,
+    shutdown_guard: Option<WeakShutdownGuard>,
 }
 
 impl TasksUiBuilder {
@@ -21,7 +21,7 @@ impl TasksUiBuilder {
             config,
             verbosity,
             db_path: None,
-            cancellation_token: None,
+            shutdown_guard: None,
         }
     }
 
@@ -31,9 +31,9 @@ impl TasksUiBuilder {
         self
     }
 
-    /// Set the cancellation token for shutdown support
-    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
-        self.cancellation_token = Some(token);
+    /// Set the shutdown guard for graceful shutdown support
+    pub fn with_shutdown_guard(mut self, guard: WeakShutdownGuard) -> Self {
+        self.shutdown_guard = Some(guard);
         self
     }
 
@@ -45,8 +45,8 @@ impl TasksUiBuilder {
             tasks_builder = tasks_builder.with_db_path(db_path);
         }
 
-        if let Some(token) = self.cancellation_token.clone() {
-            tasks_builder = tasks_builder.with_cancellation_token(token);
+        if let Some(guard) = self.shutdown_guard.clone() {
+            tasks_builder = tasks_builder.with_shutdown_guard(guard);
         }
 
         let tasks = tasks_builder.build().await?;

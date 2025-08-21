@@ -86,6 +86,7 @@ tokio = { version = "1.47.1", features = [
   "time",
 ] }
 tokio-util = { version = "0.7.16", features = ["io"] }
+tokio-graceful = "0.1.6"
 which = "8.0.0"
 whoami = "1.6.1"
 xdg = "3.0.0"

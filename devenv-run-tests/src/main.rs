@@ -8,6 +8,7 @@ use std::{
     process::{Command, ExitCode, Stdio},
 };
 use tempfile::TempDir;
+use tokio_graceful::Shutdown;
 
 const ALL_SYSTEMS: &[&str] = &[
     "x86_64-linux",
@@ -255,7 +256,7 @@ fn discover_tests(
     Ok(test_infos)
 }
 
-async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
+async fn run_tests_in_directory(args: &RunArgs, shutdown: &Shutdown) -> Result<Vec<TestResult>> {
     let cwd = env::current_dir().into_diagnostic()?;
 
     // Discover tests (filtered by current system)
@@ -373,6 +374,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             devenv_dotfile: Some(devenv_dotfile),
             global_options: Some(devenv::GlobalOptions::default()),
             tui_sender: None,
+            shutdown: shutdown.guard(),
         };
         let devenv = Devenv::new(options).await;
 
@@ -465,18 +467,36 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
 #[tokio::main]
 async fn main() -> Result<ExitCode> {
-    log::init_tracing_default();
+    // Create shutdown signal
+    let shutdown = Shutdown::new(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C signal handler");
+    });
 
-    // If DEVENV_RUN_TESTS is set, run the tests.
+    let shutdown_guard = shutdown.guard();
+    let tracing_shutdown = Shutdown::new(async move {
+        shutdown_guard.cancelled().await;
+    });
+    log::init_tracing(
+        log::Level::default(),
+        log::LogFormat::default(),
+        &tracing_shutdown,
+    );
+
     if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
+        // Phase 2: Run the actual tests
         let args = Args::parse();
-        match execute_command(&args).await {
-            Ok(_) => return Ok(ExitCode::SUCCESS),
+        let result = match execute_command(&args, &shutdown).await {
+            Ok(_) => Ok(ExitCode::SUCCESS),
             Err(err) => {
                 eprintln!("Error: {err}");
-                return Ok(ExitCode::FAILURE);
+                Ok(ExitCode::FAILURE)
             }
         };
+        // Coordinate shutdown and wait for all tasks
+        shutdown.shutdown().await;
+        return result;
     }
 
     // Otherwise, run the tests in a subprocess with a fresh environment.
@@ -542,7 +562,7 @@ exec '{bin_dir}/devenv' \
                 wrapper_dir.path().display(),
                 env::var("PATH").unwrap_or_default()
             ),
-        ),
+         ),
         (
             "HOME",
             env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()),
@@ -573,7 +593,7 @@ exec '{bin_dir}/devenv' \
     if let Ok(tzdir) = env::var("TZDIR") {
         env.push(("TZDIR", tzdir));
     }
-
+ 
     let mut cmd = Command::new(&executable_path);
     cmd.stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
@@ -583,22 +603,27 @@ exec '{bin_dir}/devenv' \
         .envs(env);
 
     let output = cmd.output().into_diagnostic()?;
-    if output.status.success() {
+    let result = if output.status.success() {
         Ok(ExitCode::SUCCESS)
     } else {
         Ok(ExitCode::FAILURE)
-    }
+    };
+
+    // Coordinate shutdown and wait for all tasks
+    shutdown.shutdown().await;
+
+    result
 }
 
-async fn execute_command(args: &Args) -> Result<()> {
+async fn execute_command(args: &Args, shutdown: &Shutdown) -> Result<()> {
     match &args.command {
-        Commands::Run(run_args) => run_tests(run_args).await,
+        Commands::Run(run_args) => run_tests(run_args, shutdown).await,
         Commands::GenerateJson(gen_args) => generate_json(gen_args).await,
     }
 }
 
-async fn run_tests(args: &RunArgs) -> Result<()> {
-    let test_results = run_tests_in_directory(args).await?;
+async fn run_tests(args: &RunArgs, shutdown: &Shutdown) -> Result<()> {
+    let test_results = run_tests_in_directory(args, shutdown).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
 

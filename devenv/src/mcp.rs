@@ -76,10 +76,14 @@ impl DevenvMcpServer {
         info!("Fetching available packages from nixpkgs...");
 
         // Create a Devenv instance to access nix functionality
+        let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
         let devenv_options = DevenvOptions {
             config: self.config.clone(),
             devenv_root: self.devenv_root.clone(),
-            ..Default::default()
+            shutdown: shutdown.guard(),
+            global_options: None,
+            devenv_dotfile: None,
+            tui_sender: None,
         };
         let devenv = Devenv::new(devenv_options).await;
 
@@ -130,10 +134,14 @@ impl DevenvMcpServer {
         info!("Fetching available configuration options...");
 
         // Create a Devenv instance to access nix functionality
+        let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
         let devenv_options = DevenvOptions {
             config: self.config.clone(),
             devenv_root: self.devenv_root.clone(),
-            ..Default::default()
+            shutdown: shutdown.guard(),
+            global_options: None,
+            devenv_dotfile: None,
+            tui_sender: None,
         };
         let devenv = Devenv::new(devenv_options).await;
 

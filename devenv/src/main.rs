@@ -7,10 +7,17 @@ use devenv::{
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{env, os::unix::process::CommandExt, process::Command};
 use tempfile::TempDir;
+use tokio_graceful::Shutdown;
 use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Create shutdown signal
+    let shutdown = Shutdown::new(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C signal handler");
+    });
     let cli = Cli::parse_and_resolve_options();
 
     let print_version = || {
@@ -39,25 +46,7 @@ async fn main() -> Result<()> {
         log::Level::default()
     };
 
-    let tui_sender = log::init_tracing(level, cli.global_options.log_format);
-
-    // Set up signal handling for TUI mode to ensure proper cleanup
-    if let Some(ref sender) = tui_sender {
-        let cleanup_sender = sender.clone();
-        tokio::spawn(async move {
-            if tokio::signal::ctrl_c().await.is_ok() {
-                // Send shutdown event to TUI first
-                let _ = cleanup_sender.send(devenv_tui::TuiEvent::Shutdown);
-
-                // Give TUI a moment to clean up
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-                // Final cleanup
-                log::cleanup_before_exec(Some(&cleanup_sender));
-                std::process::exit(130); // Standard exit code for SIGINT
-            }
-        });
-    }
+    let tui_sender = log::init_tracing(level, cli.global_options.log_format, &shutdown);
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
@@ -72,10 +61,12 @@ async fn main() -> Result<()> {
     }
 
     let mut options = devenv::DevenvOptions {
-        global_options: Some(cli.global_options),
         config,
+        global_options: Some(cli.global_options),
+        devenv_root: None,
+        devenv_dotfile: None,
         tui_sender: tui_sender.clone(),
-        ..Default::default()
+        shutdown: shutdown.guard(),
     };
 
     // we let Drop delete the dir after all commands have ran
@@ -108,7 +99,7 @@ async fn main() -> Result<()> {
 
     let mut devenv = Devenv::new(options).await;
 
-    match command {
+    let result = match command {
         Commands::Shell { cmd, ref args } => match cmd {
             Some(cmd) => devenv.exec_in_shell(Some(cmd), args).await,
             None => devenv.shell().await,
@@ -241,5 +232,10 @@ async fn main() -> Result<()> {
         }
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
-    }
+    };
+
+    // Coordinate shutdown and wait for all tasks
+    shutdown.shutdown().await;
+
+    result
 }

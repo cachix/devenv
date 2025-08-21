@@ -16,68 +16,38 @@ pub use tracing_layer::DevenvTuiLayer;
 
 use tokio::sync::mpsc;
 
-/// Initialize the TUI system and return both the layer and event sender
-pub fn init_tui() -> (DevenvTuiLayer, mpsc::UnboundedSender<TuiEvent>) {
-    let (tx, rx) = mpsc::unbounded_channel();
-    let layer = DevenvTuiLayer::new(tx.clone());
-
-    // Set up a Ctrl-C handler that sends shutdown event, but ignore errors if channel is closed
-    let shutdown_tx = tx.clone();
-    tokio::spawn(async move {
-        // This will catch Ctrl-C if the display doesn't handle it
-        if tokio::signal::ctrl_c().await.is_ok() {
-            // Only try to send if the sender isn't closed
-            if !shutdown_tx.is_closed() {
-                let _ = shutdown_tx.send(TuiEvent::Shutdown);
-            }
-        }
-    });
-
-    // Spawn the display thread
-    tokio::spawn(async move {
-        if let Err(e) = app::run_app(rx).await {
-            eprintln!("TEA App error: {}", e);
-        }
-    });
-
-    (layer, tx)
+/// Handle for TUI system with proper shutdown tracking
+pub struct TuiHandle {
+    pub layer: DevenvTuiLayer,
+    pub sender: mpsc::UnboundedSender<TuiEvent>,
 }
 
-/// Initialize TUI with cancellation token support for proper signal handling integration
-pub fn init_tui_with_cancellation(
-    cancellation_token: tokio_util::sync::CancellationToken,
-) -> (DevenvTuiLayer, mpsc::UnboundedSender<TuiEvent>) {
+impl TuiHandle {
+    /// Get a clone of the event sender
+    pub fn sender(&self) -> mpsc::UnboundedSender<TuiEvent> {
+        self.sender.clone()
+    }
+}
+
+/// Initialize the TUI system and return handle + future to spawn
+///
+/// Returns (handle, future) where the future should be spawned with shutdown.spawn_task()
+pub fn init_tui() -> (
+    TuiHandle,
+    impl std::future::Future<Output = std::io::Result<()>> + Send + 'static,
+) {
     let (tx, rx) = mpsc::unbounded_channel();
     let layer = DevenvTuiLayer::new(tx.clone());
 
-    // Set up cancellation handler that sends shutdown event
-    let shutdown_tx = tx.clone();
-    tokio::spawn(async move {
-        cancellation_token.cancelled().await;
-        let _ = shutdown_tx.send(TuiEvent::Shutdown);
-    });
+    // Return the app future directly - tokio-graceful handles cancellation
+    let future = app::run_app(rx);
 
-    // Spawn the display thread
-    tokio::spawn(async move {
-        if let Err(e) = app::run_app(rx).await {
-            eprintln!("TEA App error: {}", e);
-        }
-    });
+    let handle = TuiHandle { layer, sender: tx };
 
-    (layer, tx)
+    (handle, future)
 }
 
 /// Create a NixLogBridge that can be used to send Nix log events to the TUI
 pub fn create_nix_bridge(sender: mpsc::UnboundedSender<TuiEvent>) -> std::sync::Arc<NixLogBridge> {
     std::sync::Arc::new(NixLogBridge::new(sender))
-}
-
-/// Cleanup TUI terminal state
-pub fn cleanup_tui(sender: &mpsc::UnboundedSender<TuiEvent>) {
-    // First, send shutdown event to gracefully close the TUI event loop
-    let _ = sender.send(TuiEvent::Shutdown);
-
-    // Give the TUI loop a moment to process the shutdown event
-    // TODO: avoid using a sleep. Use a different approach.
-    std::thread::sleep(std::time::Duration::from_millis(50));
 }

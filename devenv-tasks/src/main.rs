@@ -3,6 +3,7 @@ use devenv_tasks::{
     Config, RunMode, SudoContext, TaskConfig, Tasks, VerbosityLevel, signal_handler::SignalHandler,
 };
 use std::{env, fs, path::PathBuf};
+use tokio_graceful::Shutdown;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -43,6 +44,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ctx.drop_privileges()
             .map_err(|e| format!("Failed to drop privileges: {}", e))?;
     }
+
+    // Create shutdown signal
+    let shutdown = Shutdown::new(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C signal handler");
+    });
 
     let args = Args::parse();
 
@@ -103,12 +111,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sudo_context: sudo_context.clone(),
             };
 
-            // Create a global signal handler
-            let signal_handler = SignalHandler::start();
-
-            // Create Tasks instance with cancellation token support
+            // Create Tasks instance with shutdown guard support
+            let guard = shutdown.guard_weak();
             let tasks = Tasks::builder(config, verbosity)
-                .with_cancellation_token(signal_handler.cancellation_token())
+                .with_shutdown_guard(guard)
                 .build()
                 .await
                 .map_err(|e| format!("Failed to create tasks: {e}"))?;
@@ -166,6 +172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(output_file, serde_json::to_string_pretty(&output)?)?;
         }
     }
+
+    // Wait for shutdown and cleanup
+    shutdown.shutdown().await;
 
     Ok(())
 }

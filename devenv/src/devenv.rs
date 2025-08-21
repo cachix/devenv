@@ -51,13 +51,27 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 // project vars
 pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
     pub tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
+    pub shutdown: tokio_graceful::ShutdownGuard,
+}
+
+impl DevenvOptions {
+    pub fn new(shutdown: tokio_graceful::ShutdownGuard) -> Self {
+        Self {
+            config: config::Config::default(),
+            global_options: None,
+            devenv_root: None,
+            devenv_dotfile: None,
+            tui_sender: None,
+            shutdown,
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -102,6 +116,8 @@ pub struct Devenv {
 
     // TUI event sender for cleanup and bridge creation
     tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
+    // Shutdown guard for coordinated shutdown
+    shutdown: tokio_graceful::ShutdownGuard,
 }
 
 impl Devenv {
@@ -199,6 +215,7 @@ impl Devenv {
             secretspec_resolved,
             container_name: None,
             tui_sender: options.tui_sender,
+            shutdown: options.shutdown,
         }
     }
 
@@ -882,7 +899,13 @@ impl Devenv {
         );
 
         // Create Tasks instance using devenv-tasks execution engine
-        let tasks = Tasks::builder(config, verbosity)
+        let mut task_builder = Tasks::builder(config, verbosity);
+
+        // Add shutdown guard
+        let guard_weak = self.shutdown.clone().downgrade();
+        task_builder = task_builder.with_shutdown_guard(guard_weak);
+
+        let tasks = task_builder
             .build()
             .await
             .wrap_err("Failed to create tasks")?;

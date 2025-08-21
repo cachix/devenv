@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
+use tokio_graceful::WeakShutdownGuard;
 use tracing::{error, instrument};
 
 /// Builder for Tasks configuration
@@ -24,7 +24,7 @@ pub struct TasksBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    cancellation_token: Option<CancellationToken>,
+    shutdown_guard: Option<WeakShutdownGuard>,
 }
 
 impl TasksBuilder {
@@ -34,7 +34,7 @@ impl TasksBuilder {
             config,
             verbosity,
             db_path: None,
-            cancellation_token: None,
+            shutdown_guard: None,
         }
     }
 
@@ -44,9 +44,9 @@ impl TasksBuilder {
         self
     }
 
-    /// Set the cancellation token for shutdown support
-    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
-        self.cancellation_token = Some(token);
+    /// Set the shutdown guard for graceful shutdown support
+    pub fn with_shutdown_guard(mut self, guard: WeakShutdownGuard) -> Self {
+        self.shutdown_guard = Some(guard);
         self
     }
 
@@ -90,8 +90,8 @@ impl TasksBuilder {
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
                 task,
                 self.verbosity,
-                self.cancellation_token.clone(),
                 self.config.sudo_context.clone(),
+                self.shutdown_guard.as_ref().map(|g| g.clone()),
             ))));
             task_indices.insert(name, index);
         }
@@ -107,7 +107,7 @@ impl TasksBuilder {
             tasks_order: vec![],
             run_mode: self.config.run_mode,
             cache,
-            cancellation_token: self.cancellation_token,
+            shutdown_guard: self.shutdown_guard,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -128,7 +128,7 @@ pub struct Tasks {
     pub notify_ui: Arc<Notify>,
     pub run_mode: RunMode,
     pub cache: TaskCache,
-    pub cancellation_token: Option<CancellationToken>,
+    pub shutdown_guard: Option<WeakShutdownGuard>,
 }
 
 impl Tasks {
@@ -570,15 +570,42 @@ impl Tasks {
             }
         }
 
-        while let Some(res) = running_tasks.join_next().await {
-            match res {
-                Ok(_) => (),
-                Err(e) => error!("Task crashed: {}", e),
+        // Wait for running tasks with cancellation support
+        loop {
+            tokio::select! {
+                Some(res) = running_tasks.join_next() => {
+                    match res {
+                        Ok(_) => (),
+                        Err(e) => error!("Task crashed: {}", e),
+                    }
+                    // Continue the loop to wait for more tasks
+                },
+                _ = self.wait_for_cancellation() => {
+                    // Shutdown requested - abort remaining tasks
+                    running_tasks.abort_all();
+                    break;
+                },
+                else => {
+                    // No more tasks to wait for
+                    break;
+                }
             }
         }
 
         self.notify_finished.notify_one();
         self.notify_ui.notify_one();
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
+    }
+
+    /// Wait for cancellation to be requested
+    ///
+    /// Returns a future that never resolves if no shutdown guard is set
+    async fn wait_for_cancellation(&self) {
+        if let Some(guard) = &self.shutdown_guard {
+            guard.cancelled().await;
+        } else {
+            // If no shutdown guard, wait forever (task will be cancelled by other means)
+            std::future::pending::<()>().await;
+        }
     }
 }
