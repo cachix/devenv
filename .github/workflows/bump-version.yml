@@ -14,11 +14,11 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: cachix/install-nix-action@v26
-      - uses: cachix/cachix-action@v14
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v16
         with:
           name: devenv
 
@@ -33,7 +33,7 @@ jobs:
         run: echo "VERSION=$(nix eval --raw --expr '(builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version' --impure)" >> $GITHUB_OUTPUT
 
       - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: "Next release is ${{ steps.get-version.outputs.VERSION }}"
           file_pattern: "Cargo.toml Cargo.lock"

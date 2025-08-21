@@ -19,14 +19,14 @@ jobs:
             runs-on: [macos-13]
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Nix
-        uses: cachix/install-nix-action@v30
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
       - name: Configure Cachix
-        uses: cachix/cachix-action@v15
+        uses: cachix/cachix-action@v16
         with:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
@@ -49,7 +49,7 @@ jobs:
       examples: ${{ steps.set-examples.outputs.examples }}
     steps:
       - name: Checkout base repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Fetch examples to run
         id: set-examples
         run: |
@@ -75,14 +75,14 @@ jobs:
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Nix
-        uses: cachix/install-nix-action@v30
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
       - name: Configure Cachix
-        uses: cachix/cachix-action@v15
+        uses: cachix/cachix-action@v16
         with:
           name: devenv
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -109,13 +109,13 @@ jobs:
             runs-on: [macos-13]
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Nix
-        uses: cachix/install-nix-action@v30
+        uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: Configure Cachix
-        uses: cachix/cachix-action@v15
+        uses: cachix/cachix-action@v16
         with:
           name: devenv
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
@@ -152,13 +152,13 @@ jobs:
             runs-on: [macos-13]
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Nix
-        uses: cachix/install-nix-action@v30
+        uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
       - name: Configure Cachix
-        uses: cachix/cachix-action@v15
+        uses: cachix/cachix-action@v16
         with:
           name: devenv
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"

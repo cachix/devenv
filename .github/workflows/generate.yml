@@ -9,13 +9,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: cachix/install-nix-action@v30
+      - uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v16
         with:
           name: devenv
 

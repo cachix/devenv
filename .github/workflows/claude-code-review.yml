@@ -12,10 +12,10 @@ jobs:
       pull-requests: read
       issues: read
       id-token: write
-    
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
@@ -27,7 +27,7 @@ jobs:
 
           # update the first comment
           use_sticky_comment: true
-          
+
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |
             Please review this pull request and provide feedback on:
@@ -36,13 +36,13 @@ jobs:
             - Performance considerations
             - Security concerns
             - Test coverage
-            
+
             Be constructive and helpful in your feedback, avoid saying what's good
             and focus on thing that could be improved.
-          
+
           # Optional: Add specific tools for running tests or linting
           # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-          
+
           # Optional: Skip review for certain conditions
           # if: |
           #   !contains(github.event.pull_request.title, '[skip-review]') &&
