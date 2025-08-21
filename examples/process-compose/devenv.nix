@@ -1,7 +1,7 @@
 { pkgs, ... }:
 
 {
-  process.implementation = "process-compose";
+  process.manager.implementation = "process-compose";
 
   processes.foo.exec = "echo foo; sleep 5";
 
