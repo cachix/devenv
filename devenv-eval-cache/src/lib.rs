@@ -3,9 +3,7 @@ pub mod db;
 pub mod internal_log;
 pub mod op;
 
-pub use command::{
-    supports_eval_caching, CachedCommand, EnvInputDesc, FileInputDesc, Input, Output,
-};
+pub use command::{supports_eval_caching, EnvInputDesc, FileInputDesc, Input, NixCommand, Output};
 pub use op::Op;
 
 /// Integration tests for caching behavior with Nix evaluation.
@@ -76,7 +74,7 @@ mod integration_tests {
         expr: &str,
     ) -> Result<Output, Box<dyn std::error::Error>> {
         let nix_binary = get_nix_binary()?;
-        let cached_cmd = CachedCommand::new(pool);
+        let cached_cmd = NixCommand::new(pool);
         let mut cmd = Command::new(nix_binary);
         cmd.args(&["eval", "--impure", "--expr", expr]);
 

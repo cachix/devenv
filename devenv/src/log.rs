@@ -56,22 +56,28 @@ pub enum LogFormat {
 }
 
 pub fn init_tracing_default() -> Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>> {
-    init_tracing(Level::default(), LogFormat::default())
+    let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
+    init_tracing(Level::default(), LogFormat::default(), &shutdown)
 }
 
 /// Cleanup TUI before exec to prevent terminal corruption
+///
+/// Note: This is a synchronous operation that cannot wait for async shutdown.
+/// The TUI should handle Shutdown events quickly to avoid terminal corruption.
 pub fn cleanup_before_exec(
     tui_sender: Option<&tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
 ) {
-    // Force cleanup of any active TUI display to prevent terminal corruption
+    // Send shutdown signal to TUI - it should handle this immediately
     if let Some(sender) = tui_sender {
-        devenv_tui::cleanup_tui(sender);
+        let _ = sender.send(devenv_tui::TuiEvent::Shutdown);
+        // No sleep needed - TUI should handle shutdown synchronously in its event loop
     }
 }
 
 pub fn init_tracing(
     level: Level,
     log_format: LogFormat,
+    shutdown: &tokio_graceful::Shutdown,
 ) -> Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>> {
     let devenv_layer = DevenvLayer::new();
 
@@ -107,13 +113,21 @@ pub fn init_tracing(
                 .init();
         }
         LogFormat::Tui => {
-            // Initialize the TUI system
-            let (tui_layer, sender) = devenv_tui::init_tui();
+            // Create TUI and spawn with shutdown tracking
+            let (tui_handle, tui_future) = devenv_tui::init_tui();
 
+            // Spawn the TUI future with tracking - tokio-graceful handles cancellation
+            shutdown.spawn_task_fn(|_| async move {
+                if let Err(e) = tui_future.await {
+                    eprintln!("TEA App error: {}", e);
+                }
+            });
+
+            let sender = tui_handle.sender();
             tracing_subscriber::registry()
                 .with(filter)
                 .with(devenv_layer)
-                .with(tui_layer)
+                .with(tui_handle.layer)
                 .init();
             return Some(sender);
         }

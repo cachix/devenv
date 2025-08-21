@@ -74,9 +74,18 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Initialize TUI
-    let (_layer, tx) = init_tui();
+    // Initialize TUI with shutdown
+    let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
+    let (tui_handle, tui_future) = init_tui();
+    let tx = tui_handle.sender();
     let nix_bridge = create_nix_bridge(tx.clone());
+
+    // Spawn TUI task with shutdown tracking
+    shutdown.spawn_task_fn(|_| async move {
+        if let Err(e) = tui_future.await {
+            eprintln!("TEA App error: {}", e);
+        }
+    });
 
     // Create main operation
     let main_op_id = OperationId::new("replay");
@@ -128,7 +137,7 @@ async fn main() -> Result<()> {
                     // Give TUI a moment to display the message
                     sleep(Duration::from_millis(100)).await;
 
-                    devenv_tui::cleanup_tui(&tx);
+                    shutdown.shutdown().await;
                     return Ok(());
                 }
             }
@@ -183,7 +192,7 @@ async fn main() -> Result<()> {
     sleep(Duration::from_millis(100)).await;
 
     // Cleanup and exit
-    devenv_tui::cleanup_tui(&tx);
+    shutdown.shutdown().await;
 
     Ok(())
 }

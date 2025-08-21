@@ -9,6 +9,7 @@ clap.workspace = true
 devenv.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
+tokio-graceful.workspace = true
 miette.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true

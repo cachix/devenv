@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 # Core async runtime
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
-tokio-util = { workspace = true }
+tokio-graceful = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
 

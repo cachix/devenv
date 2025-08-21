@@ -9,7 +9,7 @@ use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
+use tokio_graceful::WeakShutdownGuard;
 use tracing::{error, instrument};
 
 #[derive(Debug)]
@@ -17,20 +17,20 @@ pub struct TaskState {
     pub task: TaskConfig,
     pub status: TaskStatus,
     pub verbosity: VerbosityLevel,
-    pub cancellation_token: Option<CancellationToken>,
+    pub shutdown_guard: Option<WeakShutdownGuard>,
 }
 
 impl TaskState {
     pub fn new(
         task: TaskConfig,
         verbosity: VerbosityLevel,
-        cancellation_token: Option<CancellationToken>,
+        shutdown_guard: Option<WeakShutdownGuard>,
     ) -> Self {
         Self {
             task,
             status: TaskStatus::Pending,
             verbosity,
-            cancellation_token,
+            shutdown_guard,
         }
     }
 
@@ -333,10 +333,10 @@ impl TaskState {
 
             loop {
                 tokio::select! {
-                    // Check for cancellation from shared signal handler
+                    // Check for cancellation from shutdown guard
                     _ = async {
-                        if let Some(ref token) = self.cancellation_token {
-                            token.cancelled().await
+                        if let Some(ref guard) = self.shutdown_guard {
+                            guard.cancelled().await
                         } else {
                             std::future::pending::<()>().await
                         }

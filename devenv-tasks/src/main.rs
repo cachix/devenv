@@ -1,8 +1,7 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{
-    signal_handler::SignalHandler, Config, RunMode, TaskConfig, Tasks, VerbosityLevel,
-};
+use devenv_tasks::{Config, RunMode, TaskConfig, Tasks, VerbosityLevel};
 use std::env;
+use tokio_graceful::Shutdown;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -28,6 +27,13 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create shutdown signal
+    let shutdown = Shutdown::new(async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C signal handler");
+    });
+
     let args = Args::parse();
 
     // Determine verbosity level from DEVENV_CMDLINE
@@ -62,13 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 run_mode: mode,
             };
 
-            // Create shared signal handler
-            let signal_handler = SignalHandler::start();
-            let cancellation_token = signal_handler.cancellation_token();
-
-            // Create Tasks instance with cancellation token support
+            // Create Tasks instance with shutdown guard support
+            let guard = shutdown.guard_weak();
             let tasks = Tasks::builder(config, verbosity)
-                .with_cancellation_token(cancellation_token)
+                .with_shutdown_guard(guard)
                 .build()
                 .await
                 .map_err(|e| format!("Failed to create tasks: {}", e))?;
@@ -122,6 +125,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(output_file, serde_json::to_string_pretty(&output)?)?;
         }
     }
+
+    // Wait for shutdown and cleanup
+    shutdown.shutdown().await;
 
     Ok(())
 }

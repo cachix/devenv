@@ -20,7 +20,7 @@ async fn main() -> Result<(), command::CommandError> {
     let mut cmd = Command::new("nix");
     cmd.args(["eval", ".#devenv.processes"]);
 
-    let output = command::CachedCommand::new(&pool).output(&mut cmd).await?;
+    let output = command::NixCommand::new(&pool).output(&mut cmd).await?;
     println!("{}", String::from_utf8_lossy(&output.stdout));
 
     Ok(())
