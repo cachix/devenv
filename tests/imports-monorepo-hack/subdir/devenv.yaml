@@ -1,6 +1,6 @@
 inputs:
   root:
-    url: git+file://../
+    url: path:../
     flake: false
 imports:
   - root/common
