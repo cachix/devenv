@@ -7,18 +7,21 @@ on:
 
 jobs:
   bump-version:
-    runs-on: ubuntu-latest
+    # Only bump the version on main.
+    # Other branches are fixed releases based off of main.
+    if: github.ref_name == 'main'
     permissions:
       contents: write
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - uses: cachix/install-nix-action@v26
       - uses: cachix/cachix-action@v14
         with:
           name: devenv
+
       - name: Install devenv.sh
         run: nix profile install nixpkgs#devenv
 
@@ -34,4 +37,3 @@ jobs:
         with:
           commit_message: "Next release is ${{ steps.get-version.outputs.VERSION }}"
           file_pattern: "Cargo.toml Cargo.lock"
-          branch: main
