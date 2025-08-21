@@ -51,7 +51,7 @@ in
     name = lib.mkOption {
       type = types.nullOr types.str;
       description = "Name of the project.";
-      default = null;
+      default = "devenv-shell";
     };
 
     enterShell = lib.mkOption {
@@ -360,7 +360,7 @@ in
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          name = "devenv-shell";
+          inherit (config) name;
           hardeningDisable = config.hardeningDisable;
           inherit buildInputs nativeBuildInputs;
           shellHook = ''

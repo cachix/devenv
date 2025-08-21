@@ -17153,7 +17153,7 @@ null or string
 
 
 *Default:*
-` null `
+` "devenv-shell" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
