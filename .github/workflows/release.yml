@@ -14,9 +14,6 @@ on:
         default: 'main'
         type: string
 
-env:
-  WORKFLOW_REF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
-
 concurrency:
   group: 'release-${{ github.ref }}'
   cancel-in-progress: false
@@ -26,14 +23,14 @@ jobs:
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      ref: ${{ env.WORKFLOW_REF }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
 
   test:
     needs: build
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
-      ref: ${{ env.WORKFLOW_REF }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
 
   pin:
     needs: build
@@ -41,11 +38,11 @@ jobs:
     uses: ./.github/workflows/pin.yml
     secrets: inherit
     with:
-      ref: ${{ env.WORKFLOW_REF }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
 
   containers:
     needs: build
     uses: ./.github/workflows/containers.yml
     secrets: inherit
     with:
-      ref: ${{ env.WORKFLOW_REF }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
