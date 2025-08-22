@@ -31,12 +31,14 @@ The same pattern works for all languages:
 
 ```nix
 { config, ... }: {
+  # https://devenv.sh/languages
   languages = {
     rust.enable = true;
     python.enable = true;
     go.enable = true;
   };
 
+  # https://devenv.sh/outputs
   outputs = {
     rust-app = config.languages.rust.import ./rust-app {};
     python-app = config.languages.python.import ./python-app {};
@@ -70,7 +72,7 @@ in
   # Expose our application inside the environment
   packages = [ myapp ];
 
-  # Nix outputs
+  # https://devenv.sh/outputs
   outputs = {
     inherit myapp;
   };
