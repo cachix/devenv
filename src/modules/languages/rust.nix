@@ -11,6 +11,13 @@ let
     attribute = "languages.rust.channel";
     follows = [ "nixpkgs" ];
   };
+
+  crate2nix = config.lib.getInput {
+    name = "crate2nix";
+    url = "github:nix-community/crate2nix";
+    attribute = "languages.rust.import";
+    follows = [ "nixpkgs" ];
+  };
 in
 {
   imports = [
@@ -102,9 +109,53 @@ in
         This is automatically set based on the channel and components configuration.
       '';
     };
+
+    import = lib.mkOption {
+      type = lib.types.functionTo (lib.types.functionTo lib.types.package);
+      description = ''
+        Import a Cargo project using cargo2nix.
+
+        This function takes a path to a directory containing a Cargo.toml file
+        and returns a derivation that builds the Rust project using cargo2nix.
+
+        Example usage:
+        ```nix
+        let
+        mypackage = config.languages.rust.import ./path/to/cargo/project {};
+        in {
+        languages.rust.enable = true;
+        packages = [ mypackage ];
+        }
+        ```
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      languages.rust.import = path: args:
+        let
+          crate2nixTools = pkgs.callPackage "${crate2nix}/tools.nix" { };
+
+          # Try to infer package name from Cargo.toml or use directory name as fallback
+          packageName = args.packageName or (
+            let
+              cargoToml =
+                if builtins.pathExists (path + "/Cargo.toml")
+                then builtins.fromTOML (builtins.readFile (path + "/Cargo.toml"))
+                else { };
+            in
+              cargoToml.package.name or (builtins.baseNameOf (builtins.toString path))
+          );
+
+          # Use crate2nix IFD to auto-generate
+          cargoNix = crate2nixTools.appliedCargoNix {
+            name = packageName;
+            src = path;
+          };
+        in
+        cargoNix.rootCrate.build.override args;
+    }
     (
       {
         assertions = [

@@ -16076,6 +16076,36 @@ list of string
 
 
 
+## languages.rust.import
+
+
+
+Import a Cargo project using cargo2nix.
+
+This function takes a path to a directory containing a Cargo.toml file
+and returns a derivation that builds the Rust project using cargo2nix.
+
+Example usage:
+
+```nix
+let
+mypackage = config.languages.rust.import ./path/to/cargo/project {};
+in {
+languages.rust.enable = true;
+packages = [ mypackage ];
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) function that evaluates to a(n) package
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.mold.enable
 
 
