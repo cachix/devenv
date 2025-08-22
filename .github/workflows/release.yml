@@ -7,30 +7,45 @@ on:
     tags:
       - v*
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (tag or branch) to release'
+        required: true
+        default: 'main'
+        type: string
+
+env:
+  WORKFLOW_REF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
 
 concurrency:
-  group: "release-${{ github.ref }}"
+  group: 'release-${{ github.ref }}'
   cancel-in-progress: false
 
 jobs:
   build:
     uses: ./.github/workflows/build.yml
     secrets: inherit
+    with:
+      ref: ${{ env.WORKFLOW_REF }}
 
   test:
     needs: build
     uses: ./.github/workflows/test.yml
     secrets: inherit
+    with:
+      ref: ${{ env.WORKFLOW_REF }}
 
   pin:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/pin.yml
     secrets: inherit
+    with:
+      ref: ${{ env.WORKFLOW_REF }}
 
   containers:
     needs: build
     uses: ./.github/workflows/containers.yml
     secrets: inherit
     with:
-      ref: ${{ github.sha }}
+      ref: ${{ env.WORKFLOW_REF }}

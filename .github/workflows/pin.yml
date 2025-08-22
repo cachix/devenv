@@ -9,6 +9,11 @@ on:
         required: true
 
   workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to checkout"
+        required: false
+        type: string
     secrets:
       CACHIX_AUTH_TOKEN:
         required: true
@@ -31,6 +36,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v5
+      with:
+        ref: ${{ inputs.ref }}
 
     - name: Install Nix
       uses: cachix/install-nix-action@v31

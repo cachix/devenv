@@ -8,14 +8,12 @@ on:
         description: "Git revision (tag, commit, or branch) to build from"
         required: false
         type: string
-        default: ""
   workflow_dispatch:
     inputs:
       ref:
         description: "Git revision (tag, commit, or branch) to build from"
         required: false
         type: string
-        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -32,7 +30,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ inputs.ref }}
 
       - name: Set up QEMU for multi-arch builds
         uses: docker/setup-qemu-action@v3
@@ -78,7 +76,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ inputs.ref }}
 
       - name: Set up QEMU for multi-arch builds
         uses: docker/setup-qemu-action@v3

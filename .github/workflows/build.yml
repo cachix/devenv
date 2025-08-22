@@ -2,6 +2,11 @@ name: "Build"
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to checkout"
+        required: false
+        type: string
 
 jobs:
   build:
@@ -20,6 +25,8 @@ jobs:
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
