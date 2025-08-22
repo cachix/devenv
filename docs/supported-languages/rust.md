@@ -125,44 +125,6 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 <!-- profile = "default" -->
 <!-- ``` -->
 
-## Packaging applications using Nix
-
-devenv can automatically package Rust projects using [crate2nix](https://github.com/nix-community/crate2nix).
-
-### Setup
-
-First, add the crate2nix input:
-
-```bash
-devenv inputs add crate2nix github:nix-community/crate2nix --follows nixpkgs
-```
-
-### Basic usage
-
-```nix
-{ config, ... }:
-let
-  myapp = config.languages.rust.import ./path/to/cargo/project {};
-in
-{
-  languages.rust.enable = true;
-  packages = [ myapp ];
-  
-  # Expose as outputs for building
-  outputs = {
-    inherit myapp;
-  };
-}
-```
-
-Then build the package:
-
-```bash
-devenv build outputs.myapp
-```
-
-The imported package will be available in your environment and can be built as an [output](/reference/options/#outputs).
-
 ## Integration with other tools
 
 ### Git hooks
@@ -239,6 +201,33 @@ list of string
 
 *Default:*
 ` [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ] `
+
+
+
+### languages\.rust\.import
+
+
+
+Import a Cargo project using cargo2nix\.
+
+This function takes a path to a directory containing a Cargo\.toml file
+and returns a derivation that builds the Rust project using cargo2nix\.
+
+Example usage:
+
+```nix
+let
+mypackage = config.languages.rust.import ./path/to/cargo/project {};
+in {
+languages.rust.enable = true;
+packages = [ mypackage ];
+}
+```
+
+
+
+*Type:*
+function that evaluates to a(n) function that evaluates to a(n) package
 
 
 
