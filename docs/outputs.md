@@ -5,21 +5,35 @@
 Outputs allow you to define Nix derivations using the module system,
 exposing Nix packages or sets of packages to be consumed by other tools for installation/distribution.
 
+devenv provides a unified interface for packaging applications across all supported languages,
+using each language's best packaging tools automatically.
+
 
 ## Defining outputs
 
-You can define outputs in your `devenv.nix` file using the `outputs` attribute. Here's a simple example:
+You can define outputs in your `devenv.nix` file using the `outputs` attribute.
+
+## Language integration
+
+Each language provides an `import` function that uses the best packaging tools for that ecosystem:
 
 ```nix
-{ pkgs, ... }: {
+{ config, ... }: {
+  languages.rust.enable = true;
+  languages.python.enable = true;
+
   outputs = {
-    myproject.myapp = import ./myapp { inherit pkgs; };
-    git = pkgs.git;
+    rust-app = config.languages.rust.import ./rust-app {};
+    python-app = config.languages.python.import ./python-app {};
   };
 }
 ```
 
-In this example, we're defining two outputs: `myproject.myapp` and `git`.
+The language `import` functions automatically:
+
+- **Rust**: Uses `crate2nix` for optimal Cargo.toml and Cargo.lock handling
+- **Python**: Uses `uv2nix` for modern Python packaging with pyproject.toml support
+- **Other languages**: Each uses the most appropriate packaging tool for that ecosystem
 
 ## Building outputs
 
@@ -27,8 +41,8 @@ To build all defined outputs, run:
 
 ```shell-session
 $ devenv build
-/nix/store/mzq5bpi49h26cy2mfj5a2r0q69fh3a9k-git-2.44.0
-/nix/store/mzq5bpi49h26cy2mfj5a2r0q69fh3a9k-myapp-1.0
+/nix/store/abc123def456ghi789jkl012mno345pq-rust-app-1.0
+/nix/store/xyz987wvu654tsr321qpo987mnl654ki-python-app-1.0
 ```
 
 This command will build all outputs and display their paths in the Nix store.
@@ -36,11 +50,11 @@ This command will build all outputs and display their paths in the Nix store.
 To build specific output(s), you can specify them explicitly:
 
 ```shell-session
-$ devenv build outputs.git
-/nix/store/mzq5bpi49h26cy2mfj5a2r0q69fh3a9k-git-2.44.0
+$ devenv build outputs.rust-app
+/nix/store/abc123def456ghi789jkl012mno345pq-rust-app-1.0
 ```
 
-This will build only the `git` output, making it easy to consume for installation or distribution.
+This will build only the `rust-app` output, making it easy to consume for installation or distribution.
 
 ## Defining outputs as custom module options
 
