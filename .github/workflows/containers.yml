@@ -51,6 +51,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/devcontainer
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}},value=${{ inputs.ref || github.ref_name }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -97,6 +100,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/devenv
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}},value=${{ inputs.ref || github.ref_name }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6

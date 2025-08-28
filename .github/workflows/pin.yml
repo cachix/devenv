@@ -52,4 +52,4 @@ jobs:
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
     - name: Pin release
-      run: cachix pin devenv ${{ github.ref_name }} $(nix build --accept-flake-config --print-out-paths)
+      run: cachix pin devenv ${{ inputs.ref || github.ref_name }} $(nix build --accept-flake-config --print-out-paths)

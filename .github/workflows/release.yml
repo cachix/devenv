@@ -15,7 +15,7 @@ on:
         type: string
 
 concurrency:
-  group: "release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref }}"
+  group: "release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name }}"
   cancel-in-progress: false
 
 jobs:
@@ -23,14 +23,14 @@ jobs:
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name }}
 
   test:
     needs: build
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name}}
 
   pin:
     needs: build
@@ -38,11 +38,11 @@ jobs:
     uses: ./.github/workflows/pin.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name }}
 
   containers:
     needs: build
     uses: ./.github/workflows/containers.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name }}
