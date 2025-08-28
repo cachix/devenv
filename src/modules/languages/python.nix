@@ -48,6 +48,27 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  uv2nix = config.lib.getInput {
+    name = "uv2nix";
+    url = "github:pyproject-nix/uv2nix";
+    attribute = "languages.python.import";
+    follows = [ "nixpkgs" ];
+  };
+
+  pyproject-nix = config.lib.getInput {
+    name = "pyproject-nix";
+    url = "github:pyproject-nix/pyproject.nix";
+    attribute = "languages.python.import";
+    follows = [ "nixpkgs" ];
+  };
+
+  pyproject-build-systems = config.lib.getInput {
+    name = "pyproject-build-systems";
+    url = "github:pyproject-nix/build-system-pkgs";
+    attribute = "languages.python.import";
+    follows = [ "nixpkgs" ];
+  };
+
   initVenvScript = ''
     pushd "${cfg.directory}"
 
@@ -457,113 +478,167 @@ in
         description = "The Poetry package to use.";
       };
     };
-  };
 
-  config = lib.mkIf cfg.enable {
-    languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
-    languages.python.poetry.install.arguments =
-      lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root"
-      ++ lib.optional
-        (
-          !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
-        ) "--no-root"
-      ++ lib.optional cfg.poetry.install.compile "--compile"
-      ++ lib.optional cfg.poetry.install.quiet "--quiet"
-      ++ lib.optionals (cfg.poetry.install.groups != [ ]) [
-        "--with"
-        ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"''
-      ]
-      ++ lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [
-        "--without"
-        ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"''
-      ]
-      ++ lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [
-        "--only"
-        ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"''
-      ]
-      ++ lib.optional cfg.poetry.install.allGroups "--all-groups"
-      ++ lib.optionals (cfg.poetry.install.extras != [ ]) [
-        "--extras"
-        ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"''
-      ]
-      ++ lib.optional cfg.poetry.install.allExtras "--all-extras"
-      ++ lib.optional (cfg.poetry.install.verbosity == "little") "-v"
-      ++ lib.optional (cfg.poetry.install.verbosity == "more") "-vv"
-      ++ lib.optional (cfg.poetry.install.verbosity == "debug") "-vvv";
+    import = lib.mkOption {
+      type = lib.types.functionTo (lib.types.functionTo lib.types.package);
+      description = ''
+        Import a Python project using uv2nix.
 
-    languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
+        This function takes a path to a directory containing a pyproject.toml file
+        and returns a derivation that builds the Python project using uv2nix.
 
-    languages.python.package = lib.mkMerge [
-      (lib.mkIf (cfg.version != null) (
-        nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version}
-          or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")
-      ))
-    ];
-
-    cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
-
-    packages =
-      [ package ]
-      ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
-      ++ (lib.optional cfg.uv.enable cfg.uv.package);
-
-    env =
-      (lib.optionalAttrs cfg.uv.enable {
-        # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
-        UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
-        # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
-        UV_PYTHON_DOWNLOADS = "never";
-        # Make uv choose the first python on PATH that is not uv provided. 
-        # The one it finds is then consistently the one from nix (which is what we want).
-        UV_PYTHON_PREFERENCE = "only-system";
-      })
-      // (lib.optionalAttrs cfg.poetry.enable {
-        # Make poetry use DEVENV_ROOT/.venv
-        POETRY_VIRTUALENVS_IN_PROJECT = "true";
-        # Make poetry create the local virtualenv when it does not exist.
-        POETRY_VIRTUALENVS_CREATE = "true";
-        # Make poetry stop accessing any other virtualenvs in $HOME.
-        POETRY_VIRTUALENVS_PATH = "/var/empty";
-      });
-
-    assertions = [
-      {
-        assertion = !(cfg.poetry.install.enable && cfg.uv.sync.enable);
-        message = "Error: Both poetry.install.enable and uv.sync.enable cannot be true simultaneously.";
-      }
-    ];
-
-    tasks = {
-      "devenv:python:virtualenv" = lib.mkIf (cfg.venv.enable && !cfg.uv.sync.enable) {
-        description = "Initialize Python virtual environment";
-        exec = initVenvScript;
-        exports = [
-          "PATH"
-          "VIRTUAL_ENV"
-        ];
-        before = [ "devenv:enterShell" ];
-      };
-
-      "devenv:python:poetry" = lib.mkIf cfg.poetry.install.enable {
-        description = "Initialize Poetry";
-        exec = initPoetryScript;
-        exports = [ "PATH" ] ++ lib.optional cfg.poetry.activate.enable "VIRTUAL_ENV";
-        before = [ "devenv:enterShell" ] ++ lib.optional cfg.venv.enable "devenv:python:virtualenv";
-      };
-
-      "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
-        description = "Initialize uv sync";
-        exec = initUvScript;
-        exports = [
-          "PATH"
-          "VIRTUAL_ENV"
-        ];
-        before = [ "devenv:enterShell" ];
-      };
+        Example usage:
+        ```nix
+        let
+          mypackage = config.languages.python.import ./path/to/python/project {};
+        in {
+          languages.python.enable = true;
+          packages = [ mypackage ];
+        }
+        ```
+      '';
     };
-
-    enterShell = ''
-      export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
-    '';
   };
+
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+    {
+      languages.python.import = path: args:
+        let
+          # Load workspace using uv2nix
+          workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = path; };
+
+          # Create package overlay from workspace
+          overlay = workspace.mkPyprojectOverlay {
+            sourcePreference = "wheel";
+          };
+
+          # Try to infer package name from pyproject.toml or use directory name as fallback
+          packageName = args.packageName or (
+            let
+              pyprojectToml =
+                if builtins.pathExists (path + "/pyproject.toml")
+                then builtins.fromTOML (builtins.readFile (path + "/pyproject.toml"))
+                else { };
+            in
+              pyprojectToml.project.name or (builtins.baseNameOf (builtins.toString path))
+          );
+
+          # Construct package set using pyproject-nix and apply overlays
+          pythonSet = (pkgs.callPackage pyproject-nix.build.packages {
+            python = cfg.package;
+          }).overrideScope (lib.composeManyExtensions [
+            pyproject-build-systems.overlays.default
+            overlay
+          ]);
+        in
+        pythonSet.mkVirtualEnv "${packageName}-env" workspace.deps.default;
+    }
+    {
+      languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
+      languages.python.poetry.install.arguments =
+        lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root"
+        ++ lib.optional
+          (
+            !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
+          ) "--no-root"
+        ++ lib.optional cfg.poetry.install.compile "--compile"
+        ++ lib.optional cfg.poetry.install.quiet "--quiet"
+        ++ lib.optionals (cfg.poetry.install.groups != [ ]) [
+          "--with"
+          ''"${lib.concatStringsSep "," cfg.poetry.install.groups}"''
+        ]
+        ++ lib.optionals (cfg.poetry.install.ignoredGroups != [ ]) [
+          "--without"
+          ''"${lib.concatStringsSep "," cfg.poetry.install.ignoredGroups}"''
+        ]
+        ++ lib.optionals (cfg.poetry.install.onlyGroups != [ ]) [
+          "--only"
+          ''"${lib.concatStringsSep " " cfg.poetry.install.onlyGroups}"''
+        ]
+        ++ lib.optional cfg.poetry.install.allGroups "--all-groups"
+        ++ lib.optionals (cfg.poetry.install.extras != [ ]) [
+          "--extras"
+          ''"${lib.concatStringsSep " " cfg.poetry.install.extras}"''
+        ]
+        ++ lib.optional cfg.poetry.install.allExtras "--all-extras"
+        ++ lib.optional (cfg.poetry.install.verbosity == "little") "-v"
+        ++ lib.optional (cfg.poetry.install.verbosity == "more") "-vv"
+        ++ lib.optional (cfg.poetry.install.verbosity == "debug") "-vvv";
+
+      languages.python.poetry.activate.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
+
+      languages.python.package = lib.mkMerge [
+        (lib.mkIf (cfg.version != null) (
+          nixpkgs-python.packages.${pkgs.stdenv.system}.${cfg.version}
+            or (throw "Unsupported Python version, see https://github.com/cachix/nixpkgs-python#supported-python-versions")
+        ))
+      ];
+
+      cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
+
+      packages =
+        [ package ]
+        ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
+        ++ (lib.optional cfg.uv.enable cfg.uv.package);
+
+      env =
+        (lib.optionalAttrs cfg.uv.enable {
+          # ummmmm how does this work? Can I even know the path to the devenv/state at this point?
+          UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
+          # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
+          UV_PYTHON_DOWNLOADS = "never";
+          # Make uv choose the first python on PATH that is not uv provided. 
+          # The one it finds is then consistently the one from nix (which is what we want).
+          UV_PYTHON_PREFERENCE = "only-system";
+        })
+        // (lib.optionalAttrs cfg.poetry.enable {
+          # Make poetry use DEVENV_ROOT/.venv
+          POETRY_VIRTUALENVS_IN_PROJECT = "true";
+          # Make poetry create the local virtualenv when it does not exist.
+          POETRY_VIRTUALENVS_CREATE = "true";
+          # Make poetry stop accessing any other virtualenvs in $HOME.
+          POETRY_VIRTUALENVS_PATH = "/var/empty";
+        });
+
+      assertions = [
+        {
+          assertion = !(cfg.poetry.install.enable && cfg.uv.sync.enable);
+          message = "Error: Both poetry.install.enable and uv.sync.enable cannot be true simultaneously.";
+        }
+      ];
+
+      tasks = {
+        "devenv:python:virtualenv" = lib.mkIf (cfg.venv.enable && !cfg.uv.sync.enable) {
+          description = "Initialize Python virtual environment";
+          exec = initVenvScript;
+          exports = [
+            "PATH"
+            "VIRTUAL_ENV"
+          ];
+          before = [ "devenv:enterShell" ];
+        };
+
+        "devenv:python:poetry" = lib.mkIf cfg.poetry.install.enable {
+          description = "Initialize Poetry";
+          exec = initPoetryScript;
+          exports = [ "PATH" ] ++ lib.optional cfg.poetry.activate.enable "VIRTUAL_ENV";
+          before = [ "devenv:enterShell" ] ++ lib.optional cfg.venv.enable "devenv:python:virtualenv";
+        };
+
+        "devenv:python:uv" = lib.mkIf cfg.uv.sync.enable {
+          description = "Initialize uv sync";
+          exec = initUvScript;
+          exports = [
+            "PATH"
+            "VIRTUAL_ENV"
+          ];
+          before = [ "devenv:enterShell" ];
+        };
+      };
+
+      enterShell = ''
+        export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+      '';
+    }
+  ]);
 }
