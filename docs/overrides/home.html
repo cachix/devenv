@@ -451,6 +451,7 @@ $
     </div>
 </div>
 
+
 <div class="overflow-hidden bg-white py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
@@ -861,6 +862,97 @@ imports:
         class="rounded-md bg-[#425C82] px-6 py-3 text-lg font-semibold text-white shadow-md hover:bg-[#344968] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
         >Get Started</a>
 </div>
+<div class="overflow-hidden bg-white py-14">
+    <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
+        <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+            <div class="px-4">
+                <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                        Packaging using Nix
+                    </h2>
+                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
+                        Use the same interface for all languages for packaging applications.
+                        <a class="text-[#425C82] font-semibold" href="/outputs/">Define outputs</a>
+                        to build your applications.
+                    </p>
+
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900">
+                                Best tools chosen for you
+                            </dt>
+                            <dd class="inline">
+                                devenv evaluates and chooses the best packaging tools
+                                (crate2nix for Rust, uv2nix for Python) so you don't have to.
+                            </dd>
+                        </div>
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900">
+                                Language integration
+                            </dt>
+                            <dd class="inline">
+                                Each language provides an <code class="bg-gray-100 p-1">import</code>
+                                function to package your application using the best tools
+                                for that ecosystem.
+                            </dd>
+                        </div>
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900">
+                                Build outputs
+                            </dt>
+                            <dd class="inline">
+                                Use <code class="bg-gray-100 p-1">devenv build</code> 
+                                to build your application outputs for distribution.
+                            </dd>
+                        </div>
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900">
+                                Distribution ready
+                            </dt>
+                            <dd class="inline">
+                                Outputs are packaged as Nix derivations, making them
+                                ready for distribution and deployment. Read more about
+                                <a class="text-[#425C82] font-semibold"
+                                   href="/blog/posts/closing-the-nix-gap-from-tools-to-packaged-applications/">closing the Nix gap</a>
+                                from tools to packaged applications.
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+            <div class="px-4 lg:px-0">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+                        <div class="overflow-hidden rounded-b-xl bg-gray-900">
+                            <div class="flex bg-gray-800/40">
+                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                                    <div class="px-4 text-gray-200">
+                                        devenv.nix
+                                    </div>
+                                </div>
+                            </div>
+                            <pre class="text-white text-sm"><code class="language-nix">{ config, ... }: {
+  # https://devenv.sh/languages
+  languages = {
+    rust.enable = true;
+    python.enable = true;
+  };
+
+  # https://devenv.sh/outputs
+  outputs = {
+    rust-app = config.languages.rust.import ./rust-app {};
+    python-app = config.languages.python.import ./python-app {};
+  };
+}
+</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 </div>
 
