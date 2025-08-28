@@ -145,6 +145,7 @@ No command        devenv:enterTest
 1 Skipped, 1 Succeeded                      474.62ms
 ```
 
+!!! note "running tests with flakes doesn't support starting processes, for that you need to use `devenv`"
 
 ### Automated shell switching
 
