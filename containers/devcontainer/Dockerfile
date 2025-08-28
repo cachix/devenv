@@ -1,6 +1,6 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
-ARG VERSION=latest
-ARG DEVENV_INSTALL_URI=github:cachix/devenv/$VERSION
+ARG DEVENV_VERSION=latest
+ARG DEVENV_INSTALL_URI=github:cachix/devenv/$DEVENV_VERSION
 # To pin a Nix version: https://releases.nixos.org/nix/nix-2.24.9/install
 ARG NIX_INSTALL_SCRIPT=https://nixos.org/nix/install
 

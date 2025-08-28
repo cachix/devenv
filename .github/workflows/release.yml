@@ -23,14 +23,14 @@ jobs:
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
 
   test:
     needs: build
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name}}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || ''}}
 
   pin:
     needs: build
@@ -38,11 +38,11 @@ jobs:
     uses: ./.github/workflows/pin.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
 
   containers:
     needs: build
     uses: ./.github/workflows/containers.yml
     secrets: inherit
     with:
-      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref_name }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}

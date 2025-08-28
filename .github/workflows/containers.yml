@@ -28,6 +28,7 @@ jobs:
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
@@ -51,9 +52,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/devcontainer
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}},value=${{ inputs.ref || github.ref_name }}
+          context: git # Get context from checkout out repo
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -67,7 +66,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ inputs.ref || github.sha }}
+            DEVENV_VERSION=${{ steps.checkout.outputs.commit }}
 
   devenv:
     runs-on: ubuntu-latest
@@ -77,6 +76,7 @@ jobs:
 
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
@@ -100,9 +100,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/devenv
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}},value=${{ inputs.ref || github.ref_name }}
+          context: git # Get context from checkout out repo
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -116,4 +114,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ inputs.ref || github.sha }}
+            DEVENV_VERSION=${{ steps.checkout.outputs.commit }}
