@@ -48,22 +48,17 @@ let
             if config.binary != null
             then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
             else pkgs.lib.getExe config.package;
+
+          execScript = pkgs.writeScript "${name}-script" ''
+            #!${binary}
+            ${config.exec}
+          '';
         in
         lib.hiPrioSet (
-          pkgs.runCommand name
-            {
-              buildInputs = config.packages;
-              text = ''
-                #!${binary}
-                ${config.exec}
-              '';
-              passAsFile = [ "text" ];
-              meta.mainProgram = name;
-            } ''
-            target="$out/bin/${name}"
-            mkdir -p "$(dirname "$target")"
-            mv "$textPath" "$target"
-            chmod +x "$target"
+          pkgs.writeScriptBin name ''
+            #!${lib.getExe pkgs.bashInteractive}
+            export PATH=${pkgs.lib.makeBinPath config.packages}:$PATH
+            exec ${execScript} "$@"
           ''
         );
     }
