@@ -63,8 +63,10 @@ A common deployment strategy is to run each [process](./processes.md) as an entr
 
   packages = [ pkgs.procps ];
 
-  processes.hello-docker.exec = "while true; do echo 'Hello Docker!' && sleep 1; done";
-  processes.hello-nix.exec = "while true; do echo 'Hello Nix!' && sleep 1; done";
+  processes = {
+    hello-docker.exec = "while true; do echo 'Hello Docker!' && sleep 1; done";
+    hello-nix.exec = "while true; do echo 'Hello Nix!' && sleep 1; done";
+  };
 
   # Exclude the source repo to make the container smaller.
   containers."processes".copyToRoot = null;
@@ -95,8 +97,10 @@ You can specify the command to run when the container starts (instead of enterin
 {
   processes.serve.exec = "python -m http.server";
 
-  containers."serve".name = "myapp";
-  containers."serve".startupCommand = config.processes.serve.exec;
+  containers."serve" = {
+    name = "myapp";
+    startupCommand = config.processes.serve.exec;
+  };
 }
 ```
 
@@ -113,8 +117,10 @@ If you're building binaries as part of the development environment, you can choo
   # watch local changes and build the project to ./dist
   processes.build.exec = "${pkgs.watchexec}/bin/watchexec my-build-tool";
 
-  containers."prod".copyToRoot = ./dist;
-  containers."prod".startupCommand = "/mybinary serve";
+  containers."prod" = {
+    copyToRoot = ./dist;
+    startupCommand = "/mybinary serve";
+  };
 }
 ```
 
@@ -145,11 +151,13 @@ You can also specify these options declaratively:
 
 ```nix title="devenv.nix"
 {
-  containers."processes".registry = "docker://registry.fly.io/";
-  containers."processes".defaultCopyArgs = [
-    "--dest-creds"
-    "x:\"$(${pkgs.flyctl}/bin/flyctl auth token)\""
-  ];
+  containers."processes" = {
+    registry = "docker://registry.fly.io/";
+    defaultCopyArgs = [
+      "--dest-creds"
+      "x:\"$(${pkgs.flyctl}/bin/flyctl auth token)\""
+    ];
+  };
 }
 ```
 
