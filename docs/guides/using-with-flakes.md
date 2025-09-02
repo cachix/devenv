@@ -43,6 +43,8 @@ Consider using the Flake integration when:
 | Evaluation caching | :material-check: | :material-close: |
 | Pure evaluation | :material-check: | :material-close: (`impure` by default) |
 | Export as a flake | :material-close: | :material-check: |
+| secretspec.dev | :material-check: | :material-close: |
+| Running processes when testing | :material-check: | :material-close: |
 
 ## Getting started
 
