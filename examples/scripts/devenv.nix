@@ -5,22 +5,25 @@
 }:
 
 {
+  # Top-level packages to the shell
   packages = [
-    pkgs.curl
     pkgs.jq
   ];
 
-  scripts.silly-example.exec = ''curl "https://httpbin.org/get?$1" | jq .args'';
-  scripts.silly-example.description = "curls httpbin with provided arg";
+  # Scripts have access to the top-level `packages`
+  scripts.silly-example.exec = ''echo "{\"name\":\"$1\",\"greeting\":\"Hello $1!\",\"timestamp\":\"$(date -Iseconds)\"}" | jq '';
+  scripts.silly-example.description = "creates JSON with provided arg and shows it with jq";
 
-  scripts.serious-example.exec = ''${pkgs.cowsay}/bin/cowsay "$*"'';
+  # Scripts can declare their own private `packages`
+  scripts.serious-example.exec = ''cowsay "$*"'';
+  scripts.serious-example.packages = [ pkgs.cowsay ];
   scripts.serious-example.description = ''echoes args in a very serious manner'';
 
-  # Example with custom package
+  # Write scripts using your favourite language.
   scripts.python-hello.exec = ''print("Hello, world!")'';
-  scripts.python-hello.package = pkgs.python311;
+  scripts.python-hello.package = pkgs.python3Minimal;
 
-  # Example when package and binary are different
+  # Handle custom scripts where the binary name doesn't match the package name
   scripts.nushell-greet.exec = ''
     def greet [name] {
     	["hello" $name]
@@ -31,6 +34,7 @@
   scripts.nushell-greet.package = pkgs.nushell;
   scripts.nushell-greet.binary = "nu";
 
+  # Render a help section when you enter the shell, similar to `devenv info`
   enterShell = ''
     echo
     echo 🦾 Helper scripts you can run to make your development richer:
@@ -39,5 +43,20 @@
     ${lib.generators.toKeyValue { } (lib.mapAttrs (name: value: value.description) config.scripts)}
     EOF
     echo
+  '';
+
+  # Test that the scripts work as expected with `devenv test`
+  enterTest = ''
+    echo "Testing silly-example"
+    silly-example world | grep Hello
+
+    echo "Testing serious-example"
+    serious-example hello world | grep hello
+
+    echo "Testing python-hello"
+    python-hello | grep Hello
+
+    echo "Testing nushell-greet"
+    nushell-greet | grep hello
   '';
 }
