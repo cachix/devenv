@@ -36,7 +36,7 @@ nixpkgs:
     allowUnfree: true
     x86_64-linux:
       cudaSupport: true
-      cudaCapabilities: ["7.5" "8.6" "8.9"]
+      cudaCapabilities: ["7.5", "8.6", "8.9"]
 ```
 
 ## Tasks Enhancements
