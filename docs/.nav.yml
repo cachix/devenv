@@ -41,3 +41,4 @@ nav:
   # XXX: we're using absolute path so that the title stays Roadmap
   - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/
   - Community: community
+  - Discord: https://discord.gg/naMgvexb6q
