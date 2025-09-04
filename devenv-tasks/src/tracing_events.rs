@@ -8,9 +8,12 @@ use tracing::{debug, error, info, warn};
 /// Emit a structured tracing event when a task starts
 pub fn emit_task_start(task_name: &str) {
     info!(
-        target: "devenv_tasks",
+        target: "devenv.ui",
         task_name = %task_name,
-        tui.op = true,
+        devenv.ui.message = task_name,
+        devenv.ui.type = "task",
+        devenv.ui.detail = "starting",
+        devenv.ui.id = format!("task-{}", task_name),
         "Task starting"
     );
 }
@@ -18,11 +21,12 @@ pub fn emit_task_start(task_name: &str) {
 /// Emit a structured tracing event for task status changes
 pub fn emit_task_status_change(task_name: &str, status: &str, result: Option<&str>) {
     info!(
-        target: "devenv_tasks",
+        target: "devenv.ui.progress",
         task_name = %task_name,
         status = %status,
         ?result,
-        tui.op = true,
+        devenv.ui.id = format!("task-{}", task_name),
+        devenv.ui.detail = status,
         "Task status updated"
     );
 }
@@ -33,7 +37,7 @@ pub fn emit_command_start(task_name: &str, command: &str) {
         target: "devenv_tasks",
         task_name = %task_name,
         command = %command,
-        tui.log = true,
+        devenv.log = true,
         "Executing command"
     );
 }
@@ -46,7 +50,7 @@ pub fn emit_command_end(task_name: &str, command: &str, exit_code: Option<i32>, 
             task_name = %task_name,
             command = %command,
             exit_code = ?exit_code,
-            tui.log = true,
+            devenv.log = true,
             "Command completed successfully"
         );
     } else {
@@ -55,7 +59,7 @@ pub fn emit_command_end(task_name: &str, command: &str, exit_code: Option<i32>, 
             task_name = %task_name,
             command = %command,
             exit_code = ?exit_code,
-            tui.log = true,
+            devenv.log = true,
             "Command failed"
         );
     }
@@ -72,85 +76,92 @@ pub fn emit_task_completed(
     match result {
         "success" => {
             info!(
-                target: "devenv_tasks",
+                target: "devenv.ui.progress",
                 task_name = %task_name,
                 status = %status,
                 result = %result,
                 ?duration_secs,
                 ?reason,
-                tui.op = true,
+                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.detail = "completed successfully",
                 "Task completed successfully"
             );
         }
         "failed" => {
             error!(
-                target: "devenv_tasks",
+                target: "devenv.ui.progress",
                 task_name = %task_name,
                 status = %status,
                 result = %result,
                 ?duration_secs,
                 ?reason,
-                tui.op = true,
+                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.detail = "failed",
                 "Task failed"
             );
         }
         "cached" => {
             info!(
-                target: "devenv_tasks",
+                target: "devenv.ui.progress",
                 task_name = %task_name,
                 status = %status,
                 result = %result,
                 ?duration_secs,
                 ?reason,
-                tui.op = true,
+                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.detail = "skipped (cached)",
                 "Task skipped (cached)"
             );
         }
         "skipped" => {
             info!(
-                target: "devenv_tasks",
+                target: "devenv.ui.progress",
                 task_name = %task_name,
                 status = %status,
                 result = %result,
                 ?duration_secs,
                 ?reason,
-                tui.op = true,
+                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.detail = "skipped",
                 "Task skipped"
             );
         }
         "dependency_failed" => {
             warn!(
-                target: "devenv_tasks",
+                target: "devenv.ui.progress",
                 task_name = %task_name,
                 status = %status,
                 result = %result,
                 ?duration_secs,
                 ?reason,
-                tui.op = true,
+                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.detail = "skipped due to dependency failure",
                 "Task skipped due to dependency failure"
             );
         }
         "cancelled" => {
             warn!(
-                target: "devenv_tasks",
+                target: "devenv.ui.progress",
                 task_name = %task_name,
                 status = %status,
                 result = %result,
                 ?duration_secs,
                 ?reason,
-                tui.op = true,
+                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.detail = "cancelled",
                 "Task cancelled"
             );
         }
         _ => {
             info!(
-                target: "devenv_tasks",
+                target: "devenv.ui.progress",
                 task_name = %task_name,
                 status = %status,
                 result = %result,
                 ?duration_secs,
                 ?reason,
-                tui.op = true,
+                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.detail = "completed",
                 "Task completed"
             );
         }

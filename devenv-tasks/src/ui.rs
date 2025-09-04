@@ -1,7 +1,7 @@
 use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio_graceful::WeakShutdownGuard;
+use tokio_shutdown::Shutdown;
 
 use crate::types::{Skipped, TaskCompleted, TaskStatus, TasksStatus};
 use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
@@ -11,17 +11,17 @@ pub struct TasksUiBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    shutdown_guard: Option<WeakShutdownGuard>,
+    shutdown: Arc<Shutdown>,
 }
 
 impl TasksUiBuilder {
-    /// Create a new builder with required configuration
-    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+    /// Create a new builder with required configuration and shutdown
+    pub fn new(config: Config, verbosity: VerbosityLevel, shutdown: Arc<Shutdown>) -> Self {
         Self {
             config,
             verbosity,
             db_path: None,
-            shutdown_guard: None,
+            shutdown,
         }
     }
 
@@ -31,22 +31,12 @@ impl TasksUiBuilder {
         self
     }
 
-    /// Set the shutdown guard for graceful shutdown support
-    pub fn with_shutdown_guard(mut self, guard: WeakShutdownGuard) -> Self {
-        self.shutdown_guard = Some(guard);
-        self
-    }
-
     /// Build the TasksUi instance
     pub async fn build(self) -> Result<TasksUi, Error> {
-        let mut tasks_builder = Tasks::builder(self.config, self.verbosity);
+        let mut tasks_builder = Tasks::builder(self.config, self.verbosity, self.shutdown);
 
         if let Some(db_path) = self.db_path {
             tasks_builder = tasks_builder.with_db_path(db_path);
-        }
-
-        if let Some(guard) = self.shutdown_guard.clone() {
-            tasks_builder = tasks_builder.with_shutdown_guard(guard);
         }
 
         let tasks = tasks_builder.build().await?;
@@ -68,8 +58,12 @@ pub struct TasksUi {
 
 impl TasksUi {
     /// Create a new TasksUiBuilder for configuring TasksUi
-    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksUiBuilder {
-        TasksUiBuilder::new(config, verbosity)
+    pub fn builder(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: Arc<Shutdown>,
+    ) -> TasksUiBuilder {
+        TasksUiBuilder::new(config, verbosity, shutdown)
     }
 
     async fn get_tasks_status(&self) -> (TasksStatus, Vec<String>) {

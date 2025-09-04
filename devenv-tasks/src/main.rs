@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 use devenv_tasks::{
     Config, RunMode, SudoContext, TaskConfig, Tasks, VerbosityLevel, signal_handler::SignalHandler,
 };
-use std::{env, fs, path::PathBuf};
-use tokio_graceful::Shutdown;
+use std::{env, fs, path::PathBuf, sync::Arc};
+use tokio_shutdown::Shutdown;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -45,13 +45,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| format!("Failed to drop privileges: {}", e))?;
     }
 
-    // Create shutdown signal
-    let shutdown = Shutdown::new(async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install CTRL+C signal handler");
-    });
+    let shutdown = Shutdown::new();
+    shutdown.install_signals().await;
 
+    tokio::select! {
+        result = run_tasks(shutdown.clone()) => result?,
+        _ = shutdown.wait_for_shutdown() => {
+            eprintln!("Task was cancelled");
+            std::process::exit(1);
+        }
+    };
+    Ok(())
+}
+
+async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     // Determine verbosity level from DEVENV_CMDLINE
@@ -111,10 +118,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sudo_context: sudo_context.clone(),
             };
 
-            // Create Tasks instance with shutdown guard support
-            let guard = shutdown.guard_weak();
-            let tasks = Tasks::builder(config, verbosity)
-                .with_shutdown_guard(guard)
+            // Create Tasks instance with shutdown support
+            let tasks = Tasks::builder(config, verbosity, shutdown)
                 .build()
                 .await
                 .map_err(|e| format!("Failed to create tasks: {e}"))?;
@@ -172,9 +177,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(output_file, serde_json::to_string_pretty(&output)?)?;
         }
     }
-
-    // Wait for shutdown and cleanup
-    shutdown.shutdown().await;
 
     Ok(())
 }

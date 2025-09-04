@@ -1,14 +1,287 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use devenv_eval_cache::internal_log::InternalLog;
-use devenv_tui::{create_nix_bridge, init_tui, LogLevel, LogSource, OperationId, TuiEvent};
-use std::collections::HashMap;
+use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog};
+use devenv_tui::{init_tui, OperationId};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use tokio::sync::mpsc;
+
+use std::sync::{Arc, Mutex};
 use tokio::time::sleep;
+use tokio_shutdown::Shutdown;
+use tracing::{debug_span, info, warn};
+
+/// Simple replay processor that emits tracing events for Nix logs
+struct NixLogReplayProcessor {
+    current_operation_id: Arc<Mutex<Option<OperationId>>>,
+}
+
+impl NixLogReplayProcessor {
+    fn new() -> Self {
+        Self {
+            current_operation_id: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    fn set_current_operation(&self, operation_id: OperationId) {
+        if let Ok(mut current) = self.current_operation_id.lock() {
+            *current = Some(operation_id);
+        }
+    }
+
+    fn process_internal_log(&self, log: InternalLog) {
+        let current_op_id = self
+            .current_operation_id
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone());
+
+        if let Some(operation_id) = current_op_id {
+            match log {
+                InternalLog::Start {
+                    id,
+                    typ,
+                    text,
+                    fields,
+                    ..
+                } => {
+                    self.handle_activity_start(operation_id, id, typ, text, fields);
+                }
+                InternalLog::Stop { id } => {
+                    self.handle_activity_stop(id, true);
+                }
+                InternalLog::Result { id, typ, fields } => {
+                    self.handle_activity_result(id, typ, fields);
+                }
+                _ => {
+                    // For other log types, emit a basic tracing event
+                    info!(devenv.log = true, "Nix: {:?}", log);
+                }
+            }
+        }
+    }
+
+    fn handle_activity_start(
+        &self,
+        operation_id: OperationId,
+        activity_id: u64,
+        activity_type: ActivityType,
+        text: String,
+        fields: Vec<Field>,
+    ) {
+        match activity_type {
+            ActivityType::Build => {
+                let derivation_path = fields
+                    .get(0)
+                    .and_then(|f| match f {
+                        Field::String(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| text.clone());
+
+                let machine = fields.get(1).and_then(|f| match f {
+                    Field::String(s) => Some(s.clone()),
+                    _ => None,
+                });
+
+                let derivation_name = extract_derivation_name(&derivation_path);
+
+                let span = debug_span!(
+                    target: "devenv.nix.build",
+                    "nix_derivation_start",
+                    devenv.ui.message = %derivation_name,
+                    devenv.ui.type = "build",
+                    devenv.ui.id = %operation_id,
+                    activity_id = activity_id,
+                    derivation_path = %derivation_path,
+                    derivation_name = %derivation_name,
+                    machine = ?machine
+                );
+
+                span.in_scope(|| {
+                    info!(devenv.log = true, "Building {}", derivation_name);
+                });
+            }
+            ActivityType::CopyPath => {
+                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
+                    (fields.get(0), fields.get(1))
+                {
+                    let package_name = extract_package_name(store_path);
+
+                    let span = debug_span!(
+                        target: "devenv.nix.download",
+                        "nix_download_start",
+                        devenv.ui.message = %package_name,
+                        devenv.ui.type = "download",
+                        devenv.ui.id = %operation_id,
+                        activity_id = activity_id,
+                        store_path = %store_path,
+                        package_name = %package_name,
+                        substituter = %substituter
+                    );
+
+                    span.in_scope(|| {
+                        info!(devenv.log = true, "Downloading {}", package_name);
+                    });
+                }
+            }
+            ActivityType::QueryPathInfo => {
+                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
+                    (fields.get(0), fields.get(1))
+                {
+                    let package_name = extract_package_name(store_path);
+
+                    let span = debug_span!(
+                        target: "devenv.nix.query",
+                        "nix_query_start",
+                        devenv.ui.message = %package_name,
+                        devenv.ui.type = "download",
+                        devenv.ui.detail = "query",
+                        devenv.ui.id = %operation_id,
+                        activity_id = activity_id,
+                        store_path = %store_path,
+                        package_name = %package_name,
+                        substituter = %substituter
+                    );
+
+                    span.in_scope(|| {
+                        info!(devenv.log = true, "Querying {}", package_name);
+                    });
+                }
+            }
+            ActivityType::FetchTree => {
+                let span = debug_span!(
+                    target: "devenv.nix.fetch",
+                    "fetch_tree_start",
+                    devenv.ui.message = %text,
+                    devenv.ui.type = "download",
+                    devenv.ui.detail = "fetch",
+                    devenv.ui.id = %operation_id,
+                    activity_id = activity_id,
+                    message = %text
+                );
+
+                span.in_scope(|| {
+                    info!(devenv.log = true, "Fetching {}", text);
+                });
+            }
+            _ => {
+                // For other activity types, emit a debug event
+                tracing::debug!("Unhandled Nix activity type: {:?}", activity_type);
+            }
+        }
+    }
+
+    fn handle_activity_stop(&self, _activity_id: u64, _success: bool) {
+        // Activity stop is handled automatically when the span drops
+        // The DevenvTuiLayer will generate the appropriate end events
+    }
+
+    fn handle_activity_result(
+        &self,
+        activity_id: u64,
+        result_type: devenv_eval_cache::internal_log::ResultType,
+        fields: Vec<Field>,
+    ) {
+        use devenv_eval_cache::internal_log::{Field, ResultType};
+
+        match result_type {
+            ResultType::Progress => {
+                if fields.len() >= 2 {
+                    if let (Some(Field::Int(downloaded)), total_opt) =
+                        (fields.get(0), fields.get(1))
+                    {
+                        let total_bytes = match total_opt {
+                            Some(Field::Int(total)) => Some(total),
+                            _ => None,
+                        };
+
+                        let span = debug_span!(
+                            target: "devenv.nix.download",
+                            "nix_download_progress",
+                            devenv.ui.message = "download progress",
+                            devenv.ui.type = "download",
+                            activity_id = activity_id,
+                            bytes_downloaded = downloaded,
+                            total_bytes = ?total_bytes
+                        );
+                        span.in_scope(|| {
+                            if let Some(total) = total_bytes {
+                                let percent = (*downloaded as f64 / *total as f64) * 100.0;
+                                tracing::debug!(
+                                    "Download progress: {} / {} bytes ({:.1}%)",
+                                    downloaded,
+                                    total,
+                                    percent
+                                );
+                            } else {
+                                tracing::debug!("Download progress: {} bytes", downloaded);
+                            }
+                        });
+                    }
+                }
+            }
+            ResultType::BuildLogLine => {
+                if let Some(Field::String(log_line)) = fields.get(0) {
+                    let span = debug_span!(
+                        target: "devenv.nix.build",
+                        "build_log",
+                        devenv.ui.message = "build log",
+                        devenv.ui.type = "build",
+                        activity_id = activity_id,
+                        line = %log_line
+                    );
+                    span.in_scope(|| {
+                        info!(
+                            target: "devenv.ui.log",
+                            stdout = %log_line,
+                            "Build output: {}", log_line
+                        );
+                    });
+                }
+            }
+            _ => {
+                tracing::debug!("Unhandled Nix result type: {:?}", result_type);
+            }
+        }
+    }
+}
+
+/// Extract a human-readable derivation name from a derivation path
+fn extract_derivation_name(derivation_path: &str) -> String {
+    // Remove .drv suffix if present
+    let path = derivation_path
+        .strip_suffix(".drv")
+        .unwrap_or(derivation_path);
+
+    // Extract the name part after the hash
+    if let Some(dash_pos) = path.rfind('-') {
+        if let Some(slash_pos) = path[..dash_pos].rfind('/') {
+            return path[slash_pos + 1..].to_string();
+        }
+    }
+
+    // Fallback: just take the filename
+    path.split('/').last().unwrap_or(path).to_string()
+}
+
+/// Extract a human-readable package name from a store path
+fn extract_package_name(store_path: &str) -> String {
+    // Extract the name part after the hash (format: /nix/store/hash-name)
+    if let Some(dash_pos) = store_path.rfind('-') {
+        if let Some(slash_pos) = store_path[..dash_pos].rfind('/') {
+            return store_path[slash_pos + 1..].to_string();
+        }
+    }
+
+    // Fallback: just take the filename
+    store_path
+        .split('/')
+        .last()
+        .unwrap_or(store_path)
+        .to_string()
+}
 
 #[derive(Debug)]
 struct LogEntry {
@@ -43,6 +316,17 @@ fn parse_log_line(line: &str) -> Result<LogEntry> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let shutdown = Shutdown::new();
+
+    tokio::select! {
+        _ = run_replay(shutdown.clone()) => {}
+        _ = shutdown.wait_for_shutdown() => {}
+    }
+
+    Ok(())
+}
+
+async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
         eprintln!("Usage: {} <log-file>", args[0]);
@@ -74,50 +358,47 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Initialize TUI with shutdown
-    let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
-    let (tui_handle, tui_future) = init_tui();
-    let tx = tui_handle.sender();
-    let nix_bridge = create_nix_bridge(tx.clone());
+    // Initialize TUI with proper shutdown coordination
+    let tui_handle = init_tui();
 
-    // Spawn TUI task with shutdown tracking
-    shutdown.spawn_task_fn(|_| async move {
-        if let Err(e) = tui_future.await {
-            eprintln!("TEA App error: {}", e);
-        }
-    });
+    // Get model before moving the layer
+    let model = tui_handle.model();
+
+    // Initialize basic tracing to support the new architecture
+    use tracing_subscriber::prelude::*;
+    tracing_subscriber::registry().with(tui_handle.layer).init();
+
+    // Create a Nix log replay processor that emits tracing events
+    let nix_processor = NixLogReplayProcessor::new();
+
+    // Start TUI in background
+    let tui_shutdown = shutdown.clone();
+    tokio::spawn(async move { devenv_tui::app::run_app(model, tui_shutdown).await });
 
     // Create main operation
     let main_op_id = OperationId::new("replay");
-    tx.send(TuiEvent::OperationStart {
-        id: main_op_id.clone(),
-        message: format!("Replaying {} log entries", entries.len()),
-        parent: None,
-        data: HashMap::new(),
-    })?;
 
-    // Set current operation for Nix bridge
-    nix_bridge.set_current_operation(main_op_id.clone());
+    // Start replay operation via tracing
+    info!(
+        target: "devenv.ui",
+        id = %main_op_id,
+        message = format!("Replaying {} log entries", entries.len()),
+        "Starting log replay"
+    );
+
+    // Set current operation for Nix processor
+    nix_processor.set_current_operation(main_op_id.clone());
 
     // Replay log entries with timing
     let start_time = Instant::now();
     let first_timestamp = entries[0].timestamp;
-
-    // Create a channel for cancellation
-    let (cancel_tx, mut cancel_rx) = mpsc::channel::<()>(1);
-
-    // Spawn a task to handle Ctrl-C
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.ok();
-        let _ = cancel_tx.send(()).await;
-    });
 
     for (idx, entry) in entries.iter().enumerate() {
         // Calculate delay from first entry
         let time_offset = entry.timestamp.signed_duration_since(first_timestamp);
         let target_elapsed = Duration::from_millis(time_offset.num_milliseconds() as u64);
 
-        // Wait until we reach the target time, but also listen for Ctrl-C
+        // Wait until we reach the target time, with shutdown support
         let current_elapsed = start_time.elapsed();
         if target_elapsed > current_elapsed {
             let sleep_duration = target_elapsed - current_elapsed;
@@ -125,19 +406,13 @@ async fn main() -> Result<()> {
                 _ = sleep(sleep_duration) => {
                     // Continue with replay
                 }
-                _ = cancel_rx.recv() => {
-                    // Ctrl-C pressed, cleanup and exit
-                    tx.send(TuiEvent::LogMessage {
-                        level: LogLevel::Warn,
-                        message: "Replay interrupted by user".to_string(),
-                        source: LogSource::System,
-                        data: HashMap::new(),
-                    })?;
+                _ = shutdown.wait_for_shutdown() => {
+                    // Shutdown requested, cleanup and exit
+                    warn!("Replay interrupted by shutdown");
 
                     // Give TUI a moment to display the message
                     sleep(Duration::from_millis(100)).await;
 
-                    shutdown.shutdown().await;
                     return Ok(());
                 }
             }
@@ -148,51 +423,35 @@ async fn main() -> Result<()> {
             "@nix" => {
                 // Try to parse as Nix internal log
                 if let Ok(internal_log) = serde_json::from_str::<InternalLog>(&entry.content) {
-                    nix_bridge.process_internal_log(internal_log);
+                    nix_processor.process_internal_log(internal_log);
                 } else {
-                    // Send as regular log message
-                    tx.send(TuiEvent::LogMessage {
-                        level: LogLevel::Info,
-                        message: entry.content.clone(),
-                        source: LogSource::Nix,
-                        data: HashMap::new(),
-                    })?;
+                    // Log as regular message
+                    info!(target: "devenv.nix", "{}", entry.content);
                 }
             }
             _ => {
-                // Send as regular log message
-                tx.send(TuiEvent::LogMessage {
-                    level: LogLevel::Info,
-                    message: format!("{} {}", entry.source, entry.content),
-                    source: LogSource::System,
-                    data: HashMap::new(),
-                })?;
+                // Log as regular message
+                info!(target: "devenv.system", "{} {}", entry.source, entry.content);
             }
         }
 
         // Show progress
         if idx % 100 == 0 {
             let progress = ((idx + 1) as f64 / entries.len() as f64) * 100.0;
-            tx.send(TuiEvent::LogMessage {
-                level: LogLevel::Info,
-                message: format!("Replay progress: {:.1}%", progress),
-                source: LogSource::System,
-                data: HashMap::new(),
-            })?;
+            info!("Replay progress: {:.1}%", progress);
         }
     }
 
     // Complete the main operation
-    tx.send(TuiEvent::OperationEnd {
-        id: main_op_id,
-        result: devenv_tui::OperationResult::Success,
-    })?;
+    info!(
+        target: "devenv.ui",
+        id = %main_op_id,
+        result = "success",
+        "Completed log replay"
+    );
 
     // Give TUI a moment to display the final state
     sleep(Duration::from_millis(100)).await;
-
-    // Cleanup and exit
-    shutdown.shutdown().await;
 
     Ok(())
 }

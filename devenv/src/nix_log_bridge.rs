@@ -1,19 +1,45 @@
-use crate::{OperationId, TuiEvent};
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use devenv_eval_cache::Op;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tokio::sync::mpsc;
+use tracing::{debug, debug_span, info, warn, Instrument};
+use tracing_subscriber::registry::LookupSpan;
 
-/// Bridge that converts Nix internal logs to TUI events
+/// Get the current user operation ID from the active span extensions
+fn current_operation_id() -> Option<devenv_tui::OperationId> {
+    // Try to get the tracing registry from the current subscriber
+    tracing::dispatcher::get_default(|dispatch| {
+        if let Some(registry) = dispatch.downcast_ref::<tracing_subscriber::Registry>() {
+            let current_span = tracing::Span::current();
+            if let Some(id) = current_span.id() {
+                if let Some(span_ref) = registry.span(&id) {
+                    // Check if current span has an operation ID (stored by DevenvLayer)
+                    if let Some(op_id) = span_ref.extensions().get::<devenv_tui::OperationId>() {
+                        return Some(op_id.clone());
+                    }
+
+                    // Walk up parent spans to find a user operation
+                    let mut current = span_ref.parent();
+                    while let Some(parent) = current {
+                        if let Some(op_id) = parent.extensions().get::<devenv_tui::OperationId>() {
+                            return Some(op_id.clone());
+                        }
+                        current = parent.parent();
+                    }
+                }
+            }
+        }
+        None
+    })
+}
+
+/// Bridge that converts Nix internal logs to tracing events
 pub struct NixLogBridge {
-    /// Channel to send TUI events
-    tui_sender: mpsc::UnboundedSender<TuiEvent>,
     /// Current active operations and their associated Nix activities
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// Current parent operation ID for correlating Nix activities
-    current_operation_id: Arc<Mutex<Option<OperationId>>>,
+    current_operation_id: Arc<Mutex<Option<devenv_tui::OperationId>>>,
     /// Evaluation tracking state
     evaluation_state: Arc<Mutex<EvaluationState>>,
 }
@@ -32,22 +58,21 @@ struct EvaluationState {
 /// Information about an active Nix activity
 #[derive(Debug, Clone)]
 struct NixActivityInfo {
-    operation_id: OperationId,
+    operation_id: devenv_tui::OperationId,
     activity_type: ActivityType,
 }
 
 impl NixLogBridge {
-    pub fn new(tui_sender: mpsc::UnboundedSender<TuiEvent>) -> Self {
-        Self {
-            tui_sender,
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             current_operation_id: Arc::new(Mutex::new(None)),
             evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
-        }
+        })
     }
 
     /// Set the current operation ID for correlating Nix activities
-    pub fn set_current_operation(&self, operation_id: OperationId) {
+    pub fn set_current_operation(&self, operation_id: devenv_tui::OperationId) {
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = Some(operation_id);
         }
@@ -79,10 +104,19 @@ impl NixLogBridge {
                     if let Some(operation_id) = current.as_ref() {
                         let files: Vec<String> = state.pending_files.drain(..).collect();
                         tracing::debug!("Flushing {} pending evaluation files", files.len());
-                        let _ = self.tui_sender.send(TuiEvent::NixEvaluationProgress {
-                            operation_id: operation_id.clone(),
-                            files,
-                            total_files_evaluated: state.total_files_evaluated,
+
+                        // Emit tracing event for evaluation progress
+                        let span = debug_span!(
+                            target: "devenv.nix.eval",
+                            "nix_evaluation_progress",
+                            devenv.ui.message = "evaluating Nix files",
+                            devenv.ui.type = "eval",
+                            devenv.ui.id = %operation_id,
+                            devenv.ui.progress.current = state.total_files_evaluated,
+                            files = ?files
+                        );
+                        span.in_scope(|| {
+                            info!(devenv_log = true, "Evaluated {} files", files.len());
                         });
                     } else {
                         tracing::warn!(
@@ -97,7 +131,7 @@ impl NixLogBridge {
         }
     }
 
-    /// Process a Nix internal log line and emit appropriate TUI events
+    /// Process a Nix internal log line and emit appropriate tracing events
     pub fn process_log_line(&self, line: &str) {
         if let Some(parse_result) = InternalLog::parse(line) {
             match parse_result {
@@ -146,7 +180,11 @@ impl NixLogBridge {
             .current_operation_id
             .lock()
             .ok()
-            .and_then(|guard| guard.clone());
+            .and_then(|guard| guard.clone())
+            .or_else(|| {
+                // Fallback: lookup current operation from tracing span context
+                current_operation_id()
+            });
 
         if let Some(operation_id) = current_op_id {
             match log {
@@ -172,10 +210,18 @@ impl NixLogBridge {
                             .iter()
                             .find(|(_, info)| info.activity_type == ActivityType::Build)
                         {
-                            let _ = self.tui_sender.send(TuiEvent::NixPhaseProgress {
-                                operation_id: operation_id.clone(),
-                                activity_id: *activity_id,
-                                phase,
+                            let span = debug_span!(
+                                target: "devenv.nix.build",
+                                "nix_phase_progress",
+                                devenv.ui.message = %phase,
+                                devenv.ui.type = "build",
+                                devenv.ui.detail = %phase,
+                                devenv.ui.id = %operation_id,
+                                activity_id = activity_id,
+                                phase = %phase
+                            );
+                            span.in_scope(|| {
+                                info!(devenv_log = true, "Build phase: {}", phase);
                             });
                         }
                     }
@@ -191,16 +237,11 @@ impl NixLogBridge {
 
                     // Handle regular log messages from Nix builds
                     if level <= Verbosity::Warn {
-                        let _ = self.tui_sender.send(TuiEvent::LogMessage {
-                            level: match level {
-                                Verbosity::Error => crate::LogLevel::Error,
-                                Verbosity::Warn => crate::LogLevel::Warn,
-                                _ => crate::LogLevel::Info,
-                            },
-                            message: msg.clone(),
-                            source: crate::LogSource::Nix,
-                            data: HashMap::new(),
-                        });
+                        match level {
+                            Verbosity::Error => tracing::error!(devenv_log = true, "{}", msg),
+                            Verbosity::Warn => tracing::warn!(devenv_log = true, "{}", msg),
+                            _ => tracing::info!(devenv_log = true, "{}", msg),
+                        }
                     }
                 }
             }
@@ -210,7 +251,7 @@ impl NixLogBridge {
     /// Handle the start of a Nix activity
     fn handle_activity_start(
         &self,
-        operation_id: OperationId,
+        operation_id: devenv_tui::OperationId,
         activity_id: u64,
         activity_type: ActivityType,
         text: String,
@@ -244,12 +285,19 @@ impl NixLogBridge {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let _ = self.tui_sender.send(TuiEvent::NixDerivationStart {
-                    operation_id,
-                    activity_id,
-                    derivation_path,
-                    derivation_name,
-                    machine,
+                let span = debug_span!(
+                    target: "devenv.nix.build",
+                    "nix_derivation_start",
+                    devenv.ui.message = %derivation_name,
+                    devenv.ui.type = "build",
+                    devenv.ui.id = %operation_id,
+                    activity_id = activity_id,
+                    derivation_path = %derivation_path,
+                    derivation_name = %derivation_name,
+                    machine = ?machine
+                );
+                span.in_scope(|| {
+                    info!(devenv_log = true, "Building {}", derivation_name);
                 });
             }
             ActivityType::QueryPathInfo => {
@@ -258,12 +306,20 @@ impl NixLogBridge {
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let _ = self.tui_sender.send(TuiEvent::NixQueryStart {
-                        operation_id,
-                        activity_id,
-                        store_path: store_path.clone(),
-                        package_name,
-                        substituter: substituter.clone(),
+                    let span = debug_span!(
+                        target: "devenv.nix.query",
+                        "nix_query_start",
+                        devenv.ui.message = %package_name,
+                        devenv.ui.type = "download",
+                        devenv.ui.detail = "query",
+                        devenv.ui.id = %operation_id,
+                        activity_id = activity_id,
+                        store_path = %store_path,
+                        package_name = %package_name,
+                        substituter = %substituter
+                    );
+                    span.in_scope(|| {
+                        info!(devenv_log = true, "Querying {}", package_name);
                     });
                 }
             }
@@ -274,23 +330,36 @@ impl NixLogBridge {
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let _ = self.tui_sender.send(TuiEvent::NixDownloadStart {
-                        operation_id,
-                        activity_id,
-                        store_path: store_path.clone(),
-                        package_name,
-                        substituter: substituter.clone(),
+                    let span = debug_span!(
+                        target: "devenv.nix.download",
+                        "nix_download_start",
+                        devenv.ui.message = %package_name,
+                        devenv.ui.type = "download",
+                        devenv.ui.id = %operation_id,
+                        activity_id = activity_id,
+                        store_path = %store_path,
+                        package_name = %package_name,
+                        substituter = %substituter
+                    );
+                    span.in_scope(|| {
+                        info!(devenv_log = true, "Downloading {}", package_name);
                     });
                 }
             }
             ActivityType::FetchTree => {
                 // FetchTree activities show when fetching Git repos, tarballs, etc.
-                let message = text.clone();
-
-                let _ = self.tui_sender.send(TuiEvent::FetchTreeStart {
-                    operation_id,
-                    activity_id,
-                    message,
+                let span = debug_span!(
+                    target: "devenv.nix.fetch",
+                    "fetch_tree_start",
+                    devenv.ui.message = %text,
+                    devenv.ui.type = "download",
+                    devenv.ui.detail = "fetch",
+                    devenv.ui.id = %operation_id,
+                    activity_id = activity_id,
+                    message = %text
+                );
+                span.in_scope(|| {
+                    info!(devenv_log = true, "Fetching {}", text);
                 });
             }
             _ => {
@@ -309,33 +378,83 @@ impl NixLogBridge {
                     self.flush_evaluation_updates();
                 }
 
+                let status = if success { "completed" } else { "failed" };
+
                 match activity_info.activity_type {
                     ActivityType::Build => {
-                        let _ = self.tui_sender.send(TuiEvent::NixDerivationEnd {
-                            operation_id: activity_info.operation_id,
-                            activity_id,
-                            success,
+                        let span = debug_span!(
+                            target: "devenv.nix.build",
+                            "nix_derivation_end",
+                            devenv.ui.message = "build complete",
+                            devenv.ui.type = "build",
+                            devenv.ui.detail = status,
+                            devenv.ui.id = %activity_info.operation_id,
+                            activity_id = activity_id,
+                            success = success
+                        );
+                        span.in_scope(|| {
+                            if success {
+                                info!(devenv_log = true, "Build completed successfully");
+                            } else {
+                                warn!(devenv_log = true, "Build failed");
+                            }
                         });
                     }
                     ActivityType::CopyPath => {
-                        let _ = self.tui_sender.send(TuiEvent::NixDownloadEnd {
-                            operation_id: activity_info.operation_id,
-                            activity_id,
-                            success,
+                        let span = debug_span!(
+                            target: "devenv.nix.download",
+                            "nix_download_end",
+                            devenv.ui.message = "download complete",
+                            devenv.ui.type = "download",
+                            devenv.ui.detail = status,
+                            devenv.ui.id = %activity_info.operation_id,
+                            activity_id = activity_id,
+                            success = success
+                        );
+                        span.in_scope(|| {
+                            if success {
+                                info!(devenv_log = true, "Download completed successfully");
+                            } else {
+                                warn!(devenv_log = true, "Download failed");
+                            }
                         });
                     }
                     ActivityType::QueryPathInfo => {
-                        let _ = self.tui_sender.send(TuiEvent::NixQueryEnd {
-                            operation_id: activity_info.operation_id,
-                            activity_id,
-                            success,
+                        let span = debug_span!(
+                            target: "devenv.nix.query",
+                            "nix_query_end",
+                            devenv.ui.message = "query complete",
+                            devenv.ui.type = "download",
+                            devenv.ui.detail = status,
+                            devenv.ui.id = %activity_info.operation_id,
+                            activity_id = activity_id,
+                            success = success
+                        );
+                        span.in_scope(|| {
+                            if success {
+                                debug!(devenv_log = true, "Query completed successfully");
+                            } else {
+                                warn!(devenv_log = true, "Query failed");
+                            }
                         });
                     }
                     ActivityType::FetchTree => {
-                        let _ = self.tui_sender.send(TuiEvent::FetchTreeEnd {
-                            operation_id: activity_info.operation_id,
-                            activity_id,
-                            success,
+                        let span = debug_span!(
+                            target: "devenv.nix.fetch",
+                            "fetch_tree_end",
+                            devenv.ui.message = "fetch complete",
+                            devenv.ui.type = "download",
+                            devenv.ui.detail = status,
+                            devenv.ui.id = %activity_info.operation_id,
+                            activity_id = activity_id,
+                            success = success
+                        );
+                        span.in_scope(|| {
+                            if success {
+                                info!(devenv_log = true, "Fetch completed successfully");
+                            } else {
+                                warn!(devenv_log = true, "Fetch failed");
+                            }
                         });
                     }
                     _ => {}
@@ -364,13 +483,29 @@ impl NixLogBridge {
                     {
                         if let Ok(activities) = self.active_activities.lock() {
                             if let Some(activity_info) = activities.get(&activity_id) {
-                                let _ = self.tui_sender.send(TuiEvent::NixActivityProgress {
-                                    operation_id: activity_info.operation_id.clone(),
-                                    activity_id,
-                                    done: *done,
-                                    expected: *expected,
-                                    running: *running,
-                                    failed: *failed,
+                                let span = debug_span!(
+                                    target: "devenv.nix.progress",
+                                    "nix_activity_progress",
+                                    devenv.ui.message = "progress update",
+                                    devenv.ui.type = "progress",
+                                    devenv.ui.id = %activity_info.operation_id,
+                                    devenv.ui.progress.current = done,
+                                    devenv.ui.progress.total = expected,
+                                    activity_id = activity_id,
+                                    done = done,
+                                    expected = expected,
+                                    running = running,
+                                    failed = failed
+                                );
+                                span.in_scope(|| {
+                                    debug!(
+                                        devenv_log = true,
+                                        "Progress: {}/{} done, {} running, {} failed",
+                                        done,
+                                        expected,
+                                        running,
+                                        failed
+                                    );
                                 });
                             }
                         }
@@ -389,11 +524,35 @@ impl NixLogBridge {
                             if let Some(activity_info) = activities.get(&activity_id) {
                                 // Only CopyPath activities have byte-based download progress
                                 if activity_info.activity_type == ActivityType::CopyPath {
-                                    let _ = self.tui_sender.send(TuiEvent::NixDownloadProgress {
-                                        operation_id: activity_info.operation_id.clone(),
-                                        activity_id,
-                                        bytes_downloaded: *downloaded,
-                                        total_bytes,
+                                    let span = debug_span!(
+                                        target: "devenv.nix.download",
+                                        "nix_download_progress",
+                                        devenv.ui.message = "download progress",
+                                        devenv.ui.type = "download",
+                                        devenv.ui.id = %activity_info.operation_id,
+                                        devenv.ui.download.size_current = downloaded,
+                                        devenv.ui.download.size_total = ?total_bytes,
+                                        activity_id = activity_id,
+                                        bytes_downloaded = downloaded,
+                                        total_bytes = ?total_bytes
+                                    );
+                                    span.in_scope(|| {
+                                        if let Some(total) = total_bytes {
+                                            let percent =
+                                                (*downloaded as f64 / total as f64) * 100.0;
+                                            debug!(
+                                                devenv_log = true,
+                                                "Download progress: {} / {} bytes ({:.1}%)",
+                                                downloaded,
+                                                total,
+                                                percent
+                                            );
+                                        } else {
+                                            debug!(
+                                                devenv_log = true,
+                                                "Download progress: {} bytes", downloaded
+                                            );
+                                        }
                                     });
                                 }
                             }
@@ -407,10 +566,19 @@ impl NixLogBridge {
                     if let Ok(activities) = self.active_activities.lock() {
                         if let Some(activity_info) = activities.get(&activity_id) {
                             if activity_info.activity_type == ActivityType::Build {
-                                let _ = self.tui_sender.send(TuiEvent::NixPhaseProgress {
-                                    operation_id: activity_info.operation_id.clone(),
-                                    activity_id,
-                                    phase: phase.clone(),
+                                let span = debug_span!(
+                                    target: "devenv.nix.build",
+                                    "nix_phase_progress",
+                                    devenv.ui.message = %phase,
+                                    devenv.ui.type = "build",
+                                    devenv.ui.detail = %phase,
+                                    devenv.ui.id = %activity_info.operation_id,
+                                    devenv.ui.build.phase = %phase,
+                                    activity_id = activity_id,
+                                    phase = %phase
+                                );
+                                span.in_scope(|| {
+                                    info!(devenv_log = true, "Build phase: {}", phase);
                                 });
                             }
                         }
@@ -421,11 +589,23 @@ impl NixLogBridge {
                 // Handle build log output
                 if let Some(Field::String(log_line)) = fields.get(0) {
                     if let Ok(activities) = self.active_activities.lock() {
-                        if let Some(_activity_info) = activities.get(&activity_id) {
-                            // Send BuildLog event instead of LogMessage
-                            let _ = self.tui_sender.send(TuiEvent::BuildLog {
-                                activity_id,
-                                line: log_line.clone(),
+                        if let Some(activity_info) = activities.get(&activity_id) {
+                            let span = debug_span!(
+                                target: "devenv.nix.build",
+                                "build_log",
+                                devenv.ui.message = "build log",
+                                devenv.ui.type = "build",
+                                devenv.ui.id = %activity_info.operation_id,
+                                activity_id = activity_id,
+                                line = %log_line
+                            );
+                            span.in_scope(|| {
+                                info!(
+                                    target: "devenv.ui.log",
+                                    devenv_log = true,
+                                    devenv_ui_log_stdout = %log_line,
+                                    "Build output: {}", log_line
+                                );
                             });
                         }
                     }
@@ -439,7 +619,11 @@ impl NixLogBridge {
     }
 
     /// Handle file evaluation events
-    fn handle_file_evaluation(&self, operation_id: OperationId, file_path: std::path::PathBuf) {
+    fn handle_file_evaluation(
+        &self,
+        operation_id: devenv_tui::OperationId,
+        file_path: std::path::PathBuf,
+    ) {
         const BATCH_SIZE: usize = 5; // Reduced from 10 for more responsive updates
         const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100); // Reduced from 200ms
 
@@ -448,10 +632,20 @@ impl NixLogBridge {
 
             // If this is the first file, send a start event
             if state.total_files_evaluated == 0 && state.pending_files.is_empty() {
-                let _ = self.tui_sender.send(TuiEvent::NixEvaluationStart {
-                    operation_id: operation_id.clone(),
-                    file_path: file_path_str.clone(),
-                    total_files_evaluated: 0,
+                let span = debug_span!(
+                    target: "devenv.nix.eval",
+                    "nix_evaluation_start",
+                    devenv.ui.message = "evaluating Nix files",
+                    devenv.ui.type = "eval",
+                    devenv.ui.id = %operation_id,
+                    file_path = %file_path_str,
+                    total_files_evaluated = 0
+                );
+                span.in_scope(|| {
+                    info!(
+                        devenv_log = true,
+                        "Starting Nix evaluation: {}", file_path_str
+                    );
                 });
             }
 
@@ -471,10 +665,23 @@ impl NixLogBridge {
 
             if should_send && !state.pending_files.is_empty() {
                 let files: Vec<String> = state.pending_files.drain(..).collect();
-                let _ = self.tui_sender.send(TuiEvent::NixEvaluationProgress {
-                    operation_id,
-                    files,
-                    total_files_evaluated: state.total_files_evaluated,
+                let span = debug_span!(
+                    target: "devenv.nix.eval",
+                    "nix_evaluation_progress",
+                    devenv.ui.message = "evaluating Nix files",
+                    devenv.ui.type = "eval",
+                    devenv.ui.id = %operation_id,
+                    devenv.ui.progress.current = state.total_files_evaluated,
+                    files = ?files,
+                    total_files_evaluated = state.total_files_evaluated
+                );
+                span.in_scope(|| {
+                    info!(
+                        devenv_log = true,
+                        "Evaluated {} files (total: {})",
+                        files.len(),
+                        state.total_files_evaluated
+                    );
                 });
                 state.last_progress_update = Some(now);
             } else if state.last_progress_update.is_none() {

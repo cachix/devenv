@@ -18,153 +18,6 @@ impl std::fmt::Display for OperationId {
     }
 }
 
-/// Events that can be sent to the TUI
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TuiEvent {
-    /// An operation has started
-    OperationStart {
-        id: OperationId,
-        message: String,
-        parent: Option<OperationId>,
-        data: HashMap<String, String>,
-    },
-    /// An operation has ended
-    OperationEnd {
-        id: OperationId,
-        result: OperationResult,
-    },
-    /// A log message
-    LogMessage {
-        level: LogLevel,
-        message: String,
-        source: LogSource,
-        data: HashMap<String, String>,
-    },
-    /// Nix build started
-    NixBuildStart {
-        operation_id: OperationId,
-        derivation: String,
-        machine: Option<String>,
-    },
-    /// Nix build progress update
-    NixBuildProgress {
-        operation_id: OperationId,
-        phase: String,
-    },
-    /// Nix build ended
-    NixBuildEnd {
-        operation_id: OperationId,
-        success: bool,
-    },
-    /// Nix derivation started (from internal-json)
-    NixDerivationStart {
-        operation_id: OperationId,
-        activity_id: u64,
-        derivation_path: String,
-        derivation_name: String,
-        machine: Option<String>,
-    },
-    /// Nix derivation phase change
-    NixPhaseProgress {
-        operation_id: OperationId,
-        activity_id: u64,
-        phase: String,
-    },
-    /// Nix derivation ended
-    NixDerivationEnd {
-        operation_id: OperationId,
-        activity_id: u64,
-        success: bool,
-    },
-    /// Nix download started
-    NixDownloadStart {
-        operation_id: OperationId,
-        activity_id: u64,
-        store_path: String,
-        package_name: String,
-        substituter: String,
-    },
-    /// Nix download progress
-    NixDownloadProgress {
-        operation_id: OperationId,
-        activity_id: u64,
-        bytes_downloaded: u64,
-        total_bytes: Option<u64>,
-    },
-    /// Nix download ended
-    NixDownloadEnd {
-        operation_id: OperationId,
-        activity_id: u64,
-        success: bool,
-    },
-    /// Nix store query started
-    NixQueryStart {
-        operation_id: OperationId,
-        activity_id: u64,
-        store_path: String,
-        package_name: String,
-        substituter: String,
-    },
-    /// Nix store query ended
-    NixQueryEnd {
-        operation_id: OperationId,
-        activity_id: u64,
-        success: bool,
-    },
-    /// Fetch tree activity started
-    FetchTreeStart {
-        operation_id: OperationId,
-        activity_id: u64,
-        message: String,
-    },
-    /// Fetch tree activity ended
-    FetchTreeEnd {
-        operation_id: OperationId,
-        activity_id: u64,
-        success: bool,
-    },
-    /// Build log line for a specific activity
-    BuildLog { activity_id: u64, line: String },
-    /// File evaluation started
-    NixEvaluationStart {
-        operation_id: OperationId,
-        file_path: String,
-        total_files_evaluated: u64,
-    },
-    /// Multiple files evaluated (batch update)
-    NixEvaluationProgress {
-        operation_id: OperationId,
-        files: Vec<String>,
-        total_files_evaluated: u64,
-    },
-    /// Generic progress update for any activity
-    NixActivityProgress {
-        operation_id: OperationId,
-        activity_id: u64,
-        done: u64,
-        expected: u64,
-        running: u64,
-        failed: u64,
-    },
-    /// Task started
-    TaskStart { task_name: String },
-    /// Task status update
-    TaskUpdate {
-        task_name: String,
-        status: String,         // "pending", "running", "completed"
-        result: Option<String>, // "success", "failed", "skipped", "cancelled"
-    },
-    /// Task completed
-    TaskEnd {
-        task_name: String,
-        duration: Duration,
-        success: bool,
-        error: Option<String>,
-    },
-    /// Shutdown the TUI display
-    Shutdown,
-}
-
 /// Result of an operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OperationResult {
@@ -354,6 +207,7 @@ pub enum NixActivityType {
     Evaluating,
     FetchTree,
     Unknown,
+    UserOperation,
 }
 
 impl std::fmt::Display for NixActivityType {
@@ -365,6 +219,7 @@ impl std::fmt::Display for NixActivityType {
             NixActivityType::Evaluating => write!(f, "evaluating"),
             NixActivityType::FetchTree => write!(f, "fetching"),
             NixActivityType::Unknown => write!(f, "unknown"),
+            NixActivityType::UserOperation => write!(f, ""), // No prefix for user operations
         }
     }
 }

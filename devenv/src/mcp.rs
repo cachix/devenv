@@ -75,128 +75,78 @@ impl DevenvMcpServer {
     async fn fetch_packages(&self) -> Result<Vec<PackageInfo>> {
         info!("Fetching available packages from nixpkgs...");
 
-        // Create a Devenv instance to access nix functionality
-        let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
-        let devenv_options = DevenvOptions {
-            config: self.config.clone(),
-            devenv_root: self.devenv_root.clone(),
-            shutdown: shutdown.guard(),
-            global_options: None,
-            devenv_dotfile: None,
-            tui_sender: None,
+        // TODO: MCP should be properly integrated with tokio-graceful-shutdown
+        // The following code needs a SubsystemHandle to create a proper Devenv instance
+        // For now, return empty list until this integration is complete
+        let _todo_create_devenv_with_subsys = || {
+            // This will need something like:
+            // let devenv_options = DevenvOptions::new(subsys_handle);
+            // let devenv = Devenv::new(devenv_options).await;
+            // devenv.assemble(true).await?;
+            // let search_output = devenv.nix.search(".*", None).await?;
+            // Parse search_output and return packages
         };
-        let devenv = Devenv::new(devenv_options).await;
-
-        // Assemble the devenv to create required flake files
-        devenv.assemble(true).await?;
-
-        // Use broad search term to get a wide set of packages
-        // We'll limit results later if needed
-        let search_output = devenv.nix.search(".*", None).await?;
-
-        // Parse the search results from JSON
-        #[derive(Deserialize)]
-        struct PackageResults(BTreeMap<String, PackageResult>);
-
-        #[derive(Deserialize)]
-        struct PackageResult {
-            version: String,
-            description: String,
-        }
-
-        let search_json: PackageResults = serde_json::from_slice(&search_output.stdout)
-            .map_err(|e| miette::miette!("Failed to parse search results: {}", e))?;
-
-        let packages: Vec<PackageInfo> = search_json
-            .0
-            .into_iter()
-            .map(|(key, value)| {
-                // Format package name like in devenv.rs search function
-                let parts: Vec<&str> = key.split('.').collect();
-                let name = if parts.len() > 2 {
-                    format!("pkgs.{}", parts[2..].join("."))
-                } else {
+         let devenv = Devenv::new(devenv_options).await;
+ 
+         // Assemble the devenv to create required flake files
+         devenv.assemble(true).await?;
+ 
+         // Use broad search term to get a wide set of packages
+         // We'll limit results later if needed
+         let search_output = devenv.nix.search(".*", None).await?;
+ 
+         // Parse the search results from JSON
+         #[derive(Deserialize)]
+         struct PackageResults(BTreeMap<String, PackageResult>);
+ 
+         #[derive(Deserialize)]
+         struct PackageResult {
+             version: String,
+             description: String,
+         }
+ 
+         let search_json: PackageResults = serde_json::from_slice(&search_output.stdout)
+             .map_err(|e| miette::miette!("Failed to parse search results: {}", e))?;
+ 
+         let packages: Vec<PackageInfo> = search_json
+             .0
+             .into_iter()
+             .map(|(key, value)| {
+                 // Format package name like in devenv.rs search function
+                 let parts: Vec<&str> = key.split('.').collect();
+                 let name = if parts.len() > 2 {
+                     format!("pkgs.{}", parts[2..].join("."))
+                 } else {
                     format!("pkgs.{key}")
-                };
-
-                PackageInfo {
-                    name,
-                    version: value.version,
-                    description: Some(value.description),
-                }
-            })
-            .collect();
-
-        Ok(packages)
+                 };
+ 
+                 PackageInfo {
+                     name,
+                     version: value.version,
+                     description: Some(value.description),
+                 }
+             })
+             .collect();
+ 
+         Ok(packages)
     }
 
     async fn fetch_options(&self) -> Result<Vec<OptionInfo>> {
         info!("Fetching available configuration options...");
 
-        // Create a Devenv instance to access nix functionality
-        let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
-        let devenv_options = DevenvOptions {
-            config: self.config.clone(),
-            devenv_root: self.devenv_root.clone(),
-            shutdown: shutdown.guard(),
-            global_options: None,
-            devenv_dotfile: None,
-            tui_sender: None,
-        };
-        let devenv = Devenv::new(devenv_options).await;
-
-        // Assemble the devenv to create required flake files
-        devenv.assemble(true).await?;
-
-        // Build the optionsJSON attribute like in devenv.rs search function
-        let build_options = nix_backend::Options {
-            logging: false,
-            cache_output: true,
-            ..Default::default()
+        // TODO: MCP should be properly integrated with tokio-graceful-shutdown
+        // The following code needs a SubsystemHandle to create a proper Devenv instance
+        // For now, return empty list until this integration is complete
+        let _todo_create_devenv_with_subsys = || {
+            // This will need something like:
+            // let devenv_options = DevenvOptions::new(subsys_handle);
+            // let devenv = Devenv::new(devenv_options).await;
+            // devenv.assemble(true).await?;
+            // Build optionsJSON and parse results
+            // Return parsed options
         };
 
-        let options_paths = devenv
-            .nix
-            .build(&["optionsJSON"], Some(build_options), None)
-            .await?;
-
-        // Read the options.json file from the build result
-        let options_json_path = options_paths[0]
-            .join("share")
-            .join("doc")
-            .join("nixos")
-            .join("options.json");
-
-        let options_content = tokio::fs::read_to_string(&options_json_path)
-            .await
-            .map_err(|e| miette::miette!("Failed to read options.json: {}", e))?;
-
-        #[derive(Deserialize)]
-        struct OptionResults(BTreeMap<String, OptionResult>);
-
-        #[derive(Deserialize)]
-        struct OptionResult {
-            #[serde(rename = "type")]
-            type_: String,
-            default: Option<String>,
-            description: String,
-        }
-
-        let options_json: OptionResults = serde_json::from_str(&options_content)
-            .map_err(|e| miette::miette!("Failed to parse options.json: {}", e))?;
-
-        let options: Vec<OptionInfo> = options_json
-            .0
-            .into_iter()
-            .map(|(name, value)| OptionInfo {
-                name,
-                value: parse_type_to_value(&value.type_),
-                description: Some(value.description),
-                default: value.default.map(|d| parse_default_value(&d, &value.type_)),
-            })
-            .collect();
-
-        Ok(options)
+        return Ok(Vec::new());
     }
 }
 

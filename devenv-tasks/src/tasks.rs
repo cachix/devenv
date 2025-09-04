@@ -16,7 +16,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
-use tokio_graceful::WeakShutdownGuard;
+
 use tracing::{error, instrument};
 
 /// Builder for Tasks configuration
@@ -24,29 +24,27 @@ pub struct TasksBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    shutdown_guard: Option<WeakShutdownGuard>,
+    shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl TasksBuilder {
-    /// Create a new builder with required configuration
-    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+    /// Create a new builder with required configuration and subsys
+    pub fn new(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    ) -> Self {
         Self {
             config,
             verbosity,
             db_path: None,
-            shutdown_guard: None,
+            shutdown,
         }
     }
 
     /// Set the database path
     pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
         self.db_path = Some(db_path);
-        self
-    }
-
-    /// Set the shutdown guard for graceful shutdown support
-    pub fn with_shutdown_guard(mut self, guard: WeakShutdownGuard) -> Self {
-        self.shutdown_guard = Some(guard);
         self
     }
 
@@ -91,7 +89,6 @@ impl TasksBuilder {
                 task,
                 self.verbosity,
                 self.config.sudo_context.clone(),
-                self.shutdown_guard.as_ref().map(|g| g.clone()),
             ))));
             task_indices.insert(name, index);
         }
@@ -107,7 +104,7 @@ impl TasksBuilder {
             tasks_order: vec![],
             run_mode: self.config.run_mode,
             cache,
-            shutdown_guard: self.shutdown_guard,
+            shutdown: self.shutdown,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -116,7 +113,16 @@ impl TasksBuilder {
     }
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for Tasks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tasks")
+            .field("root_names", &self.root_names)
+            .field("run_mode", &self.run_mode)
+            .field("shutdown", &"<Shutdown>")
+            .finish()
+    }
+}
+
 pub struct Tasks {
     pub roots: Vec<NodeIndex>,
     // Stored for reporting
@@ -128,13 +134,17 @@ pub struct Tasks {
     pub notify_ui: Arc<Notify>,
     pub run_mode: RunMode,
     pub cache: TaskCache,
-    pub shutdown_guard: Option<WeakShutdownGuard>,
+    pub shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl Tasks {
     /// Create a new TasksBuilder for configuring Tasks
-    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksBuilder {
-        TasksBuilder::new(config, verbosity)
+    pub fn builder(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    ) -> TasksBuilder {
+        TasksBuilder::new(config, verbosity, shutdown)
     }
 
     /// Get the current task completion status
@@ -572,40 +582,35 @@ impl Tasks {
 
         // Wait for running tasks with cancellation support
         loop {
-            tokio::select! {
-                Some(res) = running_tasks.join_next() => {
-                    match res {
-                        Ok(_) => (),
-                        Err(e) => error!("Task crashed: {}", e),
+            // Check for shutdown request before waiting
+            if self.shutdown.is_cancelled() {
+                // Shutdown requested - abort remaining tasks and drain them
+                running_tasks.abort_all();
+
+                // Drain the aborted tasks to ensure proper cleanup
+                while let Some(res) = running_tasks.join_next().await {
+                    if let Err(e) = res {
+                        error!("Aborted task error: {}", e);
                     }
-                    // Continue the loop to wait for more tasks
-                },
-                _ = self.wait_for_cancellation() => {
-                    // Shutdown requested - abort remaining tasks
-                    running_tasks.abort_all();
-                    break;
-                },
-                else => {
-                    // No more tasks to wait for
-                    break;
                 }
+                break;
+            }
+
+            // Wait for next task completion
+            if let Some(res) = running_tasks.join_next().await {
+                match res {
+                    Ok(_) => (),
+                    Err(e) => error!("Task crashed: {}", e),
+                }
+                // Continue the loop to wait for more tasks
+            } else {
+                // No more tasks to wait for
+                break;
             }
         }
 
         self.notify_finished.notify_one();
         self.notify_ui.notify_one();
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
-    }
-
-    /// Wait for cancellation to be requested
-    ///
-    /// Returns a future that never resolves if no shutdown guard is set
-    async fn wait_for_cancellation(&self) {
-        if let Some(guard) = &self.shutdown_guard {
-            guard.cancelled().await;
-        } else {
-            // If no shutdown guard, wait forever (task will be cancelled by other means)
-            std::future::pending::<()>().await;
-        }
     }
 }

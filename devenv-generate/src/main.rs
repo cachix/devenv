@@ -6,7 +6,8 @@ use devenv::{
 use miette::{IntoDiagnostic, Result, bail};
 use similar::{ChangeTag, TextDiff};
 use std::path::{Path, PathBuf};
-
+use std::sync::Arc;
+use tokio_shutdown::Shutdown;
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
@@ -74,6 +75,19 @@ struct GenerateResponse {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let shutdown = Shutdown::new();
+    shutdown.install_signals().await;
+
+    tokio::select! {
+        result = run_generate(shutdown.clone()) => result,
+        _ = shutdown.wait_for_shutdown() => {
+            eprintln!("Task was cancelled");
+            std::process::exit(1);
+        }
+    }
+}
+
+async fn run_generate(shutdown: Arc<Shutdown>) -> Result<()> {
     let cli = Cli::parse();
 
     if cli.version {
@@ -89,8 +103,7 @@ async fn main() -> Result<()> {
         log::Level::default()
     };
 
-    let shutdown = tokio_graceful::Shutdown::new(std::future::pending::<()>());
-    log::init_tracing(level, cli.log_format, &shutdown);
+    log::init_tracing(level, cli.log_format, shutdown.clone());
 
     let description = if !cli.description.is_empty() {
         Some(cli.description.join(" "))
