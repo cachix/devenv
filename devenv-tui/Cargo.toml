@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 # Core async runtime
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
-tokio-graceful = { workspace = true }
+tokio-shutdown = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
 
@@ -48,6 +48,9 @@ chrono = { workspace = true }
 
 # Human-readable formatting
 human-repr = "1.1"
+
+# Random number generation
+rand = { workspace = true }
 
 
 # Terminal UI components

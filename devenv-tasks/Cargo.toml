@@ -17,7 +17,7 @@ serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["signal"] }
-tokio-graceful.workspace = true
+tokio-shutdown.workspace = true
 tracing.workspace = true
 sqlx.workspace = true
 blake3.workspace = true

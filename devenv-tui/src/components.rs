@@ -1,6 +1,6 @@
 //! Reusable UI components for the TUI
 
-use crate::model::ActivityInfo;
+use crate::model::{Activity, ActivityVariant};
 use human_repr::{HumanCount, HumanThroughput};
 use iocraft::prelude::*;
 use std::collections::VecDeque;
@@ -135,17 +135,21 @@ impl ActivityTextComponent {
             depth,
         );
 
-        // Action word should be capitalized
-        let action_text = format!(
-            "{}{}",
-            self.action
-                .chars()
-                .next()
-                .unwrap_or_default()
-                .to_uppercase()
-                .collect::<String>(),
-            &self.action[1..]
-        );
+        // Action word should be capitalized (handle empty strings)
+        let action_text = if self.action.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "{}{}",
+                self.action
+                    .chars()
+                    .next()
+                    .unwrap_or_default()
+                    .to_uppercase()
+                    .collect::<String>(),
+                &self.action[1..]
+            )
+        };
         let mut final_prefix = prefix_children;
         final_prefix.push(
             element!(View(width: (action_text.len() + 1) as u32, flex_shrink: 0.0) {
@@ -254,42 +258,53 @@ impl ProgressBarComponent {
 }
 
 /// Component for rendering download activities with progress
-pub struct DownloadActivityComponent {
-    pub activity: ActivityInfo,
+pub struct DownloadActivityComponent<'a> {
+    pub activity: &'a Activity,
+    pub depth: usize,
     pub is_selected: bool,
     pub spinner_frame: usize,
 }
 
-impl DownloadActivityComponent {
-    pub fn new(activity: ActivityInfo, is_selected: bool, spinner_frame: usize) -> Self {
+impl<'a> DownloadActivityComponent<'a> {
+    pub fn new(
+        activity: &'a Activity,
+        depth: usize,
+        is_selected: bool,
+        spinner_frame: usize,
+    ) -> Self {
         Self {
             activity,
+            depth,
             is_selected,
             spinner_frame,
         }
     }
 
     pub fn render(&self, terminal_width: u16) -> AnyElement<'static> {
-        let indent = "  ".repeat(self.activity.depth);
+        let indent = "  ".repeat(self.depth);
         let elapsed = Instant::now().duration_since(self.activity.start_time);
         let elapsed_str = format!("{:.1}s", elapsed.as_secs_f64());
 
         let mut elements = vec![];
 
         // First line: activity name
-        let prefix = HierarchyPrefixComponent::new(indent.clone(), self.activity.depth).render();
+        let prefix = HierarchyPrefixComponent::new(indent.clone(), self.depth).render();
+
+        // Get substituter from download variant
+        let substituter =
+            if let ActivityVariant::Download(ref download_data) = self.activity.variant {
+                download_data.substituter.as_ref()
+            } else {
+                None
+            };
 
         let (shortened_name, _) = calculate_display_info(
             &self.activity.short_name,
             terminal_width as u32,
             "Downloading",
-            self.activity
-                .substituter
-                .as_ref()
-                .map(|s| format!("from {}", s))
-                .as_deref(),
+            substituter.map(|s| format!("from {}", s)).as_deref(),
             &elapsed_str,
-            self.activity.depth,
+            self.depth,
         );
 
         let mut line1_children = prefix;
@@ -302,7 +317,7 @@ impl DownloadActivityComponent {
             }).into_any(),
         ]);
 
-        if let Some(substituter) = &self.activity.substituter {
+        if let Some(substituter) = &substituter {
             // Only show "from" text on wider terminals
             if terminal_width >= 80 {
                 line1_children.push(
@@ -327,32 +342,35 @@ impl DownloadActivityComponent {
         );
 
         // Second line: progress bar if we have progress data
-        if let (Some(downloaded), Some(total)) =
-            (self.activity.bytes_downloaded, self.activity.total_bytes)
-        {
-            let percent = (downloaded as f64 / total as f64 * 100.0) as u8;
-            let human_downloaded = downloaded.human_count_bytes().to_string();
-            let human_total = total.human_count_bytes().to_string();
-            let speed = self
-                .activity
-                .download_speed
-                .unwrap_or(0.0)
-                .human_throughput_bytes()
-                .to_string();
-
-            let progress_bar =
-                ProgressBarComponent::new(percent, human_downloaded, human_total, indent)
-                    .with_speed(speed);
-            elements.push(progress_bar.render(terminal_width));
-        } else if let Some(progress) = &self.activity.generic_progress {
-            if progress.expected > 0 {
-                let percent = (progress.done as f64 / progress.expected as f64 * 100.0) as u8;
-                let human_done = progress.done.human_count_bytes().to_string();
-                let human_expected = progress.expected.human_count_bytes().to_string();
+        if let ActivityVariant::Download(ref download_data) = self.activity.variant {
+            if let (Some(downloaded), Some(total)) =
+                (download_data.size_current, download_data.size_total)
+            {
+                let percent = (downloaded as f64 / total as f64 * 100.0) as u8;
+                let human_downloaded = downloaded.human_count_bytes().to_string();
+                let human_total = total.human_count_bytes().to_string();
+                let speed = download_data
+                    .speed
+                    .unwrap_or(0)
+                    .human_throughput_bytes()
+                    .to_string();
 
                 let progress_bar =
-                    ProgressBarComponent::new(percent, human_done, human_expected, indent);
+                    ProgressBarComponent::new(percent, human_downloaded, human_total, indent)
+                        .with_speed(speed);
                 elements.push(progress_bar.render(terminal_width));
+            } else if let Some(progress) = &self.activity.progress {
+                if progress.total.unwrap_or(0) > 0 {
+                    let current = progress.current.unwrap_or(0);
+                    let total = progress.total.unwrap_or(1);
+                    let percent = (current as f64 / total as f64 * 100.0) as u8;
+                    let human_done = current.human_count_bytes().to_string();
+                    let human_expected = total.human_count_bytes().to_string();
+
+                    let progress_bar =
+                        ProgressBarComponent::new(percent, human_done, human_expected, indent);
+                    elements.push(progress_bar.render(terminal_width));
+                }
             }
         }
 
@@ -420,10 +438,11 @@ pub fn calculate_display_info(
 
     // Path doesn't fit - truncate from the left to keep meaningful filename
     if remaining_width_for_path > 4 {
-        let truncated = format!(
-            "…{}",
-            &path[path.len().saturating_sub(remaining_width_for_path - 1)..]
-        );
+        // Use char indices to avoid slicing in the middle of UTF-8 characters
+        let chars: Vec<char> = path.chars().collect();
+        let start_char = chars.len().saturating_sub(remaining_width_for_path - 1);
+        let truncated_chars: String = chars.iter().skip(start_char).collect();
+        let truncated = format!("…{}", truncated_chars);
         return (truncated, show_suffix);
     }
 

@@ -11,6 +11,7 @@ members = [
     "nix-conf-parser",
     "xtask",
     "devenv-cache-core",
+    "tokio-shutdown",
 ]
 
 [workspace.package]
@@ -30,6 +31,7 @@ devenv-cache-core = { path = "devenv-cache-core" }
 http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
 xtask = { path = "xtask" }
+tokio-shutdown = { path = "tokio-shutdown" }
 
 ansiterm = "0.12.2"
 async-trait = "0.1"
@@ -52,6 +54,7 @@ nix = { version = "0.29.0", features = ["signal", "process"] }
 once_cell = "1.20.2"
 petgraph = "0.7.1"
 pretty_assertions = { version = "1.4.0", features = ["unstable"] }
+rand = "0.8.5"
 regex = "1.10.3"
 schemars = "0.8.16"
 schematic = { version = "0.18.2", features = [
@@ -73,6 +76,7 @@ tracing = "0.1.40"
 tracing-core = "0.1.32"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-indicatif = "0.3"
+tracing-timing = "0.7.0"
 indicatif = "0.17"
 tokio = { version = "1.39.3", features = [
     "process",
@@ -85,7 +89,6 @@ tokio = { version = "1.39.3", features = [
     "signal",
 ] }
 tokio-util = { version = "0.7.12", features = ["io"] }
-tokio-graceful = "0.1.6"
 which = "7.0.2"
 whoami = "1.5.1"
 xdg = "2.5.2"

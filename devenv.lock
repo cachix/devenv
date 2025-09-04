@@ -16,10 +16,10 @@
     "devenv-claude-agents": {
       "flake": false,
       "locked": {
-        "lastModified": 1753996307,
+        "lastModified": 1756414178,
         "owner": "cachix",
         "repo": "devenv-claude-agents",
-        "rev": "ca850e6d7f0fceebd5b1601788cbc5da51c93a88",
+        "rev": "4d5c8142461f6132e6aa0458e2a9661c2178db78",
         "type": "github"
       },
       "original": {

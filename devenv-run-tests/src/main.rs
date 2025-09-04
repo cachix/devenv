@@ -2,15 +2,16 @@ use clap::Parser;
 use devenv::{log, Devenv, DevenvOptions};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{
     env, fs,
     path::PathBuf,
     process::{Command, ExitCode, Stdio},
 };
 use tempfile::TempDir;
-use tokio_graceful::Shutdown;
+use tokio_shutdown::Shutdown;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     #[clap(long, value_parser, help = "Exclude these tests.")]
@@ -87,7 +88,7 @@ impl TestConfig {
     }
 }
 
-async fn run_tests_in_directory(args: &Args, shutdown: &Shutdown) -> Result<Vec<TestResult>> {
+async fn run_tests_in_directory(args: &Args, shutdown: Arc<Shutdown>) -> Result<Vec<TestResult>> {
     eprintln!("Running Tests");
 
     let cwd = env::current_dir().into_diagnostic()?;
@@ -184,8 +185,7 @@ async fn run_tests_in_directory(args: &Args, shutdown: &Shutdown) -> Result<Vec<
                     eval_cache: false,
                     ..Default::default()
                 }),
-                shutdown: shutdown.guard(),
-                tui_sender: None,
+                shutdown: shutdown.clone(), // Pass the shutdown to each test
             };
             let devenv = Devenv::new(options).await;
 
@@ -267,33 +267,33 @@ async fn run_tests_in_directory(args: &Args, shutdown: &Shutdown) -> Result<Vec<
 
 #[tokio::main]
 async fn main() -> Result<ExitCode> {
-    // Create shutdown signal
-    let shutdown = Shutdown::new(async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install CTRL+C signal handler");
-    });
-
-    let shutdown_guard = shutdown.guard();
-    let tracing_shutdown = Shutdown::new(async move {
-        shutdown_guard.cancelled().await;
-    });
-    log::init_tracing(
-        log::Level::default(),
-        log::LogFormat::default(),
-        &tracing_shutdown,
-    );
-
-    let result = if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
-        // Phase 2: Run the actual tests
+    if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
+        // Phase 2: Run the actual tests with proper shutdown handling
+        let shutdown = Shutdown::new();
+        shutdown.install_signals().await;
+        log::init_tracing(
+            log::Level::default(),
+            log::LogFormat::default(),
+            shutdown.clone(),
+        );
         let args = Args::parse();
-        match run(&args, &shutdown).await {
-            Ok(_) => Ok(ExitCode::SUCCESS),
-            Err(err) => {
-                eprintln!("Error: {}", err);
-                Ok(ExitCode::FAILURE)
+
+        tokio::select! {
+            result = run(&args, shutdown.clone()) => {
+                match result {
+                    Ok(()) => {},
+                    Err(e) => {
+                        eprintln!("Error: {}", e);
+                        return Ok(ExitCode::FAILURE);
+                    }
+                }
+            },
+            _ = shutdown.wait_for_shutdown() => {
+                eprintln!("Task was cancelled");
+                return Ok(ExitCode::FAILURE);
             }
         }
+        Ok(ExitCode::SUCCESS)
     } else {
         // Phase 1: Spawn subprocess with clean environment
         let executable_path = env::current_exe().into_diagnostic()?;
@@ -331,15 +331,10 @@ async fn main() -> Result<ExitCode> {
         } else {
             Ok(ExitCode::FAILURE)
         }
-    };
-
-    // Coordinate shutdown and wait for all tasks
-    shutdown.shutdown().await;
-
-    result
+    }
 }
 
-async fn run(args: &Args, shutdown: &Shutdown) -> Result<()> {
+async fn run(args: &Args, shutdown: Arc<Shutdown>) -> Result<()> {
     let test_results = run_tests_in_directory(args, shutdown).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();

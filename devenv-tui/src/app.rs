@@ -1,40 +1,44 @@
 use crate::{
-    message::{key_event_to_message, Message},
     model::{AppState, Model},
-    update::update,
     view::view,
-    TuiEvent,
 };
 use iocraft::prelude::*;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::mpsc;
-
-/// Shared application state
-pub struct SharedAppState {
-    model: Model,
-    event_receiver: mpsc::UnboundedReceiver<TuiEvent>,
-}
 
 /// Main TUI component
 #[component]
 fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let app_state = hooks.use_context::<Arc<Mutex<SharedAppState>>>();
+    let model = hooks.use_context::<Arc<Mutex<Model>>>();
     let (terminal_width, _terminal_height) = hooks.use_terminal_size();
 
-    // Force re-render on state changes
-    let mut render_tick = hooks.use_state(|| 0);
-
-    // Handle keyboard events
+    // Handle keyboard events directly
     hooks.use_terminal_events({
-        let app_state = app_state.clone();
+        let model = model.clone();
         move |event| {
             if let TerminalEvent::Key(key_event) = event {
                 if key_event.kind != KeyEventKind::Release {
-                    if let Ok(mut state) = app_state.lock() {
-                        let message = key_event_to_message(key_event);
-                        if let Some(new_message) = update(&mut state.model, message) {
-                            update(&mut state.model, new_message);
+                    if let Ok(mut model_guard) = model.lock() {
+                        match key_event.code {
+                            KeyCode::Char('c')
+                                if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
+                            {
+                                model_guard.app_state = AppState::Shutdown;
+                            }
+                            KeyCode::Down => {
+                                model_guard.select_next_build();
+                            }
+                            KeyCode::Up => {
+                                model_guard.select_previous_build();
+                            }
+                            KeyCode::Esc => {
+                                model_guard.ui.selected_activity = None;
+                            }
+                            KeyCode::Char('e') => {
+                                model_guard.ui.view_options.show_expanded_logs =
+                                    !model_guard.ui.view_options.show_expanded_logs;
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -42,46 +46,41 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
-    // Update loop for spinner animation and processing TUI events
+    // Spinner animation update loop - also triggers re-renders to pick up model changes
     hooks.use_future({
-        let app_state = app_state.clone();
+        let model = model.clone();
         async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(50)).await;
 
-                if let Ok(mut state) = app_state.lock() {
-                    // Process any pending TUI events
-                    while let Ok(tui_event) = state.event_receiver.try_recv() {
-                        let message = Message::TuiEvent(tui_event);
-                        if let Some(new_message) = update(&mut state.model, message) {
-                            update(&mut state.model, new_message);
-                        }
-                    }
-
-                    // Update spinner animation
-                    let message = Message::UpdateSpinner;
-                    if let Some(new_message) = update(&mut state.model, message) {
-                        update(&mut state.model, new_message);
+                if let Ok(mut model_guard) = model.lock() {
+                    // Update spinner animation directly
+                    let now = std::time::Instant::now();
+                    if now
+                        .duration_since(model_guard.ui.last_spinner_update)
+                        .as_millis()
+                        >= 50
+                    {
+                        model_guard.ui.spinner_frame = (model_guard.ui.spinner_frame + 1) % 10;
+                        model_guard.ui.last_spinner_update = now;
                     }
 
                     // Check if we should exit
-                    if state.model.app_state == AppState::Shutdown {
+                    if model_guard.app_state == AppState::Shutdown {
                         break;
                     }
                 }
-
-                // Force re-render
-                render_tick += 1;
+                // The model mutation above triggers a re-render, which picks up all changes
             }
         }
     });
 
     // Render the view
-    let app_state_clone = app_state.clone();
-    let result = if let Ok(state) = app_state_clone.lock() {
+    let model_clone = model.clone();
+    let result = if let Ok(model_guard) = model_clone.lock() {
         element! {
             View(width: terminal_width) {
-                #(vec![view(&state.model).into()])
+                #(vec![view(&model_guard).into()])
             }
         }
     } else {
@@ -91,21 +90,20 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 }
 
 /// Create and run the TUI application
-pub async fn run_app(event_receiver: mpsc::UnboundedReceiver<TuiEvent>) -> std::io::Result<()> {
-    let model = Model::new();
-
-    let app_state = Arc::new(Mutex::new(SharedAppState {
-        model,
-        event_receiver,
-    }));
-
-    // Run the iocraft render loop
-    element! {
-        ContextProvider(value: Context::owned(app_state)) {
+pub async fn run_app(
+    model: Arc<Mutex<Model>>,
+    _shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+) -> std::io::Result<()> {
+    // Run the iocraft render loop - tokio-graceful-shutdown will handle cancellation automatically
+    let mut tui_element = element! {
+        ContextProvider(value: Context::owned(model.clone())) {
             TuiApp
         }
-    }
-    .render_loop()
-    .await
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    };
+
+    // No need for select! - tokio-graceful-shutdown handles cancellation
+    tui_element
+        .render_loop()
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }

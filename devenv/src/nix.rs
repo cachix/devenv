@@ -1,8 +1,10 @@
 use crate::{
-    cli, config, devenv,
+    cli, config, devenv, log,
     nix_backend::{self, NixBackend},
+    nix_log_bridge::NixLogBridge,
 };
 use async_trait::async_trait;
+use blake3;
 use futures::future;
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
@@ -15,12 +17,41 @@ use std::env;
 use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process;
+
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::OnceCell;
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
+use tracing_subscriber::registry::LookupSpan;
+
+/// Get the current user operation ID from the active span extensions
+fn get_user_operation_id() -> Option<devenv_tui::OperationId> {
+    // Try to get the tracing registry from the current subscriber
+    tracing::dispatcher::get_default(|dispatch| {
+        if let Some(registry) = dispatch.downcast_ref::<tracing_subscriber::Registry>() {
+            let current_span = tracing::Span::current();
+            if let Some(id) = current_span.id() {
+                if let Some(span_ref) = registry.span(&id) {
+                    // Check if current span has an operation ID (stored by DevenvLayer)
+                    if let Some(op_id) = span_ref.extensions().get::<devenv_tui::OperationId>() {
+                        return Some(op_id.clone());
+                    }
+
+                    // Walk up parent spans to find a user operation
+                    let mut current = span_ref.parent();
+                    while let Some(parent) = current {
+                        if let Some(op_id) = parent.extensions().get::<devenv_tui::OperationId>() {
+                            return Some(op_id.clone());
+                        }
+                        current = parent.parent();
+                    }
+                }
+            }
+        }
+        None
+    })
+}
 
 pub struct Nix {
     pub options: nix_backend::Options,
@@ -32,7 +63,6 @@ pub struct Nix {
     cachix_caches: Arc<OnceCell<CachixCaches>>,
     paths: nix_backend::DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
-    tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
 }
 
 impl Nix {
@@ -41,7 +71,6 @@ impl Nix {
         global_options: cli::GlobalOptions,
         paths: nix_backend::DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
-        tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
     ) -> Result<Self> {
         let cachix_caches = Arc::new(OnceCell::new());
         let options = nix_backend::Options::default();
@@ -60,7 +89,6 @@ impl Nix {
             cachix_caches,
             paths,
             secretspec_resolved,
-            tui_sender,
         })
     }
 
@@ -338,7 +366,11 @@ impl Nix {
                 cmd.arg("--debugger");
             }
 
-            debug!(tui.log = true, "Running command: {}", display_command(&cmd));
+            debug!(
+                devenv.log = true,
+                "Running command: {}",
+                display_command(&cmd)
+            );
 
             let error = cmd.exec();
             error!(
@@ -348,46 +380,16 @@ impl Nix {
             bail!("Failed to replace shell")
         }
 
-        // Only set stdio inheritance for non-NixCommand execution
-        // NixCommand handles its own stdio to parse internal logs
-        let will_use_cached_command = supports_eval_caching(&cmd) && self.pool.get().is_some();
+        // Always use NixCommand for consistent log parsing and TUI integration
+        // Only enable caching if both eval caching is supported and database pool is available
+        let enable_caching = supports_eval_caching(&cmd)
+            && self.pool.get().is_some()
+            && self.global_options.eval_cache
+            && options.cache_output;
 
-        if options.logging && !will_use_cached_command {
-            cmd.stdin(process::Stdio::inherit())
-                .stderr(process::Stdio::inherit());
-            if options.logging_stdout {
-                cmd.stdout(std::process::Stdio::inherit());
-            }
-        }
-
-        // Use NixCommand for all Nix commands to get consistent log parsing and TUI integration
-        let result = if supports_eval_caching(&cmd) && self.pool.get().is_some() {
-            let enable_caching = self.global_options.eval_cache && options.cache_output;
-            self.run_with_cached_command(&mut cmd, options, enable_caching)
-                .await?
-        } else {
-            // Fallback to simple execution for non-Nix commands or when no database pool
-            let pretty_cmd = display_command(&cmd);
-            let span = debug_span!(
-                "Running command",
-                command = pretty_cmd.as_str(),
-                devenv.user_message = format!("Running command: {}", pretty_cmd)
-            );
-
-            let output = span.in_scope(|| {
-                cmd.output()
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))
-            })?;
-
-            devenv_eval_cache::Output {
-                status: output.status,
-                stdout: output.stdout,
-                stderr: output.stderr,
-                inputs: vec![],
-                cache_hit: false,
-            }
-        };
+        let result = self
+            .run_with_cached_command(&mut cmd, options, enable_caching)
+            .await?;
 
         tracing::Span::current().record("output", format!("{:?}", result));
 
@@ -449,11 +451,8 @@ impl Nix {
         // Ignore anything in .devenv except for the specifically watched files above.
         cached_cmd.unwatch_path(&self.paths.dotfile);
 
-        // Setup TUI bridge for enhanced log processing
-        let nix_bridge = self
-            .tui_sender
-            .as_ref()
-            .map(|sender| devenv_tui::create_nix_bridge(sender.clone()));
+        // Setup Nix log bridge for enhanced log processing
+        let nix_bridge = NixLogBridge::new();
 
         // Add stderr processing callback with proper lifetime management
         let bridge_for_callback = nix_bridge.clone();
@@ -462,14 +461,13 @@ impl Nix {
         let verbose = self.global_options.verbose;
 
         cached_cmd.on_stderr(move |log| {
-            // Send to TUI bridge for detailed progress tracking
-            if let Some(bridge) = &bridge_for_callback {
-                bridge.process_internal_log(log.clone());
-            }
+            // Send to Nix log bridge for detailed progress tracking
+            // The bridge will emit appropriate tracing events
+            bridge_for_callback.process_internal_log(log.clone());
 
-            // Only output to tracing logs if logging is enabled and TUI bridge is not available
-            // This prevents double output when TUI is handling the display
-            if bridge_for_callback.is_none() && logging && !quiet {
+            // Only output to tracing logs if logging is enabled
+            // This provides fallback logging when detailed processing is not needed
+            if logging && !quiet {
                 let target_log_level = if verbose {
                     Verbosity::Talkative
                 } else {
@@ -496,18 +494,25 @@ impl Nix {
         // Setup tracing span for command execution
         let pretty_cmd = display_command(&cmd);
         let span = debug_span!(
-            "Running command",
-            command = pretty_cmd.as_str(),
-            devenv.user_message = format!("Running command: {}", pretty_cmd)
+            target: "devenv.ui",
+            "nix_command",
+            devenv.ui.message = format!("{}", pretty_cmd),
+            devenv.ui.type = "command",
+            devenv.ui.detail = "nix",
+            devenv.ui.id = format!("nix-{}", blake3::hash(pretty_cmd.as_bytes()).to_hex()[..8].to_string()),
+            command = pretty_cmd.as_str()
         );
 
         // Set current operation for Nix log correlation
-        if let Some(bridge) = &nix_bridge {
-            if let Some(span_id) = span.id() {
-                let operation_id = devenv_tui::OperationId::new(format!("{:?}", span_id));
-                bridge.set_current_operation(operation_id);
-            }
+        if self.global_options.verbose {
+            // In verbose mode: create bridge operation that will be child of the debug span
+            let cmd_string = display_command(&cmd);
+            let cmd_hash = blake3::hash(cmd_string.as_bytes());
+            let command_operation_id =
+                devenv_tui::OperationId::new(format!("cmd-{}", &cmd_hash.to_hex()[..8]));
+            nix_bridge.set_current_operation(command_operation_id);
         }
+        // In non-verbose mode: don't set bridge operation, logs will attach via fallback
 
         // Execute the command
         let output = cached_cmd
@@ -517,10 +522,8 @@ impl Nix {
             .into_diagnostic()
             .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
 
-        // Clear current operation after command completion
-        if let Some(bridge) = &nix_bridge {
-            bridge.clear_current_operation();
-        }
+        // Clear bridge operation
+        nix_bridge.clear_current_operation();
 
         // Record cache status if applicable
         if output.cache_hit {
@@ -862,7 +865,10 @@ impl Nix {
             };
 
             info!(
-                devenv.is_user_message = true,
+                target = "devenv.ui",
+                devenv.ui.message = format!("Using Cachix caches: {}", caches.caches.pull.join(", ")),
+                devenv.ui.type = "user",
+                devenv.ui.id = "cachix-info",
                 "Using Cachix caches: {}",
                 caches.caches.pull.join(", "),
             );

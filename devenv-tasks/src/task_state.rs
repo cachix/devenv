@@ -9,28 +9,31 @@ use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
-use tokio_graceful::WeakShutdownGuard;
+
 use tracing::{error, instrument};
 
-#[derive(Debug)]
+impl std::fmt::Debug for TaskState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskState")
+            .field("task", &self.task)
+            .field("status", &self.status)
+            .field("verbosity", &self.verbosity)
+            .finish()
+    }
+}
+
 pub struct TaskState {
     pub task: TaskConfig,
     pub status: TaskStatus,
     pub verbosity: VerbosityLevel,
-    pub shutdown_guard: Option<WeakShutdownGuard>,
 }
 
 impl TaskState {
-    pub fn new(
-        task: TaskConfig,
-        verbosity: VerbosityLevel,
-        shutdown_guard: Option<WeakShutdownGuard>,
-    ) -> Self {
+    pub fn new(task: TaskConfig, verbosity: VerbosityLevel) -> Self {
         Self {
             task,
             status: TaskStatus::Pending,
             verbosity,
-            shutdown_guard,
         }
     }
 
@@ -332,42 +335,9 @@ impl TaskState {
             let is_process = self.task.name.starts_with("devenv:processes:");
 
             loop {
+                // No need for manual cancellation - tokio-graceful-shutdown will handle task abortion at the parent level
+                // Individual tasks just run until completion or until the JoinSet is aborted by the parent
                 tokio::select! {
-                    // Check for cancellation from shutdown guard
-                    _ = async {
-                        if let Some(ref guard) = self.shutdown_guard {
-                            guard.cancelled().await
-                        } else {
-                            std::future::pending::<()>().await
-                        }
-                    } => {
-                        eprintln!("Task {} received shutdown signal, terminating child process", self.task.name);
-
-                        // Kill the child process and its process group
-                        #[cfg(unix)]
-                        if let Some(pid) = child.id() {
-                            use ::nix::sys::signal::{self, Signal};
-                            use ::nix::unistd::Pid;
-
-                            // Send SIGTERM to the process group first for graceful shutdown
-                            let _ = signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
-
-                            // Wait a bit for graceful shutdown
-                            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                            if child.try_wait().unwrap_or(None).is_none() {
-                                // Force kill if still running
-                                let _ = signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);
-                            }
-                        }
-
-                        #[cfg(not(unix))]
-                        {
-                            // On non-Unix systems, try to kill the child process directly
-                            let _ = child.kill().await;
-                        }
-
-                        return Ok(TaskCompleted::Cancelled(now.elapsed()));
-                    }
                     result = stdout_reader.next_line(), if !stdout_closed => {
                         match result {
                             Ok(Some(line)) => {

@@ -4,19 +4,24 @@ use devenv::{
     config, log, Devenv,
 };
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use std::sync::Arc;
 use std::{env, os::unix::process::CommandExt, process::Command};
 use tempfile::TempDir;
-use tokio_graceful::Shutdown;
+use tokio_shutdown::Shutdown;
 use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Create shutdown signal
-    let shutdown = Shutdown::new(async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install CTRL+C signal handler");
-    });
+    let shutdown = Shutdown::new();
+    shutdown.install_signals().await;
+
+    tokio::select! {
+        result = run_devenv(shutdown.clone()) => result,
+        _ = shutdown.wait_for_shutdown() => Ok(()),
+    }
+}
+
+async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
     let cli = Cli::parse_and_resolve_options();
 
     let print_version = || {
@@ -51,7 +56,7 @@ async fn main() -> Result<()> {
         log::Level::default()
     };
 
-    let tui_sender = log::init_tracing(level, cli.global_options.log_format, &shutdown);
+    log::init_tracing(level, cli.global_options.log_format, shutdown.clone());
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
@@ -70,8 +75,7 @@ async fn main() -> Result<()> {
         global_options: Some(cli.global_options),
         devenv_root: None,
         devenv_dotfile: None,
-        tui_sender: tui_sender.clone(),
-        shutdown: shutdown.guard(),
+        shutdown: shutdown.clone(),
     };
 
     // we let Drop delete the dir after all commands have ran
@@ -127,20 +131,26 @@ async fn main() -> Result<()> {
             let command = if let Some(name) = name {
                 if copy {
                     warn!(
-                        devenv.is_user_message = true,
-                        "The --copy flag is deprecated. Use `devenv container copy` instead."
+                        target = "devenv.ui",
+                        devenv.ui.message = "The --copy flag is deprecated. Use `devenv container copy` instead.",
+                        devenv.ui.type = "user",
+                        devenv.ui.id = "deprecation-warning"
                     );
                     ContainerCommand::Copy { name }
                 } else if docker_run {
                     warn!(
-                        devenv.is_user_message = true,
-                        "The --docker-run flag is deprecated. Use `devenv container run` instead."
+                        target = "devenv.ui",
+                        devenv.ui.message = "The --docker-run flag is deprecated. Use `devenv container run` instead.",
+                        devenv.ui.type = "user",
+                        devenv.ui.id = "deprecation-warning-2"
                     );
                     ContainerCommand::Run { name }
                 } else {
                     warn!(
-                        devenv.is_user_message = true,
-                        "Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead."
+                        target = "devenv.ui",
+                        devenv.ui.message = format!("Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead."),
+                        devenv.ui.type = "user",
+                        devenv.ui.id = "deprecation-warning-3"
                     );
                     ContainerCommand::Build { name }
                 }
@@ -238,9 +248,6 @@ async fn main() -> Result<()> {
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
     };
-
-    // Coordinate shutdown and wait for all tasks
-    shutdown.shutdown().await;
 
     result
 }

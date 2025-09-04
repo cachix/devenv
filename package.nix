@@ -31,6 +31,7 @@ rustPlatform.buildRustPackage {
     ".*devenv-run-tests(/.*)?"
     ".*devenv-tasks(/.*)?"
     ".*devenv-tui(/.*)?"
+    ".*tokio-shutdown(/.*)?"
     ".*http-client-tls(/.*)?"
     ".*nix-conf-parser(/.*)?"
     ".*xtask(/.*)?"

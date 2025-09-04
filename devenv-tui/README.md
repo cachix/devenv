@@ -1,82 +1,75 @@
 # devenv-tui
 
-A Terminal User Interface (TUI) library that provides real-time visualization of devenv operations, including Nix builds, downloads, and evaluations.
+A Terminal User Interface (TUI) for devenv that provides real-time visualization of development environment operations through the tracing framework.
 
-## Overview
+## Architecture
 
-devenv-tui creates an interactive terminal interface that displays the progress of various development environment operations. It acts as a visualization layer between devenv's build processes and the user, transforming raw Nix logs and operation events into a comprehensible, real-time display.
+devenv-tui implements a tracing-based event system that captures structured logs from devenv operations and renders them in an interactive terminal interface:
 
-## Adding replays
+```
+devenv (library) ──tracing events──> devenv-tui ──iocraft──> Terminal
+```
 
-$ nix-build --log-format internal-json -vv -A chromium |& awk '{print strftime("%Y-%m-%dT%H:%M:%S%z"), $0}' > devenv-tui/replays/new
-$ cargo run -p devenv-tui devenv-tui/replays/new
+### Components
 
-## How It Works
+- **DevenvTuiLayer**: Tracing subscriber that captures structured events from devenv operations
+- **TuiState**: Central state manager tracking active operations, progress, and logs
+- **NixLogBridge**: Specialized parser for Nix's internal JSON log format
+- **Event System**: Typed events for operation lifecycle, progress updates, and log messages
 
-### Event Flow
+### Display Modes
 
-1. **Event Generation**: Operations in devenv (builds, downloads, evaluations) generate events through the tracing framework or Nix's internal JSON logs
-2. **Event Processing**: The TUI system receives these events through channels and updates its internal state
-3. **State Management**: A centralized state manager tracks all active operations, their relationships, and progress
-4. **Display Rendering**: The display layer continuously renders the current state to the terminal
-
-### Key Components
-
-**TuiState**: The central nervous system that maintains:
-- Active operations and their hierarchical relationships
-- Build progress and phase information
-- Download statistics with speed calculations
-- Log messages and build outputs
-- Nix activity tracking (derivations, downloads, queries)
-
-**Event System**: Messages flow through the system as typed events:
-- Operation lifecycle (start/end)
-- Progress updates
-- Log messages
-- Nix-specific activities
-
-**Display Modes**:
-- **Ratatui**: Full-featured TUI with scrollable views and keyboard navigation
-- **Tui**: Simplified terminal interface
+- **Full TUI**: Interactive interface with scrollable views and keyboard navigation
 - **Console**: Plain text output for non-interactive environments
 
-**Nix Integration**: A specialized bridge that:
-- Parses Nix's internal JSON log format
-- Translates Nix activities into TUI events
-- Tracks build phases, download progress, and evaluations
-- Maintains activity relationships and timings
+## Usage
 
-### Visual Features
+### As a Library
 
-The TUI displays:
-- **Operation Tree**: Hierarchical view of running operations
-- **Progress Indicators**: Real-time progress bars for downloads and builds
-- **Activity Summary**: Count of active builds, downloads, and queries
-- **Build Phases**: Current phase for each build (unpacking, building, installing)
-- **Download Speed**: Transfer rates and estimated completion times
-- **Log Viewer**: Scrollable build logs for active derivations
+```rust
+use devenv_tui::{init_tui};
 
-### Terminal Management
+// Initialize TUI system
+let (tui_handle, rx) = init_tui();
 
-The system uses modern terminal capabilities to:
-- Create an inline viewport that doesn't clear existing terminal content
-- Update specific regions without full screen redraws
-- Handle terminal resize events gracefully
-- Clean up properly on exit, preserving command history
+// Register tracing layer
+tracing_subscriber::registry()
+    .with(tui_handle.layer)
+    .init();
 
-## Use Cases
+// Start TUI app
+tokio::spawn(async move {
+    devenv_tui::app::run(rx).await
+});
+```
 
-- **Interactive Development**: See what devenv is doing during shell activation
-- **Build Monitoring**: Track parallel Nix builds and their dependencies
-- **Download Progress**: Monitor package downloads from binary caches
-- **Debugging**: Replay captured logs to diagnose issues
-- **CI Integration**: Fallback to simple console output in non-TTY environments
+### Replay Tool
 
-## Architecture Benefits
+Capture and replay Nix build logs for debugging:
 
-- **Non-invasive**: Integrates through standard tracing infrastructure
-- **Modular**: Display backends can be swapped based on terminal capabilities
-- **Efficient**: Updates only changed portions of the display
-- **Resilient**: Gracefully handles terminal issues and falls back to simpler modes
+```bash
+# Capture logs
+nix-build --log-format internal-json -vv -A chromium |& \
+  awk '{print strftime("%Y-%m-%dT%H:%M:%S%z"), $0}' > replays/build.log
 
-The tui-replay tool allows replaying captured process-compose logs with preserved timing, useful for debugging and demonstrations.
+# Replay in TUI
+cargo run --bin tui-replay replays/build.log
+```
+
+## Features
+
+- **Real-time Progress**: Live progress bars for downloads and builds
+- **Operation Tree**: Hierarchical view of running operations with dependencies
+- **Build Phases**: Track current phase (unpacking, building, installing)
+- **Download Monitoring**: Transfer rates and completion estimates
+- **Log Streaming**: Scrollable build logs with structured output
+- **Terminal Integration**: Inline viewport preserving command history
+
+## Integration
+
+devenv-tui integrates with devenv through:
+
+1. **Tracing Events**: Captures structured logs via `tracing` spans and events
+2. **Nix Bridge**: Parses Nix's `--log-format internal-json` output
+
+The TUI system is designed to be the primary orchestrator for devenv commands, managing both execution and display formatting through a unified event stream.

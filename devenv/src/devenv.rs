@@ -5,7 +5,6 @@ use clap::crate_version;
 use cli_table::Table;
 use cli_table::{print_stderr, WithTitle};
 use devenv_tasks::{Config as TasksConfig, Tasks, VerbosityLevel};
-use devenv_tui;
 
 use include_dir::{include_dir, Dir};
 use miette::{bail, miette, Context, IntoDiagnostic, Result};
@@ -51,24 +50,21 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 // project vars
 pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
-#[derive(Debug)]
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
-    pub tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
-    pub shutdown: tokio_graceful::ShutdownGuard,
+    pub shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl DevenvOptions {
-    pub fn new(shutdown: tokio_graceful::ShutdownGuard) -> Self {
+    pub fn new(shutdown: std::sync::Arc<tokio_shutdown::Shutdown>) -> Self {
         Self {
             config: config::Config::default(),
             global_options: None,
             devenv_root: None,
             devenv_dotfile: None,
-            tui_sender: None,
             shutdown,
         }
     }
@@ -114,10 +110,8 @@ pub struct Devenv {
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
 
-    // TUI event sender for cleanup and bridge creation
-    tui_sender: Option<tokio::sync::mpsc::UnboundedSender<devenv_tui::TuiEvent>>,
-    // Shutdown guard for coordinated shutdown
-    shutdown: tokio_graceful::ShutdownGuard,
+    // Shutdown handle for coordinated shutdown
+    shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl Devenv {
@@ -180,7 +174,6 @@ impl Devenv {
                     global_options.clone(),
                     paths,
                     secretspec_resolved.clone(),
-                    options.tui_sender.clone(),
                 )
                 .await
                 .expect("Failed to initialize Nix backend"),
@@ -212,7 +205,6 @@ impl Devenv {
             has_processes: Arc::new(OnceCell::new()),
             secretspec_resolved,
             container_name: None,
-            tui_sender: options.tui_sender,
             shutdown: options.shutdown,
         }
     }
@@ -236,7 +228,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            info!(tui.log = true, file = %filename, "Creating file");
+            info!(devenv.log = true, file = %filename, "Creating file");
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -434,10 +426,13 @@ impl Devenv {
     /// proper cleanup and termination.
     pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
         let mut shell_cmd = self.prepare_shell(&cmd, args).await?;
-        info!(devenv.is_user_message = true, "Entering shell");
-
-        // Clean up TUI before spawning to prevent terminal corruption
-        crate::log::cleanup_before_exec(self.tui_sender.as_ref());
+        info!(
+            target = "devenv.ui",
+            devenv.ui.message = "Entering shell",
+            devenv.ui.type = "user",
+            devenv.ui.id = "enter-shell",
+            "Entering shell"
+        );
 
         // Spawn the shell as a child process instead of exec
         let mut child = shell_cmd.spawn().into_diagnostic().with_context(|| {
@@ -526,7 +521,13 @@ impl Devenv {
     /// to return control to the caller with the command's output.
     pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let span = info_span!("running_in_shell", devenv.user_message = "Running in shell");
+        let span = info_span!(
+            target: "devenv.ui",
+            "running_in_shell",
+            devenv.ui.message = "Running in shell",
+            devenv.ui.type = "user",
+            devenv.ui.id = "run-in-shell"
+        );
         // Note that tokio's `output()` always configures stdout/stderr as pipes.
         // Use `spawn` + `wait_with_output` instead.
         let proc = shell_cmd
@@ -549,9 +550,11 @@ impl Devenv {
         };
 
         let span = info_span!(
+            target: "devenv.ui",
             "update",
-            tui.op = true,
-            devenv.user_message = msg,
+            devenv.ui.message = msg,
+            devenv.ui.type = "user",
+            devenv.ui.id = "update",
             input = ?input_name
         );
         self.nix.update(input_name).instrument(span).await?;
@@ -560,9 +563,14 @@ impl Devenv {
     }
 
     #[instrument(
+        target = "devenv.ui",
         name = "building_container",
         skip(self),
-        fields(devenv.user_message = format!("Building {name} container"))
+        fields(
+            devenv.ui.message = format!("Building {name} container"),
+            devenv.ui.type = "user",
+            devenv.ui.id = format!("build-container-{name}")
+        )
     )]
     pub async fn container_build(&self, name: &str) -> Result<String> {
         if cfg!(target_os = "macos") {
@@ -652,7 +660,13 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        info!(devenv.is_user_message = true, "Running container {name}",);
+        info!(
+            target = "devenv.ui",
+            devenv.ui.message = format!("Running container {name}"),
+            devenv.ui.type = "user",
+            devenv.ui.id = format!("run-container-{name}"),
+            "Running container {name}"
+        );
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
@@ -684,11 +698,14 @@ impl Devenv {
         let (to_gc, removed_symlinks) = {
             // TODO: No newline
             let span = info_span!(
+                target: "devenv.ui",
                 "cleanup_symlinks",
-                devenv.user_message = format!(
+                devenv.ui.message = format!(
                     "Removing non-existing symlinks in {}",
                     &self.devenv_home_gc.display()
-                )
+                ),
+                devenv.ui.type = "user",
+                devenv.ui.id = "cleanup-symlinks"
             );
             span.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
         };
@@ -702,9 +719,11 @@ impl Devenv {
 
         {
             let span = info_span!(
+                target: "devenv.ui",
                 "nix_gc",
-                devenv.user_message =
-                    "Running garbage collection (this process will take some time)"
+                devenv.ui.message = "Running garbage collection (this process will take some time)",
+                devenv.ui.type = "user",
+                devenv.ui.id = "nix-gc"
             );
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
@@ -725,9 +744,12 @@ impl Devenv {
     }
 
     #[instrument(
+        target = "devenv.ui",
         skip(self),
         fields(
-            devenv.user_message = "Searching options and packages",
+            devenv.ui.message = "Searching options and packages",
+            devenv.ui.type = "user",
+            devenv.ui.id = "search"
         )
     )]
     pub async fn search(&self, name: &str) -> Result<()> {
@@ -828,7 +850,13 @@ impl Devenv {
 
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
-            let span = info_span!("load_tasks", devenv.user_message = "Evaluating tasks");
+            let span = info_span!(
+                target: "devenv.ui",
+                "load_tasks",
+                devenv.ui.message = "Evaluating tasks",
+                devenv.ui.type = "user",
+                devenv.ui.id = "load-tasks"
+            );
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
                 .build(&["devenv.task.config"], None, Some(&gc_root))
@@ -845,7 +873,7 @@ impl Devenv {
     }
 
     pub async fn tasks_run(
-        &self,
+        self,
         roots: Vec<String>,
         run_mode: devenv_tasks::RunMode,
     ) -> Result<()> {
@@ -885,11 +913,8 @@ impl Devenv {
         );
 
         // Create Tasks instance using devenv-tasks execution engine
-        let mut task_builder = Tasks::builder(config, verbosity);
-
-        // Add shutdown guard
-        let guard_weak = self.shutdown.clone().downgrade();
-        task_builder = task_builder.with_shutdown_guard(guard_weak);
+        // Note: This consumes the subsys handle, which is fine since tasks_run is the final operation
+        let task_builder = Tasks::builder(config, verbosity, self.shutdown.clone());
 
         let tasks = task_builder
             .build()
@@ -1018,9 +1043,11 @@ impl Devenv {
         // collect tests
         let test_script = {
             let span = info_span!(
+                target: "devenv.ui",
                 "test_build",
-                tui.op = true,
-                devenv.user_message = "Building tests"
+                devenv.ui.message = "Building tests",
+                devenv.ui.type = "user",
+                devenv.ui.id = "test-build"
             );
             let gc_root = self.devenv_dot_gc.join("test");
             self.nix
@@ -1044,9 +1071,11 @@ impl Devenv {
         }
 
         let span = info_span!(
+            target: "devenv.ui",
             "test_run",
-            tui.op = true,
-            devenv.user_message = "Running tests"
+            devenv.ui.message = "Running tests",
+            devenv.ui.type = "user",
+            devenv.ui.id = "test-run"
         );
         let result = async {
             debug!("Running command: {test_script}");
@@ -1089,9 +1118,11 @@ impl Devenv {
 
     pub async fn build(&self, attributes: &[String]) -> Result<()> {
         let span = info_span!(
+            target: "devenv.ui",
             "build",
-            tui.op = true,
-            devenv.user_message = "Building",
+            devenv.ui.message = "Building",
+            devenv.ui.type = "user",
+            devenv.ui.id = "build",
             attributes = ?attributes
         );
         async move {
@@ -1154,8 +1185,11 @@ impl Devenv {
         }
 
         let span = info_span!(
+            target: "devenv.ui",
             "build_processes",
-            devenv.user_message = "Building processes"
+            devenv.ui.message = "Building processes",
+            devenv.ui.type = "user",
+            devenv.ui.id = "build-processes"
         );
         let proc_script_string = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
@@ -1169,7 +1203,13 @@ impl Devenv {
         .instrument(span)
         .await?;
 
-        let span = info_span!("up", devenv.user_message = "Starting processes");
+        let span = info_span!(
+            target: "devenv.ui",
+            "up",
+            devenv.ui.message = "Starting processes",
+            devenv.ui.type = "user",
+            devenv.ui.id = "up"
+        );
         async {
             let processes = processes.join(" ");
 
@@ -1500,8 +1540,16 @@ impl Devenv {
         Ok(())
     }
 
-    #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
+        let _span = tracing::info_span!(
+            target: "devenv.ui",
+            "get_dev_environment",
+            devenv.ui.message = "Building shell",
+            devenv.ui.type = "user",
+            devenv.ui.id = "get-dev-environment"
+        )
+        .entered();
+
         self.assemble(false).await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");
