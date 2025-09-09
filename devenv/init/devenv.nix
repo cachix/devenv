@@ -11,7 +11,7 @@
   # languages.rust.enable = true;
 
   # https://devenv.sh/processes/
-  # processes.cargo-watch.exec = "cargo-watch";
+  # processes.dev.exec = "${lib.getExe pkgs.watchexec} -n -- ls -la";
 
   # https://devenv.sh/services/
   # services.postgres.enable = true;
@@ -21,9 +21,10 @@
     echo hello from $GREET
   '';
 
+  # https://devenv.sh/basics/
   enterShell = ''
-    hello
-    git --version
+    hello         # Run scripts directly
+    git --version # Use packages
   '';
 
   # https://devenv.sh/tasks/
