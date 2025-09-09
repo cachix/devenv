@@ -13,8 +13,22 @@ let
       pkg.override { inherit buildGoModule; }
     else if builtins.hasAttr "buildGoLatestModule" overrideArgs then
       pkg.override { buildGoLatestModule = buildGoModule; }
+    else if builtins.hasAttr "buildGo125Module" overrideArgs then
+      pkg.override { buildGo125Module = buildGoModule; }
+    else if builtins.hasAttr "buildGo124Module" overrideArgs then
+      pkg.override { buildGo124Module = buildGoModule; }
+    else if builtins.hasAttr "buildGo123Module" overrideArgs then
+      pkg.override { buildGo123Module = buildGoModule; }
+    else if builtins.hasAttr "buildGo122Module" overrideArgs then
+      pkg.override { buildGo122Module = buildGoModule; }
     else
-      throw "Package ${pkg.pname or "unknown"} does not accept buildGoModule or buildGoLatestModule arguments";
+      throw ''
+        Package ${pkg.pname or "unknown"} requires a pinned version of `buildGoModule`.
+
+        The devenv go module needs to be updated to support overriding the Go version for this package.
+
+        Package arguments: ${toString (lib.attrNames overrideArgs)}
+      '';
 in
 {
   options.languages.go = {
