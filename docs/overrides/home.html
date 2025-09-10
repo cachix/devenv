@@ -25,21 +25,21 @@
 <div class="relative isolate overflow-hidden pt-14">
     <div class="mx-auto max-w-3xl py-8 px-4">
         <div class="text-center">
-            <h1 class="text-3xl font-bold tracking-tight text-black sm:text-4xl">
+            <h1 class="text-3xl font-bold tracking-tight text-black dark:text-white sm:text-4xl">
                 Fast, Declarative, Reproducible and Composable Developer
                 Environments using Nix
             </h1>
-            <p class="mt-6 text-lg leading-8 text-gray-800">
-                <a href="/basics" class="text-[#425C82] font-medium">Develop natively</a> •
-                <a href="/containers" class="text-[#425C82] font-medium">Deploy containers</a> •
-                <a href="/packages" class="text-[#425C82] font-medium">100,000+ packages</a> •
-                <a href="/scripts" class="text-[#425C82] font-medium">Write scripts</a> and
-                <a href="/tasks" class="text-[#425C82] font-medium">tasks</a> •
-                <a href="/languages" class="text-[#425C82] font-medium">50+ languages</a> •
-                <a href="/processes" class="text-[#425C82] font-medium">Define processes</a> •
-                <a href="/services" class="text-[#425C82] font-medium">Reuse services</a> •
-                <a href="/tests" class="text-[#425C82] font-medium">Run tests</a> •
-                <a href="/git-hooks" class="text-[#425C82] font-medium">Enforce git hooks</a>
+            <p class="mt-6 text-lg leading-8 text-gray-800 dark:text-gray-200">
+                <a href="/basics" class="link font-medium">Develop natively</a> •
+                <a href="/containers" class="link font-medium">Deploy containers</a> •
+                <a href="/packages" class="link font-medium">100,000+ packages</a> •
+                <a href="/scripts" class="link font-medium">Write scripts</a> and
+                <a href="/tasks" class="link font-medium">tasks</a> •
+                <a href="/languages" class="link font-medium">50+ languages</a> •
+                <a href="/processes" class="link font-medium">Define processes</a> •
+                <a href="/services" class="link font-medium">Reuse services</a> •
+                <a href="/tests" class="link font-medium">Run tests</a> •
+                <a href="/git-hooks" class="link font-medium">Enforce git hooks</a>
             </p>
             <form class="flex max-sm:flex-col gap-4 mt-10" id="generate" onsubmit="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value); return false;">
                 <input
@@ -101,36 +101,41 @@
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
-            <div class="px-4">
+            <div class="px-4 text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Simple JSON-like language
                     </h2>
-                    <p class="mt-6 text-lg leading-8 text-gray-600">
+
+                    <p class="mt-6 text-lg leading-8">
                         Declaratively define your development environment by
-                        <a href="/basics/" class="text-[#425C82] font-semibold">toggling basic options</a>.
+                        <a href="/basics/" class="link font-semibold">toggling basic options</a>.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Environment variables
                             </dt>
+
                             <dd class="inline">
-                                Use <code class="bg-gray-100 p-1">env</code> attribute set to define environment variables.
+                                Use <code class="inline-code">env</code> attribute set to define environment variables.
+
                                 <p class="mt-2">
-                                    Include secrets from <code class="bg-gray-100 p-1">.env</code> file with 
-                                    <code class="bg-gray-100 p-1">dotenv.enable = true;</code>.
+                                    Include secrets from <code class="inline-code">.env</code> file with 
+                                    <code class="inline-code">dotenv.enable = true;</code>.
                                 </p>
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Packages
                             </dt>
+
                             <dd class="inline">
                                 Pick from <strong>100,000+</strong> prebuilt packages for
                                 <strong>Linux/macOS</strong> and
@@ -138,30 +143,35 @@
                                 <strong>WSL2</strong>.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Shell initialization
                             </dt>
+
                             <dd class="inline">
                                 Run scripts when entering the environment with
-                                <code class="bg-gray-100 p-1">enterShell</code>.
+                                <code class="inline-code">enterShell</code>.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Automatic activation
                             </dt>
+
                             <dd class="inline">
-                                Using <code class="bg-gray-100 p-1">direnv</code> will
-                                <a class="text-[#425C82] font-semibold" href="/automatic-shell-activation">
+                                Using <code class="inline-code">direnv</code> will
+                                <a class="link font-semibold" href="/automatic-shell-activation">
                                 automatically load the environment</a> when you enter the project directory.
                             </dd>
                         </div>
                     </dl>
                 </div>
             </div>
+
             <div class="px-4 lg:px-0">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -171,6 +181,7 @@
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
   env.GREET = "determinism";
 
@@ -200,11 +211,11 @@ ncdu 2.3
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
             <div class="px-4 lg:px-0 order-last lg:order-first">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -214,6 +225,7 @@ ncdu 2.3
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   scripts.build = {
     exec = "yarn build";
@@ -255,49 +267,55 @@ $
                 </div>
             </div>
 
-            <div class="px-4 order-first lg:order-last">
+            <div class="px-4 order-first lg:order-last text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Scripts and Tasks
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
+
+                    <p class="mt-6 text-xl font-medium leading-8">
                         Define
-                        <a href="/scripts/" class="text-[#425C82] font-semibold">scripts</a>,
-                        <a href="/tasks/" class="text-[#425C82] font-semibold">tasks</a>, and
-                        <a href="/git-hooks/" class="text-[#425C82] font-semibold">git hooks</a>
+                        <a href="/scripts/" class="link font-semibold">scripts</a>,
+                        <a href="/tasks/" class="link font-semibold">tasks</a>, and
+                        <a href="/git-hooks/" class="link font-semibold">git hooks</a>
                         to automate your development workflow.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Scripts
                             </dt>
+
                             <dd class="inline">
                                 Define scripts that can be invoked inside the
                                 environment, with optional runtime packages that
                                 are only available when the script runs.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Tasks
                             </dt>
+
                             <dd class="inline">
                                 Form dependencies between automation code,
                                 executed in parallel and written in your
                                 favorite language.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Git hooks
                             </dt>
+
                             <dd class="inline">
                                 Pick from builtin and language-specific linters
                                 and formatters using
                                 <a href="https://github.com/cachix/git-hooks.nix?tab=readme-ov-file#hooks" 
-                                   class="text-[#425C82] font-semibold">git-hooks.nix</a>.
+                                   class="link font-semibold">git-hooks.nix</a>.
                             </dd>
                         </div>
                     </dl>
@@ -307,26 +325,27 @@ $
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-8 lg:items-start">
-            <div class="px-4">
+            <div class="px-4 text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg text-center">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Search packages and options
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
+
+                    <p class="mt-6 text-xl font-medium leading-8">
                         Explore
-                        <a href="/packages/" class="text-[#425C82] font-semibold">packages</a>
+                        <a href="/packages/" class="link font-semibold">packages</a>
                         and
-                        <a href="/reference/options/" class="text-[#425C82] font-semibold">options</a>
+                        <a href="/reference/options/" class="link font-semibold">options</a>
                         to customize your environment.
                     </p>
                 </div>
             </div>
 
             <div class="px-4 lg:px-0">
-                <div class="mt-4 relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="mt-4 relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="bg-gray-900">
                         <pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv search devenv
 +--------------+---------------+------------------------------------------------------------------------+
@@ -352,46 +371,52 @@ $
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
-            <div class="px-4">
+            <div class="px-4 text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Languages
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
+
+                    <p class="mt-6 text-xl font-medium leading-8">
                         Supports over 50
-                        <a href="/languages/" class="text-[#425C82] font-semibold">programming languages</a>.
+                        <a href="/languages/" class="link font-semibold">programming languages</a>.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Packed with tooling
                             </dt>
+
                             <dd class="inline">
                                 Comes with commonly used tooling for each
                                 language including LSP servers, formatters,
                                 linters, and compilers.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Version support
                             </dt>
+
                             <dd class="inline">
                                 Languages like Python, Terraform, Rust, PHP, and
                                 Ruby all have version support.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Examples
                             </dt>
+
                             <dd class="inline">
                                 Check out the
-                                <a class="text-[#425C82] font-semibold"
+                                <a class="link font-semibold"
                                    href="https://github.com/cachix/devenv/tree/main/examples">examples collection</a>
                                 to get started.
                             </dd>
@@ -399,8 +424,9 @@ $
                     </dl>
                 </div>
             </div>
+
             <div class="px-4 lg:px-0">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden rounded-b-xl bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -410,6 +436,7 @@ $
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
   languages.python = {
     enable = true;
@@ -452,11 +479,11 @@ $
 </div>
 
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
             <div class="px-4 lg:px-0 order-last lg:order-first">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -466,6 +493,7 @@ $
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   packages = [
     pkgs.cargo-watch
@@ -490,39 +518,44 @@ $
                 </div>
             </div>
 
-            <div class="px-4 order-first lg:order-last">
+            <div class="px-4 order-first lg:order-last text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Run processes
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
+
+                    <p class="mt-6 text-xl font-medium leading-8">
                         Define your
-                        <a class="text-[#425C82] font-semibold" href="/processes/">processes declaratively</a>
+                        <a class="link font-semibold" href="/processes/">processes declaratively</a>
                         and start them with
-                        <code class="bg-gray-100 p-1">devenv up</code>.
+                        <code class="inline-code">devenv up</code>.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Declarative processes
                             </dt>
+
                             <dd class="inline">
-                                Inspired by <code class="bg-gray-100 p-1">Procfile</code>,
+                                Inspired by <code class="inline-code">Procfile</code>,
                                 define development processes that have access
                                 to your environment.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Process management
                             </dt>
+
                             <dd class="inline">
                                 By default
-                                <a class="text-[#425C82] font-semibold" 
+                                <a class="link font-semibold" 
                                    href="https://github.com/F1bonacc1/process-compose">process-compose</a>
                                 is used to manage processes, giving you a simple
                                 interface to inspect logs and restart processes (Ctrl+R).
+
                                 <img class="mt-4 rounded-md shadow-sm" 
                                      src="/assets/images/process-compose.png" 
                                      alt="Process compose interface" />
@@ -535,45 +568,51 @@ $
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
-            <div class="px-4">
+            <div class="px-4 text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Run services
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
-                        <a class="text-[#425C82] font-semibold" href="/services">Choose from many community-maintained services</a>
+
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        <a class="link font-semibold" href="/services">Choose from many community-maintained services</a>
                         like <strong>PostgreSQL, Redis, MySQL, RabbitMQ, WireMock,
                         MinIO, Caddy, ElasticSearch, OpenTelemetry
                         Collector, Prometheus</strong>, and
-                        <a class="text-[#425C82] font-semibold" href="/services/#supported-services">more added regularly</a>.
+                        <a class="link font-semibold" href="/services/#supported-services">more added regularly</a>.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Pre-configured processes
                             </dt>
+
                             <dd class="inline">
                                 Services define processes that start automatically when
-                                enabled via <code class="bg-gray-100 p-1">devenv up</code>.
+                                enabled via <code class="inline-code">devenv up</code>.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Simple configuration
                             </dt>
+
                             <dd class="inline">
                                 Each service provides various configuration options
                                 and hooks to pass additional custom configuration.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Extensible
                             </dt>
+
                             <dd class="inline">
                                 Define your own development processes as services,
                                 enabling simple reuse with minimal configuration.
@@ -582,8 +621,9 @@ $
                     </dl>
                 </div>
             </div>
+
             <div class="px-4 lg:px-0">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -593,6 +633,7 @@ $
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   services.postgres = {
     enable = true;
@@ -622,11 +663,11 @@ $
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
             <div class="px-4 lg:px-0 order-last lg:order-first">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -636,6 +677,7 @@ $
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   packages = [
     pkgs.mkdocs
@@ -664,21 +706,22 @@ $
                 </div>
             </div>
 
-            <div class="px-4 order-first lg:order-last">
+            <div class="px-4 order-first lg:order-last text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Run tests
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
-                        Running <a class="text-[#425C82] font-semibold" href="/tests">scripts in your environment with all processes active</a>
-                        is as simple as <code class="bg-gray-100 p-1">devenv test</code>.
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        Running <a class="link font-semibold" href="/tests">scripts in your environment with all processes active</a>
+                        is as simple as <code class="inline-code">devenv test</code>.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Integrated testing
                             </dt>
+
                             <dd class="inline">
                                 Execute your preferred language test runner or a
                                 simple script to verify your environment.
@@ -695,60 +738,67 @@ $
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
-            <div class="px-4">
+            <div class="px-4 text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Container interoperability
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
-                        <a href="/containers/" class="text-[#425C82] font-semibold">Generate containers</a>
+
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        <a href="/containers/" class="link font-semibold">Generate containers</a>
                         from your development environment and build/copy/run them.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Containerized environments
                             </dt>
+
                             <dd class="inline">
-                                The <code class="bg-gray-100 p-1">shell</code> container 
+                                The <code class="inline-code">shell</code> container 
                                 lets you run your environment in a container.
                                 <p class="mt-2">
-                                    Use <code class="bg-gray-100 p-1">devenv container run shell</code>
+                                    Use <code class="inline-code">devenv container run shell</code>
                                     to enter your environment in a container.
                                 </p>
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Containerized processes
                             </dt>
+
                             <dd class="inline">
-                                The <code class="bg-gray-100 p-1">processes</code> container 
+                                The <code class="inline-code">processes</code> container 
                                 lets you run your processes in a container.
                                 <p class="mt-2">
-                                    Use <code class="bg-gray-100 p-1">devenv container run processes</code>
+                                    Use <code class="inline-code">devenv container run processes</code>
                                     to run your processes in a container.
                                 </p>
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Custom containers
                             </dt>
+
                             <dd class="inline">
-                                Define <code class="bg-gray-100 p-1">containers.mycontainer.*</code> to
-                                <a href="/containers/#running-artifacts" class="text-[#425C82] font-semibold">customize your container</a>.
+                                Define <code class="inline-code">containers.mycontainer.*</code> to
+                                <a href="/containers/#running-artifacts" class="link font-semibold">customize your container</a>.
                             </dd>
                         </div>
                     </dl>
                 </div>
             </div>
+
             <div class="px-4 lg:px-0">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -758,6 +808,7 @@ $
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ pkgs, ... }: {
   packages = [
     pkgs.mkdocs
@@ -788,11 +839,11 @@ $
     </div>
 </div>
 
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
             <div class="px-4 lg:px-0 order-last lg:order-first">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -802,6 +853,7 @@ $
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-yaml">inputs:
   myorg-devenv:
     url: github:myorg/myorg-devenv
@@ -816,30 +868,34 @@ imports:
                 </div>
             </div>
 
-            <div class="px-4 order-first lg:order-last">
+            <div class="px-4 order-first lg:order-last text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Poly/Mono repo composability
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
-                        <a class="text-[#425C82] font-semibold" href="/composing-using-imports/">Compose multiple environments</a>
+
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        <a class="link font-semibold" href="/composing-using-imports/">Compose multiple environments</a>
                         into a single environment.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Local imports
                             </dt>
+
                             <dd class="inline">
                                 For monorepos, define environments per folder and import them 
                                 to merge into a single unified environment.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Remote imports
                             </dt>
+
                             <dd class="inline">
                                 For polyrepos, define environments per repository and import them
                                 to merge into a single unified environment.
@@ -862,57 +918,64 @@ imports:
         class="rounded-md bg-[#425C82] px-6 py-3 text-lg font-semibold text-white shadow-md hover:bg-[#344968] transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
         >Get Started</a>
 </div>
-<div class="overflow-hidden bg-white py-14">
+<div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
-            <div class="px-4">
+            <div class="px-4 text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
-                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
                         Packaging using Nix
                     </h2>
-                    <p class="mt-6 text-xl font-medium leading-8 text-gray-600">
+                    <p class="mt-6 text-xl font-medium leading-8">
                         Use the same interface for all languages for packaging applications.
-                        <a class="text-[#425C82] font-semibold" href="/outputs/">Define outputs</a>
+                        <a class="link font-semibold" href="/outputs/">Define outputs</a>
                         to build your applications.
                     </p>
 
-                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 text-gray-600 lg:max-w-none">
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Best tools chosen for you
                             </dt>
+
                             <dd class="inline">
                                 devenv evaluates and chooses the best packaging tools
                                 (crate2nix for Rust, uv2nix for Python) so you don't have to.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Language integration
                             </dt>
+
                             <dd class="inline">
-                                Each language provides an <code class="bg-gray-100 p-1">import</code>
+                                Each language provides an <code class="inline-code">import</code>
                                 function to package your application using the best tools
                                 for that ecosystem.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Build outputs
                             </dt>
+
                             <dd class="inline">
-                                Use <code class="bg-gray-100 p-1">devenv build</code> 
+                                Use <code class="inline-code">devenv build</code> 
                                 to build your application outputs for distribution.
                             </dd>
                         </div>
+
                         <div class="relative lg:pl-3">
-                            <dt class="block font-semibold text-gray-900">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
                                 Distribution ready
                             </dt>
+
                             <dd class="inline">
                                 Outputs are packaged as Nix derivations, making them
                                 ready for distribution and deployment. Read more about
-                                <a class="text-[#425C82] font-semibold"
+                                <a class="link font-semibold"
                                    href="/blog/posts/closing-the-nix-gap-from-tools-to-packaged-applications/">closing the Nix gap</a>
                                 from tools to packaged applications.
                             </dd>
@@ -920,8 +983,9 @@ imports:
                     </dl>
                 </div>
             </div>
+
             <div class="px-4 lg:px-0">
-                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
                     <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
                         <div class="overflow-hidden rounded-b-xl bg-gray-900">
                             <div class="flex bg-gray-800/40">
@@ -931,6 +995,7 @@ imports:
                                     </div>
                                 </div>
                             </div>
+
                             <pre class="text-white text-sm"><code class="language-nix">{ config, ... }: {
   # https://devenv.sh/languages
   languages = {
