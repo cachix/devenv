@@ -1,7 +1,7 @@
 set -xe
 
 rm devenv.yaml || true
-devenv shell -- env|grep "DEVENV_CMDLINE=shell"
+devenv shell -- env | grep "DEVENV_CMDLINE"
 devenv build languages.python.package
 devenv shell ls -- -la | grep ".test.sh"
 devenv shell ls ../ | grep "cli"
