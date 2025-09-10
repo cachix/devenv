@@ -5,29 +5,23 @@ let
 
   # Override the buildGoModule function to use the specified Go package.
   buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
+  # A helper function to rebuild a package with the specific Go version.
+  # It expects the package to have a `buildGo*Module` argument in its override function.
+  # This will override multiple buildGo*Module arguments if they exist.
   buildWithSpecificGo = pkg:
     let
       overrideArgs = lib.functionArgs pkg.override;
+      goModuleArgs = lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null) overrideArgs;
+      goModuleOverrides = lib.mapAttrs (_: _: buildGoModule) goModuleArgs;
     in
-    if builtins.hasAttr "buildGoModule" overrideArgs then
-      pkg.override { inherit buildGoModule; }
-    else if builtins.hasAttr "buildGoLatestModule" overrideArgs then
-      pkg.override { buildGoLatestModule = buildGoModule; }
-    else if builtins.hasAttr "buildGo125Module" overrideArgs then
-      pkg.override { buildGo125Module = buildGoModule; }
-    else if builtins.hasAttr "buildGo124Module" overrideArgs then
-      pkg.override { buildGo124Module = buildGoModule; }
-    else if builtins.hasAttr "buildGo123Module" overrideArgs then
-      pkg.override { buildGo123Module = buildGoModule; }
-    else if builtins.hasAttr "buildGo122Module" overrideArgs then
-      pkg.override { buildGo122Module = buildGoModule; }
+    if goModuleOverrides != {} then
+      pkg.override goModuleOverrides
     else
       throw ''
-        Package ${pkg.pname or "unknown"} requires a pinned version of `buildGoModule`.
+        `languages.go` failed to override the Go version for ${pkg.pname or "unknown"}.
+        Expected to find a `buildGo*Module` argument in its override function.
 
-        The devenv go module needs to be updated to support overriding the Go version for this package.
-
-        Package arguments: ${toString (lib.attrNames overrideArgs)}
+        Found: ${toString (lib.attrNames overrideArgs)}
       '';
 in
 {
