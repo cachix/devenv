@@ -14,6 +14,8 @@ To enable automatic shell activation, create an `.envrc` file in your project di
 === "v1.4+"
 
     ``` bash title=".envrc"
+    #!/usr/bin/env bash
+
     eval "$(devenv direnvrc)"
 
     # You can pass flags to the devenv command
@@ -24,6 +26,8 @@ To enable automatic shell activation, create an `.envrc` file in your project di
 === "v1.3 and older"
 
     ``` bash title=".envrc"
+    #!/usr/bin/env bash
+
     source_url "https://raw.githubusercontent.com/cachix/devenv/82c0147677e510b247d8b9165c54f73d32dfd899/direnvrc" "sha256-7u4iDd1nZpxL4tCzmPG0dQgC5V+/44Ba+tHkPob1v2k="
 
     use devenv
@@ -103,6 +107,7 @@ To use it in your `.envrc`, first compute its sha256 hash:
 ```shell-session
 direnv fetchurl "https://raw.githubusercontent.com/cachix/devenv/VERSION/direnvrc"
 ```
+
 ```shell-session
 Found hash: <HASH>
 ```
