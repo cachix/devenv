@@ -162,6 +162,16 @@ let
         UV_SYNC_COMMAND+=(--all-groups)
       ''}
 
+      # Add packages if specified
+      ${lib.concatMapStrings (package: ''
+        UV_SYNC_COMMAND+=(--package "${package}")
+      '') cfg.uv.sync.packages}
+
+      # Add all-packages flag if enabled
+      ${lib.optionalString cfg.uv.sync.allPackages ''
+        UV_SYNC_COMMAND+=(--all-packages)
+      ''}
+
       # Avoid running "uv sync" for every shell.
       # Only run it when the "pyproject.toml" file or Python interpreter has changed.
       local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
@@ -349,7 +359,6 @@ in
           type = lib.types.listOf lib.types.str;
           default = [ ];
           description = "Command line arguments pass to `uv sync` during devenv initialisation.";
-          internal = true;
         };
         extras = lib.mkOption {
           type = lib.types.listOf lib.types.str;
@@ -370,6 +379,16 @@ in
           type = lib.types.bool;
           default = false;
           description = "Whether to install all groups. See `--all-groups`.";
+        };
+        packages = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          default = [ ];
+          description = "Sync for specific packages in the workspace. See `--package`.";
+        };
+        allPackages = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+          description = "Sync all packages in the workspace. See `--all-packages`.";
         };
       };
     };
