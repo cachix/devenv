@@ -1,5 +1,6 @@
 nav:
   - Home: index.md
+  - Cloud: cloud.md
   - Guide:
     - Getting started: getting-started.md
     - Files and variables: files-and-variables.md
