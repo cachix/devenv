@@ -17756,6 +17756,165 @@ attribute set
 
 
 
+## profiles
+
+
+
+Profile definitions that can be activated manually or automatically.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  # Manual profiles (activated via --profile)
+  "python-3.14" = {
+    config = {
+      languages.python.version = "3.14";
+    };
+  };
+  "backend" = {
+    config = {
+      services.postgres.enable = true;
+      services.redis.enable = true;
+    };
+  };
+  # Automatic hostname-based profiles
+  hostname."work-laptop" = {
+    config = {
+      services.postgres.enable = true;
+      env.WORK_ENV = "true";
+    };
+  };
+  # Automatic user-based profiles  
+  user."alice" = {
+    config = {
+      languages.python.enable = true;
+      env.USER_ROLE = "developer";
+    };
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## profiles.\<name>.config
+
+
+
+Configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+
+
+## profiles.hostname
+
+
+
+Profile definitions that are automatically activated based on hostname.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## profiles.hostname.\<name>.config
+
+
+
+Configuration to merge when this hostname matches.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## profiles.user
+
+
+
+Profile definitions that are automatically activated based on username.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## profiles.user.\<name>.config
+
+
+
+Configuration to merge when this username matches.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## scripts
 
 
