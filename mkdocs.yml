@@ -23,8 +23,28 @@ theme:
     repo: fontawesome/brands/github
   custom_dir: docs/overrides
   palette:
-    primary: white
-    accent: "#FBFBFB"
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      accent: "#FBFBFB"
+      primary: white
+      scheme: default 
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      primary: custom
+      scheme: slate # i.e. dark
+      toggle:
+        icon: material/weather-night
+        name: Switch to system preference
   features:
     - content.action.edit
     - content.code.annotate

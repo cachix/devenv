@@ -12,56 +12,62 @@
 {% endblock %}
 {% block footer %}
 <footer class="md-footer tailwind">
-    <div class="bg-white py-10 px-4 border-t border-gray-200">
+    <div class="bg-white dark:bg-dark-primary-fg py-10 px-4 border-t border-gray-200 dark:border-devenv-blue">
         <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                         devenv
                     </h3>
-                    <p class="text-gray-600">
+
+                    <p class="text-gray-600 dark:text-gray-400">
                         Fast, Declarative, Reproducible, and Composable
                         Developer Environments using Nix
                     </p>
                 </div>
 
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                         Documentation
                     </h3>
+
                     <ul class="space-y-2">
                         <li>
                             <a
                                 href="/getting-started/"
-                                class="text-[#425C82] hover:text-[#344968]"
+                                class="link"
                                 >Getting Started</a
                             >
                         </li>
+
                         <li>
                             <a
                                 href="/examples/"
-                                class="text-[#425C82] hover:text-[#344968]"
+                                class="link"
                                 >Examples</a
                             >
                         </li>
+
                         <li>
                             <a
                                 href="/languages/"
-                                class="text-[#425C82] hover:text-[#344968]"
+                                class="link"
                                 >Languages</a
                             >
                         </li>
+
                         <li>
                             <a
                                 href="/services/"
-                                class="text-[#425C82] hover:text-[#344968]"
+                                class="link"
                                 >Services</a
                             >
                         </li>
+
                         <li>
                             <a
                                 href="/reference/options/"
-                                class="text-[#425C82] hover:text-[#344968]"
+                                class="link"
                                 >Options Reference</a
                             >
                         </li>
@@ -69,9 +75,10 @@
                 </div>
 
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                         Subscribe to updates
                     </h3>
+
                     <form
                         action="https://eu.customerioforms.com/forms/submit_action?site_id=2c25e3eca6d203c63933&form_id=01gvdph2kbbq2nr4mh5t7sdb19&success_url=https://devenv.sh"
                         method="POST"
@@ -85,6 +92,7 @@
                                 placeholder="name@example.com"
                                 class="w-full px-4 py-2 rounded-l-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#425C82] focus:border-transparent"
                             />
+
                             <button
                                 type="submit"
                                 class="px-4 bg-[#425C82] text-white font-medium rounded-r-lg hover:bg-[#344968] transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#425C82] focus:ring-offset-2"
@@ -96,13 +104,13 @@
                 </div>
             </div>
 
-            <div class="mt-8 pt-8 border-t border-gray-200 text-center">
+            <div class="mt-8 pt-8 border-t border-gray-200 dark:border-devenv-blue text-center">
                 <div class="flex justify-center space-x-6 mb-4">
                     <a
                         href="https://github.com/cachix/devenv"
                         target="_blank"
                         rel="noopener"
-                        class="text-gray-500 hover:text-[#425C82]"
+                        class="text-gray-500 hover:link"
                         aria-label="GitHub"
                     >
                         <svg
@@ -118,11 +126,12 @@
                             ></path>
                         </svg>
                     </a>
+
                     <a
                         href="https://x.com/devenv_nix"
                         target="_blank"
                         rel="noopener"
-                        class="text-gray-500 hover:text-[#425C82]"
+                        class="text-gray-500 hover:link"
                         aria-label="X"
                     >
                         <svg
@@ -136,11 +145,12 @@
                             ></path>
                         </svg>
                     </a>
+
                     <a
                         href="https://discord.gg/naMgvexb6q"
                         target="_blank"
                         rel="noopener"
-                        class="text-gray-500 hover:text-[#425C82]"
+                        class="text-gray-500 hover:link"
                         aria-label="Discord"
                     >
                         <svg
@@ -155,6 +165,7 @@
                         </svg>
                     </a>
                 </div>
+
                 <p class="text-gray-500">
                     © 2022-2025 Cachix. All rights reserved.
                 </p>

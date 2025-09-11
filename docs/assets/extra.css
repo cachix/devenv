@@ -9,13 +9,64 @@
 .tailwind {
     @tailwind base;
 }
+
 @tailwind components;
 @tailwind utilities;
 
 @layer components {
+    a.link {
+        @apply text-devenv-blue;
+    }
+
+    a.link:hover {
+        color: #344968;
+    }
+
+    /* Extracted from the rendered mkdocs inline code styles */
+    .inline-code {
+        background-color: rgb(245, 245, 245);
+        border-radius: 2px;
+        color: rgb(54, 70, 78);
+        font-family: "Roboto Mono", SFMono-Regular, Consolas, Menlo, monospace;
+        font-feature-settings: "kern";
+        font-size: 13.6px;
+        line-height: 21.7667px;
+        outline-style: none;
+        padding: 0px 4px;
+        word-break: break-word;
+    }
+
     .language-shell::before {
         content: attr(data-shell-prefix);
         @apply me-2 text-blue-300;
+    }
+}
+
+/*
+ * Targets either the explicit dark mode, or the implicit dark mode
+ * i.e. the toggle is set to automatic so the applied theme is "slate" which is the dark theme.
+ */
+:is([data-md-color-media="(prefers-color-scheme: dark)"], [data-md-color-media="(prefers-color-scheme)"][data-md-color-scheme="slate"]) {    --md-typeset-a-color: theme(colors.dark-link);
+    --md-accent-fg-color: theme(colors.dark-accent-fg);
+    --md-default-bg-color: theme(colors.dark-default-bg);
+    --md-default-fg-color--light: theme(colors.dark-default-fg--light);
+    --md-primary-fg-color: theme(colors.dark-primary-fg);
+
+    a.link {
+        @apply text-dark-link;
+    }
+
+    a.link:hover {
+        color: theme(colors.dark-accent-fg);
+    }
+
+    .inline-code {
+        background-color: rgb(39, 42, 53);
+        color: rgba(213, 216, 226, 0.82);
+    }
+
+    .md-logo img {
+        content:url("/assets/logo-dark.webp");
     }
 }
 
@@ -28,4 +79,3 @@
 .md-main__inner {
     padding-bottom: 1rem;
 }
-
