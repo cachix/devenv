@@ -252,6 +252,80 @@ in
         internal = true;
       };
     };
+
+    profiles = lib.mkOption {
+      type = types.submodule {
+        freeformType = types.attrsOf (types.submodule {
+          options = {
+            config = lib.mkOption {
+              type = types.deferredModule;
+              description = "Configuration to merge when this profile is active.";
+              default = { };
+            };
+          };
+        });
+        options = {
+          hostname = lib.mkOption {
+            type = types.attrsOf (types.submodule {
+              options = {
+                config = lib.mkOption {
+                  type = types.deferredModule;
+                  description = "Configuration to merge when this hostname matches.";
+                  default = { };
+                };
+              };
+            });
+            description = "Profile definitions that are automatically activated based on hostname.";
+            default = { };
+          };
+          user = lib.mkOption {
+            type = types.attrsOf (types.submodule {
+              options = {
+                config = lib.mkOption {
+                  type = types.deferredModule;
+                  description = "Configuration to merge when this username matches.";
+                  default = { };
+                };
+              };
+            });
+            description = "Profile definitions that are automatically activated based on username.";
+            default = { };
+          };
+        };
+      };
+      description = "Profile definitions that can be activated manually or automatically.";
+      default = { };
+      example = lib.literalExpression ''
+        {
+          # Manual profiles (activated via --profile)
+          "python-3.14" = {
+            config = {
+              languages.python.version = "3.14";
+            };
+          };
+          "backend" = {
+            config = {
+              services.postgres.enable = true;
+              services.redis.enable = true;
+            };
+          };
+          # Automatic hostname-based profiles
+          hostname."work-laptop" = {
+            config = {
+              services.postgres.enable = true;
+              env.WORK_ENV = "true";
+            };
+          };
+          # Automatic user-based profiles  
+          user."alice" = {
+            config = {
+              languages.python.enable = true;
+              env.USER_ROLE = "developer";
+            };
+          };
+        }
+      '';
+    };
   };
 
   imports = [

@@ -62,7 +62,8 @@
               else if builtins.pathExists devenvdefaultpath
               then devenvdefaultpath
               else throw (devenvdefaultpath + " file does not exist for input ${name}.");
-          project = pkgs.lib.evalModules {
+          # Phase 1: Base evaluation to extract profile definitions
+          baseProject = pkgs.lib.evalModules {
             specialArgs = inputs // { inherit inputs; };
             modules = [
               ({ config, ... }: {
@@ -101,6 +102,42 @@
               (if builtins.pathExists (devenv_dotfile_path + "/cli-options.nix") then import (devenv_dotfile_path + "/cli-options.nix") else { })
             ];
           };
+
+          # Phase 2: Extract and apply profiles using extendModules
+          project =
+            let
+              # Collect all profiles to activate
+              manualProfiles = active_profiles;
+              currentHostname = hostname;
+              currentUsername = username;
+              hostnameProfile = lib.optional (currentHostname != "" && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })) currentHostname;
+              usernameProfile = lib.optional (currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })) currentUsername;
+
+              allProfiles = {
+                manual = manualProfiles;
+                hostname = hostnameProfile;
+                user = usernameProfile;
+              };
+
+              profileModules =
+                # Manual profiles
+                (map
+                  (name:
+                    let
+                      availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
+                      profile = baseProject.config.profiles.${name} or (throw "Profile '${name}' not found. Available profiles: ${lib.concatStringsSep ", " (availableProfiles ++ ["hostname.*" "user.*"])}");
+                    in
+                    profile.config
+                  )
+                  allProfiles.manual) ++
+                # Hostname profiles  
+                (map (name: baseProject.config.profiles.hostname.${name}.config) allProfiles.hostname) ++
+                # User profiles
+                (map (name: baseProject.config.profiles.user.${name}.config) allProfiles.user);
+            in
+            if profileModules == [ ]
+            then baseProject
+            else baseProject.extendModules { modules = profileModules; };
           config = project.config;
 
           options = pkgs.nixosOptionsDoc {

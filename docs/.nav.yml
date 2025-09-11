@@ -22,6 +22,7 @@ nav:
       - Binary caching: binary-caching.md
       - Git hooks: git-hooks.md
       - Tests: tests.md
+      - Profiles: profiles.md
       - Overlays: overlays.md
       - Outputs: outputs.md
     - Writing devenv.yaml:
