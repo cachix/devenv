@@ -32,13 +32,13 @@
     env.MERGE_TEST = lib.mkDefault "profile-a";
   };
 
-  profiles."profile-b".config = { lib, ... }: {
+  profiles."profile-b".config = { pkgs, lib, ... }: {
     packages = [ pkgs.jq pkgs.tree ];
     env.PROFILE_B = "active";
     env.MERGE_TEST = lib.mkForce "profile-b";
   };
 
-  profiles."profile-c".config = { lib, ... }: {
+  profiles."profile-c".config = { pkgs, lib, ... }: {
     packages = [ pkgs.curl pkgs.jq pkgs.htop ];
     env.PROFILE_C = "active";
     env.MERGE_TEST = lib.mkForce "profile-c";

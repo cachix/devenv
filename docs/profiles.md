@@ -9,7 +9,7 @@ Profiles allow you to organize different variations of your development environm
 Define profiles in your `devenv.nix` file using the `profiles` option:
 
 ```nix
-{
+{ pkgs, config, ... }: {
   profiles = {
     backend.config = {
       services.postgres.enable = true;
@@ -23,7 +23,7 @@ Define profiles in your `devenv.nix` file using the `profiles` option:
       env.ENVIRONMENT = "frontend";
     };
 
-    testing.config = {
+    testing.config = { pkgs, ... }: {
       packages = [ pkgs.playwright pkgs.cypress ];
       env.NODE_ENV = "test";
     };
@@ -68,7 +68,7 @@ Profiles can automatically activate based on your machine's hostname:
 ```nix
 {
   profiles.hostname = {
-    "work-laptop".config = {
+    "work-laptop".config = { pkgs, ... }: {
       env.WORK_ENV = "true";
 
       packages = [ pkgs.docker pkgs.kubectl ];
@@ -135,7 +135,7 @@ All matching profiles are automatically merged when you run devenv commands:
 When you run `devenv --profile backend shell` on a machine named "ci-server" with user "developer", all matching profiles activate:
 
 - Base configuration (always active)
-- `profiles.backend` (manual via `--profile`)  
+- `profiles.backend` (via `--profile`)  
 - `profiles.hostname."ci-server"` (automatic hostname match)
 - `profiles.user."developer"` (automatic user match)
 
