@@ -1,10 +1,12 @@
 # Profiles
 
-!!! info "New in 1.9"
+!!! tip "New in 1.9"
+
+    [Read more about profiles in the v1.9 release post](blog/posts/devenv-v1.9-profiles.md)
 
 Profiles allow you to organize different variations of your development environment. You can activate profiles manually using CLI flags or have them activate automatically based on your system environment.
 
-### Basics 
+### Basics
 
 Define profiles in your `devenv.nix` file using the `profiles` option:
 
@@ -43,7 +45,7 @@ $ devenv --profile backend --profile testing shell
 
 When using multiple profiles, configurations are merged with later profiles taking precedence for conflicting options.
 
-### Resolving conflicts
+### Resolving option conflicts
 
 Profile configurations can be functions that receive module arguments, allowing access to `lib`, `config`, and other module system features:
 
@@ -113,17 +115,17 @@ All matching profiles are automatically merged when you run devenv commands:
 ```nix
 {
   languages.nix.enable = true;
-  
+
   profiles = {
     backend.config = {
       services.postgres.enable = true;
     };
-    
+
     hostname."ci-server".config = {
       env.CI = "true";
       packages = [ pkgs.buildkit ];
     };
-    
+
     user."developer".config = {
       git.enable = true;
       packages = [ pkgs.gh ];
@@ -135,7 +137,6 @@ All matching profiles are automatically merged when you run devenv commands:
 When you run `devenv --profile backend shell` on a machine named "ci-server" with user "developer", all matching profiles activate:
 
 - Base configuration (always active)
-- `profiles.backend` (via `--profile`)  
+- `profiles.backend` (via `--profile`)
 - `profiles.hostname."ci-server"` (automatic hostname match)
 - `profiles.user."developer"` (automatic user match)
-

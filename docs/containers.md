@@ -1,4 +1,6 @@
-!!! info "New in version 0.6."
+!!! tip "New in version 0.6"
+    
+    [Read more about containers in the v0.6 release post](blog/posts/devenv-v0.6-generating-containers-and-instant-shell-activation.md)
 
 !!! note
 
