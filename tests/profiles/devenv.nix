@@ -43,4 +43,68 @@
     env.PROFILE_C = "active";
     env.MERGE_TEST = lib.mkForce "profile-c";
   };
+
+  # Extends functionality tests
+  profiles."base-profile".config = { lib, ... }: {
+    packages = [ pkgs.git pkgs.curl ];
+    env.BASE_PROFILE = "enabled";
+    env.EXTENDS_TEST = lib.mkDefault "base";
+  };
+
+  profiles."child-profile" = {
+    extends = [ "base-profile" ];
+    config = { lib, ... }: {
+      packages = [ pkgs.wget ];
+      env.CHILD_PROFILE = "enabled";
+      env.EXTENDS_TEST = "child"; # Should override base (normal priority beats mkDefault)
+    };
+  };
+
+  profiles."grandchild-profile" = {
+    extends = [ "child-profile" ];
+    config = { lib, ... }: {
+      packages = [ pkgs.tree ];
+      env.GRANDCHILD_PROFILE = "enabled";
+      env.EXTENDS_TEST = lib.mkForce "grandchild"; # Should override child and base
+    };
+  };
+
+  profiles."multiple-extends" = {
+    extends = [ "basic" "backend" ];
+    config = {
+      packages = [ pkgs.htop ];
+      env.MULTIPLE_EXTENDS = "enabled";
+    };
+  };
+
+  # Test hostname profile extends
+  profiles.hostname."test-machine" = {
+    extends = [ "base-profile" ];
+    config = {
+      env.HOSTNAME_PROFILE = "enabled";
+    };
+  };
+
+  # Test user profile extends
+  profiles.user."test-user" = {
+    extends = [ "child-profile" ];
+    config = {
+      env.USER_PROFILE = "enabled";
+    };
+  };
+
+  # Test circular dependency - should cause infinite recursion
+  profiles."cycle-a" = {
+    extends = [ "cycle-b" ];
+    config = {
+      env.CYCLE_A = "enabled";
+    };
+  };
+
+  profiles."cycle-b" = {
+    extends = [ "cycle-a" ];
+    config = {
+      env.CYCLE_B = "enabled";
+    };
+  };
 }

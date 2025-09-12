@@ -119,21 +119,38 @@
                 user = usernameProfile;
               };
 
-              profileModules =
-                # Manual profiles
-                (map
-                  (name:
-                    let
-                      availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
-                      profile = baseProject.config.profiles.${name} or (throw "Profile '${name}' not found. Available profiles: ${lib.concatStringsSep ", " (availableProfiles ++ ["hostname.*" "user.*"])}");
-                    in
-                    profile.config
-                  )
-                  allProfiles.manual) ++
-                # Hostname profiles  
-                (map (name: baseProject.config.profiles.hostname.${name}.config) allProfiles.hostname) ++
-                # User profiles
-                (map (name: baseProject.config.profiles.user.${name}.config) allProfiles.user);
+              # Recursive function to collect all profile modules including extends with cycle detection
+              collectProfileModules = profileName: profileType: visited:
+                let
+                  profileId = "${profileType}:${profileName}";
+                in
+                if builtins.elem profileId visited then
+                  throw "Circular dependency detected in profile extends: ${lib.concatStringsSep " -> " visited} -> ${profileId}"
+                else
+                  let
+                    profile =
+                      if profileType == "manual" then
+                        let
+                          availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
+                        in
+                          baseProject.config.profiles.${profileName} or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " (availableProfiles ++ ["hostname.*" "user.*"])}")
+                      else if profileType == "hostname" then
+                        baseProject.config.profiles.hostname.${profileName}
+                      else # user
+                        baseProject.config.profiles.user.${profileName};
+
+                    extends = profile.extends or [ ];
+                    newVisited = visited ++ [ profileId ];
+                    extendedModules = lib.flatten (map (name: collectProfileModules name "manual" newVisited) extends);
+                  in
+                  extendedModules ++ [ profile.config ];
+
+              # Collect all profile modules
+              manualModules = lib.flatten (map (name: collectProfileModules name "manual" [ ]) allProfiles.manual);
+              hostnameModules = lib.flatten (map (name: collectProfileModules name "hostname" [ ]) allProfiles.hostname);
+              userModules = lib.flatten (map (name: collectProfileModules name "user" [ ]) allProfiles.user);
+
+              profileModules = manualModules ++ hostnameModules ++ userModules;
             in
             if profileModules == [ ]
             then baseProject

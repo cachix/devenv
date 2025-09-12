@@ -7,14 +7,14 @@ draft: false
 
 # devenv 1.9: Scaling Nix projects using modules and profiles
 
-[Profiles](/profiles/) are new way for teams to organize and selectively activate parts of their development environment.
+[Profiles](/profiles/) are a new way for teams to organize and selectively activate parts of their development environment.
 
 While we try [our best to ship sane defaults for languages and services](https://en.wikipedia.org/wiki/Convention_over_configuration), each team has its own preferences. We're [still working on uniform interface for language configuration](https://github.com/cachix/devenv/pull/1974) so you'll be able to customize each bit of the environment.
 
 Typically, these best practices are created using scaffolds, these quickly go out of date and don't have
 the ability to ship updates in a central place.
 
-On top of that, when developing in a repository with different components, it's handy to be able to active only part of
+On top of that, when developing in a repository with different components, it's handy to be able to activate only part of
 the development environment.
 
 ## Extending devenv modules
@@ -67,32 +67,51 @@ Since options default to `false`, you'll need to enable them per project. You ca
 
 ```nix title="devenv.nix"
 { pkgs, config, ... }: {
-  myteam.languages.rust.enable = true;
+  packages = [ pkgs.jq ];
 
   profiles = {
     backend.config = {
+      myteam.languages.rust.enable = true;
       myteam.services.database.enable = true;
     };
+
+    frontend.config = {
+      languages.javascript.enable = true;
+    };
+
+    fullstack.extends = [ "backend" "frontend" ];
   };
 }
 ```
 
-Let's do some Rust development:
+Let's do some Rust development with the base configuration:
 
 ```shell-session
-$ devenv shell
+$ devenv --profile backend shell
 ```
 
-Using backend profile launch the database:
+Using backend profile to launch the database:
 
 ```shell-session
 $ devenv --profile backend up
 ```
 
-Use [ad-hoc environment options](../../ad-hoc-developer-environments.md) to augment the environment using CLI:
+Using frontend profile for JavaScript development:
 
+```shell-session
+$ devenv --profile frontend shell
 ```
-$ devenv -P backend -O myteam.languages.rust.enable:bool false shell
+
+Using fullstack profile to get both backend and frontend tools (extends both profiles):
+
+```shell-session
+$ devenv --profile fullstack shell
+```
+
+The fullstack profile automatically includes everything from both the backend and frontend profiles through extends. Use [ad-hoc environment options](../../ad-hoc-developer-environments.md) to further customize:
+
+```shell-session
+$ devenv -P fullstack -O myteam.languages.rust.enable:bool false shell
 ```
 
 ## User and Hostname Profiles

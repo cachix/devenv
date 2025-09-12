@@ -59,4 +59,44 @@ else
     exit 1
 fi
 
+# Test 6: Profile extends - single inheritance
+echo "Test 6: Profile extends - single inheritance (child-profile extends base-profile)"
+output=$(devenv --profile child-profile print-dev-env)
+if echo "$output" | grep -q 'BASE_PROFILE.*enabled' && echo "$output" | grep -q 'CHILD_PROFILE.*enabled' && echo "$output" | grep -q 'EXTENDS_TEST.*child'; then
+    echo "✓ Single profile extends working correctly"
+else
+    echo "✗ Single profile extends failed"
+    exit 1
+fi
+
+# Test 7: Profile extends - nested inheritance
+echo "Test 7: Profile extends - nested inheritance (grandchild-profile extends child-profile extends base-profile)"
+output=$(devenv --profile grandchild-profile print-dev-env)
+if echo "$output" | grep -q 'BASE_PROFILE.*enabled' && echo "$output" | grep -q 'CHILD_PROFILE.*enabled' && echo "$output" | grep -q 'GRANDCHILD_PROFILE.*enabled' && echo "$output" | grep -q 'EXTENDS_TEST.*grandchild'; then
+    echo "✓ Nested profile extends working correctly"
+else
+    echo "✗ Nested profile extends failed"
+    exit 1
+fi
+
+# Test 8: Profile extends - multiple inheritance
+echo "Test 8: Profile extends - multiple inheritance (multiple-extends extends basic and backend)"
+output=$(devenv --profile multiple-extends print-dev-env)
+if echo "$output" | grep -q 'BASIC_PROFILE.*enabled' && echo "$output" | grep -q 'BACKEND_ENABLED.*true' && echo "$output" | grep -q 'MULTIPLE_EXTENDS.*enabled'; then
+    echo "✓ Multiple profile extends working correctly"
+else
+    echo "✗ Multiple profile extends failed"
+    exit 1
+fi
+
+# Test 9: Circular dependency detection
+echo "Test 9: Circular dependency detection (cycle-a extends cycle-b extends cycle-a)"
+error_output=$(devenv --profile cycle-a info 2>&1 || true)
+if echo "$error_output" | grep -q "Circular dependency detected"; then
+    echo "✓ Circular dependency detection working correctly"
+else
+    echo "✗ Circular dependency detection failed: $error_output"
+    exit 1
+fi
+
 echo "All profile tests passed!"

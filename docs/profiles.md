@@ -45,6 +45,41 @@ $ devenv --profile backend --profile testing shell
 
 When using multiple profiles, configurations are merged with later profiles taking precedence for conflicting options.
 
+## Merging profiles
+
+Profiles can extend other profiles using the `extends` option, allowing you to build hierarchical configurations and reduce duplication:
+
+```nix
+{
+  name = "myproject";
+
+  packages = [ pkgs.git pkgs.curl ];
+  languages.nix.enable = true;
+
+  profiles = {
+    backend = {
+      extends = [ "base" ];
+      config = {
+        services.postgres.enable = true;
+        services.redis.enable = true;
+      };
+    };
+
+    frontend = {
+      extends = [ "base" ];
+      config = {
+        languages.javascript.enable = true;
+        processes.dev-server.exec = "npm run dev";
+      };
+    };
+
+    fullstack = {
+      extends = [ "backend" "frontend" ];
+    };
+  };
+}
+```
+
 ### Resolving option conflicts
 
 Profile configurations can be functions that receive module arguments, allowing access to `lib`, `config`, and other module system features:
@@ -69,17 +104,23 @@ Profiles can automatically activate based on your machine's hostname:
 
 ```nix
 {
-  profiles.hostname = {
-    "work-laptop".config = { pkgs, ... }: {
-      env.WORK_ENV = "true";
-
-      packages = [ pkgs.docker pkgs.kubectl ];
-
-      services.postgres.enable = true;
+  profiles = {
+    work-tools.config = {
+      packages = [ pkgs.docker pkgs.kubectl pkgs.slack ];
     };
 
-    "home-desktop".config = {
-      env.PERSONAL_DEV = "true";
+    hostname = {
+      "work-laptop" = {
+        extends = [ "work-tools" ];
+        config = {
+          env.WORK_ENV = "true";
+          services.postgres.enable = true;
+        };
+      };
+
+      "home-desktop".config = {
+        env.PERSONAL_DEV = "true";
+      };
     };
   };
 }
@@ -91,18 +132,29 @@ Profiles can automatically activate based on your username:
 
 ```nix
 {
-  profiles.user = {
-    "alice".config = {
-      env.USER_ROLE = "backend-developer";
-
-      languages.python.enable = true;
+  profiles = {
+    developer-base.config = {
+      packages = [ pkgs.git pkgs.gh pkgs.jq ];
+      git.enable = true;
     };
 
-    "bob".config = {
-      env.USER_ROLE = "systems-engineer";
+    user = {
+      "alice" = {
+        extends = [ "developer-base" ];
+        config = {
+          env.USER_ROLE = "backend-developer";
+          languages.python.enable = true;
+        };
+      };
 
-      languages.go.enable = true;
-      languages.rust.enable = true;
+      "bob" = {
+        extends = [ "developer-base" ];
+        config = {
+          env.USER_ROLE = "systems-engineer";
+          languages.go.enable = true;
+          languages.rust.enable = true;
+        };
+      };
     };
   };
 }

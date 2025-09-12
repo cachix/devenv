@@ -257,6 +257,12 @@ in
       type = types.submodule {
         freeformType = types.attrsOf (types.submodule {
           options = {
+            extends = lib.mkOption {
+              type = types.listOf types.str;
+              description = "List of profile names to extend/inherit from.";
+              default = [ ];
+              example = [ "base" "backend" ];
+            };
             config = lib.mkOption {
               type = types.deferredModule;
               description = "Configuration to merge when this profile is active.";
@@ -268,6 +274,12 @@ in
           hostname = lib.mkOption {
             type = types.attrsOf (types.submodule {
               options = {
+                extends = lib.mkOption {
+                  type = types.listOf types.str;
+                  description = "List of profile names to extend/inherit from.";
+                  default = [ ];
+                  example = [ "base" "backend" ];
+                };
                 config = lib.mkOption {
                   type = types.deferredModule;
                   description = "Configuration to merge when this hostname matches.";
@@ -281,6 +293,12 @@ in
           user = lib.mkOption {
             type = types.attrsOf (types.submodule {
               options = {
+                extends = lib.mkOption {
+                  type = types.listOf types.str;
+                  description = "List of profile names to extend/inherit from.";
+                  default = [ ];
+                  example = [ "base" "backend" ];
+                };
                 config = lib.mkOption {
                   type = types.deferredModule;
                   description = "Configuration to merge when this username matches.";
@@ -298,28 +316,42 @@ in
       example = lib.literalExpression ''
         {
           # Manual profiles (activated via --profile)
+          "base" = {
+            config = {
+              languages.nix.enable = true;
+              packages = [ pkgs.git ];
+            };
+          };
           "python-3.14" = {
+            extends = [ "base" ];
             config = {
               languages.python.version = "3.14";
             };
           };
           "backend" = {
+            extends = [ "base" ];
             config = {
               services.postgres.enable = true;
               services.redis.enable = true;
             };
           };
+          "fullstack" = {
+            extends = [ "backend" "python-3.14" ];
+            config = {
+              env.FULL_STACK = "true";
+            };
+          };
           # Automatic hostname-based profiles
           hostname."work-laptop" = {
+            extends = [ "backend" ];
             config = {
-              services.postgres.enable = true;
               env.WORK_ENV = "true";
             };
           };
           # Automatic user-based profiles  
           user."alice" = {
+            extends = [ "python-3.14" ];
             config = {
-              languages.python.enable = true;
               env.USER_ROLE = "developer";
             };
           };
