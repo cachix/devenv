@@ -2,7 +2,7 @@
 
 !!! tip "New in 1.9"
 
-    [Read more about profiles in the v1.9 release post](blog/posts/devenv-v1.9-profiles.md)
+    [Read more about profiles in the v1.9 release post](blog/posts/devenv-v1.9-scaling-nix-projects-using-modules-and-profiles.md)
 
 Profiles allow you to organize different variations of your development environment. You can activate profiles manually using CLI flags or have them activate automatically based on your system environment.
 
