@@ -17779,28 +17779,42 @@ attribute set of (submodule)
 ```
 {
   # Manual profiles (activated via --profile)
+  "base" = {
+    config = {
+      languages.nix.enable = true;
+      packages = [ pkgs.git ];
+    };
+  };
   "python-3.14" = {
+    extends = [ "base" ];
     config = {
       languages.python.version = "3.14";
     };
   };
   "backend" = {
+    extends = [ "base" ];
     config = {
       services.postgres.enable = true;
       services.redis.enable = true;
     };
   };
+  "fullstack" = {
+    extends = [ "backend" "python-3.14" ];
+    config = {
+      env.FULL_STACK = "true";
+    };
+  };
   # Automatic hostname-based profiles
   hostname."work-laptop" = {
+    extends = [ "backend" ];
     config = {
-      services.postgres.enable = true;
       env.WORK_ENV = "true";
     };
   };
   # Automatic user-based profiles  
   user."alice" = {
+    extends = [ "python-3.14" ];
     config = {
-      languages.python.enable = true;
       env.USER_ROLE = "developer";
     };
   };
@@ -17828,6 +17842,35 @@ module
 
 *Default:*
 ` { } `
+
+
+
+## profiles.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
 
 
 
@@ -17873,6 +17916,38 @@ module
 
 
 
+## profiles.hostname.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## profiles.user
 
 
@@ -17909,6 +17984,38 @@ module
 
 *Default:*
 ` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
+## profiles.user.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
