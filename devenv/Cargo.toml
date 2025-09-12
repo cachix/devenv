@@ -24,6 +24,7 @@ dotlock.workspace = true
 fd-lock.workspace = true
 futures.workspace = true
 hex.workspace = true
+hostname.workspace = true
 include_dir.workspace = true
 indoc.workspace = true
 miette.workspace = true

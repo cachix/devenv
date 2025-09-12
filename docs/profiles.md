@@ -1,0 +1,194 @@
+# Profiles
+
+!!! tip "New in 1.9"
+
+    [Read more about profiles in the v1.9 release post](blog/posts/devenv-v1.9-scaling-nix-projects-using-modules-and-profiles.md)
+
+Profiles allow you to organize different variations of your development environment. You can activate profiles manually using CLI flags or have them activate automatically based on your system environment.
+
+### Basics
+
+Define profiles in your `devenv.nix` file using the `profiles` option:
+
+```nix
+{ pkgs, config, ... }: {
+  profiles = {
+    backend.config = {
+      services.postgres.enable = true;
+      services.redis.enable = true;
+      env.ENVIRONMENT = "backend";
+    };
+
+    frontend.config = {
+      languages.javascript.enable = true;
+      processes.dev-server.exec = "npm run dev";
+      env.ENVIRONMENT = "frontend";
+    };
+
+    testing.config = { pkgs, ... }: {
+      packages = [ pkgs.playwright pkgs.cypress ];
+      env.NODE_ENV = "test";
+    };
+  };
+}
+```
+
+Use the `--profile` flag to activate one or more profiles:
+
+```shell-session
+# Activate a single profile
+$ devenv --profile backend shell
+
+# Activate multiple profiles
+$ devenv --profile backend --profile testing shell
+```
+
+When using multiple profiles, configurations are merged with later profiles taking precedence for conflicting options.
+
+## Merging profiles
+
+Profiles can extend other profiles using the `extends` option, allowing you to build hierarchical configurations and reduce duplication:
+
+```nix
+{
+  name = "myproject";
+
+  packages = [ pkgs.git pkgs.curl ];
+  languages.nix.enable = true;
+
+  profiles = {
+    backend = {
+      extends = [ "base" ];
+      config = {
+        services.postgres.enable = true;
+        services.redis.enable = true;
+      };
+    };
+
+    frontend = {
+      extends = [ "base" ];
+      config = {
+        languages.javascript.enable = true;
+        processes.dev-server.exec = "npm run dev";
+      };
+    };
+
+    fullstack = {
+      extends = [ "backend" "frontend" ];
+    };
+  };
+}
+```
+
+### Resolving option conflicts
+
+Profile configurations can be functions that receive module arguments, allowing access to `lib`, `config`, and other module system features:
+
+```nix
+{
+  profiles = {
+    base.config = { lib, ... }: {
+      env.DEBUG = lib.mkDefault "false";  # Low priority
+    };
+
+    development.config = { lib, ... }: {
+      env.DEBUG = lib.mkForce "true";     # High priority - overrides base
+    };
+  };
+}
+```
+
+## Hostname Profiles
+
+Profiles can automatically activate based on your machine's hostname:
+
+```nix
+{
+  profiles = {
+    work-tools.config = {
+      packages = [ pkgs.docker pkgs.kubectl pkgs.slack ];
+    };
+
+    hostname = {
+      "work-laptop" = {
+        extends = [ "work-tools" ];
+        config = {
+          env.WORK_ENV = "true";
+          services.postgres.enable = true;
+        };
+      };
+
+      "home-desktop".config = {
+        env.PERSONAL_DEV = "true";
+      };
+    };
+  };
+}
+```
+
+## User Profiles
+
+Profiles can automatically activate based on your username:
+
+```nix
+{
+  profiles = {
+    developer-base.config = {
+      packages = [ pkgs.git pkgs.gh pkgs.jq ];
+      git.enable = true;
+    };
+
+    user = {
+      "alice" = {
+        extends = [ "developer-base" ];
+        config = {
+          env.USER_ROLE = "backend-developer";
+          languages.python.enable = true;
+        };
+      };
+
+      "bob" = {
+        extends = [ "developer-base" ];
+        config = {
+          env.USER_ROLE = "systems-engineer";
+          languages.go.enable = true;
+          languages.rust.enable = true;
+        };
+      };
+    };
+  };
+}
+```
+
+## Composition
+
+All matching profiles are automatically merged when you run devenv commands:
+
+```nix
+{
+  languages.nix.enable = true;
+
+  profiles = {
+    backend.config = {
+      services.postgres.enable = true;
+    };
+
+    hostname."ci-server".config = {
+      env.CI = "true";
+      packages = [ pkgs.buildkit ];
+    };
+
+    user."developer".config = {
+      git.enable = true;
+      packages = [ pkgs.gh ];
+    };
+  };
+}
+```
+
+When you run `devenv --profile backend shell` on a machine named "ci-server" with user "developer", all matching profiles activate:
+
+- Base configuration (always active)
+- `profiles.backend` (via `--profile`)
+- `profiles.hostname."ci-server"` (automatic hostname match)
+- `profiles.user."developer"` (automatic user match)

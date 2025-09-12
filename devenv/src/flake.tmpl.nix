@@ -62,7 +62,8 @@
               else if builtins.pathExists devenvdefaultpath
               then devenvdefaultpath
               else throw (devenvdefaultpath + " file does not exist for input ${name}.");
-          project = pkgs.lib.evalModules {
+          # Phase 1: Base evaluation to extract profile definitions
+          baseProject = pkgs.lib.evalModules {
             specialArgs = inputs // { inherit inputs; };
             modules = [
               ({ config, ... }: {
@@ -101,6 +102,59 @@
               (if builtins.pathExists (devenv_dotfile_path + "/cli-options.nix") then import (devenv_dotfile_path + "/cli-options.nix") else { })
             ];
           };
+
+          # Phase 2: Extract and apply profiles using extendModules
+          project =
+            let
+              # Collect all profiles to activate
+              manualProfiles = active_profiles;
+              currentHostname = hostname;
+              currentUsername = username;
+              hostnameProfile = lib.optional (currentHostname != "" && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })) currentHostname;
+              usernameProfile = lib.optional (currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })) currentUsername;
+
+              allProfiles = {
+                manual = manualProfiles;
+                hostname = hostnameProfile;
+                user = usernameProfile;
+              };
+
+              # Recursive function to collect all profile modules including extends with cycle detection
+              collectProfileModules = profileName: profileType: visited:
+                let
+                  profileId = "${profileType}:${profileName}";
+                in
+                if builtins.elem profileId visited then
+                  throw "Circular dependency detected in profile extends: ${lib.concatStringsSep " -> " visited} -> ${profileId}"
+                else
+                  let
+                    profile =
+                      if profileType == "manual" then
+                        let
+                          availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
+                        in
+                          baseProject.config.profiles.${profileName} or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " (availableProfiles ++ ["hostname.*" "user.*"])}")
+                      else if profileType == "hostname" then
+                        baseProject.config.profiles.hostname.${profileName}
+                      else # user
+                        baseProject.config.profiles.user.${profileName};
+
+                    extends = profile.extends or [ ];
+                    newVisited = visited ++ [ profileId ];
+                    extendedModules = lib.flatten (map (name: collectProfileModules name "manual" newVisited) extends);
+                  in
+                  extendedModules ++ [ profile.config ];
+
+              # Collect all profile modules
+              manualModules = lib.flatten (map (name: collectProfileModules name "manual" [ ]) allProfiles.manual);
+              hostnameModules = lib.flatten (map (name: collectProfileModules name "hostname" [ ]) allProfiles.hostname);
+              userModules = lib.flatten (map (name: collectProfileModules name "user" [ ]) allProfiles.user);
+
+              profileModules = manualModules ++ hostnameModules ++ userModules;
+            in
+            if profileModules == [ ]
+            then baseProject
+            else baseProject.extendModules { modules = profileModules; };
           config = project.config;
 
           options = pkgs.nixosOptionsDoc {

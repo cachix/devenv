@@ -26,3 +26,13 @@ devenv container build shell | grep image-shell.json
 # bw compat
 devenv container shell | grep "image-shell.json"
 devenv gc
+
+# Test profile error handling with no profiles defined
+echo "Testing profile error handling..."
+error_output=$(devenv --profile some-profile info 2>&1 || true)
+if echo "$error_output" | grep -q "Profile 'some-profile' not found"; then
+    echo "✓ Profile error handling works correctly"
+else
+    echo "✗ Profile error handling failed: $error_output"
+    exit 1
+fi

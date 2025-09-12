@@ -1,6 +1,8 @@
 # Tasks
 
-!!! info "New in version 1.2"
+!!! tip "New in version 1.2"
+    
+    [Read more about tasks in the v1.2 release post](blog/posts/devenv-v1.2-tasks.md)
 
 Tasks allow you to form dependencies between code, executed in parallel.
 
@@ -23,7 +25,9 @@ Succeeded         myapp:hello         9ms
 1 Succeeded                           10.14ms
 ```
 
-!!! info "New in version 1.7"
+!!! tip "New in version 1.7"
+    
+    [Read more about enhanced tasks in the v1.7 release post](blog/posts/devenv-v1.7-cuda-support-enhanced-tasks-mcp-support.md)
 
 You can also run all tasks in a namespace by providing just the namespace prefix:
 
@@ -158,7 +162,9 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
 
 ## Processes as tasks
 
-!!! info "New in version 1.4"
+!!! tip "New in version 1.4"
+    
+    [Read more about process-task integration in the v1.4 release post](blog/posts/devenv-v1.4-generating-nix-developer-environments-using-ai.md)
 
 All processes defined in `processes` are automatically available as tasks with the `devenv:processes:` prefix. This allows you to:
 
