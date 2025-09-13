@@ -58,7 +58,6 @@ Profiles can extend other profiles using the `extends` option, allowing you to b
 
   profiles = {
     backend = {
-      extends = [ "base" ];
       config = {
         services.postgres.enable = true;
         services.redis.enable = true;
@@ -66,7 +65,6 @@ Profiles can extend other profiles using the `extends` option, allowing you to b
     };
 
     frontend = {
-      extends = [ "base" ];
       config = {
         languages.javascript.enable = true;
         processes.dev-server.exec = "npm run dev";
