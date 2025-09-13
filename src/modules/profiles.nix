@@ -5,78 +5,42 @@
 }:
 let
   types = lib.types;
+
+  profileModule = {
+    options = {
+      extends = lib.mkOption {
+        type = types.listOf types.str;
+        description = "List of profile names to extend/inherit from.";
+        default = [ ];
+        example = [
+          "base"
+          "backend"
+        ];
+      };
+      config = lib.mkOption {
+        type = types.deferredModule;
+        description = "Additional configuration to merge when this profile is active.";
+        default = { };
+      };
+    };
+  };
+
+  profileType = types.lazyAttrsOf (types.submodule profileModule);
 in
 {
   options = {
     profiles = lib.mkOption {
       type = types.submodule {
-        freeformType = types.attrsOf (
-          types.submodule {
-            options = {
-              extends = lib.mkOption {
-                type = types.listOf types.str;
-                description = "List of profile names to extend/inherit from.";
-                default = [ ];
-                example = [
-                  "base"
-                  "backend"
-                ];
-              };
-              config = lib.mkOption {
-                type = types.deferredModule;
-                description = "Configuration to merge when this profile is active.";
-                default = { };
-              };
-            };
-          }
-        );
+        freeformType = profileType;
         options = {
           hostname = lib.mkOption {
-            type = types.attrsOf (
-              types.submodule {
-                options = {
-                  extends = lib.mkOption {
-                    type = types.listOf types.str;
-                    description = "List of profile names to extend/inherit from.";
-                    default = [ ];
-                    example = [
-                      "base"
-                      "backend"
-                    ];
-                  };
-                  config = lib.mkOption {
-                    type = types.deferredModule;
-                    description = "Configuration to merge when this hostname matches.";
-                    default = { };
-                  };
-                };
-              }
-            );
-            description = "Profile definitions that are automatically activated based on hostname.";
+            type = profileType;
+            description = "Profile definitions that are automatically activated based on the machine's hostname.";
             default = { };
           };
           user = lib.mkOption {
-            type = types.attrsOf (
-              types.submodule {
-                options = {
-                  extends = lib.mkOption {
-                    type = types.listOf types.str;
-                    description = "List of profile names to extend/inherit from.";
-                    default = [ ];
-                    example = [
-                      "base"
-                      "backend"
-                    ];
-                  };
-                  config = lib.mkOption {
-                    type = types.deferredModule;
-                    description = "Configuration to merge when this username matches.";
-                    default = { };
-                  };
-                };
-              }
-            );
-            description = "Profile definitions that are automatically activated based on username.";
+            type = profileType;
+            description = "Profile definitions that are automatically activated based on the username.";
             default = { };
           };
         };
