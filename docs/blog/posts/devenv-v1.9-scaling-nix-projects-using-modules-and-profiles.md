@@ -1,5 +1,5 @@
 ---
-date: 2025-09-12
+date: 2025-09-14
 authors:
   - domenkozar
 draft: false
@@ -7,7 +7,7 @@ draft: false
 
 # devenv 1.9: Scaling Nix projects using modules and profiles
 
-[Profiles](/profiles/) are a new way for teams to organize and selectively activate parts of their development environment.
+[Profiles](/profiles/) are a new way to organize and selectively activate parts of development environment.
 
 While we try [our best to ship sane defaults for languages and services](https://en.wikipedia.org/wiki/Convention_over_configuration), each team has its own preferences. We're [still working on uniform interface for language configuration](https://github.com/cachix/devenv/pull/1974) so you'll be able to customize each bit of the environment.
 
