@@ -103,56 +103,116 @@
             ];
           };
 
-          # Phase 2: Extract and apply profiles using extendModules
+          # Phase 2: Extract and apply profiles using extendModules with priority overrides
           project =
             let
-              # Collect all profiles to activate
+              # Collect profiles to activate in priority order (lowest to highest precedence)
               manualProfiles = active_profiles;
               currentHostname = hostname;
               currentUsername = username;
-              hostnameProfile = lib.optional (currentHostname != "" && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })) "hostname.${currentHostname}";
-              usernameProfile = lib.optional (currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })) "user.${currentUsername}";
+              hostnameProfiles = lib.optional (currentHostname != "" && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })) "hostname.${currentHostname}";
+              userProfiles = lib.optional (currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })) "user.${currentUsername}";
 
-              allProfiles = manualProfiles ++ hostnameProfile ++ usernameProfile;
+              # Priority groups: hostname (700) -> user (600) -> manual (500, 490, 480...)
+              allProfileGroups = [
+                { profiles = hostnameProfiles; basePriority = 99; }
+                { profiles = userProfiles; basePriority = 94; }
+                { profiles = manualProfiles; basePriority = 90; }
+              ];
 
-              # Recursive function to collect all profile modules including extends with cycle detection
-              collectProfileModules = profileName: visited:
+              # Resolve profile extends with cycle detection
+              resolveProfileExtends = profileName: visited:
                 if builtins.elem profileName visited then
                   throw "Circular dependency detected in profile extends: ${lib.concatStringsSep " -> " visited} -> ${profileName}"
                 else
                   let
-                    profile =
-                      if lib.hasPrefix "hostname." profileName then
-                        let
-                          name = lib.removePrefix "hostname." profileName;
-                        in
-                        baseProject.config.profiles.hostname.${name}
-                      else if lib.hasPrefix "user." profileName then
-                        let
-                          name = lib.removePrefix "user." profileName;
-                        in
-                        baseProject.config.profiles.user.${name}
-                      else
-                        let
-                          availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
-                          hostnameProfiles = map (n: "hostname.${n}") (builtins.attrNames (baseProject.config.profiles.hostname or { }));
-                          userProfiles = map (n: "user.${n}") (builtins.attrNames (baseProject.config.profiles.user or { }));
-                          allAvailableProfiles = availableProfiles ++ hostnameProfiles ++ userProfiles;
-                        in
-                          baseProject.config.profiles.${profileName} or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " allAvailableProfiles}");
-
+                    profile = getProfileConfig profileName;
                     extends = profile.extends or [ ];
                     newVisited = visited ++ [ profileName ];
-                    extendedModules = lib.flatten (map (name: collectProfileModules name newVisited) extends);
+                    extendedProfiles = lib.flatten (map (name: resolveProfileExtends name newVisited) extends);
                   in
-                  extendedModules ++ [ profile.config ];
+                  extendedProfiles ++ [ profileName ];
 
-              # Collect all profile modules
-              profileModules = lib.flatten (map (name: collectProfileModules name [ ]) allProfiles);
+              # Get profile configuration by name from baseProject
+              getProfileConfig = profileName:
+                if lib.hasPrefix "hostname." profileName then
+                  let name = lib.removePrefix "hostname." profileName;
+                  in baseProject.config.profiles.hostname.${name}
+                else if lib.hasPrefix "user." profileName then
+                  let name = lib.removePrefix "user." profileName;
+                  in baseProject.config.profiles.user.${name}
+                else
+                  let
+                    availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
+                    hostnameProfiles = map (n: "hostname.${n}") (builtins.attrNames (baseProject.config.profiles.hostname or { }));
+                    userProfiles = map (n: "user.${n}") (builtins.attrNames (baseProject.config.profiles.user or { }));
+                    allAvailableProfiles = availableProfiles ++ hostnameProfiles ++ userProfiles;
+                  in
+                  baseProject.config.profiles.${profileName} or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " allAvailableProfiles}");
+
+              # Process profile groups and apply priorities
+              # lower number = higher priority
+              processProfileGroup = { profiles, basePriority }:
+                lib.flatten (lib.imap0 (groupIndex: profileName:
+                  let
+                    # Resolve all extended profiles for this profile
+                    allProfileNames = resolveProfileExtends profileName [ ];
+                  in
+                  # Apply priorities to all resolved profiles
+                  # Extended profiles get lower priority, current profile gets highest
+                  lib.imap0 (profileIndex: resolvedProfileName:
+                    let
+                      # Calculate priority: base - (group * 100) - (profile * 10) - (extends * 1)
+                      profilePriority = basePriority - profileIndex;
+                      profileConfig = builtins.trace (resolvedProfileName) getProfileConfig resolvedProfileName;
+
+                      applyModuleOverride = config:
+                        if builtins.isFunction config
+                        then (args:
+                          let res = config args;
+                          in builtins.trace
+                              (builtins.toJSON res)
+                              applyOverrideRecursive res
+                        )
+                        else builtins.trace (builtins.toJSON config) applyOverrideRecursive config;
+
+                      # Apply priority overrides recursively to the deferredModule imports structure
+                      # Need to apply override to actual config values, not container objects
+                      applyOverrideRecursive = config:
+                        if builtins.isFunction config
+                        then config  # Don't modify functions - let module system handle them
+                        else if lib.isAttrs config && config ? _type
+                        then config  # Don't override values with existing type metadata
+                        else if lib.isAttrs config
+                        then lib.mapAttrs (_: applyOverrideRecursive) config
+                        else lib.mkOverride profilePriority config;
+
+                      prioritizedConfig = (
+                        profileConfig.config // {
+                          imports = lib.map (importItem:
+                            importItem // {
+                              imports = lib.map (nestedImport:
+                                applyModuleOverride nestedImport
+                              ) (importItem.imports or [ ]);
+                            }
+                          ) (profileConfig.config.imports or [ ]);
+                        });
+                    in
+                    prioritizedConfig
+                  ) allProfileNames
+                ) profiles);
+
+              # Collect all prioritized profile modules
+              allPrioritizedModules = lib.flatten (map processProfileGroup allProfileGroups);
             in
-            if profileModules == [ ]
+            if allPrioritizedModules == [ ]
             then baseProject
-            else baseProject.extendModules { modules = profileModules; };
+            else 
+              let
+                finalProject = baseProject.extendModules { modules = allPrioritizedModules; };
+              in
+              # builtins.trace "=== FINAL MODULES === Count: ${toString (builtins.length allPrioritizedModules)} Environment: ${builtins.toJSON (finalProject.config.env or {})}" finalProject;
+              finalProject;
           config = project.config;
 
           options = pkgs.nixosOptionsDoc {

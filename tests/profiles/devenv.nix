@@ -93,6 +93,28 @@
     };
   };
 
+  # Test priority conflicts - multiple profiles setting same env var
+  profiles."conflict-low" = {
+    config = {
+      env.CONFLICT_VAR = "low-priority";
+      env.CONFLICT_LOW = "enabled";
+    };
+  };
+
+  profiles."conflict-high" = {
+    config = {
+      env.CONFLICT_VAR = "high-priority";
+      env.CONFLICT_HIGH = "enabled";
+    };
+  };
+
+  profiles."conflict-middle" = {
+    config = {
+      env.CONFLICT_VAR = "middle-priority";
+      env.CONFLICT_MIDDLE = "enabled";
+    };
+  };
+
   # Test circular dependency - should cause infinite recursion
   profiles."cycle-a" = {
     extends = [ "cycle-b" ];
