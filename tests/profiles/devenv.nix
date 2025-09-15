@@ -1,6 +1,10 @@
-{ pkgs, ... }: {
+{ pkgs, config, ... }:
+{
   # Base configuration
-  packages = [ pkgs.git pkgs.hello ];
+  packages = [
+    pkgs.git
+    pkgs.hello
+  ];
 
   env.BASE_ENV = "base-value";
 
@@ -11,7 +15,10 @@
   };
 
   profiles."backend".config = {
-    packages = [ pkgs.wget pkgs.tree ];
+    packages = [
+      pkgs.wget
+      pkgs.tree
+    ];
     env.BACKEND_ENABLED = "true";
   };
 
@@ -21,56 +28,87 @@
   };
 
   profiles."extra-packages".config = {
-    packages = [ pkgs.jq pkgs.htop ];
+    packages = [
+      pkgs.jq
+      pkgs.htop
+    ];
     env.EXTRA_TOOLS = "enabled";
   };
 
   # Profile merging test profiles
-  profiles."profile-a".config = { lib, ... }: {
-    packages = [ pkgs.curl pkgs.wget ];
-    env.PROFILE_A = "active";
-    env.MERGE_TEST = lib.mkDefault "profile-a";
-  };
+  profiles."profile-a".config =
+    { lib, ... }:
+    {
+      packages = [
+        pkgs.curl
+        pkgs.wget
+      ];
+      env.PROFILE_A = "active";
+      env.MERGE_TEST = lib.mkDefault "profile-a";
+    };
 
-  profiles."profile-b".config = { pkgs, lib, ... }: {
-    packages = [ pkgs.jq pkgs.tree ];
-    env.PROFILE_B = "active";
-    env.MERGE_TEST = lib.mkForce "profile-b";
-  };
+  profiles."profile-b".config =
+    { pkgs, lib, ... }:
+    {
+      packages = [
+        pkgs.jq
+        pkgs.tree
+      ];
+      env.PROFILE_B = "active";
+      env.MERGE_TEST = lib.mkForce "profile-b";
+    };
 
-  profiles."profile-c".config = { pkgs, lib, ... }: {
-    packages = [ pkgs.curl pkgs.jq pkgs.htop ];
-    env.PROFILE_C = "active";
-    env.MERGE_TEST = lib.mkForce "profile-c";
-  };
+  profiles."profile-c".config =
+    { pkgs, lib, ... }:
+    {
+      packages = [
+        pkgs.curl
+        pkgs.jq
+        pkgs.htop
+      ];
+      env.PROFILE_C = "active";
+      env.MERGE_TEST = lib.mkForce "profile-c";
+    };
 
   # Extends functionality tests
-  profiles."base-profile".config = { lib, ... }: {
-    packages = [ pkgs.git pkgs.curl ];
-    env.BASE_PROFILE = "enabled";
-    env.EXTENDS_TEST = lib.mkDefault "base";
-  };
+  profiles."base-profile".config =
+    { lib, ... }:
+    {
+      packages = [
+        pkgs.git
+        pkgs.curl
+      ];
+      env.BASE_PROFILE = "enabled";
+      env.EXTENDS_TEST = lib.mkDefault "base";
+    };
 
   profiles."child-profile" = {
     extends = [ "base-profile" ];
-    config = { lib, ... }: {
-      packages = [ pkgs.wget ];
-      env.CHILD_PROFILE = "enabled";
-      env.EXTENDS_TEST = "child"; # Should override base (normal priority beats mkDefault)
-    };
+    config =
+      { lib, ... }:
+      {
+        packages = [ pkgs.wget ];
+        env.CHILD_PROFILE = "enabled";
+        env.EXTENDS_TEST = "child"; # Should override base (normal priority beats mkDefault)
+      };
   };
 
   profiles."grandchild-profile" = {
     extends = [ "child-profile" ];
-    config = { lib, ... }: {
-      packages = [ pkgs.tree ];
-      env.GRANDCHILD_PROFILE = "enabled";
-      env.EXTENDS_TEST = lib.mkForce "grandchild"; # Should override child and base
-    };
+    config =
+      { lib, ... }:
+      {
+        packages = [ pkgs.tree ];
+        env.GRANDCHILD_PROFILE = "enabled";
+        env.EXTENDS_TEST = lib.mkForce "grandchild"; # Should override child and base
+      };
   };
 
   profiles."multiple-extends" = {
-    extends = [ "basic" "backend" ];
+    extends = [
+      "basic"
+      "backend"
+    ];
     config = {
       packages = [ pkgs.htop ];
       env.MULTIPLE_EXTENDS = "enabled";
@@ -128,5 +166,24 @@
     config = {
       env.CYCLE_B = "enabled";
     };
+  };
+
+  # Test function vs attrset conflict
+  profiles."function-profile" = {
+    config =
+      { ... }:
+      {
+        env.BASE_ENV = "foobar";
+        env.TEST_VAR = "function";
+      };
+  };
+
+  profiles."attrset-profile" = {
+    extends = [ "function-profile" ];
+    config =
+      { config, ... }:
+      {
+        env.TEST_VAR = config.env.BASE_ENV;
+      };
   };
 }

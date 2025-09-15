@@ -111,4 +111,16 @@ else
   exit 1
 fi
 
+# Test 11: Profile precedence with both functions
+echo "Test 11: Profile precedence with both functions"
+output=$(devenv --profile function-profile --profile attrset-profile print-dev-env)
+if echo "$output" | grep -q 'TEST_VAR.*foobar' && echo "$output" | grep -q 'BASE_ENV.*foobar'; then
+  echo "✓ Profile priorities working correctly - attrset-profile overrides function-profile, profiles override base config"
+else
+  echo "✗ Profile precedence failed"
+  echo "Expected TEST_VAR=foobar and BASE_ENV=foobar, got:"
+  echo "$output" | grep -E "(TEST_VAR|BASE_ENV)"
+  exit 1
+fi
+
 echo "All profile tests passed!"
