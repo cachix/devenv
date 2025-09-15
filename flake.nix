@@ -19,11 +19,18 @@
     url = "github:edolstra/flake-compat";
     flake = false;
   };
+  inputs.flake-parts = {
+    url = "github:hercules-ci/flake-parts";
+    inputs = {
+      nixpkgs-lib.follows = "nixpkgs";
+    };
+  };
   inputs.nix = {
     url = "github:cachix/nix/devenv-2.30";
     inputs = {
       nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
+      flake-parts.follows = "flake-parts";
       git-hooks-nix.follows = "git-hooks";
       nixpkgs-23-11.follows = "";
       nixpkgs-regression.follows = "";
