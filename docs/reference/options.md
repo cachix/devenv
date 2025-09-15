@@ -17765,7 +17765,7 @@ Profile definitions that can be activated manually or automatically.
 
 
 *Type:*
-attribute set of (submodule)
+lazy attribute set of (submodule)
 
 
 
@@ -17811,7 +17811,7 @@ attribute set of (submodule)
       env.WORK_ENV = "true";
     };
   };
-  # Automatic user-based profiles  
+  # Automatic user-based profiles
   user."alice" = {
     extends = [ "python-3.14" ];
     config = {
@@ -17823,7 +17823,7 @@ attribute set of (submodule)
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
@@ -17831,7 +17831,7 @@ attribute set of (submodule)
 
 
 
-Configuration to merge when this profile is active.
+Additional configuration to merge when this profile is active.
 
 
 
@@ -17878,12 +17878,12 @@ list of string
 
 
 
-Profile definitions that are automatically activated based on hostname.
+Profile definitions that are automatically activated based on the machine’s hostname.
 
 
 
 *Type:*
-attribute set of (submodule)
+lazy attribute set of (submodule)
 
 
 
@@ -17891,7 +17891,7 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
@@ -17899,7 +17899,7 @@ attribute set of (submodule)
 
 
 
-Configuration to merge when this hostname matches.
+Additional configuration to merge when this profile is active.
 
 
 
@@ -17912,7 +17912,7 @@ module
 ` { } `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
@@ -17944,7 +17944,7 @@ list of string
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
@@ -17952,12 +17952,12 @@ list of string
 
 
 
-Profile definitions that are automatically activated based on username.
+Profile definitions that are automatically activated based on the username.
 
 
 
 *Type:*
-attribute set of (submodule)
+lazy attribute set of (submodule)
 
 
 
@@ -17965,7 +17965,7 @@ attribute set of (submodule)
 ` { } `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
@@ -17973,7 +17973,7 @@ attribute set of (submodule)
 
 
 
-Configuration to merge when this username matches.
+Additional configuration to merge when this profile is active.
 
 
 
@@ -17986,7 +17986,7 @@ module
 ` { } `
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
@@ -18018,7 +18018,7 @@ list of string
 ```
 
 *Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
