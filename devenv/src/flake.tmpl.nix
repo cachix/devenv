@@ -188,14 +188,14 @@
                         else lib.mkOverride profilePriority config;
 
                       prioritizedConfig = (
-                        profileConfig.config // {
+                        profileConfig.module // {
                           imports = lib.map (importItem:
                             importItem // {
                               imports = lib.map (nestedImport:
                                 applyModuleOverride nestedImport
                               ) (importItem.imports or [ ]);
                             }
-                          ) (profileConfig.config.imports or [ ]);
+                          ) (profileConfig.module.imports or [ ]);
                         });
                     in
                     prioritizedConfig

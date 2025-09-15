@@ -70,12 +70,12 @@ Since options default to `false`, you'll need to enable them per project. You ca
   packages = [ pkgs.jq ];
 
   profiles = {
-    backend.config = {
+    backend.module = {
       myteam.languages.rust.enable = true;
       myteam.services.database.enable = true;
     };
 
-    frontend.config = {
+    frontend.module = {
       languages.javascript.enable = true;
     };
 
@@ -121,11 +121,11 @@ Profiles can activate automatically based on hostname or username:
 ```nix
 {
   profiles = {
-    hostname."dev-server".config = {
+    hostname."dev-server".module = {
       myteam.services.database.enable = true;
     };
 
-    user."alice".config = {
+    user."alice".module = {
       myteam.languages.rust.enable = true;
     };
   };

@@ -9,12 +9,12 @@
   env.BASE_ENV = "base-value";
 
   # Profile definitions
-  profiles."basic".config = {
+  profiles."basic".module = {
     packages = [ pkgs.curl ];
     env.BASIC_PROFILE = "enabled";
   };
 
-  profiles."backend".config = {
+  profiles."backend".module = {
     packages = [
       pkgs.wget
       pkgs.tree
@@ -22,12 +22,12 @@
     env.BACKEND_ENABLED = "true";
   };
 
-  profiles."fast-startup".config = {
+  profiles."fast-startup".module = {
     packages = [ pkgs.hello ];
     env.FAST_STARTUP = "true";
   };
 
-  profiles."extra-packages".config = {
+  profiles."extra-packages".module = {
     packages = [
       pkgs.jq
       pkgs.htop
@@ -36,7 +36,7 @@
   };
 
   # Profile merging test profiles
-  profiles."profile-a".config =
+  profiles."profile-a".module =
     { lib, ... }:
     {
       packages = [
@@ -47,7 +47,7 @@
       env.MERGE_TEST = lib.mkDefault "profile-a";
     };
 
-  profiles."profile-b".config =
+  profiles."profile-b".module =
     { pkgs, lib, ... }:
     {
       packages = [
@@ -58,7 +58,7 @@
       env.MERGE_TEST = lib.mkForce "profile-b";
     };
 
-  profiles."profile-c".config =
+  profiles."profile-c".module =
     { pkgs, lib, ... }:
     {
       packages = [
@@ -71,7 +71,7 @@
     };
 
   # Extends functionality tests
-  profiles."base-profile".config =
+  profiles."base-profile".module =
     { lib, ... }:
     {
       packages = [
@@ -84,7 +84,7 @@
 
   profiles."child-profile" = {
     extends = [ "base-profile" ];
-    config =
+    module =
       { lib, ... }:
       {
         packages = [ pkgs.wget ];
@@ -95,7 +95,7 @@
 
   profiles."grandchild-profile" = {
     extends = [ "child-profile" ];
-    config =
+    module =
       { lib, ... }:
       {
         packages = [ pkgs.tree ];
@@ -109,7 +109,7 @@
       "basic"
       "backend"
     ];
-    config = {
+    module = {
       packages = [ pkgs.htop ];
       env.MULTIPLE_EXTENDS = "enabled";
     };
@@ -118,7 +118,7 @@
   # Test hostname profile extends
   profiles.hostname."test-machine" = {
     extends = [ "base-profile" ];
-    config = {
+    module = {
       env.HOSTNAME_PROFILE = "enabled";
     };
   };
@@ -126,28 +126,28 @@
   # Test user profile extends
   profiles.user."test-user" = {
     extends = [ "child-profile" ];
-    config = {
+    module = {
       env.USER_PROFILE = "enabled";
     };
   };
 
   # Test priority conflicts - multiple profiles setting same env var
   profiles."conflict-low" = {
-    config = {
+    module = {
       env.CONFLICT_VAR = "low-priority";
       env.CONFLICT_LOW = "enabled";
     };
   };
 
   profiles."conflict-high" = {
-    config = {
+    module = {
       env.CONFLICT_VAR = "high-priority";
       env.CONFLICT_HIGH = "enabled";
     };
   };
 
   profiles."conflict-middle" = {
-    config = {
+    module = {
       env.CONFLICT_VAR = "middle-priority";
       env.CONFLICT_MIDDLE = "enabled";
     };
@@ -156,21 +156,21 @@
   # Test circular dependency - should cause infinite recursion
   profiles."cycle-a" = {
     extends = [ "cycle-b" ];
-    config = {
+    module = {
       env.CYCLE_A = "enabled";
     };
   };
 
   profiles."cycle-b" = {
     extends = [ "cycle-a" ];
-    config = {
+    module = {
       env.CYCLE_B = "enabled";
     };
   };
 
   # Test function vs attrset conflict
   profiles."function-profile" = {
-    config =
+    module =
       { ... }:
       {
         env.BASE_ENV = "foobar";
@@ -180,7 +180,7 @@
 
   profiles."attrset-profile" = {
     extends = [ "function-profile" ];
-    config =
+    module =
       { config, ... }:
       {
         env.TEST_VAR = config.env.BASE_ENV;

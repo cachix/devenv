@@ -13,19 +13,19 @@ Define profiles in your `devenv.nix` file using the `profiles` option:
 ```nix
 { pkgs, config, ... }: {
   profiles = {
-    backend.config = {
+    backend.module = {
       services.postgres.enable = true;
       services.redis.enable = true;
       env.ENVIRONMENT = "backend";
     };
 
-    frontend.config = {
+    frontend.module = {
       languages.javascript.enable = true;
       processes.dev-server.exec = "npm run dev";
       env.ENVIRONMENT = "frontend";
     };
 
-    testing.config = { pkgs, ... }: {
+    testing.module = { pkgs, ... }: {
       packages = [ pkgs.playwright pkgs.cypress ];
       env.NODE_ENV = "test";
     };
@@ -58,14 +58,14 @@ Profiles can extend other profiles using the `extends` option, allowing you to b
 
   profiles = {
     backend = {
-      config = {
+      module = {
         services.postgres.enable = true;
         services.redis.enable = true;
       };
     };
 
     frontend = {
-      config = {
+      module = {
         languages.javascript.enable = true;
         processes.dev-server.exec = "npm run dev";
       };
@@ -85,11 +85,11 @@ Profile configurations can be functions that receive module arguments, allowing 
 ```nix
 {
   profiles = {
-    base.config = { lib, ... }: {
+    base.module = { lib, ... }: {
       env.DEBUG = lib.mkDefault "false";  # Low priority
     };
 
-    development.config = { lib, ... }: {
+    development.module = { lib, ... }: {
       env.DEBUG = lib.mkForce "true";     # High priority - overrides base
     };
   };
@@ -103,20 +103,20 @@ Profiles can automatically activate based on your machine's hostname:
 ```nix
 {
   profiles = {
-    work-tools.config = {
+    work-tools.module = {
       packages = [ pkgs.docker pkgs.kubectl pkgs.slack ];
     };
 
     hostname = {
       "work-laptop" = {
         extends = [ "work-tools" ];
-        config = {
+        module = {
           env.WORK_ENV = "true";
           services.postgres.enable = true;
         };
       };
 
-      "home-desktop".config = {
+      "home-desktop".module = {
         env.PERSONAL_DEV = "true";
       };
     };
@@ -131,7 +131,7 @@ Profiles can automatically activate based on your username:
 ```nix
 {
   profiles = {
-    developer-base.config = {
+    developer-base.module = {
       packages = [ pkgs.git pkgs.gh pkgs.jq ];
       git.enable = true;
     };
@@ -139,7 +139,7 @@ Profiles can automatically activate based on your username:
     user = {
       "alice" = {
         extends = [ "developer-base" ];
-        config = {
+        module = {
           env.USER_ROLE = "backend-developer";
           languages.python.enable = true;
         };
@@ -147,7 +147,7 @@ Profiles can automatically activate based on your username:
 
       "bob" = {
         extends = [ "developer-base" ];
-        config = {
+        module = {
           env.USER_ROLE = "systems-engineer";
           languages.go.enable = true;
           languages.rust.enable = true;
@@ -167,16 +167,16 @@ All matching profiles are automatically merged when you run devenv commands:
   languages.nix.enable = true;
 
   profiles = {
-    backend.config = {
+    backend.module = {
       services.postgres.enable = true;
     };
 
-    hostname."ci-server".config = {
+    hostname."ci-server".module = {
       env.CI = "true";
       packages = [ pkgs.buildkit ];
     };
 
-    user."developer".config = {
+    user."developer".module = {
       git.enable = true;
       packages = [ pkgs.gh ];
     };
