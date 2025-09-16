@@ -17722,7 +17722,7 @@ Only used when using ` process.manager.implementation = "process-compose"; `
 
 
 *Type:*
-attribute set
+YAML value
 
 
 
