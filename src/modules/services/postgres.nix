@@ -430,7 +430,7 @@ in
           # pg_isready does not distinguish between a server that is ready and one that's being initialized by initdb.
           exec.command = ''
             if [[ -f "$PGDATA/.devenv_initialized" ]]; then
-              ${postgresPkg}/bin/pg_isready -d template1 && \
+              ${postgresPkg}/bin/pg_isready -d template1 && \\
               ${postgresPkg}/bin/psql -c "SELECT 1" template1 > /dev/null 2>&1
             else
               echo "Waiting for PostgreSQL initialization to complete..." 2>&1
