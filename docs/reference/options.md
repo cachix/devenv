@@ -22710,7 +22710,7 @@ Override the configuration file used by OpenTelemetry Collector.
 By default, a configuration is generated from ` services.opentelemetry-collector.settings `.
 
 If overriding, enable the ` health_check ` extension to allow process-compose to check whether the Collector is ready.
-Otherwise, disable the readiness probe by setting ` processes.opentelemetry-collector.process-compose.readiness_probe = {}; `.
+Otherwise, disable the readiness probe by setting ` processes.opentelemetry-collector.process-compose.readiness_probe = lib.mkForce {}; `.
 
 
 
