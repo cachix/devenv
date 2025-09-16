@@ -96,7 +96,7 @@ in
     process.manager.command = lib.mkDefault ''
       # Ensure the log directory exists
       mkdir -p "${config.env.DEVENV_STATE}/process-compose"
-      
+
       ${if cfg.unixSocket.enable then ''
       # Check if process-compose server is already running on the socket
       if [ -S "${cfg.unixSocket.path}" ]; then
