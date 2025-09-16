@@ -106,19 +106,15 @@
           # Phase 2: Extract and apply profiles using extendModules with priority overrides
           project =
             let
-              # Collect profiles to activate in priority order (lowest to highest precedence)
+              # Build ordered list of profile names: hostname -> user -> manual
               manualProfiles = active_profiles;
               currentHostname = hostname;
               currentUsername = username;
               hostnameProfiles = lib.optional (currentHostname != "" && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })) "hostname.${currentHostname}";
               userProfiles = lib.optional (currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })) "user.${currentUsername}";
-
-              # Priority groups: hostname (700) -> user (600) -> manual (500, 490, 480...)
-              allProfileGroups = [
-                { profiles = hostnameProfiles; basePriority = 99; }
-                { profiles = userProfiles; basePriority = 94; }
-                { profiles = manualProfiles; basePriority = 90; }
-              ];
+  
+              # Ordered list of profiles to activate
+              orderedProfiles = hostnameProfiles ++ userProfiles ++ manualProfiles;
 
               # Resolve profile extends with cycle detection
               resolveProfileExtends = profileName: visited:
@@ -150,69 +146,56 @@
                   in
                   baseProject.config.profiles.${profileName} or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " allAvailableProfiles}");
 
-              # Process profile groups and apply priorities
-              # lower number = higher priority
-              processProfileGroup = { profiles, basePriority }:
-                lib.flatten (lib.imap0 (groupIndex: profileName:
-                  let
-                    # Resolve all extended profiles for this profile
-                    allProfileNames = resolveProfileExtends profileName [ ];
-                  in
-                  # Apply priorities to all resolved profiles
-                  # Extended profiles get lower priority, current profile gets highest
-                  lib.imap0 (profileIndex: resolvedProfileName:
-                    let
-                      # Calculate priority: base - (group * 100) - (profile * 10) - (extends * 1)
-                      profilePriority = basePriority - profileIndex;
-                      profileConfig = builtins.trace (resolvedProfileName) getProfileConfig resolvedProfileName;
+              # Fold over ordered profiles to build final list with extends
+              expandedProfiles = lib.foldl' (acc: profileName:
+                let
+                  allProfileNames = resolveProfileExtends profileName [ ];
+                in
+                acc ++ allProfileNames
+              ) [ ] orderedProfiles;
 
-                      applyModuleOverride = config:
-                        if builtins.isFunction config
-                        then (args:
-                          let res = config args;
-                          in builtins.trace
-                              (builtins.toJSON res)
-                              applyOverrideRecursive res
-                        )
-                        else builtins.trace (builtins.toJSON config) applyOverrideRecursive config;
+              # Map over expanded profiles and apply priorities
+              allPrioritizedModules = lib.imap0 (index: profileName:
+                let
+                  # Decrement priority for each profile (lower = higher precedence)
+                  # Start with the next lowest priority after the default priority for values (100)
+                  profilePriority = (lib.modules.defaultOverridePriority - 1) - index;
+                  profileConfig = getProfileConfig profileName;
 
-                      # Apply priority overrides recursively to the deferredModule imports structure
-                      # Need to apply override to actual config values, not container objects
-                      applyOverrideRecursive = config:
-                        if builtins.isFunction config
-                        then config  # Don't modify functions - let module system handle them
-                        else if lib.isAttrs config && config ? _type
-                        then config  # Don't override values with existing type metadata
-                        else if lib.isAttrs config
-                        then lib.mapAttrs (_: applyOverrideRecursive) config
-                        else lib.mkOverride profilePriority config;
+                  # Support overriding both plain attrset modules and functions
+                  applyModuleOverride = config:
+                    if builtins.isFunction config
+                    then let
+                      wrapper = args: applyOverrideRecursive (config args);
+                    in lib.mirrorFunctionArgs config wrapper
+                    else applyOverrideRecursive config;
 
-                      prioritizedConfig = (
-                        profileConfig.module // {
-                          imports = lib.map (importItem:
-                            importItem // {
-                              imports = lib.map (nestedImport:
-                                applyModuleOverride nestedImport
-                              ) (importItem.imports or [ ]);
-                            }
-                          ) (profileConfig.module.imports or [ ]);
-                        });
-                    in
-                    prioritizedConfig
-                  ) allProfileNames
-                ) profiles);
+                  # Apply overrides recursively
+                  applyOverrideRecursive = config:
+                    if lib.isAttrs config && config ? _type
+                    then config  # Don't override values with existing type metadata
+                    else if lib.isAttrs config
+                    then lib.mapAttrs (_: applyOverrideRecursive) config
+                    else lib.mkOverride profilePriority config;
 
-              # Collect all prioritized profile modules
-              allPrioritizedModules = lib.flatten (map processProfileGroup allProfileGroups);
+                  # Apply priority overrides recursively to the deferredModule imports structure
+                  prioritizedConfig = (
+                    profileConfig.module // {
+                      imports = lib.map (importItem:
+                        importItem // {
+                          imports = lib.map (nestedImport:
+                            applyModuleOverride nestedImport
+                          ) (importItem.imports or [ ]);
+                        }
+                      ) (profileConfig.module.imports or [ ]);
+                    });
+                in
+                prioritizedConfig
+              ) expandedProfiles;
             in
             if allPrioritizedModules == [ ]
             then baseProject
-            else 
-              let
-                finalProject = baseProject.extendModules { modules = allPrioritizedModules; };
-              in
-              # builtins.trace "=== FINAL MODULES === Count: ${toString (builtins.length allPrioritizedModules)} Environment: ${builtins.toJSON (finalProject.config.env or {})}" finalProject;
-              finalProject;
+            else baseProject.extendModules { modules = allPrioritizedModules; };
           config = project.config;
 
           options = pkgs.nixosOptionsDoc {
