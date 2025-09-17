@@ -17860,30 +17860,6 @@ list of string
 
 
 
-<<<<<<< HEAD
-Profile definitions that are automatically activated based on the machine’s hostname.
-
-
-
-*Type:*
-lazy attribute set of (submodule)
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
-
-
-
-## profiles.hostname.\<name>.config
-
-
-
-=======
->>>>>>> profile-priorities
 Additional configuration to merge when this profile is active.
 
 
@@ -17955,30 +17931,6 @@ list of string
 
 
 
-<<<<<<< HEAD
-Profile definitions that are automatically activated based on the username.
-
-
-
-*Type:*
-lazy attribute set of (submodule)
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
-
-
-
-## profiles.user.\<name>.config
-
-
-
-=======
->>>>>>> profile-priorities
 Additional configuration to merge when this profile is active.
 
 
@@ -17993,8 +17945,6 @@ module
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
-<<<<<<< HEAD
-=======
 
 
 
@@ -18016,7 +17966,6 @@ lazy attribute set of (submodule)
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
->>>>>>> profile-priorities
 
 
 
@@ -18049,8 +17998,6 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
-<<<<<<< HEAD
-=======
 
 
 
@@ -18072,7 +18019,6 @@ module
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
->>>>>>> profile-priorities
 
 
 
