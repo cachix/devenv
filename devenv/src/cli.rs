@@ -169,6 +169,15 @@ pub struct GlobalOptions {
         long_help = "Override configuration options with typed values.\n\nOPTION must include a type: <attribute>:<type>\nSupported types: string, int, float, bool, path, pkg, pkgs\n\nExamples:\n  --option languages.rust.channel:string beta\n  --option services.postgres.enable:bool true\n  --option languages.python.version:string 3.10\n  --option packages:pkgs \"ncdu git\""
     )]
     pub option: Vec<String>,
+
+    #[arg(
+        short = 'P',
+        long,
+        global = true,
+        help = "Activate one or more profiles defined in devenv.nix",
+        long_help = "Activate one or more profiles defined in devenv.nix.\n\nProfiles allow you to define different configurations that can be merged with your base configuration.\n\nSee https://devenv.sh/profiles for more information.\n\nExamples:\n  --profile python-3.14\n  --profile backend --profile fast-startup"
+    )]
+    pub profile: Vec<String>,
 }
 
 impl Default for GlobalOptions {
@@ -191,6 +200,7 @@ impl Default for GlobalOptions {
             nix_option: vec![],
             override_input: vec![],
             option: vec![],
+            profile: vec![],
         }
     }
 }

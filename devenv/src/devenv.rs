@@ -1410,6 +1410,28 @@ impl Devenv {
         // `devenv_runtime` is an absolute string path to the runtime directory for this shell.
         // `devenv_istesting` is a boolean indicating if the shell is being assembled for testing.
         // `container_name` indicates the name of the container being built, copied, or run, if any.
+        let active_profiles = if self.global_options.profile.is_empty() {
+            "[ ]".to_string()
+        } else {
+            format!(
+                "[ {} ]",
+                self.global_options
+                    .profile
+                    .iter()
+                    .map(|p| format!("\"{}\"", p))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        };
+
+        // Get current hostname and username using system APIs
+        let hostname = hostname::get()
+            .ok()
+            .and_then(|h| h.to_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let username = whoami::username();
+
         let vars = indoc::formatdoc!(
             "version = \"{version}\";
             system = \"{system}\";
@@ -1421,6 +1443,9 @@ impl Devenv {
             devenv_istesting = {devenv_istesting};
             devenv_direnvrc_latest_version = {direnv_version};
             container_name = {container_name};
+            active_profiles = {active_profiles};
+            hostname = \"{hostname}\";
+            username = \"{username}\";
             ",
             version = crate_version!(),
             system = self.global_options.system,
@@ -1439,7 +1464,10 @@ impl Devenv {
             devenv_tmpdir = self.devenv_tmp,
             devenv_runtime = self.devenv_runtime.display(),
             devenv_istesting = is_testing,
-            direnv_version = DIRENVRC_VERSION.to_string()
+            direnv_version = DIRENVRC_VERSION.to_string(),
+            active_profiles = active_profiles,
+            hostname = hostname,
+            username = username
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);

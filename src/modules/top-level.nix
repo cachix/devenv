@@ -255,6 +255,7 @@ in
   };
 
   imports = [
+    ./profiles.nix
     ./info.nix
     ./outputs.nix
     ./files.nix

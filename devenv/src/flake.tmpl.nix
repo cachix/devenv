@@ -22,7 +22,7 @@
 
           systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
 
-          # Function to create devenv configuration for a specific system
+          # Function to create devenv configuration for a specific system with profiles support
           mkDevenvForSystem = targetSystem:
             let
               getOverlays = inputName: inputAttrs:
@@ -69,7 +69,9 @@
                   else if builtins.pathExists devenvdefaultpath
                   then devenvdefaultpath
                   else throw (devenvdefaultpath + " file does not exist for input ${name}.");
-              project = pkgs.lib.evalModules {
+
+              # Phase 1: Base evaluation to extract profile definitions
+              baseProject = pkgs.lib.evalModules {
                 specialArgs = inputs // { inherit inputs; };
                 modules = [
                   ({ config, ... }: {
@@ -108,6 +110,112 @@
                   (if builtins.pathExists (devenv_dotfile_path + "/cli-options.nix") then import (devenv_dotfile_path + "/cli-options.nix") else { })
                 ];
               };
+
+              # Phase 2: Extract and apply profiles using extendModules with priority overrides
+              project =
+                let
+                  # Build ordered list of profile names: hostname -> user -> manual
+                  manualProfiles = active_profiles;
+                  currentHostname = hostname;
+                  currentUsername = username;
+                  hostnameProfiles = lib.optional (currentHostname != "" && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })) "hostname.${currentHostname}";
+                  userProfiles = lib.optional (currentUsername != "" && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })) "user.${currentUsername}";
+
+                  # Ordered list of profiles to activate
+                  orderedProfiles = hostnameProfiles ++ userProfiles ++ manualProfiles;
+
+                  # Resolve profile extends with cycle detection
+                  resolveProfileExtends = profileName: visited:
+                    if builtins.elem profileName visited then
+                      throw "Circular dependency detected in profile extends: ${lib.concatStringsSep " -> " visited} -> ${profileName}"
+                    else
+                      let
+                        profile = getProfileConfig profileName;
+                        extends = profile.extends or [ ];
+                        newVisited = visited ++ [ profileName ];
+                        extendedProfiles = lib.flatten (map (name: resolveProfileExtends name newVisited) extends);
+                      in
+                      extendedProfiles ++ [ profileName ];
+
+                  # Get profile configuration by name from baseProject
+                  getProfileConfig = profileName:
+                    if lib.hasPrefix "hostname." profileName then
+                      let name = lib.removePrefix "hostname." profileName;
+                      in baseProject.config.profiles.hostname.${name}
+                    else if lib.hasPrefix "user." profileName then
+                      let name = lib.removePrefix "user." profileName;
+                      in baseProject.config.profiles.user.${name}
+                    else
+                      let
+                        availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
+                        hostnameProfiles = map (n: "hostname.${n}") (builtins.attrNames (baseProject.config.profiles.hostname or { }));
+                        userProfiles = map (n: "user.${n}") (builtins.attrNames (baseProject.config.profiles.user or { }));
+                        allAvailableProfiles = availableProfiles ++ hostnameProfiles ++ userProfiles;
+                      in
+                        baseProject.config.profiles.${profileName} or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " allAvailableProfiles}");
+
+                  # Fold over ordered profiles to build final list with extends
+                  expandedProfiles = lib.foldl'
+                    (acc: profileName:
+                      let
+                        allProfileNames = resolveProfileExtends profileName [ ];
+                      in
+                      acc ++ allProfileNames
+                    ) [ ]
+                    orderedProfiles;
+
+                  # Map over expanded profiles and apply priorities
+                  allPrioritizedModules = lib.imap0
+                    (index: profileName:
+                      let
+                        # Decrement priority for each profile (lower = higher precedence)
+                        # Start with the next lowest priority after the default priority for values (100)
+                        profilePriority = (lib.modules.defaultOverridePriority - 1) - index;
+                        profileConfig = getProfileConfig profileName;
+
+                        # Support overriding both plain attrset modules and functions
+                        applyModuleOverride = config:
+                          if builtins.isFunction config
+                          then
+                            let
+                              wrapper = args: applyOverrideRecursive (config args);
+                            in
+                            lib.mirrorFunctionArgs config wrapper
+                          else applyOverrideRecursive config;
+
+                        # Apply overrides recursively
+                        applyOverrideRecursive = config:
+                          if lib.isAttrs config && config ? _type
+                          then config  # Don't override values with existing type metadata
+                          else if lib.isAttrs config
+                          then lib.mapAttrs (_: applyOverrideRecursive) config
+                          else lib.mkOverride profilePriority config;
+
+                        # Apply priority overrides recursively to the deferredModule imports structure
+                        prioritizedConfig = (
+                          profileConfig.module // {
+                            imports = lib.map
+                              (importItem:
+                                importItem // {
+                                  imports = lib.map
+                                    (nestedImport:
+                                      applyModuleOverride nestedImport
+                                    )
+                                    (importItem.imports or [ ]);
+                                }
+                              )
+                              (profileConfig.module.imports or [ ]);
+                          }
+                        );
+                      in
+                      prioritizedConfig
+                    )
+                    expandedProfiles;
+                in
+                if allPrioritizedModules == [ ]
+                then baseProject
+                else baseProject.extendModules { modules = allPrioritizedModules; };
+
               config = project.config;
 
               options = pkgs.nixosOptionsDoc {

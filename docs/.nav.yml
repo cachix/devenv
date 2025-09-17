@@ -1,5 +1,6 @@
 nav:
   - Home: index.md
+  - Cloud: cloud.md
   - Guide:
     - Getting started: getting-started.md
     - Files and variables: files-and-variables.md
@@ -22,6 +23,7 @@ nav:
       - Binary caching: binary-caching.md
       - Git hooks: git-hooks.md
       - Tests: tests.md
+      - Profiles: profiles.md
       - Overlays: overlays.md
       - Outputs: outputs.md
     - Writing devenv.yaml:

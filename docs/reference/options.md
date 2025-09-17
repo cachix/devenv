@@ -17756,6 +17756,326 @@ YAML value
 
 
 
+## profiles
+
+
+
+Profile definitions that can be activated manually or automatically.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  # Manual profiles (activated via --profile)
+  "base" = {
+    module = {
+      languages.nix.enable = true;
+      packages = [ pkgs.git ];
+    };
+  };
+  "python-3.14" = {
+    extends = [ "base" ];
+    module = {
+      languages.python.version = "3.14";
+    };
+  };
+  "backend" = {
+    extends = [ "base" ];
+    module = {
+      services.postgres.enable = true;
+      services.redis.enable = true;
+    };
+  };
+  "fullstack" = {
+    extends = [ "backend" "python-3.14" ];
+    module = {
+      env.FULL_STACK = "true";
+    };
+  };
+  # Automatic hostname-based profiles
+  hostname."work-laptop" = {
+    extends = [ "backend" ];
+    module = {
+      env.WORK_ENV = "true";
+    };
+  };
+  # Automatic user-based profiles
+  user."alice" = {
+    extends = [ "python-3.14" ];
+    module = {
+      env.USER_ROLE = "developer";
+    };
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
+
+
+
+## profiles.\<name>.module
+
+
+
+<<<<<<< HEAD
+Profile definitions that are automatically activated based on the machine’s hostname.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.hostname.\<name>.config
+
+
+
+=======
+>>>>>>> profile-priorities
+Additional configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+
+
+## profiles.hostname
+
+
+
+Profile definitions that are automatically activated based on the machine’s hostname.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.hostname.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.hostname.\<name>.module
+
+
+
+<<<<<<< HEAD
+Profile definitions that are automatically activated based on the username.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.user.\<name>.config
+
+
+
+=======
+>>>>>>> profile-priorities
+Additional configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+<<<<<<< HEAD
+=======
+
+
+
+## profiles.user
+
+
+
+Profile definitions that are automatically activated based on the username.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+>>>>>>> profile-priorities
+
+
+
+## profiles.user.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+<<<<<<< HEAD
+=======
+
+
+
+## profiles.user.\<name>.module
+
+
+
+Additional configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+>>>>>>> profile-priorities
+
+
+
 ## scripts
 
 
