@@ -1,4 +1,4 @@
-use tokio::signal;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
@@ -17,36 +17,20 @@ impl SignalHandler {
         let cancellation_token = CancellationToken::new();
         let token_clone = cancellation_token.clone();
 
+        let mut sigint = signal(SignalKind::interrupt()).expect("Failed to install SIGINT handler");
+        let mut sigterm = signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
+
         let handle = tokio::spawn(async move {
-            let ctrl_c = signal::ctrl_c();
-
-            #[cfg(unix)]
-            {
-                let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
-                    .expect("Failed to install SIGTERM handler");
-
-                tokio::select! {
-                    _ = ctrl_c => {
-                        debug!("Received SIGINT (Ctrl+C), triggering shutdown...");
-                        eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
-                        token_clone.cancel();
-                    }
-                    _ = sigterm.recv() => {
-                        debug!("Received SIGTERM, triggering shutdown...");
-                        eprintln!("Received SIGTERM, shutting down gracefully...");
-                        token_clone.cancel();
-                    }
+            tokio::select! {
+                _ = sigint.recv() => {
+                    debug!("Received SIGINT (Ctrl+C), triggering shutdown...");
+                    eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                    token_clone.cancel();
                 }
-            }
-
-            #[cfg(not(unix))]
-            {
-                tokio::select! {
-                    _ = ctrl_c => {
-                        debug!("Received SIGINT (Ctrl+C), triggering shutdown...");
-                        eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
-                        token_clone.cancel();
-                    }
+                _ = sigterm.recv() => {
+                    debug!("Received SIGTERM, triggering shutdown...");
+                    eprintln!("Received SIGTERM, shutting down gracefully...");
+                    token_clone.cancel();
                 }
             }
         });
