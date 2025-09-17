@@ -10,7 +10,8 @@ let
       };
 
       process-compose = lib.mkOption {
-        type = types.attrs; # TODO: type this explicitly?
+        # TODO: type up as a submodule for discoverability
+        type = (pkgs.formats.yaml { }).type;
         default = { };
         description = ''
           process-compose.yaml specific process attributes.
