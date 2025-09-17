@@ -100,8 +100,10 @@ in
       ${lib.optionalString cfg.unixSocket.enable ''
       # Attach to an existing process-compose instance if:
       # - The unix socket is enabled
+      # - The socket file exists
+      # - The file is a unix socket
       # - There's an active process listening on the socket
-      if ${lib.getExe pkgs.lsof} "$PC_SOCKET_PATH" >/dev/null 2>&1; then
+      if ${pkgs.coreutils}/bin/timeout 1 ${lib.getExe pkgs.socat} - "UNIX-CONNECT:$PC_SOCKET_PATH" </dev/null >/dev/null 2>&1; then
         echo "Attaching to existing process-compose server at $PC_SOCKET_PATH" >&2
         exec ${lib.getExe cfg.package} --unix-socket "$PC_SOCKET_PATH" attach "$@"
       fi
