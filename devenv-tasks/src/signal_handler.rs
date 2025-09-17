@@ -1,11 +1,15 @@
-use tokio::signal::unix::{signal, SignalKind};
+use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::Arc;
+use tokio::signal::unix::signal;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
+use nix::libc;
 
 /// A shared signal handler service that manages signal handling across the entire application.
 /// This replaces per-task signal handlers with a single, efficient, centralized handler.
 pub struct SignalHandler {
     cancellation_token: CancellationToken,
+    last_signal: Arc<AtomicI32>,
     _handle: tokio::task::JoinHandle<()>,
 }
 
@@ -16,20 +20,31 @@ impl SignalHandler {
     pub fn start() -> Self {
         let cancellation_token = CancellationToken::new();
         let token_clone = cancellation_token.clone();
+        let last_signal = Arc::new(AtomicI32::new(0));
+        let last_signal_clone = Arc::clone(&last_signal);
 
-        let mut sigint = signal(SignalKind::interrupt()).expect("Failed to install SIGINT handler");
-        let mut sigterm = signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
+        let mut sigint = signal(libc::SIGINT.into()).expect("Failed to install SIGINT handler");
+        let mut sigterm = signal(libc::SIGTERM.into()).expect("Failed to install SIGTERM handler");
+        let mut sighup = signal(libc::SIGHUP.into()).expect("Failed to install SIGHUP handler");
 
         let handle = tokio::spawn(async move {
             tokio::select! {
                 _ = sigint.recv() => {
                     debug!("Received SIGINT (Ctrl+C), triggering shutdown...");
                     eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                    last_signal_clone.store(libc::SIGINT, Ordering::Relaxed);
                     token_clone.cancel();
                 }
                 _ = sigterm.recv() => {
                     debug!("Received SIGTERM, triggering shutdown...");
                     eprintln!("Received SIGTERM, shutting down gracefully...");
+                    last_signal_clone.store(libc::SIGTERM, Ordering::Relaxed);
+                    token_clone.cancel();
+                }
+                _ = sighup.recv() => {
+                    debug!("Received SIGHUP, triggering shutdown...");
+                    eprintln!("Received SIGHUP, shutting down gracefully...");
+                    last_signal_clone.store(libc::SIGHUP, Ordering::Relaxed);
                     token_clone.cancel();
                 }
             }
@@ -37,6 +52,7 @@ impl SignalHandler {
 
         Self {
             cancellation_token,
+            last_signal,
             _handle: handle,
         }
     }
@@ -50,6 +66,26 @@ impl SignalHandler {
     /// Check if a shutdown signal has been received.
     pub fn is_cancelled(&self) -> bool {
         self.cancellation_token.is_cancelled()
+    }
+
+    /// Get the last signal that was received, if any.
+    pub fn last_signal(&self) -> Option<i32> {
+        match self.last_signal.load(Ordering::Relaxed) {
+            0 => None,
+            i => Some(i)
+        }
+    }
+
+    /// Restore the default handler for the last received signal and re-raise the signal to terminate with the correct exit code.
+    pub fn exit_process(&self) -> ! {
+        let signal = self.last_signal().unwrap_or(libc::SIGTERM);
+        unsafe {
+            libc::signal(signal, libc::SIG_DFL);
+            libc::kill(libc::getpid(), signal);
+        }
+
+        // Unreachable: something went wrong
+        std::process::exit(1);
     }
 }
 
