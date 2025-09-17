@@ -99,6 +99,13 @@
                       })
                     ];
                   })
+                  ({ options, ... }: {
+                    config.git = lib.mkMerge [
+                      (pkgs.lib.optionalAttrs (builtins.hasAttr "root" options.git) {
+                        root = git_root;
+                      })
+                    ];
+                  })
                   (pkgs.lib.optionalAttrs (container_name != null) {
                     container.isBuilding = pkgs.lib.mkForce true;
                     containers.${container_name}.isBuilding = true;

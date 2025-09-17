@@ -225,6 +225,30 @@ You can also run tasks after a process finishes by using the `after` attribute:
 
 This ensures that cleanup tasks like removing PID files or clearing caches are executed when the application server stops.
 
+## Git Integration
+
+!!! tip "New in version 1.10"
+
+Tasks can reference the git repository root path using `${config.git.root}`, which is particularly useful in monorepo environments:
+
+```nix title="devenv.nix"
+{ config, ... }:
+
+{
+  tasks."build:frontend" = {
+    exec = "npm run build";
+    cwd = "${config.git.root}/frontend";
+  };
+
+  tasks."test:backend" = {
+    exec = "cargo test";
+    cwd = "${config.git.root}/backend";
+  };
+}
+```
+
+This allows tasks to reference paths relative to the repository root regardless of where the `devenv.nix` file is located within the repository.
+
 ## SDK using Task Server Protocol
 
 See [Task Server Protocol](https://github.com/cachix/devenv/issues/1457) for a proposal how defining tasks in your favorite language would look like.

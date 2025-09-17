@@ -1432,6 +1432,24 @@ impl Devenv {
 
         let username = whoami::username();
 
+        // Detect git repository root
+        let git_root = std::process::Command::new("git")
+            .args(&["rev-parse", "--show-toplevel"])
+            .current_dir(&self.devenv_root)
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    Some(format!(
+                        "\"{}\"",
+                        String::from_utf8_lossy(&output.stdout).trim()
+                    ))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| "null".to_string());
+
         let vars = indoc::formatdoc!(
             "version = \"{version}\";
             system = \"{system}\";
@@ -1446,6 +1464,7 @@ impl Devenv {
             active_profiles = {active_profiles};
             hostname = \"{hostname}\";
             username = \"{username}\";
+            git_root = {git_root};
             ",
             version = crate_version!(),
             system = self.global_options.system,
@@ -1467,7 +1486,8 @@ impl Devenv {
             direnv_version = DIRENVRC_VERSION.to_string(),
             active_profiles = active_profiles,
             hostname = hostname,
-            username = username
+            username = username,
+            git_root = git_root
         );
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
