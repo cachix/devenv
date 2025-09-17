@@ -388,10 +388,9 @@ impl Devenv {
 
         shell_cmd.env("SHELL", &bash);
 
-        // Pass the DEVENV_CMDLINE environment variable from the current process
-        if let Ok(cmdline) = std::env::var("DEVENV_CMDLINE") {
-            shell_cmd.env("DEVENV_CMDLINE", cmdline);
-        }
+        // Pass command args to the shell as DEVENV_CMDLINE
+        let cmdline = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
+        shell_cmd.env("DEVENV_CMDLINE", cmdline);
 
         Ok(shell_cmd)
     }
