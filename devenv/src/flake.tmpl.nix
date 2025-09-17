@@ -101,7 +101,7 @@
                   })
                   ({ options, ... }: {
                     config.git = lib.mkMerge [
-                      (pkgs.lib.optionalAttrs (builtins.hasAttr "root" options.git) {
+                      (pkgs.lib.optionalAttrs (builtins.hasAttr "git" options) {
                         root = git_root;
                       })
                     ];
