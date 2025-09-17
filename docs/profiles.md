@@ -43,7 +43,42 @@ $ devenv --profile backend shell
 $ devenv --profile backend --profile testing shell
 ```
 
-When using multiple profiles, configurations are merged with later profiles taking precedence for conflicting options.
+When multiple profiles are active, devenv wraps every profile module in a deterministic priority. Conflicting options are resolved by those priorities instead of relying on evaluation order.
+
+### Profile priorities
+
+Profile priorities are assigned automatically so you can reason about overrides:
+
+- **Base configuration** always loads first and has the lowest precedence.
+- **Hostname profiles** activate next, followed by **user profiles**.
+- **Manual profiles** passed with `--profile` have the highest precedence; if you pass several profiles, the last flag wins.
+- **Extends chains** resolve parents before children, so child profiles override their parents without extra `mkForce` calls.
+
+This ordering keeps large profile stacks predictable even when several profiles change the same option.
+
+Here is a simple example where every tier toggles the same option, yet the final value stays deterministic:
+
+```nix
+{ config, ... }: {
+  myteam.services.database.enable = false;
+
+  profiles = {
+    hostname."dev-server".module = {
+      myteam.services.database.enable = true;
+    };
+
+    user."alice".module = {
+      myteam.services.database.enable = false;
+    };
+
+    qa.module = {
+      myteam.services.database.enable = true;
+    };
+  };
+}
+```
+
+When Alice runs on `dev-server`, the hostname profile enables the database, her user profile disables it again, and a manual `devenv --profile qa shell` flips it back on. Conflicts resolve in priority order without any extra override helpers.
 
 ## Merging profiles
 
@@ -73,24 +108,6 @@ Profiles can extend other profiles using the `extends` option, allowing you to b
 
     fullstack = {
       extends = [ "backend" "frontend" ];
-    };
-  };
-}
-```
-
-### Resolving option conflicts
-
-Profile configurations can be functions that receive module arguments, allowing access to `lib`, `config`, and other module system features:
-
-```nix
-{
-  profiles = {
-    base.module = { lib, ... }: {
-      env.DEBUG = lib.mkDefault "false";  # Low priority
-    };
-
-    development.module = { lib, ... }: {
-      env.DEBUG = lib.mkForce "true";     # High priority - overrides base
     };
   };
 }

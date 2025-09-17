@@ -136,6 +136,34 @@ When user `alice` runs `devenv shell` on `dev-server` hostname, both her user pr
 
 This gives teams fine-grained control over development environments while keeping individual setups simple and centralized.
 
+## Profile priorities
+
+To keep profile-heavy projects from fighting each other we wrap every profile module in an automatic override priority. The base configuration is applied first, hostname profiles stack on top, then user profiles, and finally any manual `--profile` flags—if you pass several, the last flag wins. Extends chains apply parents before children so overrides land where you expect.
+
+Here is a simple example where every tier toggles the same option, yet the final value stays deterministic:
+
+```nix
+{ config, ... }: {
+  myteam.services.database.enable = false;
+
+  profiles = {
+    hostname."dev-server".module = {
+      myteam.services.database.enable = true;
+    };
+
+    user."alice".module = {
+      myteam.services.database.enable = false;
+    };
+
+    qa.module = {
+      myteam.services.database.enable = true;
+    };
+  };
+}
+```
+
+Alice starting a shell on `dev-server` will see the base configuration turn the database off, the hostname profile enable it, her user profile disable it again, and a manual `devenv --profile qa shell` flip it back on. Even with conflicting assignments, priorities make the outcome predictable and avoid merge conflicts.
+
 ## Building Linux containers on macOS
 
 Oh, we've also [removed restriction so you can now build containers on macOS](https://github.com/cachix/devenv/pull/2085) if you configure a linux builder.
