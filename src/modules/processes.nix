@@ -163,6 +163,8 @@ in
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
     procfileScript = pkgs.writeShellScript "devenv-up" ''
+      ${lib.optionalString config.devenv.debug "set -x"}
+
       ${config.process.manager.before}
 
       ${config.process.manager.command}
