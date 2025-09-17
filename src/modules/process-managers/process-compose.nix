@@ -124,10 +124,22 @@ in
         version = lib.mkDefault "0.5";
         is_strict = lib.mkDefault true;
         log_location = lib.mkDefault "${config.env.DEVENV_STATE}/process-compose/process-compose.log";
+        shell = {
+          shell_command = lib.mkDefault (lib.getExe pkgs.bashInteractive);
+          shell_argument = lib.mkDefault "-c";
+          elevated_shell_command = lib.mkDefault "sudo";
+          # Pass-through environment variables required by devenv-tasks when using elevated processes.
+          elevated_shell_argument = lib.mkDefault (lib.concatStringsSep " " [
+            "DEVENV_DOTFILE='${config.devenv.dotfile}'"
+            "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
+            "DEVENV_TASK_FILE='${config.env.DEVENV_TASK_FILE}'"
+            "-S"
+          ]);
+        };
         processes = lib.mapAttrs
           (name: value:
             let
-              taskCmd = "${config.task.package}/bin/devenv-tasks run --mode all devenv:processes:${name}";
+              taskCmd = "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}";
               command =
                 if value.process-compose.is_elevated or false
                 then taskCmd

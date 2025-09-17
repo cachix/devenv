@@ -789,6 +789,7 @@ impl Devenv {
             roots,
             tasks,
             run_mode,
+            sudo_context: None,
         };
         debug!(
             "Tasks config: {}",
