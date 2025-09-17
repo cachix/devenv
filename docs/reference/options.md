@@ -2740,6 +2740,27 @@ null or YAML value
 
 
 
+## git.root
+
+
+
+Git repository root path. This field is populated automatically in devenv 1.10 and newer.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
+
+
+
 ## git-hooks
 
 
