@@ -17,7 +17,7 @@ let
           "backend"
         ];
       };
-      config = lib.mkOption {
+      module = lib.mkOption {
         type = types.deferredModule;
         description = "Additional configuration to merge when this profile is active.";
         default = { };
@@ -51,41 +51,41 @@ in
         {
           # Manual profiles (activated via --profile)
           "base" = {
-            config = {
+            module = {
               languages.nix.enable = true;
               packages = [ pkgs.git ];
             };
           };
           "python-3.14" = {
             extends = [ "base" ];
-            config = {
+            module = {
               languages.python.version = "3.14";
             };
           };
           "backend" = {
             extends = [ "base" ];
-            config = {
+            module = {
               services.postgres.enable = true;
               services.redis.enable = true;
             };
           };
           "fullstack" = {
             extends = [ "backend" "python-3.14" ];
-            config = {
+            module = {
               env.FULL_STACK = "true";
             };
           };
           # Automatic hostname-based profiles
           hostname."work-laptop" = {
             extends = [ "backend" ];
-            config = {
+            module = {
               env.WORK_ENV = "true";
             };
           };
           # Automatic user-based profiles
           user."alice" = {
             extends = [ "python-3.14" ];
-            config = {
+            module = {
               env.USER_ROLE = "developer";
             };
           };

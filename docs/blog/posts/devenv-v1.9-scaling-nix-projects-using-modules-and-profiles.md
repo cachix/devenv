@@ -70,12 +70,12 @@ Since options default to `false`, you'll need to enable them per project. You ca
   packages = [ pkgs.jq ];
 
   profiles = {
-    backend.config = {
+    backend.module = {
       myteam.languages.rust.enable = true;
       myteam.services.database.enable = true;
     };
 
-    frontend.config = {
+    frontend.module = {
       languages.javascript.enable = true;
     };
 
@@ -121,11 +121,11 @@ Profiles can activate automatically based on hostname or username:
 ```nix
 {
   profiles = {
-    hostname."dev-server".config = {
+    hostname."dev-server".module = {
       myteam.services.database.enable = true;
     };
 
-    user."alice".config = {
+    user."alice".module = {
       myteam.languages.rust.enable = true;
     };
   };
@@ -135,6 +135,34 @@ Profiles can activate automatically based on hostname or username:
 When user `alice` runs `devenv shell` on `dev-server` hostname, both her user profile and the hostname profile automatically activate.
 
 This gives teams fine-grained control over development environments while keeping individual setups simple and centralized.
+
+## Profile priorities
+
+To keep profile-heavy projects from fighting each other we wrap every profile module in an automatic override priority. The base configuration is applied first, hostname profiles stack on top, then user profiles, and finally any manual `--profile` flags—if you pass several, the last flag wins. Extends chains apply parents before children so overrides land where you expect.
+
+Here is a simple example where every tier toggles the same option, yet the final value stays deterministic:
+
+```nix
+{ config, ... }: {
+  myteam.services.database.enable = false;
+
+  profiles = {
+    hostname."dev-server".module = {
+      myteam.services.database.enable = true;
+    };
+
+    user."alice".module = {
+      myteam.services.database.enable = false;
+    };
+
+    qa.module = {
+      myteam.services.database.enable = true;
+    };
+  };
+}
+```
+
+Alice starting a shell on `dev-server` will see the base configuration turn the database off, the hostname profile enable it, her user profile disable it again, and a manual `devenv --profile qa shell` flip it back on. Even with conflicting assignments, priorities make the outcome predictable and avoid merge conflicts.
 
 ## Building Linux containers on macOS
 

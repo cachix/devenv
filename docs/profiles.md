@@ -13,19 +13,19 @@ Define profiles in your `devenv.nix` file using the `profiles` option:
 ```nix
 { pkgs, config, ... }: {
   profiles = {
-    backend.config = {
+    backend.module = {
       services.postgres.enable = true;
       services.redis.enable = true;
       env.ENVIRONMENT = "backend";
     };
 
-    frontend.config = {
+    frontend.module = {
       languages.javascript.enable = true;
       processes.dev-server.exec = "npm run dev";
       env.ENVIRONMENT = "frontend";
     };
 
-    testing.config = { pkgs, ... }: {
+    testing.module = { pkgs, ... }: {
       packages = [ pkgs.playwright pkgs.cypress ];
       env.NODE_ENV = "test";
     };
@@ -43,7 +43,42 @@ $ devenv --profile backend shell
 $ devenv --profile backend --profile testing shell
 ```
 
-When using multiple profiles, configurations are merged with later profiles taking precedence for conflicting options.
+When multiple profiles are active, devenv wraps every profile module in a deterministic priority. Conflicting options are resolved by those priorities instead of relying on evaluation order.
+
+### Profile priorities
+
+Profile priorities are assigned automatically so you can reason about overrides:
+
+- **Base configuration** always loads first and has the lowest precedence.
+- **Hostname profiles** activate next, followed by **user profiles**.
+- **Manual profiles** passed with `--profile` have the highest precedence; if you pass several profiles, the last flag wins.
+- **Extends chains** resolve parents before children, so child profiles override their parents without extra `mkForce` calls.
+
+This ordering keeps large profile stacks predictable even when several profiles change the same option.
+
+Here is a simple example where every tier toggles the same option, yet the final value stays deterministic:
+
+```nix
+{ config, ... }: {
+  myteam.services.database.enable = false;
+
+  profiles = {
+    hostname."dev-server".module = {
+      myteam.services.database.enable = true;
+    };
+
+    user."alice".module = {
+      myteam.services.database.enable = false;
+    };
+
+    qa.module = {
+      myteam.services.database.enable = true;
+    };
+  };
+}
+```
+
+When Alice runs on `dev-server`, the hostname profile enables the database, her user profile disables it again, and a manual `devenv --profile qa shell` flips it back on. Conflicts resolve in priority order without any extra override helpers.
 
 ## Merging profiles
 
@@ -58,14 +93,14 @@ Profiles can extend other profiles using the `extends` option, allowing you to b
 
   profiles = {
     backend = {
-      config = {
+      module = {
         services.postgres.enable = true;
         services.redis.enable = true;
       };
     };
 
     frontend = {
-      config = {
+      module = {
         languages.javascript.enable = true;
         processes.dev-server.exec = "npm run dev";
       };
@@ -78,24 +113,6 @@ Profiles can extend other profiles using the `extends` option, allowing you to b
 }
 ```
 
-### Resolving option conflicts
-
-Profile configurations can be functions that receive module arguments, allowing access to `lib`, `config`, and other module system features:
-
-```nix
-{
-  profiles = {
-    base.config = { lib, ... }: {
-      env.DEBUG = lib.mkDefault "false";  # Low priority
-    };
-
-    development.config = { lib, ... }: {
-      env.DEBUG = lib.mkForce "true";     # High priority - overrides base
-    };
-  };
-}
-```
-
 ## Hostname Profiles
 
 Profiles can automatically activate based on your machine's hostname:
@@ -103,20 +120,20 @@ Profiles can automatically activate based on your machine's hostname:
 ```nix
 {
   profiles = {
-    work-tools.config = {
+    work-tools.module = {
       packages = [ pkgs.docker pkgs.kubectl pkgs.slack ];
     };
 
     hostname = {
       "work-laptop" = {
         extends = [ "work-tools" ];
-        config = {
+        module = {
           env.WORK_ENV = "true";
           services.postgres.enable = true;
         };
       };
 
-      "home-desktop".config = {
+      "home-desktop".module = {
         env.PERSONAL_DEV = "true";
       };
     };
@@ -131,7 +148,7 @@ Profiles can automatically activate based on your username:
 ```nix
 {
   profiles = {
-    developer-base.config = {
+    developer-base.module = {
       packages = [ pkgs.git pkgs.gh pkgs.jq ];
       git.enable = true;
     };
@@ -139,7 +156,7 @@ Profiles can automatically activate based on your username:
     user = {
       "alice" = {
         extends = [ "developer-base" ];
-        config = {
+        module = {
           env.USER_ROLE = "backend-developer";
           languages.python.enable = true;
         };
@@ -147,7 +164,7 @@ Profiles can automatically activate based on your username:
 
       "bob" = {
         extends = [ "developer-base" ];
-        config = {
+        module = {
           env.USER_ROLE = "systems-engineer";
           languages.go.enable = true;
           languages.rust.enable = true;
@@ -167,16 +184,16 @@ All matching profiles are automatically merged when you run devenv commands:
   languages.nix.enable = true;
 
   profiles = {
-    backend.config = {
+    backend.module = {
       services.postgres.enable = true;
     };
 
-    hostname."ci-server".config = {
+    hostname."ci-server".module = {
       env.CI = "true";
       packages = [ pkgs.buildkit ];
     };
 
-    user."developer".config = {
+    user."developer".module = {
       git.enable = true;
       packages = [ pkgs.gh ];
     };

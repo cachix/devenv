@@ -17780,41 +17780,41 @@ lazy attribute set of (submodule)
 {
   # Manual profiles (activated via --profile)
   "base" = {
-    config = {
+    module = {
       languages.nix.enable = true;
       packages = [ pkgs.git ];
     };
   };
   "python-3.14" = {
     extends = [ "base" ];
-    config = {
+    module = {
       languages.python.version = "3.14";
     };
   };
   "backend" = {
     extends = [ "base" ];
-    config = {
+    module = {
       services.postgres.enable = true;
       services.redis.enable = true;
     };
   };
   "fullstack" = {
     extends = [ "backend" "python-3.14" ];
-    config = {
+    module = {
       env.FULL_STACK = "true";
     };
   };
   # Automatic hostname-based profiles
   hostname."work-laptop" = {
     extends = [ "backend" ];
-    config = {
+    module = {
       env.WORK_ENV = "true";
     };
   };
   # Automatic user-based profiles
   user."alice" = {
     extends = [ "python-3.14" ];
-    config = {
+    module = {
       env.USER_ROLE = "developer";
     };
   };
@@ -17824,24 +17824,6 @@ lazy attribute set of (submodule)
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
-
-
-
-## profiles.\<name>.config
-
-
-
-Additional configuration to merge when this profile is active.
-
-
-
-*Type:*
-module
-
-
-
-*Default:*
-` { } `
 
 
 
@@ -17874,10 +17856,11 @@ list of string
 
 
 
-## profiles.hostname
+## profiles.\<name>.module
 
 
 
+<<<<<<< HEAD
 Profile definitions that are automatically activated based on the machine’s hostname.
 
 
@@ -17899,12 +17882,32 @@ lazy attribute set of (submodule)
 
 
 
+=======
+>>>>>>> profile-priorities
 Additional configuration to merge when this profile is active.
 
 
 
 *Type:*
 module
+
+
+
+*Default:*
+` { } `
+
+
+
+## profiles.hostname
+
+
+
+Profile definitions that are automatically activated based on the machine’s hostname.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
 
 
 
@@ -17948,10 +17951,11 @@ list of string
 
 
 
-## profiles.user
+## profiles.hostname.\<name>.module
 
 
 
+<<<<<<< HEAD
 Profile definitions that are automatically activated based on the username.
 
 
@@ -17973,6 +17977,8 @@ lazy attribute set of (submodule)
 
 
 
+=======
+>>>>>>> profile-priorities
 Additional configuration to merge when this profile is active.
 
 
@@ -17987,6 +17993,30 @@ module
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+<<<<<<< HEAD
+=======
+
+
+
+## profiles.user
+
+
+
+Profile definitions that are automatically activated based on the username.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+>>>>>>> profile-priorities
 
 
 
@@ -18019,6 +18049,30 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+<<<<<<< HEAD
+=======
+
+
+
+## profiles.user.\<name>.module
+
+
+
+Additional configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+>>>>>>> profile-priorities
 
 
 
