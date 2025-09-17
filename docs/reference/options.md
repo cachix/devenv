@@ -1493,6 +1493,156 @@ string
 
 
 
+## claude.code.mcpServers
+
+
+
+MCP (Model Context Protocol) servers to configure.
+These servers provide additional capabilities and context to Claude Code.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  awslabs-iam-mcp-server = {
+    type = "stdio";
+    command = lib.getExe pkgs.awslabs-iam-mcp-server;
+    args = [ ];
+    env = { };
+  };
+  linear = {
+    type = "http";
+    url = "https://mcp.linear.app/mcp";
+  };
+  devenv = {
+    type = "stdio";
+    command = "devenv";
+    args = [ "mcp" ];
+    env = {
+      DEVENV_ROOT = config.devenv.root;
+    };
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.args
+
+
+
+Arguments to pass to the command for stdio MCP servers.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.command
+
+
+
+Command to execute for stdio MCP servers.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.env
+
+
+
+Environment variables for stdio MCP servers.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.type
+
+
+
+Type of MCP server connection.
+
+
+
+*Type:*
+one of “stdio”, “http”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.url
+
+
+
+URL for HTTP MCP servers.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## claude.code.model
 
 
@@ -2298,8 +2448,6 @@ string
 
 ## devcontainer.settings.overrideCommand
 
-
-
 Override the default command.
 
 
@@ -2428,6 +2576,8 @@ string
 
 
 ## devenv.warnOnNewVersion
+
+
 
 Whether to warn when a new version of either devenv or the direnv integration is available.
 
@@ -5129,8 +5279,6 @@ string
 
 ## git-hooks.hooks.credo.settings.strict
 
-
-
 Whether to auto-promote the changes.
 
 
@@ -5249,6 +5397,8 @@ list of string
 
 
 ## git-hooks.hooks.deadnix.settings.hidden
+
+
 
 Recurse into hidden subdirectories and process hidden .\*.nix files.
 
@@ -7171,8 +7321,6 @@ string
 
 ## git-hooks.hooks.lychee.settings.flags
 
-
-
 Flags passed to lychee. See all available [here](https://lychee.cli.rs/\#/usage/cli).
 
 
@@ -7307,6 +7455,8 @@ boolean
 
 
 ## git-hooks.hooks.mdl.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
