@@ -17693,6 +17693,27 @@ attribute set of (submodule)
 
 
 
+## processes.\<name>.cwd
+
+
+
+Working directory to run the process in. If not specified, the current working directory will be used.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.exec
 
 
@@ -26281,6 +26302,27 @@ list of string
 
 
 Override the binary name from the default ` package.meta.mainProgram `.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.cwd
+
+
+
+Working directory to run the task in. If not specified, the current working directory will be used.
 
 
 
