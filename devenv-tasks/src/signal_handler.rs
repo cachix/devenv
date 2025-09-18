@@ -1,10 +1,10 @@
+use nix::sys::signal::{self, SaFlags, SigAction, SigHandler, SigSet, Signal};
+use nix::unistd;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
-use nix::sys::signal::{self, Signal, SigAction, SigHandler, SaFlags, SigSet};
-use nix::unistd;
 
 /// A shared signal handler service that manages signal handling across the entire application.
 /// This replaces per-task signal handlers with a single, efficient, centralized handler.
@@ -25,7 +25,8 @@ impl SignalHandler {
         let last_signal_clone = Arc::clone(&last_signal);
 
         let mut sigint = signal(SignalKind::interrupt()).expect("Failed to install SIGINT handler");
-        let mut sigterm = signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
+        let mut sigterm =
+            signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
         let mut sighup = signal(SignalKind::hangup()).expect("Failed to install SIGHUP handler");
 
         let handle = tokio::spawn(async move {

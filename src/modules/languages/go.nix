@@ -14,7 +14,7 @@ let
       goModuleArgs = lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null) overrideArgs;
       goModuleOverrides = lib.mapAttrs (_: _: buildGoModule) goModuleArgs;
     in
-    if goModuleOverrides != {} then
+    if goModuleOverrides != { } then
       pkg.override goModuleOverrides
     else
       throw ''
