@@ -26352,12 +26352,38 @@ The Starship configuration file to use.
 
 
 *Type:*
-absolute path
+null or absolute path
 
 
 
 *Default:*
+` null `
+
+
+
+*Example:*
 ` ${config.env.DEVENV_ROOT}/starship.toml `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
+
+
+
+## starship.config.settings
+
+
+
+Starship configuration to use
+
+
+
+*Type:*
+TOML value
+
+
+
+*Default:*
+` {} `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
