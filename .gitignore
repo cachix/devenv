@@ -21,3 +21,6 @@ target
 /node_modules
 
 **/.claude/settings.local.json
+
+# MacOS Finder folder attributes store
+.DS_Store
