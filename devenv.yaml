@@ -1,14 +1,14 @@
 # yaml-language-server: $schema=./docs/devenv.schema.json
 inputs:
   nixpkgs:
-    url: github:NixOS/nixpkgs/nixpkgs-unstable
+    url: github:cachix/devenv-nixpkgs/rolling
   rust-overlay:
     url: github:oxalica/rust-overlay
     inputs:
       nixpkgs:
         follows: nixpkgs
   nix:
-    url: github:cachix/nix/devenv-2.30
+    url: github:cachix/nix/devenv-2.30.4
   devenv:
     url: path:.?dir=src/modules
   devenv-claude-agents:
