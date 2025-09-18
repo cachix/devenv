@@ -333,11 +333,12 @@ impl TaskState {
                             use ::nix::unistd::Pid;
 
                             // Send SIGTERM to the process group first for graceful shutdown
-                            signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM).ok();
+                            signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM).expect("failed to send SIGTERM to process group");
                             tokio::select! {
                                 _ = child.wait() => {}
                                 _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
-                                        child.kill().await.ok();
+                                        signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL).expect("failed to send SIGKILL to process group");
+                                        child.wait().await.expect("failed to wait on child process");
                                 }
                             }
                         }

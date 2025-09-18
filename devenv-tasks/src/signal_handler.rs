@@ -1,9 +1,10 @@
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use tokio::signal::unix::signal;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
-use nix::libc;
+use nix::sys::signal::{self, Signal, SigAction, SigHandler, SaFlags, SigSet};
+use nix::unistd;
 
 /// A shared signal handler service that manages signal handling across the entire application.
 /// This replaces per-task signal handlers with a single, efficient, centralized handler.
@@ -23,28 +24,28 @@ impl SignalHandler {
         let last_signal = Arc::new(AtomicI32::new(0));
         let last_signal_clone = Arc::clone(&last_signal);
 
-        let mut sigint = signal(libc::SIGINT.into()).expect("Failed to install SIGINT handler");
-        let mut sigterm = signal(libc::SIGTERM.into()).expect("Failed to install SIGTERM handler");
-        let mut sighup = signal(libc::SIGHUP.into()).expect("Failed to install SIGHUP handler");
+        let mut sigint = signal(SignalKind::interrupt()).expect("Failed to install SIGINT handler");
+        let mut sigterm = signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
+        let mut sighup = signal(SignalKind::hangup()).expect("Failed to install SIGHUP handler");
 
         let handle = tokio::spawn(async move {
             tokio::select! {
                 _ = sigint.recv() => {
                     debug!("Received SIGINT (Ctrl+C), triggering shutdown...");
                     eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
-                    last_signal_clone.store(libc::SIGINT, Ordering::Relaxed);
+                    last_signal_clone.store(Signal::SIGINT as i32, Ordering::Relaxed);
                     token_clone.cancel();
                 }
                 _ = sigterm.recv() => {
                     debug!("Received SIGTERM, triggering shutdown...");
                     eprintln!("Received SIGTERM, shutting down gracefully...");
-                    last_signal_clone.store(libc::SIGTERM, Ordering::Relaxed);
+                    last_signal_clone.store(Signal::SIGTERM as i32, Ordering::Relaxed);
                     token_clone.cancel();
                 }
                 _ = sighup.recv() => {
                     debug!("Received SIGHUP, triggering shutdown...");
                     eprintln!("Received SIGHUP, shutting down gracefully...");
-                    last_signal_clone.store(libc::SIGHUP, Ordering::Relaxed);
+                    last_signal_clone.store(Signal::SIGHUP as i32, Ordering::Relaxed);
                     token_clone.cancel();
                 }
             }
@@ -69,19 +70,20 @@ impl SignalHandler {
     }
 
     /// Get the last signal that was received, if any.
-    pub fn last_signal(&self) -> Option<i32> {
+    pub fn last_signal(&self) -> Option<Signal> {
         match self.last_signal.load(Ordering::Relaxed) {
             0 => None,
-            i => Some(i)
+            i => Signal::try_from(i).ok(),
         }
     }
 
     /// Restore the default handler for the last received signal and re-raise the signal to terminate with the correct exit code.
     pub fn exit_process(&self) -> ! {
-        let signal = self.last_signal().unwrap_or(libc::SIGTERM);
+        let signal = self.last_signal().unwrap_or(Signal::SIGTERM);
+        let action = SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
         unsafe {
-            libc::signal(signal, libc::SIG_DFL);
-            libc::kill(libc::getpid(), signal);
+            signal::sigaction(signal, &action).expect("Failed to restore default signal handler");
+            signal::kill(unistd::getpid(), signal).expect("Failed to re-raise signal");
         }
 
         // Unreachable: something went wrong
