@@ -38,7 +38,8 @@ nav:
   - Reference: reference
   - Recipes: common-patterns.md
   - Blog: blog
-  # XXX: we're using absolute path so that the title stays Roadmap
-  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/
+  - Roadmap:
+      # XXX: Override the title to prevent the full blog title from appearing in the nav
+      - Roadmap: blog/posts/devenv-is-switching-its-nix-implementation-to-tvix.md
   - Community: community
   - Discord: https://discord.gg/naMgvexb6q

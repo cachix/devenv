@@ -70,10 +70,11 @@ theme:
     - tabs
     - toc.follow
 
-# Exclude doc templates
+# Exclude doc templates and any unreleased docs
 exclude_docs: |
   /snippets/
   /individual-docs/**/*.md
+  /cloud.md
 
 plugins:
   search: {}
