@@ -2,50 +2,54 @@
 #    uv pip compile requirements.in -o requirements.txt
 annotated-types==0.7.0
     # via pydantic
-babel==2.16.0
+babel==2.17.0
     # via mkdocs-material
-bracex==2.5
+backrefs==5.9
+    # via mkdocs-material
+bracex==2.6
     # via wcmatch
-cachecontrol==0.14.2
+cachecontrol==0.14.3
     # via mkdocs-rss-plugin
 cairocffi==1.7.1
     # via cairosvg
-cairosvg==2.7.1
+cairosvg==2.8.2
     # via mkdocs-material
-certifi==2024.7.4
+certifi==2025.8.3
     # via requests
-cffi==1.17.0
+cffi==2.0.0
     # via cairocffi
-charset-normalizer==3.3.2
+charset-normalizer==3.4.3
     # via requests
-click==8.1.7
-    # via mkdocs
+click==8.2.1
+    # via
+    #   mkdocs
+    #   mkdocs-material
 colorama==0.4.6
     # via mkdocs-material
-cssselect2==0.7.0
+cssselect2==0.8.0
     # via cairosvg
 defusedxml==0.7.1
     # via cairosvg
-filelock==3.18.0
+filelock==3.19.1
     # via cachecontrol
 ghp-import==2.1.0
     # via mkdocs
 gitdb==4.0.12
     # via gitpython
-gitpython==3.1.44
+gitpython==3.1.45
     # via mkdocs-rss-plugin
-idna==3.7
+idna==3.10
     # via requests
-jinja2==3.1.4
+jinja2==3.1.6
     # via
     #   mkdocs
     #   mkdocs-material
-markdown==3.6
+markdown==3.9
     # via
     #   mkdocs
     #   mkdocs-material
     #   pymdown-extensions
-markupsafe==2.1.5
+markupsafe==3.0.2
     # via
     #   jinja2
     #   mkdocs
@@ -53,50 +57,50 @@ mergedeep==1.3.4
     # via
     #   mkdocs
     #   mkdocs-get-deps
-mkdocs==1.6.0
+mkdocs==1.6.1
     # via
     #   -r requirements.in
     #   mkdocs-awesome-nav
     #   mkdocs-include-markdown-plugin
     #   mkdocs-material
     #   mkdocs-rss-plugin
-mkdocs-awesome-nav==3.1.2
+mkdocs-awesome-nav==3.2.0
     # via -r requirements.in
 mkdocs-get-deps==0.2.0
     # via mkdocs
-mkdocs-include-markdown-plugin==6.2.1
+mkdocs-include-markdown-plugin==7.1.7
     # via -r requirements.in
-mkdocs-material==9.5.31
+mkdocs-material==9.6.20
     # via -r requirements.in
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
-mkdocs-rss-plugin==1.16.0
+mkdocs-rss-plugin==1.17.3
     # via -r requirements.in
-msgpack==1.1.0
+msgpack==1.1.1
     # via cachecontrol
 natsort==8.4.0
     # via mkdocs-awesome-nav
-packaging==24.1
+packaging==25.0
     # via mkdocs
 paginate==0.5.7
     # via mkdocs-material
 pathspec==0.12.1
     # via mkdocs
-pillow==10.4.0
+pillow==11.3.0
     # via
     #   cairosvg
     #   mkdocs-material
-platformdirs==4.3.6
+platformdirs==4.4.0
     # via mkdocs-get-deps
-pycparser==2.22
+pycparser==2.23
     # via cffi
-pydantic==2.11.5
+pydantic==2.11.9
     # via mkdocs-awesome-nav
 pydantic-core==2.33.2
     # via pydantic
-pygments==2.18.0
+pygments==2.19.2
     # via mkdocs-material
-pymdown-extensions==10.12
+pymdown-extensions==10.16.1
     # via mkdocs-material
 python-dateutil==2.9.0.post0
     # via ghp-import
@@ -106,16 +110,14 @@ pyyaml==6.0.2
     #   mkdocs-get-deps
     #   pymdown-extensions
     #   pyyaml-env-tag
-pyyaml-env-tag==0.1
+pyyaml-env-tag==1.1
     # via mkdocs
-regex==2024.11.6
-    # via mkdocs-material
-requests==2.32.3
+requests==2.32.5
     # via
     #   cachecontrol
     #   mkdocs-material
     #   mkdocs-rss-plugin
-six==1.16.0
+six==1.17.0
     # via python-dateutil
 smmap==5.0.2
     # via gitdb
@@ -123,18 +125,18 @@ tinycss2==1.4.0
     # via
     #   cairosvg
     #   cssselect2
-typing-extensions==4.14.0
+typing-extensions==4.15.0
     # via
     #   pydantic
     #   pydantic-core
     #   typing-inspection
 typing-inspection==0.4.1
     # via pydantic
-urllib3==2.2.3
+urllib3==2.5.0
     # via requests
 watchdog==6.0.0
     # via mkdocs
-wcmatch==8.5.2
+wcmatch==10.1
     # via
     #   mkdocs-awesome-nav
     #   mkdocs-include-markdown-plugin
