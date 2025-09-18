@@ -62,15 +62,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 run_mode: mode,
             };
 
-            // Create shared signal handler
+            // Create a global signal handler
             let signal_handler = SignalHandler::start();
-            let cancellation_token = signal_handler.cancellation_token();
 
             let mut tasks_ui = TasksUi::builder(config, verbosity)
-                .with_cancellation_token(cancellation_token)
+                .with_cancellation_token(signal_handler.cancellation_token())
                 .build()
                 .await?;
             let (status, _outputs) = tasks_ui.run().await?;
+
+            if signal_handler.last_signal().is_some() {
+                signal_handler.exit_process();
+            }
 
             if status.failed + status.dependency_failed > 0 {
                 std::process::exit(1);
