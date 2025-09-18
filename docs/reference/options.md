@@ -1599,6 +1599,156 @@ list of string
 
 
 
+## configurations
+
+
+
+Configurations for NixOS, home-manager, and nix-darwin.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.home-manager
+
+
+
+Home Manager configuration for the configuration.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  home.username = "jdoe";
+  home.homeDirectory = "/home/jdoe";
+  programs.git.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.nix-darwin
+
+
+
+nix-darwin configuration for the configuration.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{ pkgs, ... }: {
+  environment.systemPackages = [
+    pkgs.vim
+  ];
+  services.nix-daemon.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.nixos
+
+
+
+NixOS configuration for the configuration.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  fileSystems."/".device = "/dev/sda1";
+  boot.loader.systemd-boot.enable = true;
+  services.openssh.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.system
+
+
+
+System architecture for the configuration.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "x86_64-linux" `
+
+
+
+*Example:*
+` "x86_64-linux" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
 ## container.isBuilding
 
 
@@ -2319,8 +2469,6 @@ anything
 
 ## devcontainer.settings.updateContentCommand
 
-
-
 A command to run after the container is created.
 
 
@@ -2428,6 +2576,8 @@ string
 
 
 ## devenv.warnOnNewVersion
+
+
 
 Whether to warn when a new version of either devenv or the direnv integration is available.
 
@@ -5171,8 +5321,6 @@ boolean
 
 ## git-hooks.hooks.deadnix
 
-
-
 deadnix hook
 
 
@@ -5270,6 +5418,8 @@ list of string
 
 
 ## git-hooks.hooks.deadnix.settings.hidden
+
+
 
 Recurse into hidden subdirectories and process hidden .\*.nix files.
 
@@ -7213,8 +7363,6 @@ string
 
 ## git-hooks.hooks.markdownlint
 
-
-
 markdownlint hook
 
 
@@ -7328,6 +7476,8 @@ boolean
 
 
 ## git-hooks.hooks.mdl.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
