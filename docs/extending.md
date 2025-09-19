@@ -27,7 +27,7 @@ Projects can encode their best practices by creating custom modules with opinion
 }
 ```
 
-Once you have your team module defined, you can start using it in new projects:
+Once you have your best practices module defined, you can start using it in new projects:
 
 ```yaml title="devenv.yaml"
 inputs:
