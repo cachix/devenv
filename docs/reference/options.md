@@ -2483,8 +2483,6 @@ null or string
 
 ## delta.enable
 
-
-
 Integrate delta into git: https://dandavison.github.io/delta/.
 
 
@@ -2598,6 +2596,8 @@ string
 
 ## devcontainer.settings.overrideCommand
 
+
+
 Override the default command.
 
 
@@ -2616,6 +2616,8 @@ anything
 
 
 ## devcontainer.settings.updateContentCommand
+
+
 
 A command to run after the container is created.
 
@@ -2716,7 +2718,7 @@ string
 
 
 *Default:*
-` "1.8.2" `
+` "1.9" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -5322,8 +5324,6 @@ submodule
 
 ## git-hooks.hooks.cmake-format.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -5448,6 +5448,8 @@ string
 
 ## git-hooks.hooks.credo.settings.strict
 
+
+
 Whether to auto-promote the changes.
 
 
@@ -5466,6 +5468,8 @@ boolean
 
 
 ## git-hooks.hooks.deadnix
+
+
 
 deadnix hook
 
@@ -7388,8 +7392,6 @@ one of “Error”, “Warning”, “Information”, “Hint”
 
 ## git-hooks.hooks.lua-ls.settings.configuration
 
-
-
 See https://github.com/LuaLS/lua-language-server/wiki/Configuration-File\#luarcjson
 
 
@@ -7488,6 +7490,8 @@ string
 
 ## git-hooks.hooks.lychee.settings.flags
 
+
+
 Flags passed to lychee. See all available [here](https://lychee.cli.rs/\#/usage/cli).
 
 
@@ -7506,6 +7510,8 @@ string
 
 
 ## git-hooks.hooks.markdownlint
+
+
 
 markdownlint hook
 
