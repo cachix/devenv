@@ -32,6 +32,7 @@ nav:
     - Overview:
       - Automatic shell activation: automatic-shell-activation.md
       - Garbage collection: garbage-collection.md
+    - Extending: extending.md
     - Guides: guides
     - Integrations: integrations
     - Tutorial: https://github.com/cachix/nixcon-2024-workshop

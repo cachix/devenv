@@ -286,6 +286,52 @@ Common tools that can be assigned to agents:
 
 For more details on agents, see the [official Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code/sub-agents).
 
+## MCP Servers
+
+MCP (Model Context Protocol) servers provide additional capabilities and context to Claude Code. You can configure both stdio and HTTP-based MCP servers:
+
+```nix
+{
+  claude.code.mcpServers = {
+    # Local devenv MCP server
+    devenv = {
+      type = "stdio";
+      command = "devenv";
+      args = [ "mcp" ];
+      env = {
+        DEVENV_ROOT = config.devenv.root;
+      };
+    };
+
+    # AWS IAM MCP server
+    awslabs-iam-mcp-server = {
+      type = "stdio";
+      command = lib.getExe pkgs.awslabs-iam-mcp-server;
+      args = [ ];
+      env = { };
+    };
+
+    # HTTP-based MCP server
+    linear = {
+      type = "http";
+      url = "https://mcp.linear.app/mcp";
+    };
+  };
+}
+```
+
+### Server Types
+
+- **stdio**: Executes a command that communicates via stdin/stdout
+  - `command`: The executable to run
+  - `args`: Command line arguments (optional)
+  - `env`: Environment variables (optional)
+
+- **http**: Connects to an HTTP-based MCP server
+  - `url`: The server URL
+
+When MCP servers are configured, devenv generates a `.mcp.json` file that Claude Code uses to connect to these servers.
+
 ## Composable Specialized Agents
 
 The [devenv-claude-agents](https://github.com/cachix/devenv-claude-agents) repository provides a composable collection of specialized agents:

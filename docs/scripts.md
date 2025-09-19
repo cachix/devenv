@@ -118,6 +118,11 @@ Scripts can also execute using a package and have a description, which can be us
     description = "Greet in Nu Shell";
   };
 
+  scripts.file-example = {
+    exec = ./file-script.sh;
+    description = "Script loaded from external file";
+  };
+
   enterShell = ''
     echo
     echo 🦾 Helper scripts you can run to make your development richer:
@@ -139,6 +144,7 @@ Entering shell ...
 🦾
 🦾 python-hello     Hello world in Python
 🦾 nushell-greet    Greet in Nu Shell
+🦾 file-example     Script loaded from external file
 
 (devenv) $
 ```

@@ -34,6 +34,10 @@
   scripts.nushell-greet.package = pkgs.nushell;
   scripts.nushell-greet.binary = "nu";
 
+  # Load script content from a file
+  scripts.file-example.exec = ./file-script.sh;
+  scripts.file-example.description = "demonstrates loading script from a file";
+
   # Render a help section when you enter the shell, similar to `devenv info`
   enterShell = ''
     echo
@@ -58,5 +62,8 @@
 
     echo "Testing nushell-greet"
     nushell-greet | grep hello
+
+    echo "Testing file-example"
+    file-example test args | grep "This script was loaded from a file!"
   '';
 }

@@ -1493,6 +1493,156 @@ string
 
 
 
+## claude.code.mcpServers
+
+
+
+MCP (Model Context Protocol) servers to configure.
+These servers provide additional capabilities and context to Claude Code.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  awslabs-iam-mcp-server = {
+    type = "stdio";
+    command = lib.getExe pkgs.awslabs-iam-mcp-server;
+    args = [ ];
+    env = { };
+  };
+  linear = {
+    type = "http";
+    url = "https://mcp.linear.app/mcp";
+  };
+  devenv = {
+    type = "stdio";
+    command = "devenv";
+    args = [ "mcp" ];
+    env = {
+      DEVENV_ROOT = config.devenv.root;
+    };
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.args
+
+
+
+Arguments to pass to the command for stdio MCP servers.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.command
+
+
+
+Command to execute for stdio MCP servers.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.env
+
+
+
+Environment variables for stdio MCP servers.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.type
+
+
+
+Type of MCP server connection.
+
+
+
+*Type:*
+one of “stdio”, “http”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.url
+
+
+
+URL for HTTP MCP servers.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## claude.code.model
 
 
@@ -2333,8 +2483,6 @@ null or string
 
 ## delta.enable
 
-
-
 Integrate delta into git: https://dandavison.github.io/delta/.
 
 
@@ -2469,6 +2617,8 @@ anything
 
 ## devcontainer.settings.updateContentCommand
 
+
+
 A command to run after the container is created.
 
 
@@ -2568,7 +2718,7 @@ string
 
 
 *Default:*
-` "1.8.2" `
+` "1.9" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -5174,8 +5324,6 @@ submodule
 
 ## git-hooks.hooks.cmake-format.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -5320,6 +5468,8 @@ boolean
 
 
 ## git-hooks.hooks.deadnix
+
+
 
 deadnix hook
 
@@ -7242,8 +7392,6 @@ one of “Error”, “Warning”, “Information”, “Hint”
 
 ## git-hooks.hooks.lua-ls.settings.configuration
 
-
-
 See https://github.com/LuaLS/lua-language-server/wiki/Configuration-File\#luarcjson
 
 
@@ -7362,6 +7510,8 @@ string
 
 
 ## git-hooks.hooks.markdownlint
+
+
 
 markdownlint hook
 
@@ -18323,12 +18473,12 @@ string
 
 
 
-Shell code to execute when the script is run.
+Shell code to execute when the script is run, or path to a script file.
 
 
 
 *Type:*
-string
+string or absolute path
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
