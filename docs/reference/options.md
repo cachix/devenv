@@ -18473,12 +18473,12 @@ string
 
 
 
-Shell code to execute when the script is run.
+Shell code to execute when the script is run, or path to a script file.
 
 
 
 *Type:*
-string
+string or absolute path
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
