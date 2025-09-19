@@ -1,25 +1,25 @@
 # Extending devenv
 
-Teams can encode their best practices by creating custom modules with opinionated defaults in a central repository:
+Projects can encode their best practices by creating custom modules with opinionated defaults in a central repository:
 
 ```nix title="devenv.nix"
 { lib, config, pkgs, ... }: {
-  options.myteam = {
+  options.myproject = {
     languages.rust.enable = lib.mkEnableOption "Rust development stack";
     services.database.enable = lib.mkEnableOption "Database services";
   };
 
   config = {
-    packages = lib.mkIf config.myteam.languages.rust.enable [
+    packages = lib.mkIf config.myproject.languages.rust.enable [
       pkgs.cargo-watch
     ];
 
-    languages.rust = lib.mkIf config.myteam.languages.rust.enable {
+    languages.rust = lib.mkIf config.myproject.languages.rust.enable {
       enable = true;
       channel = "nightly";
     };
 
-    services.postgres = lib.mkIf config.myteam.services.database.enable {
+    services.postgres = lib.mkIf config.myproject.services.database.enable {
       enable = true;
       initialScript = "CREATE DATABASE myapp;";
     };
@@ -31,11 +31,11 @@ Once you have your team module defined, you can start using it in new projects:
 
 ```yaml title="devenv.yaml"
 inputs:
-  myteam:
-    url: github:myorg/devenv-myteam
+  myproject:
+    url: github:myorg/devenv-myproject
     flake: false
 imports:
-- myteam
+- myproject
 ```
 
 This automatically includes your centrally managed module. Since options default to `false`, you'll need to enable them per project.
