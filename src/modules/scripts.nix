@@ -11,8 +11,8 @@ let
     {
       options = {
         exec = lib.mkOption {
-          type = types.str;
-          description = "Shell code to execute when the script is run.";
+          type = types.oneOf [ types.str types.path ];
+          description = "Shell code to execute when the script is run, or path to a script file.";
         };
         package = lib.mkOption {
           type = types.package;
@@ -49,10 +49,17 @@ let
             then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
             else pkgs.lib.getExe config.package;
 
-          execScript = pkgs.writeScript "${name}-script" ''
-            #!${binary}
-            ${config.exec}
-          '';
+          execScript = pkgs.writeScript "${name}-script" (
+            if builtins.isPath config.exec
+            then ''
+              #!${binary}
+              ${builtins.readFile config.exec}
+            ''
+            else ''
+              #!${binary}
+              ${config.exec}
+            ''
+          );
         in
         lib.hiPrioSet (
           pkgs.writeScriptBin name ''
