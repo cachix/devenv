@@ -60,6 +60,12 @@ Running ``devenv init`` generates ``devenv.nix``:
     git --version | grep --color=auto "${pkgs.git.version}"
   '';
 
+  # https://devenv.sh/outputs/
+  # outputs = {
+  #   rust-app = config.languages.rust.import ./rust-app {};
+  #   python-app = config.languages.python.import ./python-app {};
+  # };
+
   # https://devenv.sh/git-hooks/
   # git-hooks.hooks.shellcheck.enable = true;
 
