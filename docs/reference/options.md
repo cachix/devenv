@@ -9492,8 +9492,6 @@ one of “”, “flow”, “babel”, “babel-flow”, “babel-ts”, “typ
 
 ## git-hooks.hooks.prettier.settings.plugins
 
-
-
 Add plugins from paths.
 
 
@@ -11571,8 +11569,6 @@ boolean
 
 ## git-hooks.hooks.typos.settings.color
 
-
-
 When to use generate output.
 
 
@@ -13544,6 +13540,134 @@ list of string
 
 
 
+## languages.helm.enable
+
+
+
+Whether to enable tools for Helm development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.package
+
+
+
+The Helm package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.kubernetes-helm `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.languageServer.enable
+
+
+
+Whether to enable Helm language server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.languageServer.package
+
+
+
+The Helm language server package to include.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.helm-ls `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.plugins
+
+
+
+List of Helm plugin names to include.
+They will be symlinked into one directory and exposed via HELM_PLUGINS.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "helm-secrets"
+  "helm-diff"
+  "helm-unittest"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
 ## languages.idris.enable
 
 
@@ -13724,8 +13848,6 @@ boolean
 
 
 ## languages.java.maven.package
-
-
 
 The Maven package to use.
 The Maven package by default inherits the JDK from ` languages.java.jdk.package `.
@@ -16141,8 +16263,6 @@ boolean
 
 
 ## languages.racket.package
-
-
 
 The Racket package to use.
 
@@ -20692,7 +20812,7 @@ string
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/kafka/connect/connect.offsets" `
+` "/var/home/mshnwq/Desktop/forks/devenv/.devenv/state/kafka/connect/connect.offsets" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
