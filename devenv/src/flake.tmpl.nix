@@ -262,7 +262,7 @@
                   options;
             in
             {
-              inherit config options build;
+              inherit config options build project;
               shell = config.shell;
               packages = {
                 optionsJSON = options.optionsJSON;
@@ -285,7 +285,7 @@
           # Per-system devenv configurations
           devenv = {
             # Default devenv for the current system
-            inherit (currentSystemDevenv) config options build shell packages;
+            inherit (currentSystemDevenv) config options build shell packages project;
             # Per-system devenv configurations
             inherit perSystem;
           };
