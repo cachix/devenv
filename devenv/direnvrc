@@ -119,7 +119,7 @@ use_devenv() {
   default_watches=(".envrc" "$HOME/.direnvrc" "$HOME/.config/direnv/direnvrc")
 
   if [[ -d "$devenv_dir" ]]; then
-    default_watches+=("$devenv_dir/devenv.nix" "$devenv_dir/devenv.lock" "$devenv_dir/devenv.yaml" "$devenv_dir/devenv.local.nix")
+    default_watches+=("$devenv_dir/devenv.nix" "$devenv_dir/devenv.lock" "$devenv_dir/devenv.yaml" "$devenv_dir/devenv.local.nix" "$devenv_dir/devenv.local.yaml")
 
     if [[ -f "$devenv_dir/devenv.yaml" ]]; then
       if ! "${devenv_cmd[@]}" assemble; then

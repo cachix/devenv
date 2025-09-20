@@ -1,2 +1,3 @@
 devenv.lock
 devenv.local.nix
+devenv.local.yaml
