@@ -180,23 +180,63 @@
                         profilePriority = (lib.modules.defaultOverridePriority - 1) - index;
                         profileConfig = getProfileConfig profileName;
 
+                        # Check if an option type needs explicit override to resolve conflicts
+                        typeNeedsOverride = type:
+                          if type == null then false
+                          else builtins.elem (type.name or type._type or "") [
+                            "str" "int" "bool" "enum" "path" "package" "float" "anything" "nullOr"
+                          ];
+
+                        # Check if a config path needs explicit override
+                        pathNeedsOverride = optionPath:
+                          let
+                            # Try direct option first
+                            directOption = lib.attrByPath optionPath null baseProject.options;
+                          in
+                          if directOption != null && lib.isOption directOption then
+                            typeNeedsOverride directOption.type
+                          else if optionPath != [] then
+                            # Check parent for freeform type
+                            let
+                              parentPath = lib.init optionPath;
+                              parentOption = lib.attrByPath parentPath null baseProject.options;
+                            in
+                            if parentOption != null && lib.isOption parentOption then
+                              let
+                                # Look for freeform type:
+                                # 1. Standard location: type.freeformType (primary)
+                                # 2. Nested location: type.nestedTypes.freeformType (evaluated form)
+                                freeformType = parentOption.type.freeformType or
+                                              parentOption.type.nestedTypes.freeformType or
+                                              null;
+                                elementType = if freeformType ? elemType then freeformType.elemType
+                                             else if freeformType ? nestedTypes && freeformType.nestedTypes ? elemType then freeformType.nestedTypes.elemType
+                                             else freeformType;
+                              in
+                              typeNeedsOverride elementType
+                            else false
+                          else false;
+
                         # Support overriding both plain attrset modules and functions
                         applyModuleOverride = config:
                           if builtins.isFunction config
                           then
                             let
-                              wrapper = args: applyOverrideRecursive (config args);
+                              wrapper = args: applyOverrideRecursive (config args) [];
                             in
                             lib.mirrorFunctionArgs config wrapper
-                          else applyOverrideRecursive config;
+                          else applyOverrideRecursive config [];
 
-                        # Apply overrides recursively
-                        applyOverrideRecursive = config:
-                          if lib.isAttrs config && config ? _type
-                          then config  # Don't override values with existing type metadata
-                          else if lib.isAttrs config
-                          then lib.mapAttrs (_: applyOverrideRecursive) config
-                          else lib.mkOverride profilePriority config;
+                        # Apply overrides recursively based on option types
+                        applyOverrideRecursive = config: optionPath:
+                          if lib.isAttrs config && config ? _type then
+                            config  # Don't touch values with existing type metadata
+                          else if lib.isAttrs config then
+                            lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [name])) config
+                          else if pathNeedsOverride optionPath then
+                            lib.mkOverride profilePriority config
+                          else
+                            config;
 
                         # Apply priority overrides recursively to the deferredModule imports structure
                         prioritizedConfig = (

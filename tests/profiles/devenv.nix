@@ -186,4 +186,27 @@
         env.TEST_VAR = config.env.BASE_ENV;
       };
   };
+
+  # Test enterShell concatenation (types.lines should merge)
+  profiles."shell-setup-a" = {
+    module = {
+      packages = [ pkgs.curl ];
+      enterShell = ''
+        echo "Entering shell from profile A"
+        export SHELL_A="setup"
+      '';
+      env.SHELL_SETUP_A = "enabled";
+    };
+  };
+
+  profiles."shell-setup-b" = {
+    module = {
+      packages = [ pkgs.wget ];
+      enterShell = ''
+        echo "Entering shell from profile B"
+        export SHELL_B="setup"
+      '';
+      env.SHELL_SETUP_B = "enabled";
+    };
+  };
 }
