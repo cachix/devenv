@@ -57,7 +57,7 @@ inputs:
   myteam:
     url: github:myorg/devenv-myteam
     flake: false
-inputs:
+imports:
 - myteam
 ```
 
