@@ -7,6 +7,7 @@ let
         type = lib.types.str;
         description = "System architecture for the configuration.";
         default = pkgs.stdenv.system;
+        defaultText = lib.literalExpression "pkgs.stdenv.system";
         example = "x86_64-linux";
       };
 
