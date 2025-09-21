@@ -21,9 +21,6 @@ async fn main() -> Result<()> {
         Ok(())
     };
 
-    let args = env::args().skip(1).collect::<Vec<_>>().join(" ");
-    env::set_var("DEVENV_CMDLINE", args);
-
     let command = match cli.command {
         None | Some(Commands::Version) => return print_version(),
         Some(Commands::Direnvrc) => {

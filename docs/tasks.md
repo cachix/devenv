@@ -1,6 +1,8 @@
 # Tasks
 
-!!! info "New in version 1.2"
+!!! tip "New in version 1.2"
+    
+    [Read more about tasks in the v1.2 release post](blog/posts/devenv-v1.2-tasks.md)
 
 Tasks allow you to form dependencies between code, executed in parallel.
 
@@ -23,7 +25,9 @@ Succeeded         myapp:hello         9ms
 1 Succeeded                           10.14ms
 ```
 
-!!! info "New in version 1.7"
+!!! tip "New in version 1.7"
+    
+    [Read more about enhanced tasks in the v1.7 release post](blog/posts/devenv-v1.7-cuda-support-enhanced-tasks-mcp-support.md)
 
 You can also run all tasks in a namespace by providing just the namespace prefix:
 
@@ -118,6 +122,8 @@ You can specify a list of files to monitor with `execIfModified`. The task will 
         "package.json" # Specific file
         "src"          # Entire directory
       ];
+      # Optionally run the build in a specific directory
+      cwd = "./frontend";
     };
   };
 }
@@ -158,7 +164,9 @@ Tasks support passing inputs and produce outputs, both as JSON objects:
 
 ## Processes as tasks
 
-!!! info "New in version 1.4"
+!!! tip "New in version 1.4"
+    
+    [Read more about process-task integration in the v1.4 release post](blog/posts/devenv-v1.4-generating-nix-developer-environments-using-ai.md)
 
 All processes defined in `processes` are automatically available as tasks with the `devenv:processes:` prefix. This allows you to:
 
@@ -216,6 +224,30 @@ You can also run tasks after a process finishes by using the `after` attribute:
 ```
 
 This ensures that cleanup tasks like removing PID files or clearing caches are executed when the application server stops.
+
+## Git Integration
+
+!!! tip "New in version 1.10"
+
+Tasks can reference the git repository root path using `${config.git.root}`, which is particularly useful in monorepo environments:
+
+```nix title="devenv.nix"
+{ config, ... }:
+
+{
+  tasks."build:frontend" = {
+    exec = "npm run build";
+    cwd = "${config.git.root}/frontend";
+  };
+
+  tasks."test:backend" = {
+    exec = "cargo test";
+    cwd = "${config.git.root}/backend";
+  };
+}
+```
+
+This allows tasks to reference paths relative to the repository root regardless of where the `devenv.nix` file is located within the repository.
 
 ## SDK using Task Server Protocol
 

@@ -1,5 +1,6 @@
 nav:
   - Home: index.md
+  - Cloud: cloud.md
   - Guide:
     - Getting started: getting-started.md
     - Files and variables: files-and-variables.md
@@ -22,6 +23,7 @@ nav:
       - Binary caching: binary-caching.md
       - Git hooks: git-hooks.md
       - Tests: tests.md
+      - Profiles: profiles.md
       - Overlays: overlays.md
       - Outputs: outputs.md
     - Writing devenv.yaml:
@@ -30,6 +32,7 @@ nav:
     - Overview:
       - Automatic shell activation: automatic-shell-activation.md
       - Garbage collection: garbage-collection.md
+    - Extending: extending.md
     - Guides: guides
     - Integrations: integrations
     - Tutorial: https://github.com/cachix/nixcon-2024-workshop
@@ -38,6 +41,8 @@ nav:
   - Reference: reference
   - Recipes: common-patterns.md
   - Blog: blog
-  # XXX: we're using absolute path so that the title stays Roadmap
-  - Roadmap: /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/
+  - Roadmap:
+      # XXX: Override the title to prevent the full blog title from appearing in the nav
+      - Roadmap: blog/posts/devenv-is-switching-its-nix-implementation-to-tvix.md
   - Community: community
+  - Discord: https://discord.gg/naMgvexb6q

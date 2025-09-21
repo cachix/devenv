@@ -11,6 +11,11 @@ Devenv uses [process-compose](https://github.com/F1bonacc1/process-compose) to m
   processes = {
     silly-example.exec = "while true; do echo hello && sleep 1; done";
     ping.exec = "ping localhost";
+    # Process that runs in a specific directory
+    server = {
+      exec = "python -m http.server";
+      cwd = "./public";
+    };
   };
 }
 ```
@@ -58,6 +63,30 @@ Devenv provides many pre-configured services that are already set up with proper
 - And many more...
 
 These services come with sensible defaults, health checks, and proper initialization scripts.
+
+## Git Integration
+
+!!! tip "New in version 1.10"
+
+Processes can reference the git repository root path using `${config.git.root}`, which is particularly useful in monorepo environments:
+
+```nix title="devenv.nix"
+{ config, ... }:
+
+{
+  processes.frontend = {
+    exec = "npm run dev";
+    cwd = "${config.git.root}/frontend";
+  };
+
+  processes.backend = {
+    exec = "cargo run";
+    cwd = "${config.git.root}/backend";
+  };
+}
+```
+
+This allows processes to reference paths relative to the repository root regardless of where the `devenv.nix` file is located within the repository.
 
 ## Running tasks before/after the process
 

@@ -23,3 +23,5 @@
 - Nix modules in `/src/modules/` define supported languages and services
 - Examples in `/examples/` show various configurations
 - Tests in `/tests/` validate functionality
+
+Never edit these files: docs/reference/options.md

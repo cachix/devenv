@@ -9,8 +9,15 @@ let
         description = "Bash code to run the process.";
       };
 
+      cwd = lib.mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Working directory to run the process in. If not specified, the current working directory will be used.";
+      };
+
       process-compose = lib.mkOption {
-        type = types.attrs; # TODO: type this explicitly?
+        # TODO: type up as a submodule for discoverability
+        type = (pkgs.formats.yaml { }).type;
         default = { };
         description = ''
           process-compose.yaml specific process attributes.
@@ -142,6 +149,7 @@ in
         name = "devenv:processes:${name}";
         value = {
           exec = process.exec;
+          cwd = process.cwd;
         };
       })
       config.processes;
@@ -155,6 +163,8 @@ in
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
     procfileScript = pkgs.writeShellScript "devenv-up" ''
+      ${lib.optionalString config.devenv.debug "set -x"}
+
       ${config.process.manager.before}
 
       ${config.process.manager.command}

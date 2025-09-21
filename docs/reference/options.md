@@ -1493,6 +1493,156 @@ string
 
 
 
+## claude.code.mcpServers
+
+
+
+MCP (Model Context Protocol) servers to configure.
+These servers provide additional capabilities and context to Claude Code.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  awslabs-iam-mcp-server = {
+    type = "stdio";
+    command = lib.getExe pkgs.awslabs-iam-mcp-server;
+    args = [ ];
+    env = { };
+  };
+  linear = {
+    type = "http";
+    url = "https://mcp.linear.app/mcp";
+  };
+  devenv = {
+    type = "stdio";
+    command = "devenv";
+    args = [ "mcp" ];
+    env = {
+      DEVENV_ROOT = config.devenv.root;
+    };
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.args
+
+
+
+Arguments to pass to the command for stdio MCP servers.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.command
+
+
+
+Command to execute for stdio MCP servers.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.env
+
+
+
+Environment variables for stdio MCP servers.
+
+
+
+*Type:*
+attribute set of string
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.type
+
+
+
+Type of MCP server connection.
+
+
+
+*Type:*
+one of “stdio”, “http”
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## claude.code.mcpServers.\<name>.url
+
+
+
+URL for HTTP MCP servers.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
 ## claude.code.model
 
 
@@ -1596,6 +1746,156 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/claude.nix)
+
+
+
+## configurations
+
+
+
+Configurations for NixOS, home-manager, and nix-darwin.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.home-manager
+
+
+
+Home Manager configuration for the configuration.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  home.username = "jdoe";
+  home.homeDirectory = "/home/jdoe";
+  programs.git.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.nix-darwin
+
+
+
+nix-darwin configuration for the configuration.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{ pkgs, ... }: {
+  environment.systemPackages = [
+    pkgs.vim
+  ];
+  services.nix-daemon.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.nixos
+
+
+
+NixOS configuration for the configuration.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  fileSystems."/".device = "/dev/sda1";
+  boot.loader.systemd-boot.enable = true;
+  services.openssh.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
+
+
+
+## configurations.\<name>.system
+
+
+
+System architecture for the configuration.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "x86_64-linux" `
+
+
+
+*Example:*
+` "x86_64-linux" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
 
 
 
@@ -2183,8 +2483,6 @@ null or string
 
 ## delta.enable
 
-
-
 Integrate delta into git: https://dandavison.github.io/delta/.
 
 
@@ -2420,7 +2718,7 @@ string
 
 
 *Default:*
-` "1.8.2" `
+` "1.9" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -2428,6 +2726,8 @@ string
 
 
 ## devenv.warnOnNewVersion
+
+
 
 Whether to warn when a new version of either devenv or the direnv integration is available.
 
@@ -2737,6 +3037,27 @@ null or YAML value
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/files.nix](https://github.com/cachix/devenv/blob/main/src/modules/files.nix)
+
+
+
+## git.root
+
+
+
+Git repository root path. This field is populated automatically in devenv 1.10 and newer.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
 
 
 
@@ -5003,8 +5324,6 @@ submodule
 
 ## git-hooks.hooks.cmake-format.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -5249,6 +5568,8 @@ list of string
 
 
 ## git-hooks.hooks.deadnix.settings.hidden
+
+
 
 Recurse into hidden subdirectories and process hidden .\*.nix files.
 
@@ -7071,8 +7392,6 @@ one of “Error”, “Warning”, “Information”, “Hint”
 
 ## git-hooks.hooks.lua-ls.settings.configuration
 
-
-
 See https://github.com/LuaLS/lua-language-server/wiki/Configuration-File\#luarcjson
 
 
@@ -7307,6 +7626,8 @@ boolean
 
 
 ## git-hooks.hooks.mdl.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -15456,6 +15777,27 @@ boolean
 
 
 
+## languages.python.uv.sync.packages
+
+
+
+Sync for specific packages in the workspace. See ` --package `.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.uv.sync.allExtras
 
 
@@ -15492,6 +15834,48 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.uv.sync.allPackages
+
+
+
+Sync all packages in the workspace. See ` --all-packages `.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
+## languages.python.uv.sync.arguments
+
+
+
+Command line arguments pass to ` uv sync ` during devenv initialisation.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
@@ -17630,6 +18014,27 @@ attribute set of (submodule)
 
 
 
+## processes.\<name>.cwd
+
+
+
+Working directory to run the process in. If not specified, the current working directory will be used.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
 ## processes.\<name>.exec
 
 
@@ -17659,7 +18064,7 @@ Only used when using ` process.manager.implementation = "process-compose"; `
 
 
 *Type:*
-attribute set
+YAML value
 
 
 
@@ -17690,6 +18095,272 @@ attribute set
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/processes.nix](https://github.com/cachix/devenv/blob/main/src/modules/processes.nix)
+
+
+
+## profiles
+
+
+
+Profile definitions that can be activated manually or automatically.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  # Manual profiles (activated via --profile)
+  "base" = {
+    module = {
+      languages.nix.enable = true;
+      packages = [ pkgs.git ];
+    };
+  };
+  "python-3.14" = {
+    extends = [ "base" ];
+    module = {
+      languages.python.version = "3.14";
+    };
+  };
+  "backend" = {
+    extends = [ "base" ];
+    module = {
+      services.postgres.enable = true;
+      services.redis.enable = true;
+    };
+  };
+  "fullstack" = {
+    extends = [ "backend" "python-3.14" ];
+    module = {
+      env.FULL_STACK = "true";
+    };
+  };
+  # Automatic hostname-based profiles
+  hostname."work-laptop" = {
+    extends = [ "backend" ];
+    module = {
+      env.WORK_ENV = "true";
+    };
+  };
+  # Automatic user-based profiles
+  user."alice" = {
+    extends = [ "python-3.14" ];
+    module = {
+      env.USER_ROLE = "developer";
+    };
+  };
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
+
+
+
+## profiles.\<name>.module
+
+
+
+Additional configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+
+
+## profiles.hostname
+
+
+
+Profile definitions that are automatically activated based on the machine’s hostname.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.hostname.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.hostname.\<name>.module
+
+
+
+Additional configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.user
+
+
+
+Profile definitions that are automatically activated based on the username.
+
+
+
+*Type:*
+lazy attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.user.\<name>.extends
+
+
+
+List of profile names to extend/inherit from.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "base"
+  "backend"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
+
+
+
+## profiles.user.\<name>.module
+
+
+
+Additional configuration to merge when this profile is active.
+
+
+
+*Type:*
+module
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix](https://github.com/cachix/devenv/blob/main/src/modules/profiles.nix)
 
 
 
@@ -17802,12 +18473,12 @@ string
 
 
 
-Shell code to execute when the script is run.
+Shell code to execute when the script is run, or path to a script file.
 
 
 
 *Type:*
-string
+string or absolute path
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix](https://github.com/cachix/devenv/blob/main/src/modules/scripts.nix)
@@ -22647,7 +23318,7 @@ Override the configuration file used by OpenTelemetry Collector.
 By default, a configuration is generated from ` services.opentelemetry-collector.settings `.
 
 If overriding, enable the ` health_check ` extension to allow process-compose to check whether the Collector is ready.
-Otherwise, disable the readiness probe by setting ` processes.opentelemetry-collector.process-compose.readiness_probe = {}; `.
+Otherwise, disable the readiness probe by setting ` processes.opentelemetry-collector.process-compose.readiness_probe = lib.mkForce {}; `.
 
 
 
@@ -25831,12 +26502,38 @@ The Starship configuration file to use.
 
 
 *Type:*
-absolute path
+null or absolute path
 
 
 
 *Default:*
+` null `
+
+
+
+*Example:*
 ` ${config.env.DEVENV_ROOT}/starship.toml `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
+
+
+
+## starship.config.settings
+
+
+
+Starship configuration to use
+
+
+
+*Type:*
+TOML value
+
+
+
+*Default:*
+` {} `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/starship.nix)
@@ -25952,6 +26649,27 @@ list of string
 
 
 Override the binary name from the default ` package.meta.mainProgram `.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## tasks.\<name>.cwd
+
+
+
+Working directory to run the task in. If not specified, the current working directory will be used.
 
 
 

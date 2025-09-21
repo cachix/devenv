@@ -5,16 +5,24 @@ let
 
   # Override the buildGoModule function to use the specified Go package.
   buildGoModule = pkgs.buildGoModule.override { go = cfg.package; };
+  # A helper function to rebuild a package with the specific Go version.
+  # It expects the package to have a `buildGo*Module` argument in its override function.
+  # This will override multiple buildGo*Module arguments if they exist.
   buildWithSpecificGo = pkg:
     let
       overrideArgs = lib.functionArgs pkg.override;
+      goModuleArgs = lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null) overrideArgs;
+      goModuleOverrides = lib.mapAttrs (_: _: buildGoModule) goModuleArgs;
     in
-    if builtins.hasAttr "buildGoModule" overrideArgs then
-      pkg.override { inherit buildGoModule; }
-    else if builtins.hasAttr "buildGoLatestModule" overrideArgs then
-      pkg.override { buildGoLatestModule = buildGoModule; }
+    if goModuleOverrides != { } then
+      pkg.override goModuleOverrides
     else
-      throw "Package ${pkg.pname or "unknown"} does not accept buildGoModule or buildGoLatestModule arguments";
+      throw ''
+        `languages.go` failed to override the Go version for ${pkg.pname or "unknown"}.
+        Expected to find a `buildGo*Module` argument in its override function.
+
+        Found: ${toString (lib.attrNames overrideArgs)}
+      '';
 in
 {
   options.languages.go = {

@@ -4,7 +4,7 @@
   # This test demonstrates using permittedUnfreePackages
   # to allow specific unfree packages by name
   packages = [
-    pkgs.terraform  # This is an unfree package
+    pkgs.terraform # This is an unfree package
   ];
 
   enterTest = ''

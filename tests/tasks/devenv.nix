@@ -19,6 +19,12 @@
       # For now, test that status works.
       # status = "rm should-not-exist && ls";
     };
+
+    "test:cwd" = {
+      exec = "pwd > $DEVENV_ROOT/cwd-test.txt";
+      cwd = "/tmp";
+      before = [ "devenv:enterTest" ];
+    };
   };
 
   enterTest = ''
@@ -37,6 +43,19 @@
     if [ -f ./should-not-exist ]; then
         echo should-not-exist exists
         exit 1
+    fi
+
+    # Test cwd functionality
+    if [ -f cwd-test.txt ]; then
+      CWD_RESULT=$(cat cwd-test.txt)
+      if [ "$CWD_RESULT" != "/tmp" ]; then
+        echo "Expected cwd to be /tmp but got $CWD_RESULT"
+        exit 1
+      fi
+      rm -f cwd-test.txt
+    else
+      echo "cwd-test.txt not found - test:cwd task did not run"
+      exit 1
     fi
   '';
 }

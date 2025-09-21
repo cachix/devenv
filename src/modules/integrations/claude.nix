@@ -58,6 +58,29 @@ let
   # Add pre-commit hook if git-hooks are enabled
   postToolUseHooks = (groupedHooks.PostToolUse or [ ]) ++ preCommitHook;
 
+  # Build MCP servers configuration
+  mcpServers = lib.mapAttrs (name: server: 
+    if server.type == "stdio" then 
+      if server.command == null then
+        throw "MCP server '${name}' of type 'stdio' requires a command"
+      else {
+        type = "stdio";
+        command = server.command;
+      } // lib.optionalAttrs (server.args != []) {
+        args = server.args;
+      } // lib.optionalAttrs (server.env != {}) {
+        env = server.env;
+      }
+    else if server.type == "http" then
+      if server.url == null then
+        throw "MCP server '${name}' of type 'http' requires a url"
+      else {
+        type = "http";
+        url = server.url;
+      }
+    else throw "Invalid MCP server type: ${server.type}"
+  ) cfg.mcpServers;
+
   # Generate the settings content
   settingsContent = lib.filterAttrs (n: v: v != null) {
     hooks = lib.filterAttrs (n: v: v != null) {
@@ -75,6 +98,11 @@ let
       ;
     env = if cfg.env == { } then null else cfg.env;
     permissions = if cfg.permissions == { } then null else cfg.permissions;
+  };
+
+  # Generate the MCP configuration content
+  mcpContent = if cfg.mcpServers == {} then null else {
+    mcpServers = mcpServers;
   };
 in
 {
@@ -340,6 +368,66 @@ in
       '';
     };
 
+    mcpServers = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            type = lib.mkOption {
+              type = lib.types.enum [ "stdio" "http" ];
+              description = "Type of MCP server connection.";
+            };
+            command = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Command to execute for stdio MCP servers.";
+            };
+            args = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [ ];
+              description = "Arguments to pass to the command for stdio MCP servers.";
+            };
+            env = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              description = "Environment variables for stdio MCP servers.";
+            };
+            url = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "URL for HTTP MCP servers.";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        MCP (Model Context Protocol) servers to configure.
+        These servers provide additional capabilities and context to Claude Code.
+      '';
+      example = lib.literalExpression ''
+        {
+          awslabs-iam-mcp-server = {
+            type = "stdio";
+            command = lib.getExe pkgs.awslabs-iam-mcp-server;
+            args = [ ];
+            env = { };
+          };
+          linear = {
+            type = "http";
+            url = "https://mcp.linear.app/mcp";
+          };
+          devenv = {
+            type = "stdio";
+            command = "devenv";
+            args = [ "mcp" ];
+            env = {
+              DEVENV_ROOT = config.devenv.root;
+            };
+          };
+        }
+      '';
+    };
+
     settingsPath = lib.mkOption {
       type = lib.types.str;
       default = "${config.devenv.root}/.claude/settings.json";
@@ -353,6 +441,11 @@ in
   config = lib.mkIf cfg.enable {
     files = lib.mkMerge [
       { ".claude/settings.json".json = settingsContent; }
+      
+      # MCP configuration file
+      (lib.mkIf (cfg.mcpServers != {}) {
+        ".mcp.json".json = mcpContent;
+      })
 
       # Command files
       (lib.mapAttrs'
@@ -399,6 +492,11 @@ in
           "- Sub-agents: ${
             lib.concatStringsSep ", " (lib.attrNames cfg.agents)
           }"
+        }
+        ${lib.optionalString (cfg.mcpServers != { })
+          "- MCP servers: ${
+            lib.concatStringsSep ", " (lib.attrNames cfg.mcpServers)
+          } (configured at ${config.devenv.root}/.mcp.json)"
         }
       ''
     ];

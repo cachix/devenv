@@ -1047,7 +1047,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.8.2"
+version = "1.9.0"
 dependencies = [
  "async-trait",
  "clap",
@@ -1061,6 +1061,7 @@ dependencies = [
  "fd-lock",
  "futures",
  "hex",
+ "hostname",
  "http-client-tls",
  "include_dir",
  "indicatif",
@@ -1104,7 +1105,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-cache-core"
-version = "1.8.2"
+version = "1.9.0"
 dependencies = [
  "blake3",
  "miette",
@@ -1119,7 +1120,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "1.8.2"
+version = "1.9.0"
 dependencies = [
  "blake3",
  "devenv-cache-core",
@@ -1139,7 +1140,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.8.2"
+version = "1.9.0"
 dependencies = [
  "binaryornot",
  "clap",
@@ -1160,7 +1161,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "1.8.2"
+version = "1.9.0"
 dependencies = [
  "clap",
  "devenv",
@@ -1173,7 +1174,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "1.8.2"
+version = "1.9.0"
 dependencies = [
  "blake3",
  "clap",
@@ -2003,6 +2004,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
 dependencies = [
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "hostname"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a56f203cd1c76362b69e3863fd987520ac36cf70a8c92627449b2f64a8cf7d65"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "windows-link",
 ]
 
 [[package]]

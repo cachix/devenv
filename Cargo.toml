@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.8.2"
+version = "1.9.0"
 edition = "2021"
 license = "APACHE-2.0"
 homepage = "https://devenv.sh/"
@@ -41,6 +41,7 @@ dialoguer = "0.11.0"
 fd-lock = "4"
 futures = "0.3.30"
 hex = "0.4.3"
+hostname = "0.4.0"
 include_dir = "0.7.3"
 indexmap = "2.6.0"
 indoc = "2.0.4"

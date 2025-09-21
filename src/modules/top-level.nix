@@ -255,6 +255,7 @@ in
   };
 
   imports = [
+    ./profiles.nix
     ./info.nix
     ./outputs.nix
     ./files.nix
@@ -265,6 +266,7 @@ in
     ./containers.nix
     ./debug.nix
     ./lib.nix
+    ./configurations.nix
     ./tests.nix
     ./cachix.nix
     ./tasks.nix

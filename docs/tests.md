@@ -81,7 +81,9 @@ ncdu 2.2
 
 ## Changing environment if testing
 
-!!! info "New in version 1.0.6"
+!!! tip "New in version 1.0.6"
+    
+    [Read more about the Rust rewrite in the v1.0 release post](blog/posts/devenv-v1.0-rewrite-in-rust.md)
 
 ```nix title="devenv.nix"
 { pkgs, lib, config, ... }: {

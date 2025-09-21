@@ -458,6 +458,24 @@ boolean
 
 
 
+### languages\.python\.uv\.sync\.packages
+
+
+
+Sync for specific packages in the workspace\. See ` --package `\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
 ### languages\.python\.uv\.sync\.allExtras
 
 
@@ -491,6 +509,42 @@ boolean
 
 *Default:*
 ` false `
+
+
+
+### languages\.python\.uv\.sync\.allPackages
+
+
+
+Sync all packages in the workspace\. See ` --all-packages `\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+### languages\.python\.uv\.sync\.arguments
+
+
+
+Command line arguments pass to ` uv sync ` during devenv initialisation\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
 
 
 
