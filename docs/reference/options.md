@@ -3028,7 +3028,7 @@ yaml contents
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -3079,6 +3079,29 @@ submodule
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git-hooks.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git-hooks.nix)
+
+
+
+## git-hooks.enable
+
+
+
+Whether to enable the pre-commit hooks module.
+
+When set to false, this disables the entire module.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
@@ -3300,6 +3323,10 @@ hooks.my-tool = {
 
 The predefined hooks are:
 
+**` action-validator `**
+
+Tool to validate GitHub Action and Workflow YAML files
+
 **` actionlint `**
 
 Static checker for GitHub Actions workflow files
@@ -3443,6 +3470,10 @@ A tool for formatting CMake-files.
 **` commitizen `**
 
 Check whether the current commit message follows committing rules.
+
+**` comrak `**
+
+A 100% CommonMark-compatible GitHub Flavored Markdown formatter
 
 **` conform `**
 
@@ -3690,6 +3721,10 @@ Static type checker for Python
 
 Verify that Python test files are named correctly.
 
+**` nbstripout `**
+
+Strip output from Jupyter notebooks
+
 **` nil `**
 
 Incremental analysis assistant for writing in Nix.
@@ -3930,6 +3965,10 @@ Update uv’s lockfile.
 
 A markup-aware linter for prose built with speed and extensibility in mind.
 
+**` woodpecker-cli-lint `**
+
+Command line client for the Woodpecker Continuous Integration server (lint only).
+
 **` yamlfmt `**
 
 Formatter for YAML files.
@@ -3937,6 +3976,10 @@ Formatter for YAML files.
 **` yamllint `**
 
 Linter for YAML files.
+
+**` zizmor `**
+
+Static analysis for GitHub Actions
 
 **` zprint `**
 
@@ -4539,6 +4582,27 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.alejandra.settings.configPath
+
+
+
+(experimental) Path to the alejandra.toml configuration file.
+
+
+
+*Type:*
+null or string or absolute path
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -5308,8 +5372,6 @@ boolean
 
 ## git-hooks.hooks.cmake-format
 
-
-
 cmake-format hook
 
 
@@ -5323,6 +5385,8 @@ submodule
 
 
 ## git-hooks.hooks.cmake-format.enable
+
+
 
 Whether to enable this pre-commit hook.
 
@@ -5382,6 +5446,85 @@ string
 
 *Example:*
 ` ".cmake-format.json" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.convco
+
+
+
+convco hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.convco.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.convco.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.convco.settings.configPath
+
+
+
+Path to the configuration file (YAML or JSON)
+
+
+
+*Type:*
+null or string or absolute path
+
+
+
+*Default:*
+` null `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -6837,6 +6980,90 @@ string
 
 
 
+## git-hooks.hooks.gotest
+
+
+
+gotest hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.gotest.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.gotest.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.gotest.settings.flags
+
+
+
+Flags passed to gotest. See all available [here](https://pkg.go.dev/cmd/go\#hdr-Test_packages).
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` "-tags integration" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## git-hooks.hooks.headache
 
 
@@ -7213,8 +7440,6 @@ boolean
 
 ## git-hooks.hooks.lacheck.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -7391,6 +7616,8 @@ one of “Error”, “Warning”, “Information”, “Hint”
 
 
 ## git-hooks.hooks.lua-ls.settings.configuration
+
+
 
 See https://github.com/LuaLS/lua-language-server/wiki/Configuration-File\#luarcjson
 
@@ -8166,6 +8393,64 @@ null or string
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.nbstripout
+
+
+
+nbstripout hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.nbstripout.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.nbstripout.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
 
 
 
@@ -11590,11 +11875,52 @@ one of “auto”, “always”, “never”
 
 
 
+## git-hooks.hooks.typos.settings.config
+
+
+
+Configuration as in https://github.com/crate-ci/typos/blob/master/docs/reference.md.
+
+
+
+*Type:*
+TOML value
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  default = {
+    binary = false;
+  };
+  files = {
+    ignore-dot = true;
+  };
+  type = {
+    py = {
+      extend-glob = [ ];
+    };
+  };
+}
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## git-hooks.hooks.typos.settings.configPath
 
 
 
-Path to a custom config file.
+Path to a custom config file. Ignored if ` typos.settings.config ` is set.
 
 
 
@@ -11610,44 +11936,6 @@ string
 
 *Example:*
 ` ".typos.toml" `
-
-*Declared by:*
- - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
-
-
-
-## git-hooks.hooks.typos.settings.configuration
-
-
-
-Multiline-string configuration passed as config file. If set, config set in ` typos.settings.configPath ` gets ignored.
-
-
-
-*Type:*
-string
-
-
-
-*Default:*
-` "" `
-
-
-
-*Example:*
-
-```
-''
-  [files]
-  ignore-dot = true
-  
-  [default]
-  binary = false
-  
-  [type.py]
-  extend-glob = []
-''
-```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -11679,22 +11967,53 @@ boolean
 
 
 
-Ignore files and directories matching the glob.
+Ignore files and directories matching one of the globs.
 
 
 
 *Type:*
-string
+(list of string) or string convertible to it
 
 
 
 *Default:*
-` "" `
+` [ ] `
 
 
 
 *Example:*
-` "*.nix" `
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.typos.settings.force-exclude
+
+
+
+Respect excluded files even for paths passed explicitly.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` false `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
@@ -12182,6 +12501,161 @@ string
 
 
 
+## git-hooks.hooks.woodpecker-cli-lint
+
+
+
+` woodpecker-cli lint ` hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.woodpecker-cli-lint.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.woodpecker-cli-lint.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.woodpecker-cli-lint.settings.pluginsPrivileged
+
+
+
+List of plugins, allowed to run in privileged mode
+
+
+
+*Type:*
+strings concatenated with “,”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.woodpecker-cli-lint.settings.pluginsTrustedClone
+
+
+
+List of plugins, that are trusted to handle Git credentials in cloning steps.
+If not set, the program defaults to
+“docker.io/woodpeckerci/plugin-git:2.6.3,docker.io/woodpeckerci/plugin-git,quay.io/woodpeckerci/plugin-git”.
+
+
+
+*Type:*
+strings concatenated with “,”
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.woodpecker-cli-lint.settings.strict
+
+
+
+Whether to treat warnings as errors.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.woodpecker-cli-lint.settings.workflowPath
+
+
+
+Path to the workflow config file/directory. If not set, the program
+looks for ` .woodpecker.ya?ml ` file or ` .woodpecker ` directory.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+
+
+*Example:*
+` ".woodpecker.yml" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## git-hooks.hooks.yamlfmt
 
 
@@ -12488,6 +12962,30 @@ boolean
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.install.enable
+
+
+
+Whether to enable automatic installation of pre-commit hooks.
+
+When set to false, hooks will not be installed into the git repository,
+but all other module functionality (like configuration generation) will still work.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
@@ -17803,7 +18301,7 @@ https://github.com/pvolok/mprocs?tab=readme-ov-file\#config
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -17891,7 +18389,7 @@ Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -18064,7 +18562,7 @@ Only used when using ` process.manager.implementation = "process-compose"; `
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -23122,7 +23620,7 @@ OpenSearch configuration.
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -23355,7 +23853,7 @@ for more information on how to configure the Collector.
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -23474,8 +23972,10 @@ The available extensions are:
  - cstore_fdw
  - h3-pg
  - hypopg
+ - ip4r
  - jsonb_deep_sum
  - lantern
+ - omnigres
  - periods
  - pg-gvm
  - pg-semver
@@ -23532,6 +24032,7 @@ The available extensions are:
  - timescaledb-apache
  - timescaledb_toolkit
  - tsja
+ - vectorchord
  - wal2json
 
 
@@ -25376,7 +25877,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -25416,7 +25917,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -25645,7 +26146,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -25778,7 +26279,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -25803,7 +26304,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
