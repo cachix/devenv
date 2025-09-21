@@ -129,7 +129,7 @@ OpenSearch configuration\.
 
 
 *Type:*
-YAML value
+YAML 1\.1 value
 
 
 

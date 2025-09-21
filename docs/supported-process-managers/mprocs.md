@@ -32,7 +32,7 @@ https://github\.com/pvolok/mprocs?tab=readme-ov-file\#config
 
 
 *Type:*
-YAML value
+YAML 1\.1 value
 
 
 
