@@ -37,12 +37,8 @@ in
 {
   options = {
     env = lib.mkOption {
-      type = types.submoduleWith {
-        modules = [
-          (env: {
-            config._module.freeformType = types.lazyAttrsOf types.anything;
-          })
-        ];
+      type = types.submodule {
+        freeformType = types.lazyAttrsOf types.anything;
       };
       description = "Environment variables to be exposed inside the developer environment.";
       default = { };
