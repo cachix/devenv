@@ -1887,7 +1887,7 @@ string
 
 
 *Default:*
-` "x86_64-linux" `
+` pkgs.stdenv.system `
 
 
 
