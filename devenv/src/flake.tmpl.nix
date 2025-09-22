@@ -181,11 +181,31 @@
                         profileConfig = getProfileConfig profileName;
 
                         # Check if an option type needs explicit override to resolve conflicts
+                        # Only apply overrides to LEAF values (scalars), not collection types that can merge
                         typeNeedsOverride = type:
                           if type == null then false
-                          else builtins.elem (type.name or type._type or "") [
-                            "str" "int" "bool" "enum" "path" "package" "float" "anything" "nullOr"
-                          ];
+                          else
+                            let
+                              typeName = type.name or type._type or "";
+
+                              # True leaf types that need priority resolution when they conflict
+                              isLeafType = builtins.elem typeName [
+                                "str" "int" "bool" "enum" "path" "package" "float" "anything"
+                              ];
+                            in
+                            if isLeafType then true
+                            else if typeName == "nullOr" then
+                              # For nullOr, check the wrapped type recursively
+                              let
+                                innerType = type.elemType or
+                                           (if type ? nestedTypes && type.nestedTypes ? elemType
+                                            then type.nestedTypes.elemType
+                                            else null);
+                              in
+                              if innerType != null then typeNeedsOverride innerType else false
+                            else
+                              # Everything else (collections, submodules, etc.) should merge naturally
+                              false;
 
                         # Check if a config path needs explicit override
                         pathNeedsOverride = optionPath:
