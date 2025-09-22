@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use crate::SudoContext;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
@@ -38,6 +39,8 @@ pub struct Config {
     pub tasks: Vec<TaskConfig>,
     pub roots: Vec<String>,
     pub run_mode: RunMode,
+    #[serde(skip)]
+    pub sudo_context: Option<SudoContext>,
 }
 
 impl TryFrom<serde_json::Value> for Config {

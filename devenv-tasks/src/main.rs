@@ -1,8 +1,9 @@
 use clap::{Parser, Subcommand};
 use devenv_tasks::{
-    signal_handler::SignalHandler, Config, RunMode, TaskConfig, TasksUi, VerbosityLevel,
+    signal_handler::SignalHandler, Config, RunMode, SudoContext, TaskConfig, TasksUi,
+    VerbosityLevel,
 };
-use std::env;
+use std::{env, fs, path::PathBuf};
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -19,6 +20,14 @@ enum Command {
 
         #[clap(long, value_enum, default_value_t = RunMode::Single, help = "The execution mode for tasks (affects dependency resolution)")]
         mode: RunMode,
+
+        #[clap(
+            long,
+            value_parser,
+            env = "DEVENV_TASK_FILE",
+            help = "Path to a JSON file containing task definitions"
+        )]
+        task_file: Option<PathBuf>,
     },
     Export {
         #[clap()]
@@ -29,6 +38,14 @@ enum Command {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
+
+    // Detect and handle sudo context FIRST, before any file operations
+    let sudo_context = SudoContext::detect();
+    if let Some(ref ctx) = sudo_context {
+        // Drop privileges immediately so all files are created with correct ownership
+        ctx.drop_privileges()
+            .map_err(|e| format!("Failed to drop privileges: {}", e))?;
+    }
 
     // Determine verbosity level from DEVENV_CMDLINE
     let mut verbosity = if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
@@ -52,14 +69,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     match args.command {
-        Command::Run { roots, mode } => {
-            let tasks_json = env::var("DEVENV_TASKS")?;
-            let tasks: Vec<TaskConfig> = serde_json::from_str(&tasks_json)?;
+        Command::Run {
+            roots,
+            mode,
+            task_file,
+        } => {
+            let tasks: Vec<TaskConfig> = {
+                let task_source = || {
+                    task_file
+                        .as_ref()
+                        .map(|p| format!("tasks file at {}", p.display()))
+                        .unwrap_or_else(|| "DEVENV_TASKS".to_string())
+                };
 
+                let data = env::var("DEVENV_TASKS").or_else(|_| {
+                    task_file
+                        .as_ref()
+                        .ok_or_else(|| {
+                            "No task file specified and DEVENV_TASKS environment variable not set"
+                                .to_string()
+                        })
+                        .and_then(|path| {
+                            fs::read_to_string(path)
+                                .map_err(|e| format!("Failed to read {}: {e}", task_source()))
+                        })
+                })?;
+                serde_json::from_str(&data)
+                    .map_err(|e| format!("Failed to parse {} as JSON: {e}", task_source()))?
+            };
             let config = Config {
                 tasks,
                 roots,
                 run_mode: mode,
+                sudo_context: sudo_context.clone(),
             };
 
             // Create a global signal handler
