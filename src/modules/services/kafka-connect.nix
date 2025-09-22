@@ -7,8 +7,6 @@ let
 
   stateDir = config.env.DEVENV_STATE + "/kafka/connect";
 
-  storageFile = stateDir + "/connect.offsets";
-
   mkPropertyString =
     let
       render = {
@@ -110,7 +108,8 @@ in
 
           "offset.storage.file.filename" = lib.mkOption {
             type = types.str;
-            default = storageFile;
+            default = stateDir + "/connect.offsets";
+            defaultText = lib.literalExpression ''''${config.env.DEVENV_STATE}/kafka/connect/connect.offsets'';
             description = ''
               The file to store connector offsets in. By storing offsets on disk, a standalone process can be stopped and started on a single node and resume where it previously left off.
             '';
