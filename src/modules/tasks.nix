@@ -1,11 +1,9 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
-  devenv-tasks = pkgs.callPackage ./../../package.nix {
-    build_tasks = true;
-    cachix = null;
-    inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
-  };
+  devenv-tasks = (pkgs.callPackage ./../../workspace.nix {
+    cargoProfile = "release_fast";
+  }).devenv-tasks;
   taskType = types.submodule
     ({ name, config, ... }:
       let

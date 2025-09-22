@@ -103,12 +103,13 @@ rmcp-macros = "0.1"
 strip = "symbols"
 lto = "fat"
 
+# Fast release build without LTO
 # TODO: using underscores because of a normalization bug in buildRustPackage
 [profile.release_fast]
 inherits = "release"
 lto = false
 
-# Enable release optimizations, but retain debug symbols.
+# Retain debug symbols in release builds for better backtraces
 [profile.release_with_debug]
 inherits = "release_fast"
 debug = true

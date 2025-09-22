@@ -71,15 +71,6 @@
             })
             systems
         );
-      mkPackage =
-        pkgs: attrs:
-        pkgs.callPackage ./package.nix (
-          {
-            nix = inputs.nix.packages.${pkgs.stdenv.system}.nix-cli;
-            inherit (inputs.cachix.packages.${pkgs.stdenv.system}) cachix;
-          }
-          // attrs
-        );
       mkDocOptions =
         { pkgs, options, docOpts ? { } }:
         let
@@ -144,7 +135,15 @@
       packages = forAllSystems (
         system:
         let
-          pkgs = nixpkgs.legacyPackages.${system};
+          overlays = [
+            (final: prev: {
+              devenv-nix = inputs.nix.packages.${system}.nix-cli;
+              cachix = inputs.cachix.packages.${system}.cachix;
+            })
+          ];
+          pkgs = import nixpkgs { inherit overlays system; };
+          workspace = pkgs.callPackage ./workspace.nix { };
+
           evaluatedModules = pkgs.lib.evalModules {
             modules = [
               ./src/modules/top-level.nix
@@ -157,8 +156,8 @@
         in
         {
           default = self.packages.${system}.devenv;
-          devenv = mkPackage pkgs { };
-          devenv-tasks = mkPackage pkgs { build_tasks = true; };
+          devenv = workspace.devenv;
+          devenv-tasks = workspace.devenv-tasks;
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
           devenv-generate-individual-docs =
