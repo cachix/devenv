@@ -1,0 +1,4 @@
+impure: true
+inputs:
+  custom:
+    url: "github:user/repo"

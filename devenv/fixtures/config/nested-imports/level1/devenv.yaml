@@ -1,0 +1,3 @@
+allowBroken: true
+imports:
+  - ./level2
