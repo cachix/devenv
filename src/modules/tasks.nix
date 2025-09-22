@@ -17,7 +17,7 @@ let
           let source = pkgs.fetchFromGitHub {
             inherit (lockedNixpkgs) owner repo rev;
             hash = lock.nodes.nixpkgs.locked.narHash;
-          }; in import source { }
+          }; in import source { system = pkgs.stdenv.system; }
         else
           pkgs;
       workspace = devenvPkgs.callPackage ./../../workspace.nix { cargoProfile = "release_fast"; };
