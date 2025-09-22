@@ -4,20 +4,23 @@
 let
   src = lib.fileset.toSource {
     root = ./.;
-    fileset = lib.fileset.unions [
-      ./.cargo
-      ./Cargo.toml
-      ./Cargo.lock
-      ./devenv
-      ./devenv-generate
-      ./devenv-eval-cache
-      ./devenv-cache-core
-      ./devenv-run-tests
-      ./devenv-tasks
-      ./http-client-tls
-      ./nix-conf-parser
-      ./xtask
-    ];
+    fileset = lib.fileset.difference
+      (lib.fileset.unions [
+        ./.cargo
+        ./Cargo.toml
+        ./Cargo.lock
+        ./devenv
+        ./devenv-generate
+        ./devenv-eval-cache
+        ./devenv-cache-core
+        ./devenv-run-tests
+        ./devenv-tasks
+        ./http-client-tls
+        ./nix-conf-parser
+        ./xtask
+      ])
+      # Ignore local builds
+      (lib.fileset.fileFilter (file: file.name == "target") ./.);
   };
 
   cargoToml = builtins.fromTOML (builtins.readFile "${src}/Cargo.toml");
