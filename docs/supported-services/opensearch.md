@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
 
 
 ### services\.opensearch\.package
@@ -42,6 +45,9 @@ package
 *Default:*
 ` pkgs.opensearch `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
 
 
 ### services\.opensearch\.extraCmdLineOptions
@@ -59,6 +65,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
 
 
 
@@ -87,6 +96,9 @@ list of string
   "-Djava.net.preferIPv4Stack=true"
 ]
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
 
 
 
@@ -118,6 +130,9 @@ string
 ''
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
 
 
 ### services\.opensearch\.settings
@@ -135,6 +150,9 @@ YAML 1\.1 value
 
 *Default:*
 ` { } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
 
 
 
@@ -154,6 +172,9 @@ string
 *Default:*
 ` "opensearch" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
 
 
 ### services\.opensearch\.settings\."discovery\.type"
@@ -171,6 +192,9 @@ string
 
 *Default:*
 ` "single-node" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
 
 
 
@@ -190,6 +214,9 @@ The port to listen on for HTTP traffic\.
 *Default:*
 ` 9200 `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
 
 
 ### services\.opensearch\.settings\."network\.host"
@@ -207,6 +234,9 @@ string
 
 *Default:*
 ` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
 
 
 
@@ -229,6 +259,9 @@ boolean
 *Default:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)
+
 
 
 ### services\.opensearch\.settings\."transport\.port"
@@ -246,3 +279,6 @@ The port to listen on for transport traffic\.
 
 *Default:*
 ` 9300 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opensearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opensearch.nix)

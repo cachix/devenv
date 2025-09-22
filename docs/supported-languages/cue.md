@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)
+
 
 
 ### languages\.cue\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.cue `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/cue\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/cue.nix)

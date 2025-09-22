@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)
+
 
 
 ### languages\.julia\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.julia-bin `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/julia\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/julia.nix)

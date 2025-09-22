@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)
+
 
 
 ### languages\.idris\.package
@@ -46,3 +49,6 @@ package
 
 *Example:*
 ` pkgs.idris `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/idris\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/idris.nix)

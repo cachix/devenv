@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)
+
 
 
 ### languages\.ocaml\.packages
@@ -41,3 +44,6 @@ attribute set
 
 *Default:*
 ` pkgs.ocaml-ng.ocamlPackages_4_12 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ocaml\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ocaml.nix)

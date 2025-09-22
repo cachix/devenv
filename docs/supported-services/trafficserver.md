@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.trafficserver `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -67,6 +73,9 @@ strings concatenated with “\\n”
 
 *Example:*
 ` "dest_domain=example.com suffix=js action=never-cache" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -93,6 +102,9 @@ strings concatenated with “\\n”
 
 *Example:*
 ` "domain=example.com volume=1" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -132,6 +144,9 @@ upstream defaults
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.logging
@@ -157,6 +172,9 @@ upstream defaults
 
 *Example:*
 ` { } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -189,6 +207,9 @@ strings concatenated with “\\n”
 ''
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.plugins
@@ -210,6 +231,9 @@ list of (submodule)
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -234,6 +258,9 @@ string
 *Example:*
 ` "--header=ATS-My-Debug" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.plugins\.\*\.path
@@ -252,6 +279,9 @@ string
 
 *Example:*
 ` "xdebug.so" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -297,6 +327,9 @@ Traffic Server records value
 }
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.remap
@@ -323,6 +356,9 @@ strings concatenated with “\\n”
 *Example:*
 ` "map http://from.example http://origin.example" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.runroot
@@ -335,6 +371,9 @@ File layout used by Traffic Server
 
 *Type:*
 unspecified value *(read only)*
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -372,6 +411,9 @@ null or YAML 1\.1 value
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.splitDns
@@ -405,6 +447,9 @@ strings concatenated with “\\n”
 ''
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.sslMulticert
@@ -430,6 +475,9 @@ strings concatenated with “\\n”
 
 *Example:*
 ` "dest_ip=* ssl_cert_name=default.pem" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -457,6 +505,9 @@ strings concatenated with “\\n”
 *Example:*
 ` "/dev/disk/by-id/XXXXX volume=1" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
+
 
 
 ### services\.trafficserver\.strategies
@@ -478,6 +529,9 @@ null or YAML 1\.1 value
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)
 
 
 
@@ -505,3 +559,6 @@ null or YAML 1\.1 value
 
 *Example:*
 ` "volume=1 scheme=http size=20%" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/trafficserver](https://github.com/cachix/devenv/blob/main/src/modules/services/trafficserver)

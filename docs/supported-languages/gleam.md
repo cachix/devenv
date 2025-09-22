@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/gleam\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix)
+
 
 
 ### languages\.gleam\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.gleam `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/gleam\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/gleam.nix)

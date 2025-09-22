@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)
+
 
 
 ### languages\.elixir\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.elixir `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/elixir\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/elixir.nix)

@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)
+
 
 
 ### languages\.ansible\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.ansible `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ansible\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ansible.nix)

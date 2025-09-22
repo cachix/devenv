@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)
+
 
 
 ### languages\.erlang\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.erlang `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/erlang\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/erlang.nix)

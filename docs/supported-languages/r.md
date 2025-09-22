@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
 
 
 ### languages\.r\.package
@@ -41,6 +44,9 @@ package
 
 *Default:*
 ` pkgs.R `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
 
 
 
@@ -65,6 +71,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)
+
 
 
 ### languages\.r\.radian\.package
@@ -82,3 +91,6 @@ package
 
 *Default:*
 ` pkgs.radianWrapper `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/r\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/r.nix)

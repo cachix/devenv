@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
 
 
 ### services\.varnish\.package
@@ -41,6 +44,9 @@ package
 
 *Default:*
 ` pkgs.varnish `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
 
 
 
@@ -65,6 +71,9 @@ list of package
 *Example:*
 ` [ pkgs.varnish73Packages.modules ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
 
 
 ### services\.varnish\.listen
@@ -83,6 +92,9 @@ string
 *Default:*
 ` "127.0.0.1:6081" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
+
 
 
 ### services\.varnish\.memorySize
@@ -100,6 +112,9 @@ string
 
 *Default:*
 ` "64M" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)
 
 
 
@@ -128,3 +143,6 @@ strings concatenated with “\\n”
   }
 ''
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/varnish\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/varnish.nix)

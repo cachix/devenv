@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+
 
 
 ### languages\.java\.gradle\.enable
@@ -47,6 +50,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+
 
 
 ### languages\.java\.gradle\.package
@@ -65,6 +71,9 @@ package
 
 *Default:*
 ` pkgs.gradle.override { java = cfg.jdk.package; } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
 
 
 
@@ -90,6 +99,9 @@ package
 *Example:*
 ` pkgs.jdk8 `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+
 
 
 ### languages\.java\.maven\.enable
@@ -113,6 +125,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)
+
 
 
 ### languages\.java\.maven\.package
@@ -131,3 +146,6 @@ package
 
 *Default:*
 ` pkgs.maven.override { jdk_headless = cfg.jdk.package; } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/java\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/java.nix)

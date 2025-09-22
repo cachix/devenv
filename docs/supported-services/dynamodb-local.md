@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
 
 
 ### services\.dynamodb-local\.package
@@ -42,6 +45,9 @@ package
 *Default:*
 ` pkgs.dynamodb-local `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
+
 
 
 ### services\.dynamodb-local\.port
@@ -59,6 +65,9 @@ Listen address for the Dynamodb-local\.
 
 *Default:*
 ` 8000 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)
 
 
 
@@ -79,3 +88,6 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/dynamodb-local.nix)

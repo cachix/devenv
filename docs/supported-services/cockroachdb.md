@@ -25,6 +25,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
 
 
 ### services\.cockroachdb\.package
@@ -42,6 +45,9 @@ unspecified value
 
 *Default:*
 ` pkgs.cockroachdb-bin `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
 
 
 
@@ -61,6 +67,9 @@ string
 *Default:*
 ` "localhost:8080" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)
+
 
 
 ### services\.cockroachdb\.listen_addr
@@ -78,3 +87,6 @@ string
 
 *Default:*
 ` "localhost:26257" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cockroachdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cockroachdb.nix)

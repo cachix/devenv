@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
 
 
 ### languages\.go\.enableHardeningWorkaround
@@ -42,6 +45,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)
+
 
 
 ### languages\.go\.package
@@ -59,3 +65,6 @@ package
 
 *Default:*
 ` pkgs.go `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/go\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/go.nix)

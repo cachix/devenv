@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
+
 
 
 ### services\.elasticmq\.package
@@ -42,6 +45,9 @@ package
 *Default:*
 ` pkgs.elasticmq-server-bin `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)
+
 
 
 ### services\.elasticmq\.settings
@@ -59,3 +65,6 @@ strings concatenated with “\\n”
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticmq.nix)

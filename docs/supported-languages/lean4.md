@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lean4\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)
+
 
 
 ### languages\.lean4\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.lean4 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lean4\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lean4.nix)

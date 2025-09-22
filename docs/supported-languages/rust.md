@@ -167,6 +167,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
 
 
 ### languages\.rust\.channel
@@ -182,6 +185,9 @@ one of “nixpkgs”, “stable”, “beta”, “nightly”
 
 *Default:*
 ` "nixpkgs" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -201,6 +207,9 @@ list of string
 
 *Default:*
 ` [ "rustc" "cargo" "clippy" "rustfmt" "rust-analyzer" ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -229,6 +238,9 @@ packages = [ mypackage ];
 *Type:*
 function that evaluates to a(n) function that evaluates to a(n) package
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
 
 
 ### languages\.rust\.mold\.enable
@@ -250,6 +262,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
 
 
 ### languages\.rust\.rustflags
@@ -267,6 +282,9 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -287,6 +305,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
 
 
 ### languages\.rust\.toolchain
@@ -304,6 +325,9 @@ attribute set of package
 
 *Default:*
 ` nixpkgs `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -323,6 +347,9 @@ null or package
 *Default:*
 ` pkgs.cargo `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
 
 
 ### languages\.rust\.toolchain\.clippy
@@ -340,6 +367,9 @@ null or package
 
 *Default:*
 ` pkgs.clippy `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -359,6 +389,9 @@ null or package
 *Default:*
 ` pkgs.rust-analyzer `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
 
 
 ### languages\.rust\.toolchain\.rustc
@@ -376,6 +409,9 @@ null or package
 
 *Default:*
 ` pkgs.rustc `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -395,6 +431,9 @@ null or package
 *Default:*
 ` pkgs.rustfmt `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
 
 
 ### languages\.rust\.toolchainPackage
@@ -408,6 +447,9 @@ This is automatically set based on the channel and components configuration\.
 
 *Type:*
 package
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
 
 
 
@@ -427,3 +469,6 @@ string
 
 *Default:*
 ` "latest" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/rust\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)

@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
 
 
 ### languages\.ruby\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.ruby_3_1 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
@@ -65,6 +71,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
+
 
 
 ### languages\.ruby\.bundler\.package
@@ -82,6 +91,9 @@ package
 
 *Default:*
 ` pkgs.bundler.override { ruby = cfg.package; } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
@@ -106,6 +118,9 @@ null or string
 
 *Example:*
 ` "3.2.1" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
 
 
 
@@ -139,3 +154,6 @@ null or absolute path
 ./.ruby-version
 
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)

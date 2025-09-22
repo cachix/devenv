@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/sqld\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
+
 
 
 ### services\.sqld\.extraArgs
@@ -42,6 +45,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/sqld\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)
+
 
 
 ### services\.sqld\.port
@@ -59,3 +65,6 @@ signed integer
 
 *Default:*
 ` 8080 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/sqld\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/sqld.nix)

@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
 
 
 ### services\.mysql\.package
@@ -41,6 +44,9 @@ package
 
 *Default:*
 ` pkgs.mariadb `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -81,6 +87,9 @@ list of (submodule)
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
 
 
 ### services\.mysql\.ensureUsers\.\*\.ensurePermissions
@@ -119,6 +128,9 @@ attribute set of string
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
 
 
 ### services\.mysql\.ensureUsers\.\*\.host
@@ -137,6 +149,9 @@ string
 *Default:*
 ` "localhost" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
 
 
 ### services\.mysql\.ensureUsers\.\*\.name
@@ -149,6 +164,9 @@ Name of the user to ensure\.
 
 *Type:*
 string
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -168,6 +186,9 @@ null or string
 *Default:*
 ` null `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
 
 
 ### services\.mysql\.importTimeZones
@@ -185,6 +206,9 @@ null or boolean
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -217,6 +241,9 @@ list of (submodule)
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
 
 
 ### services\.mysql\.initialDatabases\.\*\.name
@@ -229,6 +256,9 @@ The name of the database to create\.
 
 *Type:*
 string
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -248,6 +278,9 @@ null or absolute path
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
 
 
 
@@ -287,6 +320,9 @@ lazy attribute set of lazy attribute set of anything
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)
+
 
 
 ### services\.mysql\.useDefaultsExtraFile
@@ -307,3 +343,6 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mysql\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mysql.nix)

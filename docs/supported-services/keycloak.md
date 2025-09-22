@@ -27,6 +27,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.package
@@ -44,6 +47,9 @@ package
 
 *Default:*
 ` pkgs.keycloak `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
 
 
 
@@ -68,6 +74,9 @@ one of “dev-mem”, “dev-file”
 *Example:*
 ` "dev-mem" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.initialAdminPassword
@@ -90,6 +99,9 @@ string
 *Default:*
 ` "admin" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.plugins
@@ -110,6 +122,9 @@ list of absolute path
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.processes\.exportRealms
@@ -128,6 +143,9 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
 
 
 
@@ -163,6 +181,9 @@ attribute set of (submodule)
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.realms\.\<name>\.export
@@ -186,6 +207,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.realms\.\<name>\.import
@@ -208,6 +232,9 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
 
 
 
@@ -234,6 +261,9 @@ null or relative path not in the Nix store
 *Example:*
 ` "./realms/a.json" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.scripts\.exportRealm
@@ -252,6 +282,9 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
 
 
 
@@ -292,6 +325,9 @@ attribute set of (null or string or signed integer or boolean or attribute set o
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.settings\.hostname
@@ -319,6 +355,9 @@ string
 *Example:*
 ` "localhost" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.settings\.http-host
@@ -342,6 +381,9 @@ string
 *Example:*
 ` "::1" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.settings\.http-port
@@ -364,6 +406,9 @@ On which port Keycloak should listen for new HTTP connections\.
 
 *Example:*
 ` 8080 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
 
 
 
@@ -399,6 +444,9 @@ string
 *Example:*
 ` "/auth" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.settings\.https-port
@@ -422,6 +470,9 @@ If its not set, its disabled\.
 
 *Example:*
 ` 34429 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
 
 
 
@@ -447,6 +498,9 @@ null or relative path not in the Nix store
 *Example:*
 ` "/run/keys/ssl_cert" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)
+
 
 
 ### services\.keycloak\.sslCertificateKey
@@ -470,3 +524,6 @@ null or relative path not in the Nix store
 
 *Example:*
 ` "/run/keys/ssl_key" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/keycloak\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/keycloak.nix)

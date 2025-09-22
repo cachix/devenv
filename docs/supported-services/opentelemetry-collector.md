@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
+
 
 
 ### services\.opentelemetry-collector\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.opentelemetry-collector-contrib `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
 
 
 
@@ -72,6 +78,9 @@ null or absolute path
 pkgs.writeTextFile { name = "otel-config.yaml"; text = "..."; }
 
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
 
 
 
@@ -106,3 +115,6 @@ YAML 1\.1 value
   };
 }
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)

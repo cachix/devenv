@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/pascal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)
+
 
 
 ### languages\.pascal\.lazarus\.enable
@@ -46,3 +49,6 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/pascal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/pascal.nix)

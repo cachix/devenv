@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/deno\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)
+
 
 
 ### languages\.deno\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.deno `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/deno\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/deno.nix)

@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/fortran\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)
+
 
 
 ### languages\.fortran\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.gfortran `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/fortran\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/fortran.nix)

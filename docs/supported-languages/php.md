@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.package
@@ -60,6 +63,9 @@ pkgs.php.buildEnv {
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.packages
@@ -77,6 +83,9 @@ submodule
 
 *Default:*
 ` pkgs `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -96,6 +105,9 @@ null or package
 *Default:*
 ` pkgs.phpPackages.composer `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.disableExtensions
@@ -111,6 +123,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -129,6 +144,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -150,6 +168,9 @@ null or strings concatenated with “\\n”
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -178,6 +199,9 @@ strings concatenated with “\\n”
   date.timezone = "CET"
 ''
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -220,6 +244,9 @@ attribute set of (submodule)
 }
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.fpm\.pools\.\<name>\.extraConfig
@@ -239,6 +266,9 @@ null or strings concatenated with “\\n”
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -262,6 +292,9 @@ string
 
 *Example:*
 ` "/path/to/unix/socket" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -295,6 +328,9 @@ attribute set of string
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.fpm\.pools\.\<name>\.phpOptions
@@ -307,6 +343,9 @@ Options appended to the PHP configuration file ` php.ini ` used for this PHP-FPM
 
 *Type:*
 strings concatenated with “\\n”
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -325,6 +364,9 @@ package
 
 *Default:*
 ` phpfpm.phpPackage `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -364,6 +406,9 @@ attribute set of (string or signed integer or boolean)
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.fpm\.pools\.\<name>\.socket
@@ -383,6 +428,9 @@ string *(read only)*
 
 *Example:*
 ` config.env.DEVENV_STATE + "/php-fpm/<name>.sock" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
 
 
 
@@ -418,6 +466,9 @@ attribute set of (string or signed integer or boolean)
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.ini
@@ -436,6 +487,9 @@ null or strings concatenated with “\\n”
 *Default:*
 ` "" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)
+
 
 
 ### languages\.php\.version
@@ -453,3 +507,6 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/php\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/php.nix)

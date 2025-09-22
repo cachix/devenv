@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nix\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)
+
 
 
 ### languages\.nix\.lsp\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.nil `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nix\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nix.nix)

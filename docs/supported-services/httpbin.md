@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/httpbin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix)
+
 
 
 ### services\.httpbin\.bind
@@ -47,6 +50,9 @@ list of string
 ]
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/httpbin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix)
+
 
 
 ### services\.httpbin\.extraArgs
@@ -64,3 +70,6 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/httpbin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/httpbin.nix)

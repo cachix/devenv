@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
 
 
 ### services\.wiremock\.package
@@ -44,6 +47,9 @@ package
 *Default:*
 ` pkgs.wiremock `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
 
 
 ### services\.wiremock\.disableBanner
@@ -59,6 +65,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
 
 
 
@@ -113,6 +122,9 @@ JSON value
 ]
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
 
 
 ### services\.wiremock\.port
@@ -131,6 +143,9 @@ signed integer
 *Default:*
 ` 8080 `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)
+
 
 
 ### services\.wiremock\.verbose
@@ -148,3 +163,6 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/wiremock\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/wiremock.nix)

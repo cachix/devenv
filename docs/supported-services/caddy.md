@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+
 
 
 ### services\.caddy\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.caddy `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -65,6 +71,9 @@ string
 
 *Example:*
 ` "nginx" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -91,6 +100,9 @@ null or string
 
 *Example:*
 ` "https://acme-staging-v02.api.letsencrypt.org/directory" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -135,6 +147,9 @@ strings concatenated with “\\n”
 ''
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+
 
 
 ### services\.caddy\.dataDir
@@ -157,6 +172,9 @@ absolute path
 *Default:*
 ` "${config.env.DEVENV_STATE}/caddy" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+
 
 
 ### services\.caddy\.email
@@ -175,6 +193,9 @@ string
 *Default:*
 ` "" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+
 
 
 ### services\.caddy\.resume
@@ -192,6 +213,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -229,6 +253,9 @@ attribute set of (submodule)
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
+
 
 
 ### services\.caddy\.virtualHosts\.\<name>\.extraConfig
@@ -246,6 +273,9 @@ strings concatenated with “\\n”
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)
 
 
 
@@ -275,3 +305,6 @@ list of string
   "example.org"
 ]
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/caddy\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/caddy.nix)

@@ -18,3 +18,6 @@ package
 
 *Default:*
 ` pkgs.overmind `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/overmind\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/overmind.nix)

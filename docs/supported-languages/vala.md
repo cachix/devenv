@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)
+
 
 
 ### languages\.vala\.package
@@ -46,3 +49,6 @@ package
 
 *Example:*
 ` pkgs.vala_0_54 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/vala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/vala.nix)

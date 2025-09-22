@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
 
 
 ### services\.meilisearch\.package
@@ -41,6 +44,9 @@ package
 
 *Default:*
 ` "pkgs.meilisearch" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
 
 
 
@@ -60,6 +66,9 @@ one of “development”, “production”
 *Default:*
 ` "development" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
 
 
 ### services\.meilisearch\.listenAddress
@@ -78,6 +87,9 @@ string
 *Default:*
 ` "127.0.0.1" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
 
 
 ### services\.meilisearch\.listenPort
@@ -95,6 +107,9 @@ Meilisearch port to listen on\.
 
 *Default:*
 ` 7700 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
 
 
 
@@ -121,6 +136,9 @@ string
 *Default:*
 ` "INFO" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
 
 
 ### services\.meilisearch\.maxIndexSize
@@ -142,6 +160,9 @@ string
 *Default:*
 ` "107374182400" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)
+
 
 
 ### services\.meilisearch\.noAnalytics
@@ -162,3 +183,6 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/meilisearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/meilisearch.nix)

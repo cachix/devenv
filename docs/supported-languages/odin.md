@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
+
 
 
 ### languages\.odin\.package
@@ -44,6 +47,9 @@ package
 *Default:*
 ` pkgs.odin `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)
+
 
 
 ### languages\.odin\.debugger
@@ -60,3 +66,6 @@ null or package
 
 *Default:*
 ` pkgs.gdb `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/odin\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/odin.nix)

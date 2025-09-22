@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)
+
 
 
 ### languages\.nim\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.nim `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/nim\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/nim.nix)

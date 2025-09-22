@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/unison\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)
+
 
 
 ### languages\.unison\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.unison-ucm `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/unison\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/unison.nix)

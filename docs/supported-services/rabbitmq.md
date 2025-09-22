@@ -22,6 +22,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
 
 
 ### services\.rabbitmq\.package
@@ -39,6 +42,9 @@ package
 
 *Default:*
 ` pkgs.rabbitmq-server `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -78,6 +84,9 @@ attribute set of string
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
 
 
 ### services\.rabbitmq\.cookie
@@ -97,6 +106,9 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -129,6 +141,9 @@ string
 *Example:*
 ` "" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
 
 
 ### services\.rabbitmq\.managementPlugin\.enable
@@ -152,6 +167,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
 
 
 ### services\.rabbitmq\.managementPlugin\.port
@@ -169,6 +187,9 @@ On which port to run the management plugin
 
 *Default:*
 ` 15672 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -193,6 +214,9 @@ string
 *Default:*
 ` "rabbit@localhost" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
 
 
 ### services\.rabbitmq\.pluginDirs
@@ -210,6 +234,9 @@ list of absolute path
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
 
 
 
@@ -229,6 +256,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)
+
 
 
 ### services\.rabbitmq\.port
@@ -246,3 +276,6 @@ Port on which RabbitMQ will listen for AMQP connections\.
 
 *Default:*
 ` 5672 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/rabbitmq\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/rabbitmq.nix)

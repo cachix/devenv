@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
 
 
 ### languages\.zig\.package
@@ -42,6 +45,9 @@ package
 *Default:*
 ` pkgs.zig `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
 
 
 ### languages\.zig\.zls\.package
@@ -59,3 +65,6 @@ package
 
 *Default:*
 ` pkgs.zls `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/zig\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)

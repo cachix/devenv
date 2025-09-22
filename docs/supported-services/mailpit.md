@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailpit\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
+
 
 
 ### services\.mailpit\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.mailpit `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailpit\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
 
 
 
@@ -70,6 +76,9 @@ list of strings concatenated with “\\n”
 ]
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailpit\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
+
 
 
 ### services\.mailpit\.smtpListenAddress
@@ -88,6 +97,9 @@ string
 *Default:*
 ` "127.0.0.1:1025" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailpit\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)
+
 
 
 ### services\.mailpit\.uiListenAddress
@@ -105,3 +117,6 @@ string
 
 *Default:*
 ` "127.0.0.1:8025" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailpit\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailpit.nix)

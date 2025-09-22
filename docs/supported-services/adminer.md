@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
+
 
 
 ### services\.adminer\.package
@@ -42,6 +45,9 @@ package
 *Default:*
 ` pkgs.adminer `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)
+
 
 
 ### services\.adminer\.listen
@@ -59,3 +65,6 @@ string
 
 *Default:*
 ` "127.0.0.1:8080" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/adminer\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/adminer.nix)

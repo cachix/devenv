@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)
+
 
 
 ### languages\.lua\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.lua `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/lua\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/lua.nix)

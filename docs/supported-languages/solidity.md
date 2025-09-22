@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/solidity\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
+
 
 
 ### languages\.solidity\.package
@@ -41,6 +44,9 @@ package
 
 *Default:*
 ` pkgs.solc `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/solidity\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
 
 
 
@@ -65,6 +71,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/solidity\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)
+
 
 
 ### languages\.solidity\.foundry\.package
@@ -82,3 +91,6 @@ package
 
 *Default:*
 ` foundry.defaultPackage.$${pkgs.stdenv.system} `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/solidity\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/solidity.nix)

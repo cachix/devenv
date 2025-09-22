@@ -19,6 +19,9 @@ package
 *Default:*
 ` pkgs.process-compose `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
 
 
 ### process\.managers\.process-compose\.port
@@ -38,6 +41,9 @@ signed integer
 
 *Default:*
 ` 8080 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
 
 
 
@@ -81,6 +87,9 @@ YAML 1\.1 value
 }
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
 
 
 ### process\.managers\.process-compose\.tui\.enable
@@ -98,6 +107,9 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
 
 
 
@@ -122,6 +134,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)
+
 
 
 ### process\.managers\.process-compose\.unixSocket\.path
@@ -139,3 +154,6 @@ string
 
 *Default:*
 ` ${config.devenv.runtime}/pc.sock `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/process-compose.nix)

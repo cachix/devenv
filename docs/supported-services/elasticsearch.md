@@ -21,6 +21,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+
 
 
 ### services\.elasticsearch\.package
@@ -39,6 +42,9 @@ package
 *Default:*
 ` pkgs.elasticsearch7 `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+
 
 
 ### services\.elasticsearch\.cluster_name
@@ -54,6 +60,9 @@ string
 
 *Default:*
 ` "elasticsearch" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -72,6 +81,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -103,6 +115,9 @@ string
 ''
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+
 
 
 ### services\.elasticsearch\.extraJavaOptions
@@ -131,6 +146,9 @@ list of string
 ]
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+
 
 
 ### services\.elasticsearch\.listenAddress
@@ -148,6 +166,9 @@ string
 
 *Default:*
 ` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -179,6 +200,9 @@ string
 ''
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+
 
 
 ### services\.elasticsearch\.plugins
@@ -202,6 +226,9 @@ list of package
 *Example:*
 ` [ pkgs.elasticsearchPlugins.discovery-ec2 ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+
 
 
 ### services\.elasticsearch\.port
@@ -219,6 +246,9 @@ signed integer
 
 *Default:*
 ` 9200 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
 
 
 
@@ -238,6 +268,9 @@ boolean
 *Default:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)
+
 
 
 ### services\.elasticsearch\.tcp_port
@@ -255,3 +288,6 @@ signed integer
 
 *Default:*
 ` 9300 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/elasticsearch\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/elasticsearch.nix)

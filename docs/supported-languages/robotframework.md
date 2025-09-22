@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)
+
 
 
 ### languages\.robotframework\.python
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.python3 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/robotframework\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/robotframework.nix)

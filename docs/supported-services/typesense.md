@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/typesense\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
 
 
 ### services\.typesense\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.typesense `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/typesense\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
 
 
 
@@ -65,6 +71,9 @@ list of strings concatenated with “\\n”
 *Example:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/typesense\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
 
 
 ### services\.typesense\.apiKey
@@ -82,6 +91,9 @@ string
 
 *Default:*
 ` "example" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/typesense\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
 
 
 
@@ -101,6 +113,9 @@ string
 *Default:*
 ` "127.0.0.1" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/typesense\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
 
 
 ### services\.typesense\.port
@@ -119,6 +134,9 @@ The HTTP port to accept connections\.
 *Default:*
 ` 8108 `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/typesense\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)
+
 
 
 ### services\.typesense\.searchOnlyKey
@@ -136,3 +154,6 @@ null or string
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/typesense\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/typesense.nix)

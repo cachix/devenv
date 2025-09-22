@@ -18,3 +18,6 @@ package
 
 *Default:*
 ` pkgs.honcho `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/process-managers/honcho\.nix](https://github.com/cachix/devenv/blob/main/src/modules/process-managers/honcho.nix)

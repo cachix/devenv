@@ -29,6 +29,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+
 
 
 ### services\.blackfire\.enableApm
@@ -53,6 +56,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+
 
 
 ### services\.blackfire\.package
@@ -71,6 +77,9 @@ package
 *Default:*
 ` pkgs.blackfire `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+
 
 
 ### services\.blackfire\.client-id
@@ -87,6 +96,9 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -107,6 +119,9 @@ string
 *Default:*
 ` "" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+
 
 
 ### services\.blackfire\.server-id
@@ -125,6 +140,9 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
 
 
 
@@ -145,6 +163,9 @@ string
 *Default:*
 ` "" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)
+
 
 
 ### services\.blackfire\.socket
@@ -162,3 +183,6 @@ string
 
 *Default:*
 ` "tcp://127.0.0.1:8307" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/blackfire\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/blackfire.nix)

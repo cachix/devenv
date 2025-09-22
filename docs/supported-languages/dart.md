@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)
+
 
 
 ### languages\.dart\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.dart `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/dart\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/dart.nix)

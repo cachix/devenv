@@ -23,3 +23,6 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)

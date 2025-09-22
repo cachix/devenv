@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+
 
 
 ### services\.minio\.package
@@ -44,6 +47,9 @@ package
 *Default:*
 ` pkgs.minio `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+
 
 
 ### services\.minio\.accessKey
@@ -59,6 +65,9 @@ string
 
 *Default:*
 ` "minioadmin" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -88,6 +97,9 @@ strings concatenated with “\\n”
 ''
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+
 
 
 ### services\.minio\.browser
@@ -105,6 +117,9 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -124,6 +139,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+
 
 
 ### services\.minio\.clientConfig
@@ -139,6 +157,9 @@ Use ` lib.mkForce null ` to use your regular mc configuration from ` $HOME/.mc `
 
 *Type:*
 null or JSON value
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -158,6 +179,9 @@ package
 *Default:*
 ` pkgs.minio-client `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+
 
 
 ### services\.minio\.consoleAddress
@@ -175,6 +199,9 @@ string
 
 *Default:*
 ` "127.0.0.1:9001" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
 
 
 
@@ -194,6 +221,9 @@ string
 *Default:*
 ` "127.0.0.1:9000" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+
 
 
 ### services\.minio\.region
@@ -212,6 +242,9 @@ string
 *Default:*
 ` "us-east-1" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)
+
 
 
 ### services\.minio\.secretKey
@@ -229,3 +262,6 @@ string
 
 *Default:*
 ` "minioadmin" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/minio\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/minio.nix)

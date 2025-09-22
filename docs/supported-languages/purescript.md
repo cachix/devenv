@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)
+
 
 
 ### languages\.purescript\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.purescript `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/purescript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/purescript.nix)

@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+
 
 
 ### services\.cassandra\.package
@@ -49,6 +52,9 @@ package
 *Example:*
 ` pkgs.cassandra_4; `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+
 
 
 ### services\.cassandra\.allowClients
@@ -64,6 +70,9 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -82,6 +91,9 @@ string
 
 *Default:*
 ` "Test Cluster" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -111,6 +123,9 @@ attribute set
 }
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+
 
 
 ### services\.cassandra\.jvmOpts
@@ -128,6 +143,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
 
 
 
@@ -152,6 +170,9 @@ string
 *Example:*
 ` "127.0.0.1" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)
+
 
 
 ### services\.cassandra\.seedAddresses
@@ -174,3 +195,6 @@ list of string
   "127.0.0.1"
 ]
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/cassandra\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/cassandra.nix)

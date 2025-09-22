@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/vault\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
 
 
 ### services\.vault\.package
@@ -44,6 +47,9 @@ package
 *Default:*
 ` pkgs.vault-bin `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/vault\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
 
 
 ### services\.vault\.address
@@ -59,6 +65,9 @@ string
 
 *Default:*
 ` "127.0.0.1:8200" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/vault\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
 
 
 
@@ -78,6 +87,9 @@ boolean
 *Default:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/vault\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
 
 
 ### services\.vault\.disableMlock
@@ -96,6 +108,9 @@ boolean
 *Default:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/vault\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)
+
 
 
 ### services\.vault\.ui
@@ -113,3 +128,6 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/vault\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/vault.nix)

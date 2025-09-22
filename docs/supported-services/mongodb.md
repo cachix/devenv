@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
 
 
 ### services\.mongodb\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.mongodb-ce `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
 
 
 
@@ -77,6 +83,9 @@ list of strings concatenated with “\\n”
 ]
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
 
 
 ### services\.mongodb\.initDatabasePassword
@@ -100,6 +109,9 @@ string
 *Example:*
 ` "secret" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
 
 
 ### services\.mongodb\.initDatabaseUsername
@@ -122,3 +134,6 @@ string
 
 *Example:*
 ` "mongoadmin" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)

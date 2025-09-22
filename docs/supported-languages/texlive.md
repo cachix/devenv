@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
+
 
 
 ### languages\.texlive\.packages
@@ -55,6 +58,9 @@ list of string
 ]
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)
+
 
 
 ### languages\.texlive\.base
@@ -75,3 +81,6 @@ unspecified value
 
 *Example:*
 ` pkgs.texliveBasic `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/texlive\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/texlive.nix)

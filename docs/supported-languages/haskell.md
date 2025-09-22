@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
 
 
 ### languages\.haskell\.package
@@ -41,6 +44,9 @@ package
 
 *Default:*
 ` pkgs.ghc `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
 
 
 
@@ -60,6 +66,9 @@ null or package
 *Default:*
 ` pkgs.haskell-language-server `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
 
 
 ### languages\.haskell\.stack\.enable
@@ -77,6 +86,9 @@ boolean
 
 *Default:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
 
 
 
@@ -96,6 +108,9 @@ package
 *Default:*
 ` pkgs.stack `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
 
 
 ### languages\.haskell\.stack\.args
@@ -114,3 +129,6 @@ list of string
 
 *Default:*
 ` [ "--no-nix" "--system-ghc" "--no-install-ghc" ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)

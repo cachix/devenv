@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/racket\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)
+
 
 
 ### languages\.racket\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.racket-minimal `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/racket\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/racket.nix)

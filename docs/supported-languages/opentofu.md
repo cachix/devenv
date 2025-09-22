@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)
+
 
 
 ### languages\.opentofu\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.opentofu `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/opentofu\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/opentofu.nix)

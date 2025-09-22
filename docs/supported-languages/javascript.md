@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.nodejs-slim `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -65,6 +71,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.bun\.package
@@ -82,6 +91,9 @@ package
 
 *Default:*
 ` pkgs.bun `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -106,6 +118,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.corepack\.enable
@@ -128,6 +143,9 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -153,6 +171,9 @@ string
 *Example:*
 ` "./directory" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.npm\.enable
@@ -176,6 +197,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.npm\.package
@@ -193,6 +217,9 @@ package
 
 *Default:*
 ` languages.javascript.package `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -217,6 +244,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.pnpm\.enable
@@ -240,6 +270,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.pnpm\.package
@@ -257,6 +290,9 @@ package
 
 *Default:*
 ` pkgs.nodePackages.pnpm `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -281,6 +317,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.yarn\.enable
@@ -304,6 +343,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
+
 
 
 ### languages\.javascript\.yarn\.package
@@ -321,6 +363,9 @@ package
 
 *Default:*
 ` pkgs.yarn `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)
 
 
 
@@ -344,3 +389,6 @@ boolean
 
 *Example:*
 ` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/javascript\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/javascript.nix)

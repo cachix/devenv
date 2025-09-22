@@ -29,6 +29,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/tideways\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
 
 
 ### services\.tideways\.apiKey
@@ -44,6 +47,9 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/tideways\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
 
 
 
@@ -63,6 +69,9 @@ package
 *Default:*
 ` pkgs.tideways-cli `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/tideways\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
 
 
 ### services\.tideways\.daemonPackage
@@ -80,6 +89,9 @@ package
 
 *Default:*
 ` pkgs.tideways-daemon `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/tideways\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
 
 
 
@@ -99,6 +111,9 @@ string
 *Default:*
 ` "devenv" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/tideways\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
 
 
 ### services\.tideways\.profilingSpace
@@ -117,6 +132,9 @@ boolean
 *Default:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/tideways\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)
+
 
 
 ### services\.tideways\.service
@@ -134,3 +152,6 @@ string
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/tideways\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/tideways.nix)

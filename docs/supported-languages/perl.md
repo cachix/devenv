@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/perl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)
+
 
 
 ### languages\.perl\.packages
@@ -51,3 +54,6 @@ list of string
   "Mojolicious"
 ]
 ```
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/perl\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/perl.nix)

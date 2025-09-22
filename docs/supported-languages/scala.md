@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
 
 
 ### languages\.scala\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.scala_3 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
 
 
 
@@ -67,6 +73,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
 
 
 ### languages\.scala\.mill\.package
@@ -84,6 +93,9 @@ package
 
 *Default:*
 ` pkgs.mill `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
 
 
 
@@ -108,6 +120,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)
+
 
 
 ### languages\.scala\.sbt\.package
@@ -130,3 +145,6 @@ package
 
 *Example:*
 ` sbt-with-scala-native `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/scala\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/scala.nix)

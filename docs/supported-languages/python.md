@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.python3 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -65,6 +71,9 @@ string
 
 *Example:*
 ` "./directory" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -90,6 +99,9 @@ list of absolute path
 
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.manylinux\.enable
@@ -111,6 +123,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -135,6 +150,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.package
@@ -153,6 +171,9 @@ package
 *Default:*
 ` pkgs.poetry `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.activate\.enable
@@ -170,6 +191,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -194,6 +218,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.install\.allExtras
@@ -211,6 +238,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -230,6 +260,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.install\.compile
@@ -247,6 +280,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -266,6 +302,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.install\.groups
@@ -283,6 +322,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -302,6 +344,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.install\.installRootPackage
@@ -319,6 +364,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -338,6 +386,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.install\.onlyInstallRootPackage
@@ -355,6 +406,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -374,6 +428,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.poetry\.install\.verbosity
@@ -391,6 +448,9 @@ one of “no”, “little”, “more”, “debug”
 
 *Default:*
 ` "no" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -415,6 +475,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.uv\.package
@@ -432,6 +495,9 @@ package
 
 *Default:*
 ` pkgs.uv `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -456,6 +522,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.uv\.sync\.packages
@@ -473,6 +542,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -492,6 +564,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.uv\.sync\.allGroups
@@ -509,6 +584,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -528,6 +606,9 @@ boolean
 *Default:*
 ` false `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.uv\.sync\.arguments
@@ -545,6 +626,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -564,6 +648,9 @@ list of string
 *Default:*
 ` [ ] `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.uv\.sync\.groups
@@ -581,6 +668,9 @@ list of string
 
 *Default:*
 ` [ ] `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -605,6 +695,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
 
 
 ### languages\.python\.venv\.quiet
@@ -622,6 +715,9 @@ boolean
 
 *Default:*
 ` false `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -641,6 +737,9 @@ null or strings concatenated with “\\n” or absolute path
 
 *Default:*
 ` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
 
 
 
@@ -665,3 +764,6 @@ null or string
 
 *Example:*
 ` "3.11 or 3.11.2" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/python\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)

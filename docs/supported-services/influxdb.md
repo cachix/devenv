@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/influxdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)
+
 
 
 ### services\.influxdb\.package
@@ -44,6 +47,9 @@ package
 *Default:*
 ` pkgs.influxdb `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/influxdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)
+
 
 
 ### services\.influxdb\.config
@@ -59,3 +65,6 @@ strings concatenated with “\\n”
 
 *Default:*
 ` "" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/influxdb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/influxdb.nix)

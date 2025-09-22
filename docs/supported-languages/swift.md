@@ -24,6 +24,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)
+
 
 
 ### languages\.swift\.package
@@ -41,3 +44,6 @@ package
 
 *Default:*
 ` pkgs.swift `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/swift\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/swift.nix)

@@ -26,6 +26,9 @@ boolean
 *Example:*
 ` true `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+
 
 
 ### services\.mailhog\.package
@@ -43,6 +46,9 @@ package
 
 *Default:*
 ` pkgs.mailhog `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -70,6 +76,9 @@ list of strings concatenated with “\\n”
 ]
 ```
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+
 
 
 ### services\.mailhog\.apiListenAddress
@@ -87,6 +96,9 @@ string
 
 *Default:*
 ` "127.0.0.1:8025" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
 
 
 
@@ -106,6 +118,9 @@ string
 *Default:*
 ` "127.0.0.1:1025" `
 
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
+
 
 
 ### services\.mailhog\.uiListenAddress
@@ -123,3 +138,6 @@ string
 
 *Default:*
 ` "127.0.0.1:8025" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mailhog\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mailhog.nix)
