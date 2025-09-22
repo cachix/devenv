@@ -36,6 +36,8 @@ rustPlatform.buildRustPackage {
     ];
   };
 
+  buildType = if build_tasks then "release_fast" else "release";
+
   cargoBuildFlags =
     if build_tasks
     then [ "-p devenv-tasks" ]
@@ -60,9 +62,9 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     openssl
-  ] ++ lib.optional stdenv.isDarwin apple-sdk_11
+  ]
   # secretspec
-  ++ lib.optional (!stdenv.isDarwin) dbus;
+  ++ lib.optional (stdenv.isLinux) dbus;
 
   # Fix proto files for snix dependencies
   preBuild = ''
@@ -73,12 +75,12 @@ rustPlatform.buildRustPackage {
     # Create proto directory structure that snix expects
     cd "$NIX_BUILD_TOP/cargo-vendor-dir"
     mkdir -p snix/{castore,store,build}/protos
-    
+
     # Link proto files to the expected locations
     [ -d snix-castore-*/protos ] && cp snix-castore-*/protos/*.proto snix/castore/protos/ 2>/dev/null || true
     [ -d snix-store-*/protos ] && cp snix-store-*/protos/*.proto snix/store/protos/ 2>/dev/null || true  
     [ -d snix-build-*/protos ] && cp snix-build-*/protos/*.proto snix/build/protos/ 2>/dev/null || true
-    
+
     cd - > /dev/null
   '';
 
