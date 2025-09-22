@@ -18,22 +18,23 @@ rustPlatform.buildRustPackage {
   pname = "devenv${lib.optionalString build_tasks "-tasks"}";
   version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
 
-  # WARN: building this from src/modules/tasks.nix fails.
-  # There is something being prepended to the path, hence the .*.
-  src = lib.sourceByRegex ./. [
-    ".*\.cargo(/.*)?$"
-    ".*Cargo\.toml"
-    ".*Cargo\.lock"
-    ".*devenv(/.*)?"
-    ".*devenv-generate(/.*)?"
-    ".*devenv-eval-cache(/.*)?"
-    ".*devenv-cache-core(/.*)?"
-    ".*devenv-run-tests(/.*)?"
-    ".*devenv-tasks(/.*)?"
-    ".*http-client-tls(/.*)?"
-    ".*nix-conf-parser(/.*)?"
-    ".*xtask(/.*)?"
-  ];
+  src = lib.fileset.toSource {
+    root = ./.;
+    fileset = lib.fileset.unions [
+      ./.cargo
+      ./Cargo.toml
+      ./Cargo.lock
+      ./devenv
+      ./devenv-generate
+      ./devenv-eval-cache
+      ./devenv-cache-core
+      ./devenv-run-tests
+      ./devenv-tasks
+      ./http-client-tls
+      ./nix-conf-parser
+      ./xtask
+    ];
+  };
 
   cargoBuildFlags =
     if build_tasks
