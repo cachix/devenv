@@ -328,7 +328,7 @@ string
 
 
 *Default:*
-` "/home/runner/work/devenv/devenv/.devenv/state/kafka/connect/connect.offsets" `
+` ${config.env.DEVENV_STATE}/kafka/connect/connect.offsets `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/kafka-connect\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/kafka-connect.nix)
