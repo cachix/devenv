@@ -158,6 +158,7 @@
           default = self.packages.${system}.devenv;
           devenv = workspace.devenv;
           devenv-tasks = workspace.devenv-tasks;
+          devenv-tasks-fast = self.packages.${system}.devenv-tasks.override { cargoProfile = "release_fast"; };
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
           devenv-generate-individual-docs =
