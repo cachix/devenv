@@ -109,7 +109,7 @@ for more details\.
 
 
 *Type:*
-null or YAML value
+null or YAML 1\.1 value
 
 
 
@@ -146,7 +146,7 @@ for more details\.
 
 
 *Type:*
-null or YAML value
+null or YAML 1\.1 value
 
 
 
@@ -351,7 +351,7 @@ for more details\.
 
 
 *Type:*
-null or YAML value
+null or YAML 1\.1 value
 
 
 
@@ -472,7 +472,7 @@ for more details\.
 
 
 *Type:*
-null or YAML value
+null or YAML 1\.1 value
 
 
 
@@ -494,7 +494,7 @@ for more details\.
 
 
 *Type:*
-null or YAML value
+null or YAML 1\.1 value
 
 
 

@@ -52,7 +52,7 @@ Example: https://github\.com/F1bonacc1/process-compose/blob/main/process-compose
 
 
 *Type:*
-YAML value
+YAML 1\.1 value
 
 
 

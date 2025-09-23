@@ -87,8 +87,10 @@ The available extensions are:
  - cstore_fdw
  - h3-pg
  - hypopg
+ - ip4r
  - jsonb_deep_sum
  - lantern
+ - omnigres
  - periods
  - pg-gvm
  - pg-semver
@@ -145,6 +147,7 @@ The available extensions are:
  - timescaledb-apache
  - timescaledb_toolkit
  - tsja
+ - vectorchord
  - wal2json
 
 
