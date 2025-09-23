@@ -2728,7 +2728,7 @@ yaml contents
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -2758,6 +2758,29 @@ submodule
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git-hooks.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git-hooks.nix)
+
+
+
+## git-hooks.enable
+
+
+
+Whether to enable the pre-commit hooks module.
+
+When set to false, this disables the entire module.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
@@ -5229,8 +5252,6 @@ boolean
 
 ## git-hooks.hooks.deadnix.settings.exclude
 
-
-
 Files to exclude from analysis.
 
 
@@ -5249,6 +5270,8 @@ list of string
 
 
 ## git-hooks.hooks.deadnix.settings.hidden
+
+
 
 Recurse into hidden subdirectories and process hidden .\*.nix files.
 
@@ -7271,8 +7294,6 @@ attribute set
 
 ## git-hooks.hooks.mdl
 
-
-
 mdl hook
 
 
@@ -7307,6 +7328,8 @@ boolean
 
 
 ## git-hooks.hooks.mdl.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -12167,6 +12190,30 @@ boolean
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.install.enable
+
+
+
+Whether to enable automatic installation of pre-commit hooks.
+
+When set to false, hooks will not be installed into the git repository,
+but all other module functionality (like configuration generation) will still work.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
 
 
 
@@ -17389,7 +17436,7 @@ https://github.com/pvolok/mprocs?tab=readme-ov-file\#config
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -17477,7 +17524,7 @@ Example: https://github.com/F1bonacc1/process-compose/blob/main/process-compose.
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -22377,7 +22424,7 @@ OpenSearch configuration.
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -22610,7 +22657,7 @@ for more information on how to configure the Collector.
 
 
 *Type:*
-YAML value
+YAML 1.1 value
 
 
 
@@ -22729,8 +22776,10 @@ The available extensions are:
  - cstore_fdw
  - h3-pg
  - hypopg
+ - ip4r
  - jsonb_deep_sum
  - lantern
+ - omnigres
  - periods
  - pg-gvm
  - pg-semver
@@ -22787,6 +22836,7 @@ The available extensions are:
  - timescaledb-apache
  - timescaledb_toolkit
  - tsja
+ - vectorchord
  - wal2json
 
 
@@ -24631,7 +24681,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -24671,7 +24721,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -24900,7 +24950,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -25033,7 +25083,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
@@ -25058,7 +25108,7 @@ for more details.
 
 
 *Type:*
-null or YAML value
+null or YAML 1.1 value
 
 
 
