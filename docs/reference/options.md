@@ -5691,8 +5691,6 @@ boolean
 
 ## git-hooks.hooks.deadnix.settings.exclude
 
-
-
 Files to exclude from analysis.
 
 
@@ -7816,8 +7814,6 @@ attribute set
 
 
 ## git-hooks.hooks.mdl
-
-
 
 mdl hook
 
