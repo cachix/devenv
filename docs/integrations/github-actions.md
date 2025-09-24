@@ -36,9 +36,9 @@ Let's first prepare the job environment for devenv.
 
 ```yaml
 steps:
-- uses: actions/checkout@v4
-- uses: cachix/install-nix-action@v26
-- uses: cachix/cachix-action@v14
+- uses: actions/checkout@v5
+- uses: cachix/install-nix-action@v31
+- uses: cachix/cachix-action@v16
   with:
     name: devenv
 - name: Install devenv.sh
@@ -95,6 +95,7 @@ to override the default shell for the current step and replace it with the deven
     hello
     say-bye
 ```
+
 ```console title="Output"
 Building shell ...
 Hello, world!
@@ -138,9 +139,9 @@ jobs:
     runs-on: {{ '${{ matrix.os }}' }}
 
     steps:
-    - uses: actions/checkout@v4
-    - uses: cachix/install-nix-action@v26
-    - uses: cachix/cachix-action@v14
+    - uses: actions/checkout@v5
+    - uses: cachix/install-nix-action@v31
+    - uses: cachix/cachix-action@v16
       with:
         name: devenv
     - name: Install devenv.sh
