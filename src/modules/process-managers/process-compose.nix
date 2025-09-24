@@ -127,7 +127,7 @@ in
         processes = lib.mapAttrs
           (name: value:
             let
-              taskCmd = "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}";
+              taskCmd = "${config.task.package}/bin/devenv-tasks run --mode all devenv:processes:${name}";
               command =
                 if value.process-compose.is_elevated or false
                 then taskCmd
