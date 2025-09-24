@@ -9497,8 +9497,6 @@ one of “lf”, “crlf”, “cr”, “auto”
 
 ## git-hooks.hooks.prettier.settings.html-whitespace-sensitivity
 
-
-
 How to handle whitespaces in HTML.
 
 
@@ -11566,8 +11564,6 @@ one of “stderr”, “errfmt”, “json”
 
 
 ## git-hooks.hooks.statix.settings.ignore
-
-
 
 Globs of file patterns to skip.
 
@@ -13823,8 +13819,6 @@ boolean
 
 ## languages.gleam.package
 
-
-
 The Gleam package to use.
 
 
@@ -14039,6 +14033,135 @@ list of string
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+## languages.helm.enable
+
+
+
+Whether to enable tools for Helm development.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.package
+
+
+
+The Helm package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.kubernetes-helm `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.languageServer.enable
+
+
+
+Whether to enable Helm language server.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.languageServer.package
+
+
+
+The Helm language server package to include.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.helm-ls `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
+
+
+
+## languages.helm.plugins
+
+
+
+List of Helm plugin names to include from pkgs.kubernetes-helmPlugins.
+
+They will be symlinked into one directory and exposed via HELM_PLUGINS.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "helm-secrets"
+  "helm-diff"
+  "helm-unittest"
+]
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/helm.nix)
 
 
 
@@ -16161,8 +16284,6 @@ boolean
 
 
 ## languages.python.poetry.install.quiet
-
-
 
 Whether ` poetry install ` should avoid outputting messages during devenv initialisation.
 
