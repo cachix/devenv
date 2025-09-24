@@ -21,3 +21,8 @@ jobs:
     needs: build
     uses: ./.github/workflows/test.yml
     secrets: inherit
+
+  examples:
+    needs: test
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit

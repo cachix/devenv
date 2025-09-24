@@ -32,6 +32,13 @@ jobs:
     with:
       ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || ''}}
 
+  examples:
+    needs: test
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || ''}}
+
   pin:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
