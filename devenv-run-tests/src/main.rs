@@ -280,14 +280,16 @@ async fn main() -> Result<ExitCode> {
     // Create a wrapper for devenv that adds --override-input
     let wrapper_dir = TempDir::new().into_diagnostic()?;
     let devenv_wrapper_path = wrapper_dir.path().join("devenv");
-    let devenv_override_input = format!("path:{}?dir=src/modules", cwd.display());
 
+    // NOTE: clap has a bug where multiple global arguments aren't resolved properly across subcommand boundaries.
+    // We add all overrides at the end of the command to allow invocations to provide their own overrides.
+    // Similar issue: https://github.com/clap-rs/clap/issues/6049
     let wrapper_content = format!(
         r#"#!/usr/bin/env bash
-exec "{}/devenv" --override-input devenv "{}" "$@"
+exec '{bin_dir}/devenv' "$@" --override-input devenv '{devenv_input}'
 "#,
-        executable_dir.display(),
-        devenv_override_input
+        bin_dir=executable_dir.display(),
+        devenv_input = format!("path:{}?dir=src/modules", cwd.display())
     );
 
     fs::write(&devenv_wrapper_path, wrapper_content).into_diagnostic()?;
