@@ -7,21 +7,31 @@ on:
         description: "Git ref to checkout"
         required: false
         type: string
+      system:
+        description: "System to test on (optional, tests all if not specified)"
+        required: false
+        type: string
 
 jobs:
   tests:
     strategy:
       fail-fast: false
       matrix:
-        systems:
-          - system: "aarch64-linux"
-            runs-on: [self-hosted, linux, ARM64]
-          - system: "x86_64-linux"
-            runs-on: [self-hosted, linux, X64]
-          - system: "aarch64-darwin"
-            runs-on: [self-hosted, macOS, ARM64]
-          - system: "x86_64-darwin"
-            runs-on: [macos-13]
+        systems: >-
+          ${{
+            inputs.system && fromJSON(format('[{0}]',
+              inputs.system == 'aarch64-linux' && '{"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]}' ||
+              inputs.system == 'x86_64-linux' && '{"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]}' ||
+              inputs.system == 'aarch64-darwin' && '{"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]}' ||
+              inputs.system == 'x86_64-darwin' && '{"system": "x86_64-darwin", "runs-on": ["macos-13"]}' ||
+              '{"system": "unknown", "runs-on": ["ubuntu-latest"]}'
+            )) || fromJSON('[
+              {"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]},
+              {"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]},
+              {"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]},
+              {"system": "x86_64-darwin", "runs-on": ["macos-13"]}
+            ]')
+          }}
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
       - uses: actions/checkout@v5
@@ -56,15 +66,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        systems:
-          - system: "aarch64-linux"
-            runs-on: [self-hosted, linux, ARM64]
-          - system: "x86_64-linux"
-            runs-on: [self-hosted, linux, X64]
-          - system: "aarch64-darwin"
-            runs-on: [self-hosted, macOS, ARM64]
-          - system: "x86_64-darwin"
-            runs-on: [macos-13]
+        systems: >-
+          ${{
+            inputs.system && fromJSON(format('[{0}]',
+              inputs.system == 'aarch64-linux' && '{"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]}' ||
+              inputs.system == 'x86_64-linux' && '{"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]}' ||
+              inputs.system == 'aarch64-darwin' && '{"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]}' ||
+              inputs.system == 'x86_64-darwin' && '{"system": "x86_64-darwin", "runs-on": ["macos-13"]}' ||
+              '{"system": "unknown", "runs-on": ["ubuntu-latest"]}'
+            )) || fromJSON('[
+              {"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]},
+              {"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]},
+              {"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]},
+              {"system": "x86_64-darwin", "runs-on": ["macos-13"]}
+            ]')
+          }}
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
       - uses: actions/checkout@v5
@@ -101,15 +117,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        systems:
-          - system: "aarch64-linux"
-            runs-on: [self-hosted, linux, ARM64]
-          - system: "x86_64-linux"
-            runs-on: [self-hosted, linux, X64]
-          - system: "aarch64-darwin"
-            runs-on: [self-hosted, macOS, ARM64]
-          - system: "x86_64-darwin"
-            runs-on: [macos-13]
+        systems: >-
+          ${{
+            inputs.system && fromJSON(format('[{0}]',
+              inputs.system == 'aarch64-linux' && '{"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]}' ||
+              inputs.system == 'x86_64-linux' && '{"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]}' ||
+              inputs.system == 'aarch64-darwin' && '{"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]}' ||
+              inputs.system == 'x86_64-darwin' && '{"system": "x86_64-darwin", "runs-on": ["macos-13"]}' ||
+              '{"system": "unknown", "runs-on": ["ubuntu-latest"]}'
+            )) || fromJSON('[
+              {"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]},
+              {"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]},
+              {"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]},
+              {"system": "x86_64-darwin", "runs-on": ["macos-13"]}
+            ]')
+          }}
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
       - uses: actions/checkout@v5

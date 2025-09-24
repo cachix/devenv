@@ -13,16 +13,83 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # Per-system job chains to avoid cross-system waiting
+  build-aarch64-linux:
     uses: ./.github/workflows/build.yml
     secrets: inherit
+    with:
+      system: "aarch64-linux"
 
-  test:
-    needs: build
+  test-aarch64-linux:
+    needs: build-aarch64-linux
     uses: ./.github/workflows/test.yml
     secrets: inherit
+    with:
+      system: "aarch64-linux"
 
-  examples:
-    needs: test
+  examples-aarch64-linux:
+    needs: test-aarch64-linux
     uses: ./.github/workflows/examples.yml
     secrets: inherit
+    with:
+      system: "aarch64-linux"
+
+  build-x86_64-linux:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: "x86_64-linux"
+
+  test-x86_64-linux:
+    needs: build-x86_64-linux
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: "x86_64-linux"
+
+  examples-x86_64-linux:
+    needs: test-x86_64-linux
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: "x86_64-linux"
+
+  build-aarch64-darwin:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: "aarch64-darwin"
+
+  test-aarch64-darwin:
+    needs: build-aarch64-darwin
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: "aarch64-darwin"
+
+  examples-aarch64-darwin:
+    needs: test-aarch64-darwin
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: "aarch64-darwin"
+
+  build-x86_64-darwin:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: "x86_64-darwin"
+
+  test-x86_64-darwin:
+    needs: build-x86_64-darwin
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: "x86_64-darwin"
+
+  examples-x86_64-darwin:
+    needs: test-x86_64-darwin
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: "x86_64-darwin"
