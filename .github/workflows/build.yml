@@ -42,3 +42,8 @@ jobs:
       - name: Build devenv-${{ matrix.systems.system }}
         run: |
           nix build -L --show-trace --print-out-paths --system ${{ matrix.systems.system }}
+
+      # Cache the devenv-tasks binary used by the module system
+      - name: Build devenv-tasks-fast-${{ matrix.systems.system }}
+        run: |
+          nix build -L --show-trace --print-out-paths --system ${{ matrix.systems.system }} .#devenv-tasks-fast

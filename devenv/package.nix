@@ -1,54 +1,27 @@
-{ lib
+{ src
+, version
+, cargoLock
+, cargoProfile ? "release"
+
+, lib
 , stdenv
 , makeBinaryWrapper
 , installShellFiles
 , rustPlatform
-, nix
-, cachix ? null
+, devenv-nix
+, cachix
 , openssl
 , dbus
-, apple-sdk_11
 , protobuf
 , pkg-config
 , glibcLocalesUtf8
-, build_tasks ? false
 }:
 
 rustPlatform.buildRustPackage {
-  pname = "devenv${lib.optionalString build_tasks "-tasks"}";
-  version = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
+  pname = "devenv";
+  inherit src version cargoLock;
 
-  # WARN: building this from src/modules/tasks.nix fails.
-  # There is something being prepended to the path, hence the .*.
-  src = lib.sourceByRegex ./. [
-    ".*\.cargo(/.*)?$"
-    ".*Cargo\.toml"
-    ".*Cargo\.lock"
-    ".*devenv(/.*)?"
-    ".*devenv-generate(/.*)?"
-    ".*devenv-eval-cache(/.*)?"
-    ".*devenv-cache-core(/.*)?"
-    ".*devenv-run-tests(/.*)?"
-    ".*devenv-tasks(/.*)?"
-    ".*http-client-tls(/.*)?"
-    ".*nix-conf-parser(/.*)?"
-    ".*xtask(/.*)?"
-  ];
-
-  cargoBuildFlags =
-    if build_tasks
-    then [ "-p devenv-tasks" ]
-    else [ "-p devenv -p devenv-run-tests" ];
-
-  doCheck = !build_tasks;
-
-  cargoLock = {
-    lockFile = ./Cargo.lock;
-    outputHashes = {
-      "nix-compat-0.1.0" = "sha256-ito4pvET2NEZpiVgEF95HH6VJewQ7p3mJLzPT86o4EA=";
-      "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
-    };
-  };
+  cargoBuildFlags = [ "-p devenv -p devenv-run-tests" ];
 
   nativeBuildInputs = [
     installShellFiles
@@ -59,9 +32,9 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     openssl
-  ] ++ lib.optional stdenv.isDarwin apple-sdk_11
+  ]
   # secretspec
-  ++ lib.optional (!stdenv.isDarwin) dbus;
+  ++ lib.optional (stdenv.isLinux) dbus;
 
   # Fix proto files for snix dependencies
   preBuild = ''
@@ -72,12 +45,12 @@ rustPlatform.buildRustPackage {
     # Create proto directory structure that snix expects
     cd "$NIX_BUILD_TOP/cargo-vendor-dir"
     mkdir -p snix/{castore,store,build}/protos
-    
+
     # Link proto files to the expected locations
     [ -d snix-castore-*/protos ] && cp snix-castore-*/protos/*.proto snix/castore/protos/ 2>/dev/null || true
-    [ -d snix-store-*/protos ] && cp snix-store-*/protos/*.proto snix/store/protos/ 2>/dev/null || true  
+    [ -d snix-store-*/protos ] && cp snix-store-*/protos/*.proto snix/store/protos/ 2>/dev/null || true
     [ -d snix-build-*/protos ] && cp snix-build-*/protos/*.proto snix/build/protos/ 2>/dev/null || true
-    
+
     cd - > /dev/null
   '';
 
@@ -88,16 +61,16 @@ rustPlatform.buildRustPackage {
           --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
         '';
     in
-    lib.optionalString (!build_tasks) ''
+    ''
       wrapProgram $out/bin/devenv \
         --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
-        --set DEVENV_NIX ${nix} \
+        --set DEVENV_NIX ${devenv-nix} \
         ${setDefaultLocaleArchive} \
 
       # TODO: problematic for our library...
       wrapProgram $out/bin/devenv-run-tests \
         --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
-        --set DEVENV_NIX ${nix} \
+        --set DEVENV_NIX ${devenv-nix} \
         ${setDefaultLocaleArchive} \
 
       # Generate manpages

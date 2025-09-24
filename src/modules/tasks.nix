@@ -1,11 +1,28 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
-  devenv-tasks = pkgs.callPackage ./../../package.nix {
-    build_tasks = true;
-    cachix = null;
-    inherit (inputs.nix.packages.${pkgs.stdenv.system}) nix;
-  };
+
+  # Attempt to evaluate devenv-tasks using the exact nixpkgs used by the root devenv flake.
+  # If the locked input is not what we expect, fall back to evaluating with the user's nixpkgs.
+  #
+  # In theory:
+  #   - The tasks binary will be built by CI and uploaded to devenv.cachix.org
+  #   - Only bumps to the nixpkgs in the root devenv flake will trigger a re-eval of devenv-tasks
+  devenv-tasks =
+    let
+      lock = builtins.fromJSON (builtins.readFile ./../../flake.lock);
+      lockedNixpkgs = lock.nodes.nixpkgs.locked;
+      devenvPkgs =
+        if lockedNixpkgs.type == "github" then
+          let source = pkgs.fetchFromGitHub {
+            inherit (lockedNixpkgs) owner repo rev;
+            hash = lock.nodes.nixpkgs.locked.narHash;
+          }; in import source { system = pkgs.stdenv.system; }
+        else
+          pkgs;
+      workspace = devenvPkgs.callPackage ./../../workspace.nix { cargoProfile = "release_fast"; };
+    in workspace.devenv-tasks;
+
   taskType = types.submodule
     ({ name, config, ... }:
       let

@@ -280,14 +280,42 @@ async fn main() -> Result<ExitCode> {
     // Create a wrapper for devenv that adds --override-input
     let wrapper_dir = TempDir::new().into_diagnostic()?;
     let devenv_wrapper_path = wrapper_dir.path().join("devenv");
-    let devenv_override_input = format!("path:{}?dir=src/modules", cwd.display());
 
+    // NOTE: clap has a bug where multiple global arguments aren't resolved properly across subcommand boundaries.
+    // We parse out all overrides and add them before the command to allow invocations to provide their own overrides.
+    // Similar issue: https://github.com/clap-rs/clap/issues/6049
     let wrapper_content = format!(
         r#"#!/usr/bin/env bash
-exec "{}/devenv" --override-input devenv "{}" "$@"
+
+# Parse arguments to extract --override-input and reposition them
+override_inputs=()
+other_args=()
+
+i=0
+while [ $i -lt $# ]; do
+    case "${{@:$((i+1)):1}}" in
+        --override-input)
+            # Add --override-input and its two values (name and URL)
+            override_inputs+=("--override-input")
+            override_inputs+=("${{@:$((i+2)):1}}")
+            override_inputs+=("${{@:$((i+3)):1}}")
+            i=$((i+3))
+            ;;
+        *)
+            other_args+=("${{@:$((i+1)):1}}")
+            i=$((i+1))
+            ;;
+    esac
+done
+
+# Execute devenv with our devenv override first, then user overrides, then other arguments
+exec '{bin_dir}/devenv' \
+  --override-input devenv 'path:{cwd}?dir=src/modules' \
+  "${{override_inputs[@]}}" \
+  "${{other_args[@]}}"
 "#,
-        executable_dir.display(),
-        devenv_override_input
+        bin_dir = executable_dir.display(),
+        cwd = cwd.display(),
     );
 
     fs::write(&devenv_wrapper_path, wrapper_content).into_diagnostic()?;
