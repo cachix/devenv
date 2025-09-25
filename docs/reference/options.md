@@ -9497,6 +9497,8 @@ one of “lf”, “crlf”, “cr”, “auto”
 
 ## git-hooks.hooks.prettier.settings.html-whitespace-sensitivity
 
+
+
 How to handle whitespaces in HTML.
 
 
@@ -11564,6 +11566,8 @@ one of “stderr”, “errfmt”, “json”
 
 
 ## git-hooks.hooks.statix.settings.ignore
+
+
 
 Globs of file patterns to skip.
 
@@ -13818,6 +13822,8 @@ boolean
 
 
 ## languages.gleam.package
+
+
 
 The Gleam package to use.
 
@@ -16284,6 +16290,8 @@ boolean
 
 
 ## languages.python.poetry.install.quiet
+
+
 
 Whether ` poetry install ` should avoid outputting messages during devenv initialisation.
 
