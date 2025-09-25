@@ -42,7 +42,7 @@ in
     process.manager.args = { "config" = cfg.configFile; };
 
     process.manager.command = lib.mkDefault ''
-      ${cfg.package}/bin/mprocs \
+      ${lib.getExe cfg.package} \
         ${lib.cli.toGNUCommandLineShell { } config.process.manager.args}
     '';
 

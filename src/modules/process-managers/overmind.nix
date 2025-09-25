@@ -18,13 +18,13 @@ in
 
   config = lib.mkIf cfg.enable {
     process.manager.args = {
-      "root" = config.env.DEVENV_ROOT;
+      "root" = config.devenv.root;
       "socket" = "${config.devenv.runtime}/overmind.sock";
       "procfile" = config.procfile;
     };
 
     process.manager.command = lib.mkDefault ''
-      OVERMIND_ENV=${config.procfileEnv} ${cfg.package}/bin/overmind start \
+      ${lib.getExe cfg.package} start \
         ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
         "$@" &
     '';

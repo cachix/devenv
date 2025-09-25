@@ -43,10 +43,6 @@ let
   supportedImplementations = builtins.attrNames options.process.managers;
 
   implementation = config.process.manager.implementation;
-  envList =
-    lib.mapAttrsToList
-      (name: value: "${name}=${builtins.toJSON value}")
-      config.env;
 in
 {
   imports =
@@ -160,6 +156,12 @@ in
           config.processes));
 
     procfileEnv =
+      let
+        envList =
+          lib.mapAttrsToList
+            (name: value: "${name}=${builtins.toJSON value}")
+            config.env;
+      in
       pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
 
     procfileScript = pkgs.writeShellScript "devenv-up" ''

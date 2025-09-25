@@ -22,7 +22,7 @@ in
     };
 
     process.manager.command = lib.mkDefault ''
-      ${cfg.package}/bin/hivemind \
+      ${lib.getExe cfg.package} \
         ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
         "$@" ${config.procfile} &
     '';
