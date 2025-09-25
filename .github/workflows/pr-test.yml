@@ -1,4 +1,4 @@
-name: "Build & Test"
+name: "PR Test"
 
 on:
   pull_request:
@@ -13,87 +13,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Per-system job chains to avoid cross-system waiting
-  build-aarch64-linux:
-    uses: ./.github/workflows/build.yml
+  pipeline:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: aarch64-linux
+            runs-on: '["self-hosted", "linux", "ARM64"]'
+          - system: x86_64-linux
+            runs-on: '["self-hosted", "linux", "X64"]'
+          - system: aarch64-darwin
+            runs-on: '["self-hosted", "macOS", "ARM64"]'
+          - system: x86_64-darwin
+            runs-on: '["macos-13"]'
+    uses: ./.github/workflows/per-system-pipeline.yml
     secrets: inherit
     with:
-      system: "aarch64-linux"
-
-  test-aarch64-linux:
-    needs: build-aarch64-linux
-    uses: ./.github/workflows/test.yml
-    secrets: inherit
-    with:
-      system: "aarch64-linux"
-
-  examples-aarch64-linux:
-    needs: test-aarch64-linux
-    if: needs.test-aarch64-linux.result != 'skipped'
-    uses: ./.github/workflows/examples.yml
-    secrets: inherit
-    with:
-      system: "aarch64-linux"
-
-  build-x86_64-linux:
-    uses: ./.github/workflows/build.yml
-    secrets: inherit
-    with:
-      system: "x86_64-linux"
-
-  test-x86_64-linux:
-    needs: build-x86_64-linux
-    uses: ./.github/workflows/test.yml
-    secrets: inherit
-    with:
-      system: "x86_64-linux"
-
-  examples-x86_64-linux:
-    needs: test-x86_64-linux
-    if: needs.test-x86_64-linux.result != 'skipped'
-    uses: ./.github/workflows/examples.yml
-    secrets: inherit
-    with:
-      system: "x86_64-linux"
-
-  build-aarch64-darwin:
-    uses: ./.github/workflows/build.yml
-    secrets: inherit
-    with:
-      system: "aarch64-darwin"
-
-  test-aarch64-darwin:
-    needs: build-aarch64-darwin
-    uses: ./.github/workflows/test.yml
-    secrets: inherit
-    with:
-      system: "aarch64-darwin"
-
-  examples-aarch64-darwin:
-    needs: test-aarch64-darwin
-    if: needs.test-aarch64-darwin.result != 'skipped'
-    uses: ./.github/workflows/examples.yml
-    secrets: inherit
-    with:
-      system: "aarch64-darwin"
-
-  build-x86_64-darwin:
-    uses: ./.github/workflows/build.yml
-    secrets: inherit
-    with:
-      system: "x86_64-darwin"
-
-  test-x86_64-darwin:
-    needs: build-x86_64-darwin
-    uses: ./.github/workflows/test.yml
-    secrets: inherit
-    with:
-      system: "x86_64-darwin"
-
-  examples-x86_64-darwin:
-    needs: test-x86_64-darwin
-    if: needs.test-x86_64-darwin.result != 'skipped'
-    uses: ./.github/workflows/examples.yml
-    secrets: inherit
-    with:
-      system: "x86_64-darwin"
+      system: ${{ matrix.system }}
+      runs-on: ${{ matrix.runs-on }}

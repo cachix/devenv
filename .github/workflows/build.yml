@@ -8,31 +8,17 @@ on:
         required: false
         type: string
       system:
-        description: "System to build for (optional, builds all if not specified)"
-        required: false
+        description: "System to build for"
+        required: true
+        type: string
+      runs-on:
+        description: "Runner to use"
+        required: true
         type: string
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        systems: >-
-          ${{
-            inputs.system && fromJSON(format('[{0}]',
-              inputs.system == 'aarch64-linux' && '{"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]}' ||
-              inputs.system == 'x86_64-linux' && '{"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]}' ||
-              inputs.system == 'aarch64-darwin' && '{"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]}' ||
-              inputs.system == 'x86_64-darwin' && '{"system": "x86_64-darwin", "runs-on": ["macos-13"]}' ||
-              '{"system": "unknown", "runs-on": ["ubuntu-latest"]}'
-            )) || fromJSON('[
-              {"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]},
-              {"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]},
-              {"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]},
-              {"system": "x86_64-darwin", "runs-on": ["macos-13"]}
-            ]')
-          }}
-    runs-on: ${{ matrix.systems.runs-on }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -49,11 +35,11 @@ jobs:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Build devenv-${{ matrix.systems.system }}
+      - name: Build devenv-${{ inputs.system }}
         run: |
-          nix build -L --show-trace --print-out-paths --system ${{ matrix.systems.system }}
+          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }}
 
       # Cache the devenv-tasks binary used by the module system
-      - name: Build devenv-tasks-fast-${{ matrix.systems.system }}
+      - name: Build devenv-tasks-fast-${{ inputs.system }}
         run: |
-          nix build -L --show-trace --print-out-paths --system ${{ matrix.systems.system }} .#devenv-tasks-fast
+          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-tasks-fast

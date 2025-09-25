@@ -8,8 +8,12 @@ on:
         required: false
         type: string
       system:
-        description: "System to run examples on (optional, runs on all if not specified)"
-        required: false
+        description: "System to run examples on"
+        required: true
+        type: string
+      runs-on:
+        description: "Runner to use"
+        required: true
         type: string
 
 jobs:
@@ -30,28 +34,13 @@ jobs:
           echo "examples=$json" >> $GITHUB_OUTPUT
 
   examples:
-    name: ${{ matrix.example }} (${{ join(matrix.systems.runs-on) }})
+    name: ${{ matrix.example }} (${{ inputs.system }})
     needs: [generate-examples]
     strategy:
       fail-fast: false
       matrix:
-        systems: >-
-          ${{
-            inputs.system && fromJSON(format('[{0}]',
-              inputs.system == 'aarch64-linux' && '{"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]}' ||
-              inputs.system == 'x86_64-linux' && '{"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]}' ||
-              inputs.system == 'aarch64-darwin' && '{"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]}' ||
-              inputs.system == 'x86_64-darwin' && '{"system": "x86_64-darwin", "runs-on": ["macos-13"]}' ||
-              '{"system": "unknown", "runs-on": ["ubuntu-latest"]}'
-            )) || fromJSON('[
-              {"system": "aarch64-linux", "runs-on": ["self-hosted", "linux", "ARM64"]},
-              {"system": "x86_64-linux", "runs-on": ["self-hosted", "linux", "X64"]},
-              {"system": "aarch64-darwin", "runs-on": ["self-hosted", "macOS", "ARM64"]},
-              {"system": "x86_64-darwin", "runs-on": ["macos-13"]}
-            ]')
-          }}
         example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
-    runs-on: ${{ matrix.systems.runs-on }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     steps:
       - uses: actions/checkout@v5
         with:

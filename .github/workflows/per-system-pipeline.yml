@@ -1,0 +1,45 @@
+name: "Per-System Pipeline"
+
+on:
+  workflow_call:
+    inputs:
+      system:
+        description: "System to build, test, and run examples for"
+        required: true
+        type: string
+      runs-on:
+        description: "Runner to use for this system"
+        required: true
+        type: string
+      ref:
+        description: "Git ref to checkout"
+        required: false
+        type: string
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: ${{ inputs.system }}
+      runs-on: ${{ inputs.runs-on }}
+      ref: ${{ inputs.ref }}
+
+  test:
+    needs: build
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: ${{ inputs.system }}
+      runs-on: ${{ inputs.runs-on }}
+      ref: ${{ inputs.ref }}
+
+  examples:
+    needs: test
+    if: needs.test.result != 'skipped'
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: ${{ inputs.system }}
+      runs-on: ${{ inputs.runs-on }}
+      ref: ${{ inputs.ref }}

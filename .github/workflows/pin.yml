@@ -14,6 +14,14 @@ on:
         description: "Git ref to checkout"
         required: false
         type: string
+      system:
+        description: "System to pin for"
+        required: true
+        type: string
+      runs-on:
+        description: "Runner to use"
+        required: true
+        type: string
     secrets:
       CACHIX_AUTH_TOKEN:
         required: true
@@ -21,18 +29,7 @@ on:
 jobs:
   pin:
     if: startsWith(github.ref, 'refs/tags/v')
-
-    strategy:
-      fail-fast: false
-      matrix:
-        runs-on: [
-          [self-hosted, linux, ARM64],
-          [self-hosted, linux, X64],
-          [self-hosted, macOS, ARM64],
-          [self-hosted, macOS, X64],
-        ]
-
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
 
     steps:
     - uses: actions/checkout@v5
@@ -52,4 +49,4 @@ jobs:
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
     - name: Pin release
-      run: cachix pin devenv ${{ inputs.ref || github.ref_name }} $(nix build --accept-flake-config --print-out-paths)
+      run: cachix pin devenv ${{ inputs.ref || github.ref_name }} $(nix build --accept-flake-config --print-out-paths --system ${{ inputs.system }})
