@@ -29,6 +29,7 @@ jobs:
 
   examples-aarch64-linux:
     needs: test-aarch64-linux
+    if: always()
     uses: ./.github/workflows/examples.yml
     secrets: inherit
     with:
@@ -49,6 +50,7 @@ jobs:
 
   examples-x86_64-linux:
     needs: test-x86_64-linux
+    if: always()
     uses: ./.github/workflows/examples.yml
     secrets: inherit
     with:
@@ -69,6 +71,7 @@ jobs:
 
   examples-aarch64-darwin:
     needs: test-aarch64-darwin
+    if: always()
     uses: ./.github/workflows/examples.yml
     secrets: inherit
     with:
@@ -89,6 +92,7 @@ jobs:
 
   examples-x86_64-darwin:
     needs: test-x86_64-darwin
+    if: always()
     uses: ./.github/workflows/examples.yml
     secrets: inherit
     with:
