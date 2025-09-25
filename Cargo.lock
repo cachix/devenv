@@ -151,16 +151,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-tempfile"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b37d4bb113c47e4f263d4b0221912ff5aa840a51bc9b7b47b024e1cf1926fd9b"
-dependencies = [
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1553,17 +1543,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c34f04666d835ff5d62e058c3995147c06f42fe86ff053337632bca83e42702d"
 
 [[package]]
-name = "enum-primitive-derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba7795da175654fe16979af73f81f26a8ea27638d8d9823d317016888a63dc4c"
-dependencies = [
- "num-traits",
- "quote",
- "syn 2.0.106",
-]
-
-[[package]]
 name = "env_home"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2863,26 +2842,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
-name = "magic"
-version = "0.16.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50ecbc2953846d9a3f8f6ed0700e66e49e5ad696eefb4e17fbaebbf457e1e752"
-dependencies = [
- "bitflags 2.9.4",
- "magic-sys",
-]
-
-[[package]]
-name = "magic-sys"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eff86ae08895140d628119d407d568f3b657145ee8c265878064f717534bb3bc"
-dependencies = [
- "libc",
- "vcpkg",
-]
-
-[[package]]
 name = "markdown"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3120,7 +3079,7 @@ dependencies = [
 [[package]]
 name = "nix-compat"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "bitflags 2.9.4",
  "bstr",
@@ -3128,17 +3087,15 @@ dependencies = [
  "data-encoding",
  "ed25519",
  "ed25519-dalek",
- "enum-primitive-derive",
  "futures",
- "glob",
  "mimalloc",
  "nix-compat-derive",
  "nom 8.0.0",
- "num-traits",
  "num_enum",
  "pin-project-lite",
  "serde",
  "serde_json",
+ "serde_with",
  "sha2",
  "thiserror 2.0.16",
  "tokio",
@@ -3149,7 +3106,7 @@ dependencies = [
 [[package]]
 name = "nix-compat-derive"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3164,12 +3121,6 @@ dependencies = [
  "miette",
  "thiserror 2.0.16",
 ]
-
-[[package]]
-name = "nohash-hasher"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
 name = "nom"
@@ -5017,7 +4968,7 @@ dependencies = [
 [[package]]
 name = "snix-build"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "anyhow",
  "blake3",
@@ -5048,11 +4999,10 @@ dependencies = [
 [[package]]
 name = "snix-castore"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "async-compression",
  "async-stream",
- "async-tempfile",
  "auto_impl",
  "bigtable_rs",
  "blake3",
@@ -5084,13 +5034,16 @@ dependencies = [
  "thiserror 2.0.16",
  "threadpool",
  "tokio",
+ "tokio-listener",
  "tokio-stream",
  "tokio-tar",
  "tokio-util",
  "tonic 0.12.3",
  "tonic-build 0.12.3",
+ "tonic-health",
  "tonic-reflection",
  "tower 0.4.13",
+ "tower-http",
  "tracing",
  "tracing-indicatif",
  "url",
@@ -5102,7 +5055,7 @@ dependencies = [
 [[package]]
 name = "snix-eval"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "bstr",
  "bytes",
@@ -5111,10 +5064,10 @@ dependencies = [
  "data-encoding",
  "dirs 4.0.0",
  "genawaiter",
+ "hashbrown 0.15.5",
  "itertools 0.12.1",
  "lexical-core",
  "md-5",
- "nohash-hasher",
  "os_str_bytes",
  "path-clean",
  "proptest",
@@ -5138,7 +5091,7 @@ dependencies = [
 [[package]]
 name = "snix-eval-builtin-macros"
 version = "0.0.1"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5148,7 +5101,7 @@ dependencies = [
 [[package]]
 name = "snix-glue"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "async-compression",
  "async-stream",
@@ -5157,7 +5110,6 @@ dependencies = [
  "clap",
  "data-encoding",
  "futures",
- "magic",
  "md-5",
  "nix-compat",
  "pin-project",
@@ -5184,7 +5136,7 @@ dependencies = [
 [[package]]
 name = "snix-store"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -5240,10 +5192,9 @@ dependencies = [
 [[package]]
 name = "snix-tracing"
 version = "0.1.0"
-source = "git+https://github.com/cachix/snix#e9073eeddd0bd02cde7dce4607aa328b310f38f7"
+source = "git+https://github.com/cachix/snix#052decb06ff82f15a9710a92a535334ed5089914"
 dependencies = [
  "http",
- "indicatif",
  "opentelemetry",
  "opentelemetry-http",
  "opentelemetry-otlp",
