@@ -54,7 +54,7 @@ shell-escape.workspace = true
 rmcp.workspace = true
 rmcp-macros.workspace = true
 async-trait.workspace = true
-secretspec = "0.3.1"
+secretspec = "0.3.3"
 secrecy = "0.10"
 
 # Optional snix dependencies

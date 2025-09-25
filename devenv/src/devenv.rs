@@ -103,8 +103,10 @@ pub struct Devenv {
 
 impl Devenv {
     pub async fn new(options: DevenvOptions) -> Self {
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv").unwrap();
-        let devenv_home = xdg_dirs.get_data_home();
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("devenv");
+        let devenv_home = xdg_dirs
+            .get_data_home()
+            .expect("Failed to get home directory");
         let cachix_trusted_keys = devenv_home.join("cachix_trusted_keys.json");
         let devenv_home_gc = devenv_home.join("gc");
 

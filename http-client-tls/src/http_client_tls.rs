@@ -6,7 +6,10 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum TlsError {
     #[error("Failed to set default TLS protocol versions: {0}")]
-    ProtocolVersions(#[from] rustls::Error),
+    ProtocolVersions(rustls::Error),
+
+    #[error("Failed to initialize platform verifier: {0}")]
+    PlatformVerifier(rustls::Error),
 }
 
 static RUSTLS_TLS_CONFIG: LazyLock<ClientConfig> = LazyLock::new(|| {
@@ -14,8 +17,10 @@ static RUSTLS_TLS_CONFIG: LazyLock<ClientConfig> = LazyLock::new(|| {
     ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .map_err(TlsError::ProtocolVersions)
-        .expect("TLS configuration is required for HTTPS connections")
+        .unwrap()
         .with_platform_verifier()
+        .map_err(TlsError::PlatformVerifier)
+        .unwrap()
         .with_no_client_auth()
 });
 

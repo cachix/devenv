@@ -4,10 +4,9 @@ use crate::config::Config;
 use crate::devenv::{Devenv, DevenvOptions};
 use crate::nix_backend;
 use miette::Result;
-use rmcp::handler::server::tool::Parameters;
+use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ServerCapabilities, ServerInfo};
-use rmcp::tool;
-use rmcp::{ServerHandler, ServiceExt};
+use rmcp::{tool, tool_router, ServerHandler, ServiceExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -275,7 +274,7 @@ impl ServerHandler for DevenvMcpServer {
     }
 }
 
-#[tool]
+#[tool_router]
 impl DevenvMcpServer {
     #[tool(description = "List available packages in devenv")]
     async fn list_packages(&self, params: Parameters<ListPackagesRequest>) -> String {
