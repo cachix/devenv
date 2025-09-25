@@ -29,7 +29,7 @@ let
   cargoLock = {
     lockFile = "${src}/Cargo.lock";
     outputHashes = {
-      "nix-compat-0.1.0" = "sha256-Wc3bQCZWrjFdXp9r/IRBpsfz/IYSXQLXxzeJ27YZfsU=";
+      "nix-compat-0.1.0" = "sha256-ehkc7ug0HkTHKxx9tQi/9vkOtQry9HdiX9UxBUvjYRY=";
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";
     };
   };
