@@ -771,7 +771,7 @@ impl Devenv {
         // Set environment variables in the current process
         // This ensures that tasks have access to all devenv environment variables
         for (key, value) in &envs {
-            std::env::set_var(key, value);
+            unsafe { std::env::set_var(key, value); }
         }
 
         let tasks = self.load_tasks().await?;

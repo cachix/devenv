@@ -14,9 +14,6 @@
     DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
   };
 
-  apple.sdk = if pkgs.stdenv.isDarwin then pkgs.apple-sdk_11 else null;
-
-
   claude.code = {
     enable = true;
     permissions = {
