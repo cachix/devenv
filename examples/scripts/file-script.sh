@@ -1,3 +1,3 @@
 #!/usr/bin/env
 
-echo "Hello"
+echo "This script was loaded from a file!"
