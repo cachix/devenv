@@ -221,3 +221,23 @@ in {
   ];
 }
 ```
+
+### Compile x86 dependencies on ARM Macs via Rosetta
+
+If you want to also compile dependencies for x86, you can add dependencies to `packages`:
+
+```nix
+packages = with rosettaPkgs; [
+    freetds
+    krb5
+    openssl
+];
+```
+
+And switch the compiler to x86:
+
+```nix
+stdenv = rosettaPkgs.stdenv;
+```
+
+Then, in the generated shell, you can compile software for x86, like `pymssql` or `ibm_db`.
