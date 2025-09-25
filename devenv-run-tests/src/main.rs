@@ -114,7 +114,7 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                     continue;
                 }
             } else if args.exclude.iter().any(|exclude| path.ends_with(exclude)) {
-                eprintln!("Skipping {}", dir_name);
+                eprintln!("Skipping {dir_name}");
                 continue;
             }
 
@@ -141,7 +141,7 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                 .wrap_err("Failed to add devenv input")?;
 
             // Create temp directory in system temp dir, not the current directory
-            let tmpdir = TempDir::with_prefix(format!("devenv-run-tests-{}", dir_name))
+            let tmpdir = TempDir::with_prefix(format!("devenv-run-tests-{dir_name}"))
                 .map_err(|e| miette::miette!("Failed to create temp directory: {}", e))?;
             let devenv_root = tmpdir.path().to_path_buf();
             let devenv_dotfile = tmpdir.path().join(".devenv");
@@ -180,7 +180,7 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
             };
             let devenv = Devenv::new(options).await;
 
-            eprintln!("  Running {}", dir_name);
+            eprintln!("  Running {dir_name}");
 
             // A script to patch files in the working directory before the shell.
             let patch_script = ".patch.sh";
@@ -239,7 +239,7 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
 
             let passed = status.is_ok();
             if let Err(error) = &status {
-                eprintln!("    Error in {}: {:?}", dir_name, error);
+                eprintln!("    Error in {dir_name}: {error:?}");
             }
 
             let result = TestResult {
@@ -266,7 +266,7 @@ async fn main() -> Result<ExitCode> {
         match run(&args).await {
             Ok(_) => return Ok(ExitCode::SUCCESS),
             Err(err) => {
-                eprintln!("Error: {}", err);
+                eprintln!("Error: {err}");
                 return Ok(ExitCode::FAILURE);
             }
         };
@@ -397,7 +397,7 @@ async fn run(args: &Args) -> Result<()> {
     }
 
     eprintln!();
-    eprintln!("Ran {} tests, {} failed.", num_tests, num_failed_tests);
+    eprintln!("Ran {num_tests} tests, {num_failed_tests} failed.");
 
     if num_failed_tests > 0 {
         Err(miette::miette!("Some tests failed"))

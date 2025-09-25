@@ -170,8 +170,7 @@ async fn test_tasks_cycle() -> Result<(), Error> {
         Ok(())
     } else {
         Err(Error::TaskNotFound(format!(
-            "Expected Error::CycleDetected, got {:?}",
-            result
+            "Expected Error::CycleDetected, got {result:?}"
         )))
     }
 }
@@ -230,14 +229,14 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
     assert_eq!(tasks1.tasks_order.len(), 1);
 
     let status = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
-    println!("Task 1 status: {:?}", status);
+    println!("Task 1 status: {status:?}");
 
     match status {
         TaskStatus::Completed(TaskCompleted::Skipped(Skipped::Cached(_))) => {
             // Expected case
         }
         other => {
-            panic!("Expected Skipped status for task 1, got: {:?}", other);
+            panic!("Expected Skipped status for task 1, got: {other:?}");
         }
     }
 
@@ -267,14 +266,14 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
     assert_eq!(tasks2.tasks_order.len(), 1);
 
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
-    println!("Task 2 status: {:?}", status2);
+    println!("Task 2 status: {status2:?}");
 
     match status2 {
         TaskStatus::Completed(TaskCompleted::Success(_, _)) => {
             // Expected case
         }
         other => {
-            panic!("Expected Success status for task 2, got: {:?}", other);
+            panic!("Expected Success status for task 2, got: {other:?}");
         }
     }
 
@@ -335,7 +334,7 @@ exit 0
 
     // Print the status and outputs for debugging
     let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
-    println!("First run status: {:?}", status1);
+    println!("First run status: {status1:?}");
     println!("First run outputs: {:?}", outputs1.0);
 
     // Verify output was captured
@@ -345,7 +344,7 @@ exit 0
         .and_then(|v| v.get("result"))
         .and_then(|v| v.as_str());
 
-    println!("First run output value: {:?}", output_value);
+    println!("First run output value: {output_value:?}");
 
     assert_eq!(
         output_value,
@@ -375,7 +374,7 @@ exit 0
 
     // Print the status and outputs for debugging
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
-    println!("Second run status: {:?}", status2);
+    println!("Second run status: {status2:?}");
     println!("Second run outputs: {:?}", outputs2.0);
 
     // Print the output value for debugging
@@ -385,7 +384,7 @@ exit 0
         .and_then(|v| v.get("result"))
         .and_then(|v| v.as_str());
 
-    println!("Second run output value: {:?}", output_value2);
+    println!("Second run output value: {output_value2:?}");
 
     // We allow the test to pass if the output is either:
     // 1. The originally cached value ("task_executed") - ideal case
@@ -459,7 +458,7 @@ echo "Task executed successfully"
 
     // Print status for debugging
     let status = &tasks.graph[tasks.tasks_order[0]].read().await.status;
-    println!("First run status: {:?}", status);
+    println!("First run status: {status:?}");
 
     // Check task status - should be Success
     match &tasks.graph[tasks.tasks_order[0]].read().await.status {
@@ -467,7 +466,7 @@ echo "Task executed successfully"
             // This is the expected case - test passes
         }
         other => {
-            panic!("Expected Success status on first run, got: {:?}", other);
+            panic!("Expected Success status on first run, got: {other:?}");
         }
     }
 
@@ -505,7 +504,7 @@ echo "Task executed successfully"
 
     // Print status for debugging
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
-    println!("Second run status: {:?}", status2);
+    println!("Second run status: {status2:?}");
 
     // For the second run, expect it to be skipped
     if let TaskStatus::Completed(TaskCompleted::Skipped(_)) =
@@ -560,7 +559,7 @@ echo "Task executed successfully"
 
     // Print status for debugging
     let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
-    println!("Third run status: {:?}", status3);
+    println!("Third run status: {status3:?}");
 
     // Check that the task was executed
     match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
@@ -569,8 +568,7 @@ echo "Task executed successfully"
         }
         other => {
             panic!(
-                "Expected Success status on third run after file modification, got: {:?}",
-                other
+                "Expected Success status on third run after file modification, got: {other:?}"
             );
         }
     }
@@ -863,7 +861,7 @@ echo "Task executed successfully"
 
         // Print the status and outputs for debugging
         let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
-        println!("First run status: {:?}", status1);
+        println!("First run status: {status1:?}");
         println!("First run outputs: {:?}", outputs1.0);
 
         // Verify output is stored properly the first time
@@ -873,7 +871,7 @@ echo "Task executed successfully"
             .and_then(|v| v.get("result"))
             .and_then(|v| v.as_str());
 
-        println!("First run output value: {:?}", output_value1);
+        println!("First run output value: {output_value1:?}");
 
         assert_eq!(
             output_value1,
@@ -907,7 +905,7 @@ echo "Task executed successfully"
 
         // Print the status and outputs for debugging
         let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
-        println!("Second run status: {:?}", status2);
+        println!("Second run status: {status2:?}");
         println!("Second run outputs: {:?}", outputs2.0);
 
         // Check task status for debugging - we're more relaxed here since CI can be flaky
@@ -926,7 +924,7 @@ echo "Task executed successfully"
             .and_then(|v| v.get("result"))
             .and_then(|v| v.as_str());
 
-        println!("Second run output value: {:?}", output_value2);
+        println!("Second run output value: {output_value2:?}");
 
         // We're relaxing this check due to the race conditions in CI
         let valid_output = match output_value2 {
@@ -974,7 +972,7 @@ echo "Task executed successfully"
 
         // Print the status and outputs for debugging
         let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
-        println!("Third run status: {:?}", status3);
+        println!("Third run status: {status3:?}");
         println!("Third run outputs: {:?}", outputs3.0);
 
         // Check it was executed - should be Success because the file was modified
@@ -984,8 +982,7 @@ echo "Task executed successfully"
             }
             other => {
                 panic!(
-                    "Expected Success status on third run after file modification, got: {:?}",
-                    other
+                    "Expected Success status on third run after file modification, got: {other:?}"
                 );
             }
         }
@@ -997,7 +994,7 @@ echo "Task executed successfully"
             .and_then(|v| v.get("result"))
             .and_then(|v| v.as_str());
 
-        println!("Third run output value: {:?}", output_value3);
+        println!("Third run output value: {output_value3:?}");
 
         assert_eq!(
             output_value3,
@@ -1137,7 +1134,7 @@ echo "Task completed and modified the file"
             println!("Task was correctly skipped on second run");
         }
         other => {
-            println!("Warning: Task not skipped as expected, got: {:?}", other);
+            println!("Warning: Task not skipped as expected, got: {other:?}");
             // We're relaxing this assertion for CI stability
         }
     }
@@ -1216,7 +1213,7 @@ exit 1
             println!("Task correctly failed as expected");
         }
         other => {
-            panic!("Expected Failed status, got: {:?}", other);
+            panic!("Expected Failed status, got: {other:?}");
         }
     }
 
@@ -2258,7 +2255,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
     .build()
     .await;
 
-    assert_matches!(result, Err(Error::TaskNotFound(name)) if name == "");
+    assert_matches!(result, Err(Error::TaskNotFound(name)) if name.is_empty());
 
     // Test whitespace-only namespace
     let result = Tasks::builder(

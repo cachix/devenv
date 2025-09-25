@@ -80,7 +80,7 @@ impl<'a> CachedCommand<'a> {
     /// If the command has been run before and the files it depends on have not been modified,
     /// the cached output will be returned.
     pub async fn output(mut self, cmd: &'a mut Command) -> Result<Output, CommandError> {
-        let raw_cmd = format!("{:?}", cmd);
+        let raw_cmd = format!("{cmd:?}");
         let cmd_hash = compute_string_hash(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
@@ -340,9 +340,8 @@ impl FileInputDesc {
         } else {
             compute_file_hash(&path)
                 .map_err(|e| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to compute file hash: {}", e),
+                    std::io::Error::other(
+                        format!("Failed to compute file hash: {e}"),
                     )
                 })
                 .ok()
@@ -647,9 +646,8 @@ fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
         compute_string_hash(&paths)
     } else {
         compute_file_hash(&file.path).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to compute file hash: {}", e),
+            std::io::Error::other(
+                format!("Failed to compute file hash: {e}"),
             )
         })?
     };
@@ -714,9 +712,8 @@ mod test {
         let truncated_modified_at = truncate_to_seconds(modified_at).unwrap();
         let content_hash = compute_file_hash(&file_path)
             .map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to compute file hash: {}", e),
+                std::io::Error::other(
+                    format!("Failed to compute file hash: {e}"),
                 )
             })
             .unwrap();

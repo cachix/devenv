@@ -125,7 +125,7 @@ impl TasksUi {
                         Skipped::Cached(_) => "Cached",
                         Skipped::NoCommand => "No command",
                     };
-                    (console::style(format!("{:17}", status)).blue().bold(), None)
+                    (console::style(format!("{status:17}")).blue().bold(), None)
                 }
                 TaskStatus::Completed(TaskCompleted::Success(duration, _)) => {
                     tasks_status.succeeded += 1;
@@ -341,9 +341,9 @@ impl TasksUi {
                         TaskStatus::Completed(completed) => {
                             let (status, style, duration_str) = match completed {
                                 TaskCompleted::Success(duration, _) => (
-                                    format!("Succeeded ({:.2?})", duration),
+                                    format!("Succeeded ({duration:.2?})"),
                                     console::style("Succeeded").green().bold(),
-                                    format!(" ({:.2?})", duration),
+                                    format!(" ({duration:.2?})"),
                                 ),
                                 TaskCompleted::Skipped(Skipped::Cached(_)) => (
                                     "Cached".to_string(),
@@ -356,9 +356,9 @@ impl TasksUi {
                                     "".to_string(),
                                 ),
                                 TaskCompleted::Failed(duration, _) => (
-                                    format!("Failed ({:.2?})", duration),
+                                    format!("Failed ({duration:.2?})"),
                                     console::style("Failed").red().bold(),
-                                    format!(" ({:.2?})", duration),
+                                    format!(" ({duration:.2?})"),
                                 ),
                                 TaskCompleted::DependencyFailed => (
                                     "Dependency failed".to_string(),
@@ -366,9 +366,9 @@ impl TasksUi {
                                     "".to_string(),
                                 ),
                                 TaskCompleted::Cancelled(duration) => (
-                                    format!("Cancelled ({:.2?})", duration),
+                                    format!("Cancelled ({duration:.2?})"),
                                     console::style("Cancelled").yellow().bold(),
-                                    format!(" ({:.2?})", duration),
+                                    format!(" ({duration:.2?})"),
                                 ),
                             };
 

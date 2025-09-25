@@ -42,7 +42,7 @@ impl TrackedFile {
         let is_directory = metadata.is_dir();
         let modified_at = metadata.modified().map_err(|e| CacheError::HashFailure {
             path: path.clone(),
-            reason: format!("Failed to get modification time: {}", e),
+            reason: format!("Failed to get modification time: {e}"),
         })?;
 
         let content_hash = if is_directory {
@@ -137,7 +137,7 @@ pub fn compute_file_hash<P: AsRef<Path>>(path: P) -> CacheResult<String> {
 
     io::copy(&mut file, &mut hasher).map_err(|e| CacheError::HashFailure {
         path: path.to_path_buf(),
-        reason: format!("Failed to read file: {}", e),
+        reason: format!("Failed to read file: {e}"),
     })?;
 
     Ok(hasher.finalize().to_hex().to_string())
@@ -162,13 +162,13 @@ fn compute_directory_hash<P: AsRef<Path>>(path: P) -> CacheResult<Option<String>
                         .map(time::system_time_to_unix_seconds)
                         .unwrap_or(0);
 
-                    entries.push(format!("{} {} {}", entry_type, modified, entry_path));
+                    entries.push(format!("{entry_type} {modified} {entry_path}"));
 
                     // For files, also include content hash for maximum detection sensitivity
                     if meta.is_file() {
                         match compute_file_hash(entry.path()) {
-                            Ok(hash) => entries.push(format!("hash {}", hash)),
-                            Err(_) => entries.push(format!("hash_error {}", entry_path)),
+                            Ok(hash) => entries.push(format!("hash {hash}")),
+                            Err(_) => entries.push(format!("hash_error {entry_path}")),
                         }
                     }
                 } else {
@@ -178,7 +178,7 @@ fn compute_directory_hash<P: AsRef<Path>>(path: P) -> CacheResult<Option<String>
             }
             Err(e) => {
                 // Include error entries as well to detect when errors change
-                entries.push(format!("error {}", e));
+                entries.push(format!("error {e}"));
             }
         }
     }

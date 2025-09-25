@@ -218,7 +218,7 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
                 ChangeTag::Insert => "\x1b[32m+\x1b[0m",
                 ChangeTag::Equal => " ",
             };
-            print!("{}{}", sign, change);
+            print!("{sign}{change}");
         }
 
         let confirm = dialoguer::Confirm::new()

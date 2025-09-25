@@ -40,9 +40,7 @@ mod tests {
         // They should be within 1 second of each other (due to second-level precision)
         assert!(
             original_duration.as_secs() == roundtrip_duration.as_secs(),
-            "Time conversion roundtrip failed: original: {:?}, roundtrip: {:?}",
-            original_duration,
-            roundtrip_duration
+            "Time conversion roundtrip failed: original: {original_duration:?}, roundtrip: {roundtrip_duration:?}"
         );
     }
 

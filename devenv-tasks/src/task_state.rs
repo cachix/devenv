@@ -259,7 +259,7 @@ impl TaskState {
             let result = command
                 .spawn()
                 .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to spawn command for {}", cmd));
+                .wrap_err_with(|| format!("Failed to spawn command for {cmd}"));
 
             let mut child = match result {
                 Ok(c) => c,
@@ -269,7 +269,7 @@ impl TaskState {
                         TaskFailure {
                             stdout: Vec::new(),
                             stderr: Vec::new(),
-                            error: format!("{:#}", err),
+                            error: format!("{err:#}"),
                         },
                     ));
                 }
@@ -399,7 +399,7 @@ impl TaskState {
                                         TaskFailure {
                                             stdout: stdout_lines,
                                             stderr: stderr_lines,
-                                            error: format!("Task exited with status: {}", status),
+                                            error: format!("Task exited with status: {status}"),
                                         },
                                     ));
                                 }
@@ -411,7 +411,7 @@ impl TaskState {
                                     TaskFailure {
                                         stdout: stdout_lines,
                                         stderr: stderr_lines,
-                                        error: format!("Error waiting for command: {}", e),
+                                        error: format!("Error waiting for command: {e}"),
                                     },
                                 ));
                             }

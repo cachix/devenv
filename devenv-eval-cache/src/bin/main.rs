@@ -13,7 +13,7 @@ async fn main() -> Result<(), command::CommandError> {
     let db = devenv_cache_core::db::Database::new(path, &db::MIGRATIONS)
         .await
         .map_err(|e| {
-            command::CommandError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            command::CommandError::Io(std::io::Error::other(e))
         })?;
     let pool = db.pool().clone();
 

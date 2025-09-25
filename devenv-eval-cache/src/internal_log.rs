@@ -154,7 +154,7 @@ impl InternalLog {
             } => {
                 let mut msg = String::new();
                 for field in fields {
-                    writeln!(msg, "{}", field).ok();
+                    writeln!(msg, "{field}").ok();
                 }
                 Some(Cow::Owned(msg.trim_end().to_string()))
             }
@@ -258,8 +258,8 @@ pub enum Field {
 impl Display for Field {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Field::Int(i) => write!(f, "{}", i),
-            Field::String(s) => write!(f, "{}", s),
+            Field::Int(i) => write!(f, "{i}"),
+            Field::String(s) => write!(f, "{s}"),
         }
     }
 }

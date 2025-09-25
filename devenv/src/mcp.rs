@@ -112,7 +112,7 @@ impl DevenvMcpServer {
                 let name = if parts.len() > 2 {
                     format!("pkgs.{}", parts[2..].join("."))
                 } else {
-                    format!("pkgs.{}", key)
+                    format!("pkgs.{key}")
                 };
 
                 PackageInfo {

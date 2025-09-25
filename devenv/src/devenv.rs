@@ -8,9 +8,7 @@ use include_dir::{include_dir, Dir};
 use miette::{bail, miette, IntoDiagnostic, Result, WrapErr};
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
-use secretspec;
 use serde::Deserialize;
-use serde_json;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -418,7 +416,7 @@ impl Devenv {
         let err = shell_cmd.into_std().exec();
 
         let cmd_context = match &cmd {
-            Some(c) => format!("command '{}'", c),
+            Some(c) => format!("command '{c}'"),
             None => "interactive shell".to_string(),
         };
         bail!("Failed to exec into shell with {}: {}", cmd_context, err);
@@ -933,7 +931,7 @@ impl Devenv {
                 .envs(envs)
                 .spawn()
                 .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to spawn test process using {}", test_script))?
+                .wrap_err_with(|| format!("Failed to spawn test process using {test_script}"))?
                 .wait_with_output()
                 .await
                 .into_diagnostic()
@@ -958,7 +956,7 @@ impl Devenv {
     pub async fn info(&self) -> Result<()> {
         self.assemble(false).await?;
         let output = self.nix.metadata().await?;
-        println!("{}", output);
+        println!("{output}");
         Ok(())
     }
 
@@ -980,7 +978,7 @@ impl Devenv {
                                 serde_json::Value::Object(obj) => obj
                                     .iter()
                                     .flat_map(|(k, v)| {
-                                        flatten_object(&format!("{}.{}", prefix, k), v)
+                                        flatten_object(&format!("{prefix}.{k}"), v)
                                     })
                                     .collect(),
                                 _ => vec![format!("devenv.config.{}", prefix)],
@@ -992,7 +990,7 @@ impl Devenv {
             } else {
                 attributes
                     .iter()
-                    .map(|attr| format!("devenv.config.{}", attr))
+                    .map(|attr| format!("devenv.config.{attr}"))
                     .collect()
             };
             let paths = self
@@ -1367,10 +1365,10 @@ impl Devenv {
                         // Split by whitespace and format as a Nix list of package references
                         let items = chunk[1]
                             .split_whitespace()
-                            .map(|item| format!("pkgs.{}", item))
+                            .map(|item| format!("pkgs.{item}"))
                             .collect::<Vec<_>>()
                             .join(" ");
-                        format!("[ {} ]", items)
+                        format!("[ {items} ]")
                     }
                     _ => miette::bail!(
                         "Unsupported type: '{}'. Supported types: {}",
@@ -1383,9 +1381,9 @@ impl Devenv {
                 let final_value = if type_name == "pkgs" {
                     value
                 } else {
-                    format!("lib.mkForce {}", value)
+                    format!("lib.mkForce {value}")
                 };
-                cli_options.push_str(&format!("  {} = {};\n", path, final_value));
+                cli_options.push_str(&format!("  {path} = {final_value};\n"));
             }
 
             cli_options.push_str("}\n");
@@ -1419,7 +1417,7 @@ impl Devenv {
                 self.global_options
                     .profile
                     .iter()
-                    .map(|p| format!("\"{}\"", p))
+                    .map(|p| format!("\"{p}\""))
                     .collect::<Vec<_>>()
                     .join(" ")
             )
@@ -1435,7 +1433,7 @@ impl Devenv {
 
         // Detect git repository root
         let git_root = std::process::Command::new("git")
-            .args(&["rev-parse", "--show-toplevel"])
+            .args(["rev-parse", "--show-toplevel"])
             .current_dir(&self.devenv_root)
             .output()
             .ok()
@@ -1479,7 +1477,7 @@ impl Devenv {
             container_name = self
                 .container_name
                 .as_deref()
-                .map(|s| format!("\"{}\"", s))
+                .map(|s| format!("\"{s}\""))
                 .unwrap_or_else(|| "null".to_string()),
             devenv_tmpdir = self.devenv_tmp,
             devenv_runtime = self.devenv_runtime.display(),
@@ -1546,7 +1544,7 @@ fn confirm_overwrite(file: &Path, contents: String) -> Result<()> {
                 ChangeTag::Insert => "\x1b[32m+\x1b[0m",
                 ChangeTag::Equal => " ",
             };
-            eprint!("{}{}", sign, change);
+            eprint!("{sign}{change}");
         }
 
         let confirm = dialoguer::Confirm::new()
@@ -1694,7 +1692,7 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
 
     // Print namespaced tasks grouped by namespace
     for (namespace, tasks_in_ns) in namespaces.iter() {
-        println!("{}:", namespace);
+        println!("{namespace}:");
 
         // Find roots within this namespace
         let mut ns_roots: Vec<&str> = Vec::new();
@@ -1703,7 +1701,7 @@ fn print_tasks_tree(tasks: &Vec<tasks::TaskConfig>) {
             if deps.is_empty()
                 || !deps
                     .iter()
-                    .any(|d| task_names.contains(d) && d.starts_with(&format!("{}:", namespace)))
+                    .any(|d| task_names.contains(d) && d.starts_with(&format!("{namespace}:")))
             {
                 ns_roots.push(&task.name);
             }
@@ -1792,9 +1790,9 @@ fn print_task_tree_with_namespace(
     // Print the current task with tree formatting, stripping the namespace prefix
     let connector = if is_last { "└── " } else { "├── " };
     let display_name = task_name
-        .strip_prefix(&format!("{}:", namespace))
+        .strip_prefix(&format!("{namespace}:"))
         .unwrap_or(task_name);
-    print!("{}{}{}", prefix, connector, display_name);
+    print!("{prefix}{connector}{display_name}");
 
     // Add additional info if available
     if let Some(task) = task_configs.get(task_name) {
@@ -1806,7 +1804,7 @@ fn print_task_tree_with_namespace(
 
         if !task.exec_if_modified.is_empty() {
             let files = task.exec_if_modified.join(", ");
-            extra_info.push(format!("watches: {}", files));
+            extra_info.push(format!("watches: {files}"));
         }
 
         if !extra_info.is_empty() {
@@ -1820,7 +1818,7 @@ fn print_task_tree_with_namespace(
     let children = task_dependents.get(task_name).cloned().unwrap_or_default();
     let mut children: Vec<_> = children
         .into_iter()
-        .filter(|t| task_configs.contains_key(t) && t.starts_with(&format!("{}:", namespace)))
+        .filter(|t| task_configs.contains_key(t) && t.starts_with(&format!("{namespace}:")))
         .collect();
     children.sort();
 
@@ -1857,7 +1855,7 @@ fn print_task_tree(
 
     // Print the current task with tree formatting
     let connector = if is_last { "└── " } else { "├── " };
-    print!("{}{}{}", prefix, connector, task_name);
+    print!("{prefix}{connector}{task_name}");
 
     // Add additional info if available
     if let Some(task) = task_configs.get(task_name) {
@@ -1869,7 +1867,7 @@ fn print_task_tree(
 
         if !task.exec_if_modified.is_empty() {
             let files = task.exec_if_modified.join(", ");
-            extra_info.push(format!("watches: {}", files));
+            extra_info.push(format!("watches: {files}"));
         }
 
         if !extra_info.is_empty() {

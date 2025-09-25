@@ -165,11 +165,11 @@ impl std::fmt::Display for HumanReadableDuration {
         let mut t = self.0.as_nanos() as f64;
         for unit in ["ns", "µs", "ms", "s"].iter() {
             if t < 10.0 {
-                return write!(f, "{:.2}{}", t, unit);
+                return write!(f, "{t:.2}{unit}");
             } else if t < 100.0 {
-                return write!(f, "{:.1}{}", t, unit);
+                return write!(f, "{t:.1}{unit}");
             } else if t < 1000.0 {
-                return write!(f, "{:.0}{}", t, unit);
+                return write!(f, "{t:.0}{unit}");
             }
             t /= 1000.0;
         }
@@ -259,7 +259,7 @@ impl<'a> FormatFields<'a> for DevenvFieldFormatter {
         fields.record(&mut extractor);
 
         if let Some(msg) = extractor.user_message {
-            write!(writer, "{}", msg)
+            write!(writer, "{msg}")
         } else {
             // Fallback - show nothing for spans without user messages
             Ok(())
@@ -486,7 +486,7 @@ where
         impl Visit for EventVisitor {
             fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
                 if field.name() == "message" {
-                    self.message = Some(format!("{:?}", value));
+                    self.message = Some(format!("{value:?}"));
                 }
             }
 
@@ -534,7 +534,7 @@ where
                                 } else {
                                     style("✓").green()
                                 };
-                                return writeln!(writer, "{} {} in {}", prefix, msg, time_total);
+                                return writeln!(writer, "{prefix} {msg} in {time_total}");
                             }
                         }
                     }
@@ -566,7 +566,7 @@ where
                 }
             }
 
-            writeln!(writer, "{}", msg)?;
+            writeln!(writer, "{msg}")?;
         };
 
         Ok(())

@@ -6,9 +6,7 @@ use async_trait::async_trait;
 use futures::future;
 use miette::{bail, IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
-use secretspec;
 use serde::Deserialize;
-use serde_json;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
@@ -111,7 +109,7 @@ impl Nix {
 
         // Save the GC root for this profile.
         let now_ns = get_now_with_nanoseconds();
-        let target = format!("{}-shell", now_ns);
+        let target = format!("{now_ns}-shell");
         if let Ok(resolved_gc_root) = fs::canonicalize(gc_root).await {
             symlink_force(&resolved_gc_root, &self.paths.home_gc.join(target)).await?;
         } else {
@@ -191,7 +189,7 @@ impl Nix {
         args.push("--print-out-paths".to_string());
         args.push("-L".to_string());
 
-        args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
+        args.extend(attributes.iter().map(|attr| format!(".#{attr}")));
         let args_str: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
         let output = self
             .run_nix_with_substituters("nix", &args_str, &options)
@@ -212,7 +210,7 @@ impl Nix {
             .into_iter()
             .map(String::from)
             .collect();
-        args.extend(attributes.iter().map(|attr| format!(".#{}", attr)));
+        args.extend(attributes.iter().map(|attr| format!(".#{attr}")));
         let args = &args.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
         let result = self.run_nix("nix", args, &options).await?;
         String::from_utf8(result.stdout)
@@ -445,11 +443,11 @@ impl Nix {
             }
         };
 
-        tracing::Span::current().record("output", format!("{:?}", result));
+        tracing::Span::current().record("output", format!("{result:?}"));
 
         if !result.status.success() {
             let code = match result.status.code() {
-                Some(code) => format!("with exit code {}", code),
+                Some(code) => format!("with exit code {code}"),
                 None => "without an exit code".to_string(),
             };
 
@@ -504,7 +502,7 @@ impl Nix {
                             .caches
                             .pull
                             .iter()
-                            .map(|cache| format!("https://{}.cachix.org", cache))
+                            .map(|cache| format!("https://{cache}.cachix.org"))
                             .collect::<Vec<String>>();
                         pull_caches.sort();
                         pull_caches_str = pull_caches.join(" ");
@@ -804,12 +802,12 @@ impl Nix {
                 let name = name.clone();
                 async move {
                     let result = async {
-                        let mut request = client.get(format!("https://cachix.org/api/v1/cache/{}", name));
+                        let mut request = client.get(format!("https://cachix.org/api/v1/cache/{name}"));
                         if let Some(token) = auth_token {
                             request = request.bearer_auth(token);
                         }
                         let resp = request.send().await.into_diagnostic().wrap_err_with(|| {
-                            format!("Failed to fetch information for cache '{}'", name)
+                            format!("Failed to fetch information for cache '{name}'")
                         })?;
                         if resp.status().is_client_error() {
                             error!(
@@ -829,7 +827,7 @@ impl Nix {
 
                     match result {
                         Ok(key) => Ok((name.clone(), key)),
-                        Err(e) => Err(e.wrap_err(format!("Failed to fetch cache '{}'", name)))
+                        Err(e) => Err(e.wrap_err(format!("Failed to fetch cache '{name}'")))
                     }
                 }
             }).collect();
@@ -1139,7 +1137,7 @@ fn get_now_with_nanoseconds() -> String {
     let duration = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
     let secs = duration.as_secs();
     let nanos = duration.subsec_nanos();
-    format!("{}.{}", secs, nanos)
+    format!("{secs}.{nanos}")
 }
 
 // Display a command as a pretty string.
@@ -1201,7 +1199,7 @@ fn detect_missing_caches(caches: &CachixCaches, nix_conf: NixConf) -> (Vec<Strin
         .collect::<Vec<_>>();
 
     for cache in caches.caches.pull.iter() {
-        let cache_url = format!("https://{}.cachix.org", cache);
+        let cache_url = format!("https://{cache}.cachix.org");
         if !all_substituters.iter().any(|s| s == &cache_url) {
             missing_caches.push(cache_url);
         }

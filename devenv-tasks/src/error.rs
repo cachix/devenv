@@ -19,28 +19,26 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::IoError(e) => write!(f, "IO Error: {}", e),
-            Error::CacheError(e) => write!(f, "Cache Error: {}", e),
+            Error::IoError(e) => write!(f, "IO Error: {e}"),
+            Error::CacheError(e) => write!(f, "Cache Error: {e}"),
             Error::TasksNotFound(tasks) => write!(
                 f,
                 "Task dependencies not found: {}",
                 tasks
                     .iter()
-                    .map(|(task, dep)| format!("{} is depending on non-existent {}", task, dep))
+                    .map(|(task, dep)| format!("{task} is depending on non-existent {dep}"))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Error::TaskNotFound(task) => write!(f, "Task does not exist: {}", task),
-            Error::CycleDetected(task) => write!(f, "Cycle detected at task: {}", task),
+            Error::TaskNotFound(task) => write!(f, "Task does not exist: {task}"),
+            Error::CycleDetected(task) => write!(f, "Cycle detected at task: {task}"),
             Error::MissingCommand(task) => write!(
                 f,
-                "Task {} defined a status, but is missing a command",
-                task
+                "Task {task} defined a status, but is missing a command"
             ),
             Error::InvalidTaskName(task) => write!(
                 f,
-                "Invalid task name: {}, expected [a-zA-Z-_]+:[a-zA-Z-_]+",
-                task
+                "Invalid task name: {task}, expected [a-zA-Z-_]+:[a-zA-Z-_]+"
             ),
         }
     }
