@@ -1,0 +1,99 @@
+name: "Build & Test"
+
+on:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "requirements.in"
+      - "requirements.txt"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Per-system job chains to avoid cross-system waiting
+  build-aarch64-linux:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: "aarch64-linux"
+
+  test-aarch64-linux:
+    needs: build-aarch64-linux
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: "aarch64-linux"
+
+  examples-aarch64-linux:
+    needs: test-aarch64-linux
+    if: always()
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: "aarch64-linux"
+
+  build-x86_64-linux:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: "x86_64-linux"
+
+  test-x86_64-linux:
+    needs: build-x86_64-linux
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: "x86_64-linux"
+
+  examples-x86_64-linux:
+    needs: test-x86_64-linux
+    if: always()
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: "x86_64-linux"
+
+  build-aarch64-darwin:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: "aarch64-darwin"
+
+  test-aarch64-darwin:
+    needs: build-aarch64-darwin
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: "aarch64-darwin"
+
+  examples-aarch64-darwin:
+    needs: test-aarch64-darwin
+    if: always()
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: "aarch64-darwin"
+
+  build-x86_64-darwin:
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      system: "x86_64-darwin"
+
+  test-x86_64-darwin:
+    needs: build-x86_64-darwin
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+    with:
+      system: "x86_64-darwin"
+
+  examples-x86_64-darwin:
+    needs: test-x86_64-darwin
+    if: always()
+    uses: ./.github/workflows/examples.yml
+    secrets: inherit
+    with:
+      system: "x86_64-darwin"

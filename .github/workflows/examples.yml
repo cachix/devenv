@@ -1,4 +1,4 @@
-name: "Build"
+name: "Examples"
 
 on:
   workflow_call:
@@ -8,12 +8,30 @@ on:
         required: false
         type: string
       system:
-        description: "System to build for (optional, builds all if not specified)"
+        description: "System to run examples on (optional, runs on all if not specified)"
         required: false
         type: string
 
 jobs:
-  build:
+  generate-examples:
+    runs-on: [self-hosted, linux, X64]
+    outputs:
+      examples: ${{ steps.set-examples.outputs.examples }}
+    steps:
+      - name: Checkout base repo
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Fetch examples to run
+        id: set-examples
+        run: |
+          set -euxo pipefail
+          json=$(nix shell nixpkgs#tree -c tree -J -L 1 examples | nix shell nixpkgs#jq -c jq -c '[.[0].contents[] | .name]')
+          echo "examples=$json" >> $GITHUB_OUTPUT
+
+  examples:
+    name: ${{ matrix.example }} (${{ join(matrix.systems.runs-on) }})
+    needs: [generate-examples]
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +50,7 @@ jobs:
               {"system": "x86_64-darwin", "runs-on": ["macos-13"]}
             ]')
           }}
+        example: ${{ fromJSON(needs.generate-examples.outputs.examples) }}
     runs-on: ${{ matrix.systems.runs-on }}
     steps:
       - uses: actions/checkout@v5
@@ -42,18 +61,14 @@ jobs:
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-
       - name: Configure Cachix
         uses: cachix/cachix-action@v16
         with:
           name: devenv
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-
-      - name: Build devenv-${{ matrix.systems.system }}
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build devenv
         run: |
-          nix build -L --show-trace --print-out-paths --system ${{ matrix.systems.system }}
-
-      # Cache the devenv-tasks binary used by the module system
-      - name: Build devenv-tasks-fast-${{ matrix.systems.system }}
-        run: |
-          nix build -L --show-trace --print-out-paths --system ${{ matrix.systems.system }} .#devenv-tasks-fast
+          path=$(nix build -L --print-out-paths)
+          echo "$path/bin" >> $GITHUB_PATH
+      - name: Run examples
+        run: devenv-run-tests --only ${{ matrix.example }} examples
