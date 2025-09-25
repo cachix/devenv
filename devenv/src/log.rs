@@ -8,8 +8,8 @@ use tracing::level_filters::LevelFilter;
 use tracing::{
     field::{Field, Visit},
     Event,
+    span, Subscriber
 };
-use tracing_core::{span, Subscriber};
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
     fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
