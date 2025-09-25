@@ -1,21 +1,24 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Config",
   "type": "object",
   "properties": {
-    "allowBroken": {
-      "type": "boolean"
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Input"
+      }
     },
     "allowUnfree": {
       "type": "boolean"
     },
-    "backend": {
-      "$ref": "#/definitions/NixBackendType"
+    "allowBroken": {
+      "type": "boolean"
     },
-    "clean": {
+    "nixpkgs": {
       "anyOf": [
         {
-          "$ref": "#/definitions/Clean"
+          "$ref": "#/$defs/Nixpkgs"
         },
         {
           "type": "null"
@@ -28,35 +31,32 @@
         "type": "string"
       }
     },
-    "impure": {
-      "type": "boolean"
-    },
-    "inputs": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/definitions/Input"
-      }
-    },
-    "nixpkgs": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/Nixpkgs"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "permittedInsecurePackages": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
+    "clean": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Clean"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "impure": {
+      "type": "boolean"
+    },
+    "backend": {
+      "$ref": "#/$defs/NixBackendType"
+    },
     "secretspec": {
       "anyOf": [
         {
-          "$ref": "#/definitions/SecretspecConfig"
+          "$ref": "#/$defs/SecretspecConfig"
         },
         {
           "type": "null"
@@ -64,28 +64,16 @@
       ]
     }
   },
-  "definitions": {
-    "Clean": {
-      "type": "object",
-      "required": [
-        "enabled",
-        "keep"
-      ],
-      "properties": {
-        "enabled": {
-          "type": "boolean"
-        },
-        "keep": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
+  "$defs": {
     "Input": {
       "type": "object",
       "properties": {
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "flake": {
           "type": "boolean"
         },
@@ -98,7 +86,7 @@
         "inputs": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/definitions/Input"
+            "$ref": "#/$defs/Input"
           }
         },
         "overlays": {
@@ -106,43 +94,25 @@
           "items": {
             "type": "string"
           }
-        },
-        "url": {
-          "type": [
-            "string",
-            "null"
-          ]
         }
       }
-    },
-    "NixBackendType": {
-      "type": "string",
-      "enum": [
-        "nix"
-      ]
     },
     "Nixpkgs": {
       "type": "object",
       "properties": {
+        "allowUnfree": {
+          "type": "boolean"
+        },
         "allowBroken": {
           "type": "boolean"
         },
-        "allowUnfree": {
+        "cudaSupport": {
           "type": "boolean"
         },
         "cudaCapabilities": {
           "type": "array",
           "items": {
             "type": "string"
-          }
-        },
-        "cudaSupport": {
-          "type": "boolean"
-        },
-        "per-platform": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/NixpkgsConfig"
           }
         },
         "permittedInsecurePackages": {
@@ -155,6 +125,12 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "per-platform": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/NixpkgsConfig"
           }
         }
       }
@@ -162,10 +138,13 @@
     "NixpkgsConfig": {
       "type": "object",
       "properties": {
+        "allowUnfree": {
+          "type": "boolean"
+        },
         "allowBroken": {
           "type": "boolean"
         },
-        "allowUnfree": {
+        "cudaSupport": {
           "type": "boolean"
         },
         "cudaCapabilities": {
@@ -173,9 +152,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "cudaSupport": {
-          "type": "boolean"
         },
         "permittedInsecurePackages": {
           "type": "array",
@@ -190,6 +166,30 @@
           }
         }
       }
+    },
+    "Clean": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "keep": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "keep"
+      ]
+    },
+    "NixBackendType": {
+      "type": "string",
+      "enum": [
+        "nix"
+      ]
     },
     "SecretspecConfig": {
       "type": "object",
