@@ -462,7 +462,7 @@ mod tests {
         let packages = server.fetch_packages().await;
 
         // Should be able to fetch packages without error
-        assert!(packages.is_ok(), "Failed to fetch packages: {:?}", packages);
+        assert!(packages.is_ok(), "Failed to fetch packages: {packages:?}");
 
         let packages = packages.unwrap();
 
@@ -540,8 +540,7 @@ mod tests {
                 for known_option in known_options {
                     assert!(
                         options.iter().any(|opt| opt.name == known_option),
-                        "Expected option '{}' not found",
-                        known_option
+                        "Expected option '{known_option}' not found"
                     );
                 }
 
@@ -562,7 +561,7 @@ mod tests {
             }
             Err(e) => {
                 // Expected to fail in test environment
-                eprintln!("Expected failure in test environment: {:?}", e);
+                eprintln!("Expected failure in test environment: {e:?}");
                 eprintln!(
                     "This test requires running from a devenv project root with proper setup"
                 );

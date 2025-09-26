@@ -3,13 +3,11 @@
 //! This module provides a Rust-native Nix evaluator backend using Snix
 //! as an alternative to the traditional C++ Nix binary.
 
-#![cfg(feature = "snix")]
-
 use crate::nix_backend::{DevenvPaths, NixBackend, Options};
 use crate::{cli, config};
 use async_trait::async_trait;
 use devenv_eval_cache::Output;
-use miette::{bail, Result};
+use miette::{Result, bail};
 use snix_build::buildservice::{BuildService, DummyBuildService};
 use snix_castore::blobservice::from_addr as blob_from_addr;
 use snix_castore::directoryservice::from_addr as directory_from_addr;
@@ -125,7 +123,9 @@ impl NixBackend for SnixBackend {
     async fn dev_env(&self, _json: bool, _gc_root: &Path) -> Result<Output> {
         // TODO: This is a complex operation that requires implementing the equivalent
         // of `nix print-dev-env`. For now, we'll return a placeholder error.
-        bail!("dev_env is not yet implemented for Snix backend. This requires implementing shell environment generation.")
+        bail!(
+            "dev_env is not yet implemented for Snix backend. This requires implementing shell environment generation."
+        )
     }
 
     async fn add_gc(&self, _name: &str, _path: &Path) -> Result<()> {
@@ -157,7 +157,7 @@ impl NixBackend for SnixBackend {
         } else {
             // Build an attribute path expression like ".#foo.bar"
             let attr_path = attributes.join(".");
-            format!("(import ./flake.nix).{}", attr_path)
+            format!("(import ./flake.nix).{attr_path}")
         };
 
         // For now, return a placeholder - proper implementation would need generator context
