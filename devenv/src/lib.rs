@@ -9,6 +9,6 @@ pub mod nix_backend;
 pub(crate) mod snix_backend;
 mod util;
 
-pub use cli::{default_system, GlobalOptions};
-pub use devenv::{Devenv, DevenvOptions, ProcessOptions, DIRENVRC, DIRENVRC_VERSION};
+pub use cli::{GlobalOptions, default_system};
+pub use devenv::{DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessOptions};
 pub use devenv_tasks as tasks;

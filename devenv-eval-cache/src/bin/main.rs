@@ -12,9 +12,7 @@ async fn main() -> Result<(), command::CommandError> {
     // Connect to database and run migrations
     let db = devenv_cache_core::db::Database::new(path, &db::MIGRATIONS)
         .await
-        .map_err(|e| {
-            command::CommandError::Io(std::io::Error::other(e))
-        })?;
+        .map_err(|e| command::CommandError::Io(std::io::Error::other(e)))?;
     let pool = db.pool().clone();
 
     let mut cmd = Command::new("nix");

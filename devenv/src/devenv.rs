@@ -3,9 +3,9 @@ use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
 use cli_table::Table;
-use cli_table::{print_stderr, WithTitle};
-use include_dir::{include_dir, Dir};
-use miette::{bail, miette, IntoDiagnostic, Result, WrapErr};
+use cli_table::{WithTitle, print_stderr};
+use include_dir::{Dir, include_dir};
+use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -18,14 +18,14 @@ use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
-use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
+use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
 
 // templates
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
@@ -769,7 +769,9 @@ impl Devenv {
         // Set environment variables in the current process
         // This ensures that tasks have access to all devenv environment variables
         for (key, value) in &envs {
-            unsafe { std::env::set_var(key, value); }
+            unsafe {
+                std::env::set_var(key, value);
+            }
         }
 
         let tasks = self.load_tasks().await?;
@@ -977,9 +979,7 @@ impl Devenv {
                             match value {
                                 serde_json::Value::Object(obj) => obj
                                     .iter()
-                                    .flat_map(|(k, v)| {
-                                        flatten_object(&format!("{prefix}.{k}"), v)
-                                    })
+                                    .flat_map(|(k, v)| flatten_object(&format!("{prefix}.{k}"), v))
                                     .collect(),
                                 _ => vec![format!("devenv.config.{}", prefix)],
                             }
@@ -1147,7 +1147,11 @@ impl Devenv {
                     // Process still exists
                     let elapsed = start_time.elapsed();
                     if elapsed >= max_wait {
-                        warn!("Process {} did not shut down gracefully within {} seconds, sending SIGKILL to process group", pid, max_wait.as_secs());
+                        warn!(
+                            "Process {} did not shut down gracefully within {} seconds, sending SIGKILL to process group",
+                            pid,
+                            max_wait.as_secs()
+                        );
 
                         // Send SIGKILL to the entire process group
                         // Negative PID means send to process group
@@ -1346,8 +1350,11 @@ impl Devenv {
                 // Parse the path and type from the first value
                 let key_parts: Vec<&str> = chunk[0].split(':').collect();
                 if key_parts.len() < 2 {
-                    miette::bail!("Invalid option format: '{}'. Must include type, e.g. 'languages.rust.version:string'. Supported types: {}",
-                           chunk[0], SUPPORTED_TYPES.join(", "));
+                    miette::bail!(
+                        "Invalid option format: '{}'. Must include type, e.g. 'languages.rust.version:string'. Supported types: {}",
+                        chunk[0],
+                        SUPPORTED_TYPES.join(", ")
+                    );
                 }
 
                 let path = key_parts[0];

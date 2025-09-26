@@ -190,21 +190,28 @@
 
                               # True leaf types that need priority resolution when they conflict
                               isLeafType = builtins.elem typeName [
-                                "str" "int" "bool" "enum" "path" "package" "float" "anything"
+                                "str"
+                                "int"
+                                "bool"
+                                "enum"
+                                "path"
+                                "package"
+                                "float"
+                                "anything"
                               ];
                             in
                             if isLeafType then true
                             else if typeName == "nullOr" then
-                              # For nullOr, check the wrapped type recursively
+                            # For nullOr, check the wrapped type recursively
                               let
                                 innerType = type.elemType or
-                                           (if type ? nestedTypes && type.nestedTypes ? elemType
-                                            then type.nestedTypes.elemType
-                                            else null);
+                                  (if type ? nestedTypes && type.nestedTypes ? elemType
+                                  then type.nestedTypes.elemType
+                                  else null);
                               in
                               if innerType != null then typeNeedsOverride innerType else false
                             else
-                              # Everything else (collections, submodules, etc.) should merge naturally
+                            # Everything else (collections, submodules, etc.) should merge naturally
                               false;
 
                         # Check if a config path needs explicit override
@@ -215,8 +222,8 @@
                           in
                           if directOption != null && lib.isOption directOption then
                             typeNeedsOverride directOption.type
-                          else if optionPath != [] then
-                            # Check parent for freeform type
+                          else if optionPath != [ ] then
+                          # Check parent for freeform type
                             let
                               parentPath = lib.init optionPath;
                               parentOption = lib.attrByPath parentPath null baseProject.options;
@@ -227,11 +234,12 @@
                                 # 1. Standard location: type.freeformType (primary)
                                 # 2. Nested location: type.nestedTypes.freeformType (evaluated form)
                                 freeformType = parentOption.type.freeformType or
-                                              parentOption.type.nestedTypes.freeformType or
-                                              null;
-                                elementType = if freeformType ? elemType then freeformType.elemType
-                                             else if freeformType ? nestedTypes && freeformType.nestedTypes ? elemType then freeformType.nestedTypes.elemType
-                                             else freeformType;
+                                  parentOption.type.nestedTypes.freeformType or
+                                    null;
+                                elementType =
+                                  if freeformType ? elemType then freeformType.elemType
+                                  else if freeformType ? nestedTypes && freeformType.nestedTypes ? elemType then freeformType.nestedTypes.elemType
+                                  else freeformType;
                               in
                               typeNeedsOverride elementType
                             else false
@@ -242,17 +250,17 @@
                           if builtins.isFunction config
                           then
                             let
-                              wrapper = args: applyOverrideRecursive (config args) [];
+                              wrapper = args: applyOverrideRecursive (config args) [ ];
                             in
                             lib.mirrorFunctionArgs config wrapper
-                          else applyOverrideRecursive config [];
+                          else applyOverrideRecursive config [ ];
 
                         # Apply overrides recursively based on option types
                         applyOverrideRecursive = config: optionPath:
                           if lib.isAttrs config && config ? _type then
                             config  # Don't touch values with existing type metadata
                           else if lib.isAttrs config then
-                            lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [name])) config
+                            lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [ name ])) config
                           else if pathNeedsOverride optionPath then
                             lib.mkOverride profilePriority config
                           else

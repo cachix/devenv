@@ -1,5 +1,5 @@
 use crate::config::TaskConfig;
-use crate::task_cache::{expand_glob_patterns, TaskCache};
+use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;

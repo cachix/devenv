@@ -4,7 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::future;
-use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_conf_parser::NixConf;
 use serde::Deserialize;
 use sqlx::SqlitePool;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::OnceCell;
-use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
+use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
 
 pub struct Nix {
     pub options: nix_backend::Options,
@@ -326,7 +326,7 @@ impl Nix {
         options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::Verbosity;
-        use devenv_eval_cache::{supports_eval_caching, CachedCommand};
+        use devenv_eval_cache::{CachedCommand, supports_eval_caching};
 
         if options.replace_shell {
             if self.global_options.nix_debugger

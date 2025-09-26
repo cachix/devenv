@@ -1,4 +1,4 @@
-use rustls::{crypto::aws_lc_rs, ClientConfig};
+use rustls::{ClientConfig, crypto::aws_lc_rs};
 use rustls_platform_verifier::BuilderVerifierExt;
 use std::sync::{Arc, LazyLock};
 use thiserror::Error;

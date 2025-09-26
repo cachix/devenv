@@ -14,14 +14,18 @@ let
       lockedNixpkgs = lock.nodes.nixpkgs.locked;
       devenvPkgs =
         if lockedNixpkgs.type == "github" then
-          let source = pkgs.fetchFromGitHub {
-            inherit (lockedNixpkgs) owner repo rev;
-            hash = lock.nodes.nixpkgs.locked.narHash;
-          }; in import source { system = pkgs.stdenv.system; }
+          let
+            source = pkgs.fetchFromGitHub {
+              inherit (lockedNixpkgs) owner repo rev;
+              hash = lock.nodes.nixpkgs.locked.narHash;
+            };
+          in
+          import source { system = pkgs.stdenv.system; }
         else
           pkgs;
       workspace = devenvPkgs.callPackage ./../../workspace.nix { cargoProfile = "release_fast"; };
-    in workspace.devenv-tasks;
+    in
+    workspace.devenv-tasks;
 
   taskType = types.submodule
     ({ name, config, ... }:

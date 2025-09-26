@@ -18,4 +18,4 @@ pub mod time;
 // Re-export common types for convenience
 pub use db::Database;
 pub use error::{CacheError, CacheResult};
-pub use file::{compute_file_hash, compute_string_hash, TrackedFile};
+pub use file::{TrackedFile, compute_file_hash, compute_string_hash};

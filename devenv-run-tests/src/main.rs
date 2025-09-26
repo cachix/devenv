@@ -1,5 +1,5 @@
 use clap::Parser;
-use devenv::{log, Devenv, DevenvOptions};
+use devenv::{Devenv, DevenvOptions, log};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
 use std::{

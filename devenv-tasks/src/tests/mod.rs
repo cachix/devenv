@@ -567,9 +567,7 @@ echo "Task executed successfully"
             // This is the expected case
         }
         other => {
-            panic!(
-                "Expected Success status on third run after file modification, got: {other:?}"
-            );
+            panic!("Expected Success status on third run after file modification, got: {other:?}");
         }
     }
 

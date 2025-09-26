@@ -32,10 +32,9 @@ impl Display for Error {
             ),
             Error::TaskNotFound(task) => write!(f, "Task does not exist: {task}"),
             Error::CycleDetected(task) => write!(f, "Cycle detected at task: {task}"),
-            Error::MissingCommand(task) => write!(
-                f,
-                "Task {task} defined a status, but is missing a command"
-            ),
+            Error::MissingCommand(task) => {
+                write!(f, "Task {task} defined a status, but is missing a command")
+            }
             Error::InvalidTaskName(task) => write!(
                 f,
                 "Invalid task name: {task}, expected [a-zA-Z-_]+:[a-zA-Z-_]+"

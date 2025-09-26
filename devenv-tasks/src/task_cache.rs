@@ -243,7 +243,13 @@ impl TaskCache {
 
                 debug!(
                     "File '{}' for task '{}': stored_hash={:?}, current_hash={:?}, stored_time={}, current_time={}, is_dir={}",
-                    path, task_name, stored_hash, current_hash, stored_modified_time, current_modified_time, is_directory
+                    path,
+                    task_name,
+                    stored_hash,
+                    current_hash,
+                    stored_modified_time,
+                    current_modified_time,
+                    is_directory
                 );
 
                 // Combine checking for file type and hash changes
@@ -253,7 +259,12 @@ impl TaskCache {
                 if content_changed {
                     debug!(
                         "File {} changed for task {}: type or content changed (is_dir: {} -> {}, hash: {:?} -> {:?})",
-                        path, task_name, is_directory, current_file.is_directory, stored_hash, current_hash
+                        path,
+                        task_name,
+                        is_directory,
+                        current_file.is_directory,
+                        stored_hash,
+                        current_hash
                     );
                     // Update the file state using the already loaded instance
                     self.update_file_state_with_file(task_name, &current_file)
@@ -324,16 +335,20 @@ mod tests {
         let path_str = file_path.to_str().unwrap().to_string();
 
         // First check should consider it modified (initial run)
-        assert!(cache
-            .check_modified_files(task_name, &[path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Second check should consider it unmodified
-        assert!(!cache
-            .check_modified_files(task_name, &[path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // More reliable approach to ensure modification time changes:
         // 1. Sleep to ensure system time advances
@@ -354,16 +369,20 @@ mod tests {
         }
 
         // Check should detect the modification
-        assert!(cache
-            .check_modified_files(task_name, &[path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Another check should see it as unmodified again
-        assert!(!cache
-            .check_modified_files(task_name, &[path_str])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[path_str])
+                .await
+                .unwrap()
+        );
     }
 
     #[sqlx::test]
@@ -397,16 +416,20 @@ mod tests {
         let pattern = format!("{}/*.txt", test_temp_dir.path().to_str().unwrap());
 
         // First check should consider files modified (initial run)
-        assert!(cache
-            .check_modified_files(task_name, &[pattern.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[pattern.clone()])
+                .await
+                .unwrap()
+        );
 
         // Second check should consider them unmodified
-        assert!(!cache
-            .check_modified_files(task_name, &[pattern.clone()])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[pattern.clone()])
+                .await
+                .unwrap()
+        );
 
         // Modify one of the matched files
         {
@@ -419,26 +442,32 @@ mod tests {
         }
 
         // Check should detect the modification
-        assert!(cache
-            .check_modified_files(task_name, &[pattern.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[pattern.clone()])
+                .await
+                .unwrap()
+        );
 
         // Test with multiple patterns
         let pattern2 = format!("{}/*.log", test_temp_dir.path().to_str().unwrap());
         let patterns = vec![pattern.clone(), pattern2];
 
         // First check with new pattern should detect the .log file as modified (not tracked before)
-        assert!(cache
-            .check_modified_files(task_name, &patterns)
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &patterns)
+                .await
+                .unwrap()
+        );
 
         // Second check should consider all files unmodified
-        assert!(!cache
-            .check_modified_files(task_name, &patterns)
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &patterns)
+                .await
+                .unwrap()
+        );
 
         // Modify the .log file
         {
@@ -451,10 +480,12 @@ mod tests {
         }
 
         // Check should detect the modification in .log file
-        assert!(cache
-            .check_modified_files(task_name, &patterns)
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &patterns)
+                .await
+                .unwrap()
+        );
     }
 
     #[sqlx::test]
@@ -471,16 +502,20 @@ mod tests {
         let dir_path_str = dir_path.to_str().unwrap().to_string();
 
         // First check should consider it modified (initial run)
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Second check should consider it unmodified
-        assert!(!cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Add a new file in the directory
         let file_path = dir_path.join("test_file.txt");
@@ -495,16 +530,20 @@ mod tests {
         }
 
         // Check should detect the directory modification
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Second check should consider it unmodified
-        assert!(!cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Modify an existing file
         {
@@ -518,10 +557,12 @@ mod tests {
         }
 
         // Check should detect the directory modification
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Create a subdirectory and set its mtime
         let subdir_path = dir_path.join("subdir");
@@ -538,10 +579,12 @@ mod tests {
             .unwrap();
 
         // Check should detect the directory modification
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Add a file in the subdirectory
         let subdir_file_path = subdir_path.join("nested_file.txt");
@@ -556,16 +599,20 @@ mod tests {
         }
 
         // Check should detect the directory modification
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // After the final check, it should be unmodified again
-        assert!(!cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Create a deeply nested directory structure
         let deep_dir1 = subdir_path.join("level1");
@@ -576,16 +623,20 @@ mod tests {
         tokio::fs::create_dir(&deep_dir3).await.unwrap();
 
         // Check should detect the deep directory modification
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Second check should consider it unmodified
-        assert!(!cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Add a file deep in the nested structure
         let deep_file_path = deep_dir3.join("deep_file.txt");
@@ -600,10 +651,12 @@ mod tests {
         }
 
         // Check should detect the deep file modification
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Update the deep file
         {
@@ -621,33 +674,41 @@ mod tests {
         }
 
         // Check should detect the deep file update
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Remove a deep file
         tokio::fs::remove_file(&deep_file_path).await.unwrap();
 
         // Check should detect the removal
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // Remove a deep directory
         tokio::fs::remove_dir(&deep_dir3).await.unwrap();
 
         // Check should detect the directory removal
-        assert!(cache
-            .check_modified_files(task_name, &[dir_path_str.clone()])
-            .await
-            .unwrap());
+        assert!(
+            cache
+                .check_modified_files(task_name, &[dir_path_str.clone()])
+                .await
+                .unwrap()
+        );
 
         // After the final check, it should be unmodified again
-        assert!(!cache
-            .check_modified_files(task_name, &[dir_path_str])
-            .await
-            .unwrap());
+        assert!(
+            !cache
+                .check_modified_files(task_name, &[dir_path_str])
+                .await
+                .unwrap()
+        );
     }
 }

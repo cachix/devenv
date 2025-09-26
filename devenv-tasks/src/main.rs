@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use devenv_tasks::{
-    signal_handler::SignalHandler, Config, RunMode, TaskConfig, TasksUi, VerbosityLevel,
+    Config, RunMode, TaskConfig, TasksUi, VerbosityLevel, signal_handler::SignalHandler,
 };
 use std::env;
 

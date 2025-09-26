@@ -53,15 +53,15 @@ impl TasksBuilder {
     pub async fn build(self) -> Result<Tasks, Error> {
         let cache = if let Some(db_path) = self.db_path {
             TaskCache::with_db_path(db_path).await.map_err(|e| {
-                Error::IoError(std::io::Error::other(
-                    format!("Failed to initialize task cache: {e}"),
-                ))
+                Error::IoError(std::io::Error::other(format!(
+                    "Failed to initialize task cache: {e}"
+                )))
             })?
         } else {
             TaskCache::new().await.map_err(|e| {
-                Error::IoError(std::io::Error::other(
-                    format!("Failed to initialize task cache: {e}"),
-                ))
+                Error::IoError(std::io::Error::other(format!(
+                    "Failed to initialize task cache: {e}"
+                )))
             })?
         };
 

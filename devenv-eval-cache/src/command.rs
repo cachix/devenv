@@ -339,11 +339,7 @@ impl FileInputDesc {
             Some(compute_string_hash(&paths))
         } else {
             compute_file_hash(&path)
-                .map_err(|e| {
-                    std::io::Error::other(
-                        format!("Failed to compute file hash: {e}"),
-                    )
-                })
+                .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))
                 .ok()
         };
         let modified_at = truncate_to_seconds(
@@ -645,11 +641,8 @@ fn check_file_state(file: &FileInputDesc) -> io::Result<FileState> {
             .collect::<String>();
         compute_string_hash(&paths)
     } else {
-        compute_file_hash(&file.path).map_err(|e| {
-            std::io::Error::other(
-                format!("Failed to compute file hash: {e}"),
-            )
-        })?
+        compute_file_hash(&file.path)
+            .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))?
     };
 
     if Some(&new_hash) == file.content_hash.as_ref() {
@@ -711,11 +704,7 @@ mod test {
         let modified_at = metadata.modified().unwrap();
         let truncated_modified_at = truncate_to_seconds(modified_at).unwrap();
         let content_hash = compute_file_hash(&file_path)
-            .map_err(|e| {
-                std::io::Error::other(
-                    format!("Failed to compute file hash: {e}"),
-                )
-            })
+            .map_err(|e| std::io::Error::other(format!("Failed to compute file hash: {e}")))
             .unwrap();
 
         db::FileInputRow {

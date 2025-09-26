@@ -1,8 +1,8 @@
 use nix::sys::signal::{self, SaFlags, SigAction, SigHandler, SigSet, Signal};
 use nix::unistd;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
-use tokio::signal::unix::{signal, SignalKind};
+use std::sync::atomic::{AtomicI32, Ordering};
+use tokio::signal::unix::{SignalKind, signal};
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 

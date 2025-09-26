@@ -1,9 +1,10 @@
 use clap::crate_version;
 use devenv::{
+    Devenv,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
-    config, log, Devenv,
+    config, log,
 };
-use miette::{bail, IntoDiagnostic, Result, WrapErr};
+use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{env, os::unix::process::CommandExt, process::Command};
 use tempfile::TempDir;
 use tracing::{info, warn};
@@ -132,7 +133,9 @@ async fn main() -> Result<()> {
                     cmd
                 } else {
                     // Impossible. This handled by clap, but if we have no subcommand at this point, error out.
-                    bail!("No container subcommand provided. Use `devenv container build` or specify a command.")
+                    bail!(
+                        "No container subcommand provided. Use `devenv container build` or specify a command."
+                    )
                 }
             };
 

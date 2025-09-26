@@ -6,7 +6,7 @@ use crate::nix_backend;
 use miette::Result;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ServerCapabilities, ServerInfo};
-use rmcp::{tool, tool_router, ServerHandler, ServiceExt};
+use rmcp::{ServerHandler, ServiceExt, tool, tool_router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;

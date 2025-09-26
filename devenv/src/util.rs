@@ -1,5 +1,5 @@
 use fd_lock::RwLock;
-use miette::{miette, IntoDiagnostic, Result};
+use miette::{IntoDiagnostic, Result, miette};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
