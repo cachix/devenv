@@ -19,11 +19,10 @@ in
   config = lib.mkIf cfg.enable {
     process.manager.args = {
       "f" = config.procfile;
-      "env" = config.procfileEnv;
     };
 
     process.manager.command = lib.mkDefault ''
-      ${cfg.package}/bin/honcho start \
+      ${lib.getExe cfg.package} start \
         ${lib.cli.toGNUCommandLineShell {} config.process.manager.args} \
         "$@" &
     '';
