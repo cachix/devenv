@@ -61,8 +61,7 @@ You can replace existing devenv modules using the `disabledModules` mechanism. T
   };
 
   config = lib.mkIf config.languages.rust..enable {
-    packages = [ pkgs.python3 ];
-    enterShell = "echo 'Custom Python environment'";
+    packages = [ pkgs.rustc ];
   };
 }
 ```
