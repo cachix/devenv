@@ -23,9 +23,9 @@ let
           import source { system = pkgs.stdenv.system; }
         else
           pkgs;
-      workspace = devenvPkgs.callPackage ./../../workspace.nix { cargoProfile = "release_fast"; };
+      workspace = devenvPkgs.callPackage ./../../workspace.nix { };
     in
-    workspace.devenv-tasks;
+    workspace.devenv-tasks-fast-build;
 
   taskType = types.submodule
     ({ name, config, ... }:

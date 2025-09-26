@@ -37,8 +37,6 @@ jobs:
         run: |
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
-      - name: Run cargo integration tests
-        run: devenv shell -- cargo test --all-features
       - name: Test tasks outside shell
         run: devenv tasks run devenv:enterShell
       - name: Run devenv-test-cli

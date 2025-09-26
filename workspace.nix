@@ -36,5 +36,14 @@ let
 in
 {
   devenv = callPackage ./devenv/package.nix { inherit src version cargoLock cargoProfile; };
+
   devenv-tasks = callPackage ./devenv-tasks/package.nix { inherit src version cargoLock cargoProfile; };
+
+  # A custom tasks build for the module system.
+  # Use a faster release profile and skip tests.
+  devenv-tasks-fast-build = callPackage ./devenv-tasks/package.nix {
+    inherit src version cargoLock;
+    cargoProfile = "release_fast";
+    doCheck = false;
+  };
 }

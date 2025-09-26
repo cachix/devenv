@@ -2,6 +2,7 @@
 , version
 , cargoLock
 , cargoProfile ? "release"
+, doCheck ? true
 
 , lib
 , rustPlatform
@@ -13,7 +14,6 @@ rustPlatform.buildRustPackage {
 
   cargoBuildFlags = [ "-p devenv-tasks" ];
   buildType = cargoProfile;
-  # Skip tests by default to speed up builds.
-  # This is important for builds triggered by the tasks integration.
-  doCheck = false;
+
+  inherit doCheck;
 }

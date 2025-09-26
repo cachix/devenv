@@ -36,11 +36,6 @@ rustPlatform.buildRustPackage {
   # secretspec
   ++ lib.optional (stdenv.isLinux) dbus;
 
-  # Fix proto files for snix dependencies
-  preBuild = ''
-    export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
-  '';
-
   postConfigure = ''
     # Create proto directory structure that snix expects
     cd "$NIX_BUILD_TOP/cargo-vendor-dir"
@@ -52,6 +47,11 @@ rustPlatform.buildRustPackage {
     [ -d snix-build-*/protos ] && cp snix-build-*/protos/*.proto snix/build/protos/ 2>/dev/null || true
 
     cd - > /dev/null
+  '';
+
+  # Fix proto files for snix dependencies
+  preBuild = ''
+    export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
   '';
 
   postInstall =
