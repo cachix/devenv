@@ -1,4 +1,4 @@
-{
+{ pkgs, ... }: {
   tasks = {
     "myapp:shell" = {
       exec = "touch shell";
@@ -48,8 +48,10 @@
     # Test cwd functionality
     if [ -f cwd-test.txt ]; then
       CWD_RESULT=$(cat cwd-test.txt)
-      if [ "$CWD_RESULT" != "/tmp" ]; then
-        echo "Expected cwd to be /tmp but got $CWD_RESULT"
+      # Resolve /tmp to its real path to handle cases where /tmp is a symlink (e.g. macOS)
+      CWD_EXPECTED=$(${pkgs.coreutils}/bin/realpath "/tmp")
+      if [ "$CWD_RESULT" != "$CWD_EXPECTED" ]; then
+        echo "Expected cwd to be $CWD_EXPECTED but got $CWD_RESULT"
         exit 1
       fi
       rm -f cwd-test.txt
