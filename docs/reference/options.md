@@ -24112,6 +24112,7 @@ The available extensions are:
  - pg_bigm
  - pg_byteamagic
  - pg_cron
+ - pg_csv
  - pg_ed25519
  - pg_embedding
  - pg_hint_plan
