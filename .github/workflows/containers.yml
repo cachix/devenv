@@ -21,7 +21,7 @@ env:
 
 jobs:
   devcontainer:
-    runs-on: ["self-hosted", "linux", "X64"]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -69,7 +69,7 @@ jobs:
             DEVENV_VERSION=${{ steps.checkout.outputs.commit }}
 
   devenv:
-    runs-on: ["self-hosted", "linux", "X64"]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
