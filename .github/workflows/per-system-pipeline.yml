@@ -35,8 +35,8 @@ jobs:
       ref: ${{ inputs.ref }}
 
   examples:
-    needs: test
-    if: needs.test.result != 'skipped'
+    needs: [build, test]
+    if: ${{ always() && needs.build.result == 'success' }}
     uses: ./.github/workflows/examples.yml
     secrets: inherit
     with:
