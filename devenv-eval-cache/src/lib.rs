@@ -4,7 +4,7 @@ pub mod internal_log;
 pub mod op;
 
 pub use command::{
-    supports_eval_caching, CachedCommand, EnvInputDesc, FileInputDesc, Input, Output,
+    CachedCommand, EnvInputDesc, FileInputDesc, Input, Output, supports_eval_caching,
 };
 
 /// Integration tests for caching behavior with Nix evaluation.
@@ -205,7 +205,9 @@ mod integration_tests {
         let test_env_value = "test_value_12345";
 
         // Set test environment variable
-        env::set_var(test_env_var, test_env_value);
+        unsafe {
+            env::set_var(test_env_var, test_env_value);
+        }
 
         let nix_expr = format!(r#"builtins.getEnv "{}""#, test_env_var);
 
@@ -226,7 +228,9 @@ mod integration_tests {
         );
 
         // Clean up
-        env::remove_var(test_env_var);
+        unsafe {
+            env::remove_var(test_env_var);
+        }
 
         Ok(())
     }
@@ -328,7 +332,9 @@ mod integration_tests {
         let nix_expr = format!(r#"builtins.getEnv "{}""#, test_env_var);
 
         // Set initial value
-        env::set_var(test_env_var, "initial_value");
+        unsafe {
+            env::set_var(test_env_var, "initial_value");
+        }
 
         // First run
         let output1 = run_nix_eval_cached(&pool, &nix_expr).await?;
@@ -342,7 +348,9 @@ mod integration_tests {
         assert!(output2.cache_hit);
 
         // Change environment variable
-        env::set_var(test_env_var, "changed_value");
+        unsafe {
+            env::set_var(test_env_var, "changed_value");
+        }
 
         // Third run - should invalidate cache
         let output3 = run_nix_eval_cached(&pool, &nix_expr).await?;
@@ -353,7 +361,9 @@ mod integration_tests {
         assert!(stdout3.contains("changed_value"));
 
         // Clean up
-        env::remove_var(test_env_var);
+        unsafe {
+            env::remove_var(test_env_var);
+        }
 
         Ok(())
     }
@@ -403,7 +413,9 @@ mod integration_tests {
         )?;
 
         // Set test environment variable
-        env::set_var("COMPLEX_TEST_VAR", "complex_value");
+        unsafe {
+            env::set_var("COMPLEX_TEST_VAR", "complex_value");
+        }
 
         // Create a complex Nix expression that uses multiple operations
         let nix_expr = format!(
@@ -433,7 +445,9 @@ mod integration_tests {
         assert_env_dependency_detected(&output, "COMPLEX_TEST_VAR");
 
         // Clean up
-        env::remove_var("COMPLEX_TEST_VAR");
+        unsafe {
+            env::remove_var("COMPLEX_TEST_VAR");
+        }
 
         Ok(())
     }
