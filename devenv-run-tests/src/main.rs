@@ -72,6 +72,7 @@ struct TestResult {
 #[derive(Serialize, Debug)]
 struct TestMetadata {
     name: String,
+    path: String,
     supported_systems: Vec<String>,
 }
 
@@ -226,6 +227,7 @@ fn discover_tests(
             let supported_systems = get_supported_systems_for_config(&test_config);
             let metadata = TestMetadata {
                 name: dir_name.to_string(),
+                path: path.display().to_string(),
                 supported_systems,
             };
 
