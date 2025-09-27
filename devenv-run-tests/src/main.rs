@@ -245,8 +245,6 @@ fn discover_tests(
 }
 
 async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
-    eprintln!("Running Tests");
-
     let cwd = env::current_dir().into_diagnostic()?;
 
     // Discover tests (filtered by current system)
@@ -269,7 +267,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
     });
 
     let total_tests = test_infos.len();
-    eprintln!("\nRunning {} test{}\n", total_tests, if total_tests == 1 { "" } else { "s" });
+    eprintln!("Running {} test{}", total_tests, if total_tests == 1 { "" } else { "s" });
 
     let mut test_results = vec![];
     let mut current_test_num = 0;
@@ -281,9 +279,8 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         let path = &test_info.path;
         let test_config = &test_info.config;
 
-        eprintln!("\n{}", "=".repeat(50));
-        eprintln!("[{}/{}] Starting: {}", current_test_num, total_tests, dir_name);
-        eprintln!("{}", "=".repeat(50));
+        eprintln!("\n[{}/{}] Starting: {}", current_test_num, total_tests, dir_name);
+        eprintln!("{}", "-".repeat(50));
 
         let mut config = devenv::config::Config::load_from(path)?;
         for input in args.override_input.chunks_exact(2) {
@@ -411,7 +408,6 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
                 eprintln!("    Error: {error:?}");
             }
         }
-        eprintln!("{}", "-".repeat(50));
 
         let result = TestResult {
             name: dir_name.to_string(),
