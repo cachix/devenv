@@ -45,7 +45,7 @@ jobs:
 
   examples:
     needs: [build, test]
-    if: ${{ always() && needs.build.result == 'success' }}
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     uses: ./.github/workflows/examples.yml
     secrets: inherit
     with:
