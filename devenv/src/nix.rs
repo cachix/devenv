@@ -383,8 +383,8 @@ impl Nix {
                 };
 
                 cached_cmd.on_stderr(move |log| {
-                    if let Some(log) = log.filter_by_level(target_log_level) {
-                        if let Some(msg) = log.get_msg() {
+                    if let Some(log) = log.filter_by_level(target_log_level)
+                        && let Some(msg) = log.get_msg() {
                             use devenv_eval_cache::internal_log::InternalLog;
                             match log {
                                 InternalLog::Msg { level, .. } => match *level {
@@ -396,7 +396,6 @@ impl Nix {
                                 _ => info!("{msg}"),
                             };
                         }
-                    }
                 });
             }
 
@@ -527,8 +526,8 @@ impl Nix {
                     }
 
                     // Configure a netrc file with the auth token if available
-                    if !cachix_caches.caches.pull.is_empty() {
-                        if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
+                    if !cachix_caches.caches.pull.is_empty()
+                        && let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
                             let netrc_path = self
                                 .netrc_path
                                 .get_or_try_init(|| async {
@@ -559,7 +558,6 @@ impl Nix {
                                 }
                             }
                         }
-                    }
                 }
             }
         }
@@ -761,15 +759,14 @@ impl Nix {
             .into_diagnostic()
             .and_then(|content| serde_json::from_str(&content).into_diagnostic())
             .unwrap_or_else(|e| {
-                if let Some(source) = e.chain().find_map(|s| s.downcast_ref::<std::io::Error>()) {
-                    if source.kind() != std::io::ErrorKind::NotFound {
+                if let Some(source) = e.chain().find_map(|s| s.downcast_ref::<std::io::Error>())
+                    && source.kind() != std::io::ErrorKind::NotFound {
                         error!(
                             "Failed to load cachix trusted keys from {}:\n{}.",
                             trusted_keys_path.display(),
                             e
                         );
                     }
-                }
                 BTreeMap::new()
             });
 

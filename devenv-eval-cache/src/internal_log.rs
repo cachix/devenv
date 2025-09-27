@@ -172,11 +172,9 @@ impl InternalLog {
             msg,
             ..
         } = self
-        {
-            if msg.starts_with("\u{1b}[31;1merror:") {
+            && msg.starts_with("\u{1b}[31;1merror:") {
                 return true;
             }
-        }
 
         false
     }
@@ -188,11 +186,9 @@ impl InternalLog {
             msg,
             ..
         } = self
-        {
-            if msg.starts_with("trace:") {
+            && msg.starts_with("trace:") {
                 return true;
             }
-        }
 
         false
     }

@@ -271,7 +271,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             continue;
         }
 
-        let mut config = devenv::config::Config::load_from(&path)?;
+        let mut config = devenv::config::Config::load_from(path)?;
         for input in args.override_input.chunks_exact(2) {
             config
                 .override_input_url(&input[0], &input[1])

@@ -45,11 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Keeping backwards compatibility for existing scripts that might set DEVENV_TASKS_QUIET
-    if let Ok(quiet_var) = env::var("DEVENV_TASKS_QUIET") {
-        if quiet_var == "true" || quiet_var == "1" {
+    if let Ok(quiet_var) = env::var("DEVENV_TASKS_QUIET")
+        && (quiet_var == "true" || quiet_var == "1") {
             verbosity = VerbosityLevel::Quiet;
         }
-    }
 
     match args.command {
         Command::Run { roots, mode } => {

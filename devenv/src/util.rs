@@ -12,13 +12,12 @@ pub fn write_file_with_lock<P: AsRef<Path>, S: AsRef<str>>(path: P, content: S) 
     let content = content.as_ref();
 
     // Create parent directories if they don't exist
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
+    if let Some(parent) = path.parent()
+        && !parent.exists() {
             fs::create_dir_all(parent)
                 .into_diagnostic()
                 .map_err(|e| miette!("Failed to create directory {}: {}", parent.display(), e))?;
         }
-    }
 
     // Open or create the file with locking
     let file = fs::OpenOptions::new()
