@@ -19,6 +19,8 @@ on:
 jobs:
   build:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
+    outputs:
+      devenv-path: ${{ steps.build-devenv.outputs.path }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -36,8 +38,10 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Build devenv-${{ inputs.system }}
+        id: build-devenv
         run: |
-          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv
+          devenv_path=$(nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv)
+          echo "path=$devenv_path" >> $GITHUB_OUTPUT
 
       # Build and cache the devenv-tasks binary used by the module system
       - name: Build devenv-tasks-fast-build-${{ inputs.system }}
@@ -45,6 +49,6 @@ jobs:
           nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-tasks-fast-build
 
       - name: Run integration tests
-        shell: devenv shell bash -- -e {0}
+        shell: ${{ steps.build-devenv.outputs.path }}/bin/devenv shell bash -- -e {0}
         run: |
           cargo test --all-features

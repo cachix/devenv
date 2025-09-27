@@ -241,6 +241,9 @@ fn discover_tests(
         }
     }
 
+    // Sort tests by name for consistent ordering
+    test_infos.sort_by(|a, b| a.name.cmp(&b.name));
+
     Ok(test_infos)
 }
 
