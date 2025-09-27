@@ -39,10 +39,6 @@ jobs:
         run: |
           nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv
 
-      - name: Build devenv-tasks-${{ inputs.system }}
-        run: |
-          nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-tasks
-
       # Build and cache the devenv-tasks binary used by the module system
       - name: Build devenv-tasks-fast-build-${{ inputs.system }}
         run: |

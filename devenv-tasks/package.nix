@@ -2,7 +2,7 @@
 , version
 , cargoLock
 , cargoProfile ? "release"
-, doCheck ? true
+, doCheck ? false # Tests are run by devenv anyways
 
 , lib
 , rustPlatform
@@ -14,6 +14,4 @@ rustPlatform.buildRustPackage {
 
   cargoBuildFlags = [ "-p devenv-tasks" ];
   buildType = cargoProfile;
-
-  inherit doCheck;
 }
