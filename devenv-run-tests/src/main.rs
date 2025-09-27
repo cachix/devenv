@@ -250,25 +250,40 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
     let cwd = env::current_dir().into_diagnostic()?;
 
     // Discover tests (filtered by current system)
-    let test_infos = discover_tests(&args.directories, true)?;
+    let mut test_infos = discover_tests(&args.directories, true)?;
+
+    // Apply --only and --exclude filters before counting
+    test_infos.retain(|test_info| {
+        let path = &test_info.path;
+        let dir_name = &test_info.name;
+
+        if !args.only.is_empty() {
+            if !args.only.iter().any(|only| path.ends_with(only)) {
+                return false;
+            }
+        } else if args.exclude.iter().any(|exclude| path.ends_with(exclude)) {
+            eprintln!("Excluding {dir_name}");
+            return false;
+        }
+        true
+    });
+
+    let total_tests = test_infos.len();
+    eprintln!("\nRunning {} test{}\n", total_tests, if total_tests == 1 { "" } else { "s" });
 
     let mut test_results = vec![];
+    let mut current_test_num = 0;
 
     // Now iterate over the discovered tests
     for test_info in test_infos {
+        current_test_num += 1;
         let dir_name = &test_info.name;
         let path = &test_info.path;
         let test_config = &test_info.config;
 
-        // Apply --only and --exclude filters
-        if !args.only.is_empty() {
-            if !args.only.iter().any(|only| path.ends_with(only)) {
-                continue;
-            }
-        } else if args.exclude.iter().any(|exclude| path.ends_with(exclude)) {
-            eprintln!("Skipping {dir_name}");
-            continue;
-        }
+        eprintln!("\n{}", "=".repeat(50));
+        eprintln!("[{}/{}] Starting: {}", current_test_num, total_tests, dir_name);
+        eprintln!("{}", "=".repeat(50));
 
         let mut config = devenv::config::Config::load_from(path)?;
         for input in args.override_input.chunks_exact(2) {
@@ -386,9 +401,17 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         };
 
         let passed = status.is_ok();
-        if let Err(error) = &status {
-            eprintln!("    Error in {dir_name}: {error:?}");
+
+        eprintln!("{}", "-".repeat(50));
+        if passed {
+            eprintln!("✅ [{}/{}] Passed: {}", current_test_num, total_tests, dir_name);
+        } else {
+            eprintln!("❌ [{}/{}] Failed: {}", current_test_num, total_tests, dir_name);
+            if let Err(error) = &status {
+                eprintln!("    Error: {error:?}");
+            }
         }
+        eprintln!("{}", "-".repeat(50));
 
         let result = TestResult {
             name: dir_name.to_string(),
