@@ -58,7 +58,7 @@ for the exact pinned version of Nixpkgs input in your ``devenv.lock``.
 If you'd like to see what package includes a specific file, for example `libquadmath.so`:
 
 ```shell-session
-$ nix run github:mic92/nix-index-database libquadmath.so
+$ nix run github:nix-community/nix-index-database libquadmath.so
 (rPackages.RcppEigen.out)                       302,984 x /nix/store/24r9jkqyf2nd5dlg1jyihfl82sa9nwwb-gfortran-12.3.0-lib/lib/libquadmath.so.0.0.0
 (zsnes2.out)                                    693,200 x /nix/store/z23qmfjaj5p50n3iki7zkjjgjzia16v1-gcc-12.3.0-lib/lib/libquadmath.so.0.0.0
 (zulip.out)                                           0 s /nix/store/xnlcrrg3b9fgwry6qh3fxk3hnb0whs5z-zulip-5.10.2-usr-target/lib/libquadmath.so.0.0.0
