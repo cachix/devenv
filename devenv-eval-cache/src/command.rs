@@ -84,13 +84,12 @@ impl<'a> CachedCommand<'a> {
         let cmd_hash = compute_string_hash(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
-        if !self.force_refresh {
-            if let Ok(Some(output)) =
+        if !self.force_refresh
+            && let Ok(Some(output)) =
                 query_cached_output(self.pool, &cmd_hash, &self.extra_paths).await
             {
                 return Ok(output);
             }
-        }
 
         cmd.arg("-vv")
             .arg("--log-format")

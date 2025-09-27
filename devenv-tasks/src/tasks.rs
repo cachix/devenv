@@ -428,10 +428,9 @@ impl Tasks {
                                     .insert(task_state.task.name.clone(), output.clone());
 
                                 // Store task output if we're having status or exec_if_modified
-                                if task_state.task.status.is_some()
-                                    || !task_state.task.exec_if_modified.is_empty()
-                                {
-                                    if let Some(output_value) = output.as_object() {
+                                if (task_state.task.status.is_some()
+                                    || !task_state.task.exec_if_modified.is_empty())
+                                    && let Some(output_value) = output.as_object() {
                                         let task_name = &task_state.task.name;
                                         if let Err(e) = cache
                                             .store_task_output(
@@ -447,7 +446,6 @@ impl Tasks {
                                             );
                                         }
                                     }
-                                }
                             }
                             _ => {}
                         }

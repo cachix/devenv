@@ -103,8 +103,8 @@ impl TaskState {
         // Set environment variables from task outputs
         let mut devenv_env = String::new();
         for (_, value) in outputs.iter() {
-            if let Some(env) = value.get("devenv").and_then(|d| d.get("env")) {
-                if let Some(env_obj) = env.as_object() {
+            if let Some(env) = value.get("devenv").and_then(|d| d.get("env"))
+                && let Some(env_obj) = env.as_object() {
                     for (env_key, env_value) in env_obj {
                         if let Some(env_str) = env_value.as_str() {
                             command.env(env_key, env_str);
@@ -116,7 +116,6 @@ impl TaskState {
                         }
                     }
                 }
-            }
         }
         // Internal for now
         command.env("DEVENV_TASK_ENV", devenv_env);
