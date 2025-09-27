@@ -1,0 +1,3 @@
+# Fails to start on X86 macOS
+broken_systems:
+  - x86_64-darwin
