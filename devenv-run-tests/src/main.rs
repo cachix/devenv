@@ -241,8 +241,8 @@ fn discover_tests(
         }
     }
 
-    // Sort tests by name for consistent ordering
-    test_infos.sort_by(|a, b| a.name.cmp(&b.name));
+    // Sort tests by path for consistent ordering
+    test_infos.sort_by(|a, b| a.path.cmp(&b.path));
 
     Ok(test_infos)
 }
