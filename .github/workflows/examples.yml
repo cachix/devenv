@@ -18,7 +18,7 @@ on:
 
 jobs:
   generate-examples:
-    runs-on: [self-hosted, linux, X64]
+    runs-on: [self-hosted, linux]
     outputs:
       examples: ${{ steps.set-examples.outputs.examples }}
     steps:
@@ -26,15 +26,30 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+      - name: Build devenv
+        run: |
+          path=$(nix build -L --print-out-paths)
+          echo "$path/bin" >> $GITHUB_PATH
       - name: Fetch examples to run
         id: set-examples
         run: |
           set -euxo pipefail
-          json=$(nix shell nixpkgs#tree -c tree -J -L 1 examples | nix shell nixpkgs#jq -c jq -c '[.[0].contents[] | .name]')
-          echo "examples=$json" >> $GITHUB_OUTPUT
+          # Get test metadata filtered for current system
+          examples=$(devenv-run-tests generate-json examples)
+          echo "examples=$examples" >> $GITHUB_OUTPUT
 
   examples:
-    name: ${{ matrix.example }} (${{ inputs.system }})
+    name: ${{ matrix.example.name }} (${{ inputs.system }})
     needs: [generate-examples]
     strategy:
       fail-fast: false
@@ -60,4 +75,4 @@ jobs:
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
       - name: Run examples
-        run: devenv-run-tests --only ${{ matrix.example }} examples
+        run: devenv-run-tests run --only ${{ matrix.example.name }} examples

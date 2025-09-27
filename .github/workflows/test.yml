@@ -42,7 +42,7 @@ jobs:
       - name: Run devenv-test-cli
         run: devenv shell devenv-test-cli
       - name: Run tests
-        run: devenv-run-tests tests
+        run: devenv-run-tests run tests
 
 
   direnv:
