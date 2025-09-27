@@ -14,4 +14,6 @@ rustPlatform.buildRustPackage {
 
   cargoBuildFlags = [ "-p devenv-tasks" ];
   buildType = cargoProfile;
+
+  inherit doCheck;
 }
