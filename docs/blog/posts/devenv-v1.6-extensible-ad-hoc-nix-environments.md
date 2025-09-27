@@ -82,7 +82,7 @@ $ devenv --option profile:string backend up
 
 This enables you to switch between frontend, backend, or other custom profiles without modifying your configuration files.
 
-See our [Profiles guide](https://devenv.sh/guides/profiles/) for more details on setting up and using profiles.
+See our [Profiles guide](https://devenv.sh/profiles/) for more details on setting up and using profiles.
 
 For complete documentation on this feature, visit our [Ad-hoc Developer Environments guide](https://devenv.sh/ad-hoc-developer-environments/).
 
