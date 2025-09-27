@@ -9,9 +9,33 @@ use std::{
 };
 use tempfile::TempDir;
 
+const ALL_SYSTEMS: &[&str] = &[
+    "x86_64-linux",
+    "aarch64-linux",
+    "x86_64-darwin",
+    "aarch64-darwin",
+];
+const DEFAULT_DIRECTORIES: &[&str] = &["examples", "tests"];
+
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Parser, Debug)]
+enum Commands {
+    /// Run tests (default)
+    #[clap(name = "run")]
+    Run(RunArgs),
+    /// Generate JSON metadata for tests
+    #[clap(name = "generate-json")]
+    GenerateJson(GenerateJsonArgs),
+}
+
+#[derive(Parser, Debug)]
+struct RunArgs {
     #[clap(long, value_parser, help = "Exclude these tests.")]
     exclude: Vec<PathBuf>,
 
@@ -27,13 +51,28 @@ struct Args {
     )]
     override_input: Vec<String>,
 
-    #[clap(value_parser, default_values = vec!["examples", "tests"])]
+    #[clap(value_parser, default_values = DEFAULT_DIRECTORIES)]
     directories: Vec<PathBuf>,
+}
+
+#[derive(Parser, Debug)]
+struct GenerateJsonArgs {
+    #[clap(value_parser, default_values = DEFAULT_DIRECTORIES)]
+    directories: Vec<PathBuf>,
+
+    #[clap(long, help = "Include all tests regardless of current system support")]
+    all: bool,
 }
 
 struct TestResult {
     name: String,
     passed: bool,
+}
+
+#[derive(Serialize, Debug)]
+struct TestMetadata {
+    name: String,
+    supported_systems: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -44,6 +83,12 @@ struct TestConfig {
     /// Whether to run .test.sh inside the shell automatically (default: true)
     #[serde(default = "default_use_shell")]
     use_shell: bool,
+    /// Systems that this test supports (empty means all systems supported)
+    #[serde(default)]
+    supported_systems: Vec<String>,
+    /// Systems where this test is known to be broken (empty means no broken systems)
+    #[serde(default)]
+    broken_systems: Vec<String>,
 }
 
 fn default_git_init() -> bool {
@@ -59,6 +104,8 @@ impl Default for TestConfig {
         Self {
             git_init: default_git_init(),
             use_shell: default_use_shell(),
+            supported_systems: Vec::new(),
+            broken_systems: Vec::new(),
         }
     }
 }
@@ -84,17 +131,71 @@ impl TestConfig {
 
         Ok(Self::default())
     }
+
+    fn should_skip_for_system(&self, current_system: &str) -> bool {
+        // Skip if the test explicitly lists broken systems and current system is broken
+        if !self.broken_systems.is_empty()
+            && self.broken_systems.contains(&current_system.to_string())
+        {
+            return true;
+        }
+
+        // Skip if the test lists supported systems and current system is not supported
+        if !self.supported_systems.is_empty()
+            && !self.supported_systems.contains(&current_system.to_string())
+        {
+            return true;
+        }
+
+        false
+    }
 }
 
-async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
-    eprintln!("Running Tests");
+fn get_current_system() -> String {
+    let arch = std::env::consts::ARCH;
+    let os = std::env::consts::OS;
 
-    let cwd = env::current_dir().into_diagnostic()?;
+    match (arch, os) {
+        ("x86_64", "linux") => "x86_64-linux".to_string(),
+        ("aarch64", "linux") => "aarch64-linux".to_string(),
+        ("x86_64", "macos") => "x86_64-darwin".to_string(),
+        ("aarch64", "macos") => "aarch64-darwin".to_string(),
+        _ => panic!("Unsupported system: {arch}-{os}"),
+    }
+}
 
-    let mut test_results = vec![];
+fn get_supported_systems_for_config(test_config: &TestConfig) -> Vec<String> {
+    if test_config.supported_systems.is_empty() && test_config.broken_systems.is_empty() {
+        // If no systems specified, support all known systems
+        ALL_SYSTEMS.iter().map(|s| s.to_string()).collect()
+    } else if !test_config.supported_systems.is_empty() {
+        // Use explicitly supported systems
+        test_config.supported_systems.clone()
+    } else {
+        // Start with all systems, remove broken ones
+        ALL_SYSTEMS
+            .iter()
+            .filter(|sys| !test_config.broken_systems.contains(&sys.to_string()))
+            .map(|s| s.to_string())
+            .collect()
+    }
+}
 
-    for directory in &args.directories {
-        eprintln!("Running in directory {}", directory.display());
+struct TestInfo {
+    name: String,
+    path: PathBuf,
+    config: TestConfig,
+    metadata: TestMetadata,
+}
+
+fn discover_tests(
+    directories: &[PathBuf],
+    filter_by_current_system: bool,
+) -> Result<Vec<TestInfo>> {
+    let mut test_infos = vec![];
+    let current_system = get_current_system();
+
+    for directory in directories {
         let paths = fs::read_dir(directory).into_diagnostic()?;
 
         for path in paths {
@@ -106,151 +207,199 @@ async fn run_tests_in_directory(args: &Args) -> Result<Vec<TestResult>> {
                 continue;
             }
 
-            let dir_name_path = path.file_name().unwrap();
-            let dir_name = dir_name_path.to_str().unwrap();
-
-            if !args.only.is_empty() {
-                if !args.only.iter().any(|only| path.ends_with(only)) {
-                    continue;
-                }
-            } else if args.exclude.iter().any(|exclude| path.ends_with(exclude)) {
-                eprintln!("Skipping {dir_name}");
+            let Some(dir_name_path) = path.file_name() else {
                 continue;
-            }
+            };
+            let Some(dir_name) = dir_name_path.to_str() else {
+                eprintln!(
+                    "Warning: skipping directory with non-UTF8 name: {:?}",
+                    dir_name_path
+                );
+                continue;
+            };
 
             // Load test configuration
             let test_config = TestConfig::load_from_path(path)?;
 
-            let mut config = devenv::config::Config::load_from(path)?;
-            for input in args.override_input.chunks_exact(2) {
-                config
-                    .override_input_url(&input[0], &input[1])
-                    .wrap_err(format!(
-                        "Failed to override input {} with {}",
-                        &input[0], &input[1]
-                    ))?;
+            // Skip tests that don't support current system (if filtering is enabled)
+            if filter_by_current_system && test_config.should_skip_for_system(&current_system) {
+                continue;
             }
 
-            // Override the input for the devenv module
+            let supported_systems = get_supported_systems_for_config(&test_config);
+            let metadata = TestMetadata {
+                name: dir_name.to_string(),
+                supported_systems,
+            };
+
+            let test_info = TestInfo {
+                name: dir_name.to_string(),
+                path: path.to_path_buf(),
+                config: test_config,
+                metadata,
+            };
+            test_infos.push(test_info);
+        }
+    }
+
+    Ok(test_infos)
+}
+
+async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
+    eprintln!("Running Tests");
+
+    let cwd = env::current_dir().into_diagnostic()?;
+
+    // Discover tests (filtered by current system)
+    let test_infos = discover_tests(&args.directories, true)?;
+
+    let mut test_results = vec![];
+
+    // Now iterate over the discovered tests
+    for test_info in test_infos {
+        let dir_name = &test_info.name;
+        let path = &test_info.path;
+        let test_config = &test_info.config;
+
+        // Apply --only and --exclude filters
+        if !args.only.is_empty() {
+            if !args.only.iter().any(|only| path.ends_with(only)) {
+                continue;
+            }
+        } else if args.exclude.iter().any(|exclude| path.ends_with(exclude)) {
+            eprintln!("Skipping {dir_name}");
+            continue;
+        }
+
+        let mut config = devenv::config::Config::load_from(&path)?;
+        for input in args.override_input.chunks_exact(2) {
             config
-                .add_input(
-                    "devenv",
-                    &format!("path:{:}?dir=src/modules", cwd.to_str().unwrap()),
-                    &[],
-                )
-                .wrap_err("Failed to add devenv input")?;
+                .override_input_url(&input[0], &input[1])
+                .wrap_err(format!(
+                    "Failed to override input {} with {}",
+                    &input[0], &input[1]
+                ))?;
+        }
 
-            // Create temp directory in system temp dir, not the current directory
-            let tmpdir = TempDir::with_prefix(format!("devenv-run-tests-{dir_name}"))
-                .map_err(|e| miette::miette!("Failed to create temp directory: {}", e))?;
-            let devenv_root = tmpdir.path().to_path_buf();
-            let devenv_dotfile = tmpdir.path().join(".devenv");
+        // Override the input for the devenv module
+        config
+            .add_input(
+                "devenv",
+                &format!("path:{}?dir=src/modules", cwd.display()),
+                &[],
+            )
+            .wrap_err("Failed to add devenv input")?;
 
-            // Copy the contents of the test directory to the temporary directory
-            let copy_content_status = Command::new("cp")
-                .arg("-r")
-                .arg(format!("{}/.", path.display()))
-                .arg(&devenv_root)
+        // Create temp directory in system temp dir, not the current directory
+        let tmpdir = TempDir::with_prefix(format!("devenv-run-tests-{dir_name}"))
+            .map_err(|e| miette::miette!("Failed to create temp directory: {}", e))?;
+        let devenv_root = tmpdir.path().to_path_buf();
+        let devenv_dotfile = tmpdir.path().join(".devenv");
+
+        // Copy the contents of the test directory to the temporary directory
+        let copy_content_status = Command::new("cp")
+            .arg("-r")
+            .arg(format!("{}/.", path.display()))
+            .arg(&devenv_root)
+            .status()
+            .into_diagnostic()?;
+        if !copy_content_status.success() {
+            return Err(miette::miette!("Failed to copy test directory"));
+        }
+
+        env::set_current_dir(&devenv_root).into_diagnostic()?;
+
+        // Initialize a git repository in the temporary directory if configured to do so.
+        // This helps Nix Flakes and git-hooks find the root of the project.
+        if test_config.git_init {
+            let git_init_status = Command::new("git")
+                .arg("init")
+                .arg("--initial-branch=main")
                 .status()
                 .into_diagnostic()?;
-            if !copy_content_status.success() {
-                return Err(miette::miette!("Failed to copy test directory"));
+            if !git_init_status.success() {
+                return Err(miette::miette!("Failed to initialize the git repository"));
             }
+        }
 
-            env::set_current_dir(&devenv_root).into_diagnostic()?;
+        let options = DevenvOptions {
+            config,
+            devenv_root: Some(devenv_root.clone()),
+            devenv_dotfile: Some(devenv_dotfile),
+            global_options: Some(devenv::GlobalOptions::default()),
+        };
+        let devenv = Devenv::new(options).await;
 
-            // Initialize a git repository in the temporary directory if configured to do so.
-            // This helps Nix Flakes and git-hooks find the root of the project.
-            if test_config.git_init {
-                let git_init_status = Command::new("git")
-                    .arg("init")
-                    .arg("--initial-branch=main")
+        eprintln!("  Running {dir_name}");
+
+        // A script to patch files in the working directory before the shell.
+        let patch_script = ".patch.sh";
+
+        // Run .patch.sh if it exists
+        if PathBuf::from(patch_script).exists() {
+            eprintln!("    Running {patch_script}");
+            let _ = Command::new("bash")
+                .arg(patch_script)
+                .status()
+                .into_diagnostic()?;
+        }
+
+        // A script to run inside the shell before the test.
+        let setup_script = ".setup.sh";
+
+        // Run .setup.sh if it exists
+        if PathBuf::from(setup_script).exists() {
+            eprintln!("    Running {setup_script}");
+            let output = devenv
+                .run_in_shell(format!("./{setup_script}"), &[])
+                .await?;
+            if !output.status.success() {
+                return Err(miette::miette!(
+                    "Setup script failed. Status code: {}",
+                    output.status.code().unwrap_or(1)
+                ));
+            }
+        }
+
+        // TODO: wait for processes to shut down before exiting
+        let status = if test_config.use_shell {
+            devenv.test().await
+        } else {
+            // Run .test.sh directly - it must exist when run_test_sh is false
+            if PathBuf::from(".test.sh").exists() {
+                eprintln!("    Running .test.sh directly");
+                let output = Command::new("bash")
+                    .arg(".test.sh")
                     .status()
                     .into_diagnostic()?;
-                if !git_init_status.success() {
-                    return Err(miette::miette!("Failed to initialize the git repository"));
-                }
-            }
-
-            let options = DevenvOptions {
-                config,
-                devenv_root: Some(devenv_root.clone()),
-                devenv_dotfile: Some(devenv_dotfile),
-                global_options: Some(devenv::GlobalOptions::default()),
-            };
-            let devenv = Devenv::new(options).await;
-
-            eprintln!("  Running {dir_name}");
-
-            // A script to patch files in the working directory before the shell.
-            let patch_script = ".patch.sh";
-
-            // Run .patch.sh if it exists
-            if PathBuf::from(patch_script).exists() {
-                eprintln!("    Running {patch_script}");
-                let _ = Command::new("bash")
-                    .arg(patch_script)
-                    .status()
-                    .into_diagnostic()?;
-            }
-
-            // A script to run inside the shell before the test.
-            let setup_script = ".setup.sh";
-
-            // Run .setup.sh if it exists
-            if PathBuf::from(setup_script).exists() {
-                eprintln!("    Running {setup_script}");
-                let output = devenv
-                    .run_in_shell(format!("./{setup_script}"), &[])
-                    .await?;
-                if !output.status.success() {
-                    return Err(miette::miette!(
-                        "Setup script failed. Status code: {}",
-                        output.status.code().unwrap_or(1)
-                    ));
-                }
-            }
-
-            // TODO: wait for processes to shut down before exiting
-            let status = if test_config.use_shell {
-                devenv.test().await
-            } else {
-                // Run .test.sh directly - it must exist when run_test_sh is false
-                if PathBuf::from(".test.sh").exists() {
-                    eprintln!("    Running .test.sh directly");
-                    let output = Command::new("bash")
-                        .arg(".test.sh")
-                        .status()
-                        .into_diagnostic()?;
-                    if output.success() {
-                        Ok(())
-                    } else {
-                        Err(miette::miette!(
-                            "Test script failed. Status code: {}",
-                            output.code().unwrap_or(1)
-                        ))
-                    }
+                if output.success() {
+                    Ok(())
                 } else {
                     Err(miette::miette!(
-                        ".test.sh file is required when use_shell is disabled"
+                        "Test script failed. Status code: {}",
+                        output.code().unwrap_or(1)
                     ))
                 }
-            };
-
-            let passed = status.is_ok();
-            if let Err(error) = &status {
-                eprintln!("    Error in {dir_name}: {error:?}");
+            } else {
+                Err(miette::miette!(
+                    ".test.sh file is required when use_shell is disabled"
+                ))
             }
+        };
 
-            let result = TestResult {
-                name: dir_name.to_string(),
-                passed,
-            };
-            test_results.push(result);
-
-            // Restore the current directory
-            env::set_current_dir(&cwd).into_diagnostic()?;
+        let passed = status.is_ok();
+        if let Err(error) = &status {
+            eprintln!("    Error in {dir_name}: {error:?}");
         }
+
+        let result = TestResult {
+            name: dir_name.to_string(),
+            passed,
+        };
+        test_results.push(result);
+
+        // Restore the current directory
+        env::set_current_dir(&cwd).into_diagnostic()?;
     }
 
     Ok(test_results)
@@ -263,7 +412,7 @@ async fn main() -> Result<ExitCode> {
     // If DEVENV_RUN_TESTS is set, run the tests.
     if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
         let args = Args::parse();
-        match run(&args).await {
+        match execute_command(&args).await {
             Ok(_) => return Ok(ExitCode::SUCCESS),
             Err(err) => {
                 eprintln!("Error: {err}");
@@ -383,7 +532,14 @@ exec '{bin_dir}/devenv' \
     }
 }
 
-async fn run(args: &Args) -> Result<()> {
+async fn execute_command(args: &Args) -> Result<()> {
+    match &args.command {
+        Commands::Run(run_args) => run_tests(run_args).await,
+        Commands::GenerateJson(gen_args) => generate_json(gen_args).await,
+    }
+}
+
+async fn run_tests(args: &RunArgs) -> Result<()> {
     let test_results = run_tests_in_directory(args).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
@@ -404,4 +560,17 @@ async fn run(args: &Args) -> Result<()> {
     } else {
         Ok(())
     }
+}
+
+async fn generate_json(args: &GenerateJsonArgs) -> Result<()> {
+    // Discover tests (filter by current system unless --all is specified)
+    let test_infos = discover_tests(&args.directories, !args.all)?;
+
+    // Extract just the metadata for JSON output
+    let test_metadata: Vec<TestMetadata> =
+        test_infos.into_iter().map(|info| info.metadata).collect();
+
+    let json_output = serde_json::to_string(&test_metadata).into_diagnostic()?;
+    println!("{}", json_output);
+    Ok(())
 }

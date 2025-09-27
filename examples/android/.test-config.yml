@@ -1,0 +1,3 @@
+# Android only works on x86_64-linux (not on ARM64 or macOS)
+supported_systems:
+  - x86_64-linux
