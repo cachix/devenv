@@ -26,7 +26,7 @@ struct Args {
 
 #[derive(Parser, Debug)]
 enum Commands {
-    /// Run tests (default)
+    /// Run tests
     #[clap(name = "run")]
     Run(RunArgs),
     /// Generate JSON metadata for tests
@@ -211,10 +211,7 @@ fn discover_tests(
                 continue;
             };
             let Some(dir_name) = dir_name_path.to_str() else {
-                eprintln!(
-                    "Warning: skipping directory with non-UTF8 name: {:?}",
-                    dir_name_path
-                );
+                eprintln!("Warning: skipping directory with non-UTF8 name: {dir_name_path:?}",);
                 continue;
             };
 
@@ -361,7 +358,6 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             }
         }
 
-        // TODO: wait for processes to shut down before exiting
         let status = if test_config.use_shell {
             devenv.test().await
         } else {
@@ -571,6 +567,6 @@ async fn generate_json(args: &GenerateJsonArgs) -> Result<()> {
         test_infos.into_iter().map(|info| info.metadata).collect();
 
     let json_output = serde_json::to_string(&test_metadata).into_diagnostic()?;
-    println!("{}", json_output);
+    println!("{json_output}");
     Ok(())
 }
