@@ -49,6 +49,5 @@ jobs:
           nix build -L --show-trace --print-out-paths --system ${{ inputs.system }} .#devenv-tasks-fast-build
 
       - name: Run integration tests
-        shell: ${{ steps.build-devenv.outputs.path }}/bin/devenv shell bash -- -e {0}
         run: |
-          cargo test --all-features
+          ${{ steps.build-devenv.outputs.path }}/bin/devenv shell -- cargo test --all-features
