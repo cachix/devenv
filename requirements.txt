@@ -63,6 +63,7 @@ mkdocs==1.6.1
     #   mkdocs-awesome-nav
     #   mkdocs-include-markdown-plugin
     #   mkdocs-material
+    #   mkdocs-raw-markdown
     #   mkdocs-rss-plugin
 mkdocs-awesome-nav==3.2.0
     # via -r requirements.in
@@ -74,6 +75,8 @@ mkdocs-material==9.6.20
     # via -r requirements.in
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
+mkdocs-raw-markdown @ git+https://github.com/cachix/mkdocs-raw-markdown.git@41025e27e33d4d11292a9c0976abc40e7c50ea3d
+    # via -r requirements.in
 mkdocs-rss-plugin==1.17.3
     # via -r requirements.in
 msgpack==1.1.1
