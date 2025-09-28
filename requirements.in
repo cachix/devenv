@@ -4,4 +4,3 @@ mkdocs-material[imaging]
 mkdocs-include-markdown-plugin
 mkdocs-rss-plugin
 mkdocs-awesome-nav
-git+https://github.com/cachix/mkdocs-raw-markdown.git
