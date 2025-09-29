@@ -12,6 +12,9 @@ use std::os::unix::fs::PermissionsExt;
 use tempfile::TempDir;
 use tokio::fs::{self, File};
 
+#[cfg(test)]
+use proptest::prelude::*;
+
 #[tokio::test]
 async fn test_task_name() -> Result<(), Error> {
     // Create a unique tempdir for this test
@@ -2444,4 +2447,249 @@ fn create_basic_script(tag: &str) -> std::io::Result<tempfile::TempPath> {
     create_script(&format!(
         "#!/bin/sh\necho 'Task {tag} is running' && sleep 0.1 && echo 'Task {tag} completed'"
     ))
+}
+
+// Property-based testing generators and helpers
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+
+    // Generator for valid task name segments (alphanumeric, underscore, hyphen)
+    fn valid_segment() -> impl Strategy<Value = String> {
+        prop::string::string_regex("[a-zA-Z0-9_-]{1,10}")
+            .unwrap()
+            .prop_filter("Non-empty segment", |s| !s.is_empty())
+    }
+
+    // Generator for valid task names (namespace:task or namespace:subnamespace:task)
+    fn valid_task_name() -> impl Strategy<Value = String> {
+        prop::collection::vec(valid_segment(), 2..=4)
+            .prop_map(|segments| segments.join(":"))
+            .prop_filter("Valid task name", |name| {
+                // Ensure it matches the validation requirements from tasks.rs
+                !name.is_empty()
+                    && name.contains(':')
+                    && name.split(':').count() >= 2
+                    && !name.starts_with(':')
+                    && !name.ends_with(':')
+                    && name
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '_' || c == '-')
+            })
+    }
+
+    // Generator for task hierarchies (collection of valid task names)
+    fn task_hierarchy() -> impl Strategy<Value = Vec<String>> {
+        prop::collection::vec(valid_task_name(), 1..=15).prop_filter(
+            "No duplicate task names",
+            |tasks| {
+                let mut seen = std::collections::HashSet::new();
+                tasks.iter().all(|task| seen.insert(task))
+            },
+        )
+    }
+
+    // Helper function to extract namespace matching logic
+    pub async fn get_matching_task_names(
+        task_names: &[String],
+        query: &str,
+    ) -> Result<Vec<String>, Error> {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("tasks.db");
+
+        // Create dummy scripts for all tasks
+        let dummy_script = create_basic_script("dummy").unwrap();
+        let script_path = dummy_script.to_str().unwrap();
+
+        // Build task configs
+        let tasks: Vec<_> = task_names
+            .iter()
+            .map(|name| {
+                json!({
+                    "name": name,
+                    "command": script_path
+                })
+            })
+            .collect();
+
+        let config = Config::try_from(json!({
+            "roots": [query],
+            "run_mode": "all",
+            "tasks": tasks
+        }))
+        .unwrap();
+
+        let tasks_result = Tasks::builder(config, VerbosityLevel::Quiet)
+            .with_db_path(db_path)
+            .build()
+            .await;
+
+        match tasks_result {
+            Ok(tasks) => {
+                // Extract the names of tasks that would be executed
+                let mut matched_names = Vec::new();
+                for &index in &tasks.roots {
+                    if let Some(task_state) = tasks.graph.node_weight(index) {
+                        let task_name = task_state.read().await.task.name.clone();
+                        matched_names.push(task_name);
+                    }
+                }
+
+                matched_names.sort();
+                Ok(matched_names)
+            }
+            Err(Error::TaskNotFound(_)) => {
+                // Only return empty vec for TaskNotFound (no matching tasks)
+                Ok(vec![])
+            }
+            Err(e) => {
+                // Propagate other errors (IoError, CacheError, InvalidTaskName, etc.)
+                Err(e)
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn prop_prefix_matching_correctness(
+            task_names in task_hierarchy(),
+            prefix in valid_segment()
+        ) {
+            tokio_test::block_on(async {
+                // Expected matches: all tasks that start with "prefix:"
+                let expected_matches: Vec<String> = task_names.iter()
+                    .filter(|name| name.starts_with(&format!("{}:", prefix)))
+                    .cloned()
+                    .collect();
+
+                // Skip test if no expected matches (nothing to test)
+                if expected_matches.is_empty() {
+                    return Ok(());
+                }
+
+                let actual_matches = get_matching_task_names(&task_names, &prefix).await?;
+
+                // Sort both for comparison
+                let mut expected_sorted = expected_matches.clone();
+                expected_sorted.sort();
+
+                prop_assert_eq!(actual_matches, expected_sorted);
+
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn prop_exact_task_matching(
+            task_names in task_hierarchy(),
+            task_index in 0..15usize
+        ) {
+            tokio_test::block_on(async {
+                // Skip if index is out of bounds
+                if task_index >= task_names.len() {
+                    return Ok(());
+                }
+
+                let exact_task = &task_names[task_index];
+                let matches = get_matching_task_names(&task_names, exact_task).await?;
+
+                // Should match exactly one task
+                prop_assert_eq!(matches.len(), 1);
+                prop_assert_eq!(&matches[0], exact_task);
+
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn prop_trailing_colon_equivalence(
+            task_names in task_hierarchy(),
+            prefix in valid_segment()
+        ) {
+            tokio_test::block_on(async {
+                // Skip if no tasks match this prefix
+                let has_matches = task_names.iter()
+                    .any(|name| name.starts_with(&format!("{}:", prefix)));
+                if !has_matches {
+                    return Ok(());
+                }
+
+                let matches_without_colon = get_matching_task_names(&task_names, &prefix).await?;
+                let matches_with_colon = get_matching_task_names(&task_names, &format!("{}:", prefix)).await?;
+
+                prop_assert_eq!(matches_without_colon, matches_with_colon);
+
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn prop_namespace_exclusion(
+            task_names in task_hierarchy(),
+            prefix in valid_segment()
+        ) {
+            tokio_test::block_on(async {
+                let matches = get_matching_task_names(&task_names, &prefix).await?;
+
+                // All matched tasks should start with the prefix
+                for matched_task in &matches {
+                    prop_assert!(
+                        matched_task.starts_with(&format!("{}:", prefix)),
+                        "Task '{}' should start with '{}:'", matched_task, prefix
+                    );
+                }
+
+                // All non-matched tasks should NOT start with the prefix
+                for task in &task_names {
+                    if task.starts_with(&format!("{}:", prefix)) {
+                        prop_assert!(
+                            matches.contains(task),
+                            "Task '{}' starts with '{}:' but was not matched", task, prefix
+                        );
+                    }
+                }
+
+                Ok(())
+            })?;
+        }
+
+        #[test]
+        fn prop_hierarchical_inclusion(
+            task_names in task_hierarchy()
+        ) {
+            tokio_test::block_on(async {
+                // For each task, test that shorter prefixes include longer ones
+                for task in &task_names {
+                    let segments: Vec<&str> = task.split(':').collect();
+
+                    // Test each level of the hierarchy
+                    for i in 1..segments.len() {
+                        let shorter_prefix = segments[0..i].join(":");
+                        let longer_prefix = segments[0..i+1].join(":");
+
+                        // Skip if the longer prefix doesn't match any tasks
+                        let has_longer_matches = task_names.iter()
+                            .any(|name| name.starts_with(&format!("{}:", longer_prefix)));
+                        if !has_longer_matches {
+                            continue;
+                        }
+
+                        let shorter_matches = get_matching_task_names(&task_names, &shorter_prefix).await?;
+                        let longer_matches = get_matching_task_names(&task_names, &longer_prefix).await?;
+
+                        // Every task matched by longer prefix should also be matched by shorter prefix
+                        for longer_match in &longer_matches {
+                            prop_assert!(
+                                shorter_matches.contains(longer_match),
+                                "Task '{}' matched by '{}' should also be matched by '{}'",
+                                longer_match, longer_prefix, shorter_prefix
+                            );
+                        }
+                    }
+                }
+
+                Ok(())
+            })?;
+        }
+    }
 }

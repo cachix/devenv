@@ -301,6 +301,13 @@ impl Tasks {
 
         self.graph = subgraph;
 
+        // Update roots to use the new node indices from the subgraph
+        self.roots = self
+            .roots
+            .iter()
+            .filter_map(|&old_index| node_map.get(&old_index).copied())
+            .collect();
+
         // Run topological sort on the subgraph
         match toposort(&self.graph, None) {
             Ok(indexes) => Ok(indexes),

@@ -29,3 +29,5 @@ nix = { workspace = true, features = ["user"] }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
+proptest = "1.8"
+tokio-test = "0.4"
