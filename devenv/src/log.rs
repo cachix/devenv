@@ -2,7 +2,7 @@ use console::style;
 use std::collections::HashSet;
 use std::fmt;
 use std::io::{self, IsTerminal};
-use std::sync::Mutex;
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
@@ -270,14 +270,14 @@ impl<'a> FormatFields<'a> for DevenvFieldFormatter {
 /// A filter layer that wraps IndicatifLayer and only shows progress bars for spans with `devenv.user_message`
 pub struct DevenvIndicatifFilter<S, F> {
     inner: IndicatifLayer<S, F>,
-    user_message_spans: Mutex<HashSet<span::Id>>,
+    user_message_spans: RwLock<HashSet<span::Id>>,
 }
 
 impl<S, F> DevenvIndicatifFilter<S, F> {
     pub fn new(inner: IndicatifLayer<S, F>) -> Self {
         Self {
             inner,
-            user_message_spans: Mutex::new(HashSet::new()),
+            user_message_spans: RwLock::new(HashSet::new()),
         }
     }
 }
@@ -318,7 +318,7 @@ where
             // This span has a user message, check if spinner should be disabled
             if !visitor.no_spinner {
                 // Show progress bar only if spinner is not disabled
-                if let Ok(mut spans) = self.user_message_spans.lock() {
+                if let Ok(mut spans) = self.user_message_spans.write() {
                     spans.insert(id.clone());
                 }
 
@@ -330,7 +330,7 @@ where
 
     fn on_enter(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
         // Only forward if this is a user message span
-        if let Ok(spans) = self.user_message_spans.lock()
+        if let Ok(spans) = self.user_message_spans.read()
             && spans.contains(id)
         {
             self.inner.on_enter(id, ctx);
@@ -339,7 +339,7 @@ where
 
     fn on_exit(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
         // Only forward if this is a user message span
-        if let Ok(spans) = self.user_message_spans.lock()
+        if let Ok(spans) = self.user_message_spans.read()
             && spans.contains(id)
         {
             self.inner.on_exit(id, ctx);
@@ -348,7 +348,7 @@ where
 
     fn on_close(&self, id: span::Id, ctx: layer::Context<'_, S>) {
         // Only forward if this is a user message span
-        let should_forward = if let Ok(mut spans) = self.user_message_spans.lock() {
+        let should_forward = if let Ok(mut spans) = self.user_message_spans.write() {
             let contained = spans.contains(&id);
             spans.remove(&id); // Clean up
             contained
