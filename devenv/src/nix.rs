@@ -353,25 +353,25 @@ impl Nix {
             }
         }
 
-        let result = if self.global_options.eval_cache
-            && options.cache_output
-            && supports_eval_caching(&cmd)
-            && self.pool.get().is_some()
-        {
+        let result = if supports_eval_caching(&cmd) && self.pool.get().is_some() {
             let pool = self.pool.get().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
 
-            cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
-            cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
-            cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
-            cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
-            cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
+            if self.global_options.eval_cache && options.cache_output {
+                cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
+                cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
+                cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
+                cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
+                cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
 
-            // Ignore anything in .devenv except for the specifically watched files above.
-            cached_cmd.unwatch_path(&self.paths.dotfile);
+                // Ignore anything in .devenv except for the specifically watched files above.
+                cached_cmd.unwatch_path(&self.paths.dotfile);
 
-            if self.global_options.refresh_eval_cache || options.refresh_cached_output {
-                cached_cmd.force_refresh();
+                if self.global_options.refresh_eval_cache || options.refresh_cached_output {
+                    cached_cmd.force_refresh();
+                }
+            } else {
+                cached_cmd.disable_cache();
             }
 
             if options.logging && !self.global_options.quiet {
@@ -394,8 +394,10 @@ impl Nix {
                                     _ => info!("{msg}"),
                                 },
                                 _ => info!("{msg}"),
-                            };
-                        }
+                            },
+                            _ => info!("{msg}"),
+                        };
+                    }
                 });
             }
 
