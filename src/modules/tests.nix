@@ -18,7 +18,6 @@
       internal = true;
       default = pkgs.writeShellScript "devenv-test" ''
         set -euo pipefail
-        echo "• Testing ..."
         ${config.enterTest}
       '';
     };

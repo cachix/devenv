@@ -932,10 +932,10 @@ impl Devenv {
         let span = info_span!(
             "test",
             devenv.user_message = "Running tests",
-            devenv.no_spinner = true
+            devenv.no_spinner = true,
+            test_script = %test_script
         );
         let result = async {
-            debug!("Running command: {test_script}");
             process::Command::new(&test_script)
                 .env_clear()
                 .envs(envs)

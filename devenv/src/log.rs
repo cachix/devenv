@@ -184,6 +184,8 @@ struct SpanContext {
     msg: String,
     /// Whether the span has an error event.
     has_error: bool,
+    /// Whether the spinner should be disabled for this span.
+    no_spinner: bool,
     /// Span timings
     timings: SpanTimings,
 }
@@ -389,14 +391,23 @@ where
         let span = ctx.span(id).expect("Span not found in context");
 
         #[derive(Default)]
-        struct UserMessageVisitor(Option<String>);
+        struct UserMessageVisitor {
+            user_message: Option<String>,
+            no_spinner: bool,
+        }
 
         impl Visit for UserMessageVisitor {
             fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
 
             fn record_str(&mut self, field: &Field, value: &str) {
                 if field.name() == "devenv.user_message" {
-                    self.0 = Some(value.to_string());
+                    self.user_message = Some(value.to_string());
+                }
+            }
+
+            fn record_bool(&mut self, field: &Field, value: bool) {
+                if field.name() == "devenv.no_spinner" {
+                    self.no_spinner = value;
                 }
             }
         }
@@ -406,12 +417,32 @@ where
 
         let mut ext = span.extensions_mut();
 
-        if let Some(msg) = visitor.0 {
+        if let Some(msg) = visitor.user_message {
             ext.insert(SpanContext {
                 msg: msg.clone(),
                 has_error: false,
+                no_spinner: visitor.no_spinner,
                 timings: SpanTimings::new(),
             });
+
+            // If spinner is disabled, emit a start event to show the initial message
+            if visitor.no_spinner {
+                let msg = msg.clone();
+
+                with_event_from_span!(
+                    id,
+                    span,
+                    "message" = msg,
+                    "devenv.is_user_message" = true,
+                    "devenv.span_event_kind" = SpanKind::Start as u8,
+                    "devenv.span_has_error" = false,
+                    |event| {
+                        drop(ext);
+                        drop(span);
+                        ctx.event(&event);
+                    }
+                );
+            }
         }
     }
 
@@ -532,23 +563,34 @@ where
             if let Some(span_ctx) = ext.get::<SpanContext>()
                 && visitor.is_user_message
             {
+                let ansi = writer.has_ansi_escapes();
                 let time_total = format!("{}", span_ctx.timings.total_duration());
                 let has_error = span_ctx.has_error;
                 let msg = &span_ctx.msg;
                 match span_kind {
                     SpanKind::Start => {
-                        // IndicatifLayer will handle the spinner, but we still need to
+                        // If spinner is disabled, show the start message with a dot
+                        if span_ctx.no_spinner {
+                            if ansi {
+                                write!(writer, "{prefix} ", prefix = style("•").blue())?;
+                            }
+                            return writeln!(writer, "{msg}");
+                        }
+                        // Otherwise, IndicatifLayer will handle the spinner, but we still need to
                         // return early to avoid duplicate output in our format layer
                         return Ok(());
                     }
 
                     SpanKind::End => {
-                        let prefix = if has_error {
-                            style("✖").red()
-                        } else {
-                            style("✓").green()
-                        };
-                        return writeln!(writer, "{prefix} {msg} in {time_total}");
+                        if ansi {
+                            let prefix = if has_error {
+                                style("✖").red()
+                            } else {
+                                style("✓").green()
+                            };
+                            write!(writer, "{prefix} ")?;
+                        }
+                        return writeln!(writer, "{msg} in {time_total}");
                     }
                 }
             }
