@@ -7,9 +7,6 @@ on:
 
 jobs:
   bump-version:
-    # Only bump the version on main.
-    # Other branches are fixed releases based off of main.
-    if: github.ref_name == 'main'
     permissions:
       contents: write
     runs-on: ubuntu-latest
