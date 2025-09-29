@@ -1,7 +1,7 @@
+use crate::SudoContext;
 use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
-use crate::SudoContext;
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::process::Stdio;
@@ -120,18 +120,19 @@ impl TaskState {
         let mut devenv_env = String::new();
         for (_, value) in outputs.iter() {
             if let Some(env) = value.get("devenv").and_then(|d| d.get("env"))
-                && let Some(env_obj) = env.as_object() {
-                    for (env_key, env_value) in env_obj {
-                        if let Some(env_str) = env_value.as_str() {
-                            command.env(env_key, env_str);
-                            devenv_env.push_str(&format!(
-                                "export {}={}\n",
-                                env_key,
-                                shell_escape::escape(std::borrow::Cow::Borrowed(env_str))
-                            ));
-                        }
+                && let Some(env_obj) = env.as_object()
+            {
+                for (env_key, env_value) in env_obj {
+                    if let Some(env_str) = env_value.as_str() {
+                        command.env(env_key, env_str);
+                        devenv_env.push_str(&format!(
+                            "export {}={}\n",
+                            env_key,
+                            shell_escape::escape(std::borrow::Cow::Borrowed(env_str))
+                        ));
                     }
                 }
+            }
         }
         // Internal for now
         command.env("DEVENV_TASK_ENV", devenv_env);

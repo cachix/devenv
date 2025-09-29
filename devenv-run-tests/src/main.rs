@@ -270,7 +270,11 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
     });
 
     let total_tests = test_infos.len();
-    eprintln!("Running {} test{}", total_tests, if total_tests == 1 { "" } else { "s" });
+    eprintln!(
+        "Running {} test{}",
+        total_tests,
+        if total_tests == 1 { "" } else { "s" }
+    );
 
     let mut test_results = vec![];
     let mut current_test_num = 0;
@@ -282,7 +286,10 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         let path = &test_info.path;
         let test_config = &test_info.config;
 
-        eprintln!("\n[{}/{}] Starting: {}", current_test_num, total_tests, dir_name);
+        eprintln!(
+            "\n[{}/{}] Starting: {}",
+            current_test_num, total_tests, dir_name
+        );
         eprintln!("{}", "-".repeat(50));
 
         let mut config = devenv::config::Config::load_from(path)?;
@@ -404,9 +411,15 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
         eprintln!("{}", "-".repeat(50));
         if passed {
-            eprintln!("✅ [{}/{}] Passed: {}", current_test_num, total_tests, dir_name);
+            eprintln!(
+                "✅ [{}/{}] Passed: {}",
+                current_test_num, total_tests, dir_name
+            );
         } else {
-            eprintln!("❌ [{}/{}] Failed: {}", current_test_num, total_tests, dir_name);
+            eprintln!(
+                "❌ [{}/{}] Failed: {}",
+                current_test_num, total_tests, dir_name
+            );
             if let Err(error) = &status {
                 eprintln!("    Error: {error:?}");
             }

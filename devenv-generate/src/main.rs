@@ -132,9 +132,10 @@ async fn main() -> Result<()> {
             }
 
             if let Ok(stderr) = String::from_utf8(git_output.stderr)
-                && !stderr.is_empty() {
-                    warn!("{}", &stderr);
-                }
+                && !stderr.is_empty()
+            {
+                warn!("{}", &stderr);
+            }
 
             let body = reqwest::Body::wrap_stream(streamreader);
 

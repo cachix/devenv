@@ -1,5 +1,5 @@
+use nix::unistd::{Gid, Uid, geteuid, setgid, setuid};
 use std::env;
-use nix::unistd::{Uid, Gid, setuid, setgid, geteuid};
 
 /// Context information about the original user when running under sudo
 #[derive(Debug, Clone)]
