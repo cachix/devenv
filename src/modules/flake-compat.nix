@@ -45,6 +45,11 @@ let
         ${wrapWithNixDevelop "devenv-flake-test" "\"$@\""}
         ;;
 
+      tasks)
+        # Re-enter the shell to ensure we use the latest configuration
+        ${wrapWithNixDevelop "devenv-flake-tasks" "\"$@\""}
+        ;;
+
       version)
         echo "devenv: ${version}"
         ;;
@@ -58,9 +63,10 @@ let
         echo
         echo "Commands:"
         echo
-        echo "test            Runs tests"
-        echo "up              Starts processes in foreground. See http://devenv.sh/processes"
-        echo "version         Display devenv version"
+        echo "tasks           Manage and run tasks"
+        echo "test            Run tests"
+        echo "up              Start processes in the foreground. See http://devenv.sh/processes"
+        echo "version         Display the devenv version"
         echo
         exit 1
     esac
@@ -82,12 +88,19 @@ let
       exec ${config.test} "$@"
     '';
 
+  # `devenv tasks` helper command
+  devenv-flake-tasks =
+    pkgs.writeShellScriptBin "devenv-flake-tasks" ''
+      exec ${config.task.package}/bin/devenv-tasks "$@"
+    '';
+
   devenvFlakeCompat = pkgs.symlinkJoin {
     name = "devenv-flake-compat";
     paths = [
       devenv-flake-wrapper
       devenv-flake-up
       devenv-flake-test
+      devenv-flake-tasks
     ];
   };
 in
