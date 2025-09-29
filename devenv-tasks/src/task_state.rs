@@ -1,6 +1,7 @@
 use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
+use crate::SudoContext;
 use miette::{IntoDiagnostic, Result, WrapErr};
 use std::collections::BTreeMap;
 use std::process::Stdio;
@@ -18,6 +19,7 @@ pub struct TaskState {
     pub status: TaskStatus,
     pub verbosity: VerbosityLevel,
     pub cancellation_token: Option<CancellationToken>,
+    pub sudo_context: Option<SudoContext>,
 }
 
 impl TaskState {
@@ -25,12 +27,14 @@ impl TaskState {
         task: TaskConfig,
         verbosity: VerbosityLevel,
         cancellation_token: Option<CancellationToken>,
+        sudo_context: Option<SudoContext>,
     ) -> Self {
         Self {
             task,
             status: TaskStatus::Pending,
             verbosity,
             cancellation_token,
+            sudo_context,
         }
     }
 
@@ -71,7 +75,19 @@ impl TaskState {
         cmd: &str,
         outputs: &BTreeMap<String, serde_json::Value>,
     ) -> Result<(Command, tempfile::NamedTempFile)> {
-        let mut command = Command::new(cmd);
+        // If we dropped privileges but have sudo context, restore sudo for the task
+        let mut command = if let Some(_ctx) = &self.sudo_context {
+            // Wrap with sudo to restore elevated privileges
+            let mut sudo_cmd = Command::new("sudo");
+            // Use -E to preserve environment variables
+            // The command here is a store path to a task script, not an arbitrary shell command.
+            sudo_cmd.args(["-E", cmd]);
+            sudo_cmd
+        } else {
+            // Normal execution - no sudo involved
+            Command::new(cmd)
+        };
+
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
         // Set working directory if specified

@@ -25,7 +25,7 @@ shell-escape.workspace = true
 glob = "0.3.3"
 
 [target.'cfg(unix)'.dependencies]
-nix.workspace = true
+nix = { workspace = true, features = ["user"] }
 
 [dev-dependencies]
 pretty_assertions.workspace = true

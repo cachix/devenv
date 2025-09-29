@@ -90,6 +90,7 @@ impl TasksBuilder {
                 task,
                 self.verbosity,
                 self.cancellation_token.clone(),
+                self.config.sudo_context.clone(),
             ))));
             task_indices.insert(name, index);
         }

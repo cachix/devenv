@@ -165,8 +165,6 @@ in
   };
 
   config = {
-    env.DEVENV_TASKS = builtins.toJSON tasksJSON;
-
     assertions = [
       {
         assertion = lib.all (task: task.package.meta.mainProgram == "bash" || task.binary == "bash" || task.exports == [ ]) (lib.attrValues config.tasks);
@@ -178,12 +176,14 @@ in
       }
     ];
 
+    env.DEVENV_TASKS = builtins.toJSON tasksJSON;
+    env.DEVENV_TASK_FILE = config.task.config;
+    task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
+
     infoSections."tasks" =
       lib.mapAttrsToList
         (name: task: "${name}: ${task.description} (${if task.command == null then "no command" else task.command})")
         config.tasks;
-
-    task.config = (pkgs.formats.json { }).generate "tasks.json" tasksJSON;
 
     tasks = {
       "devenv:enterShell" = {
