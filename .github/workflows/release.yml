@@ -25,8 +25,8 @@ concurrency:
 
 jobs:
   pipeline:
+    name: pipeline (${{ matrix.system }})
     strategy:
-      name: pipeline (${{ matrix.system }})
       fail-fast: false
       matrix:
         include:
