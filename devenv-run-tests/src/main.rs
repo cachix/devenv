@@ -90,6 +90,9 @@ struct TestConfig {
     /// Systems where this test is known to be broken (empty means no broken systems)
     #[serde(default)]
     broken_systems: Vec<String>,
+    /// Whether to run the test in a temporary directory (default: true)
+    #[serde(default = "default_use_tmp_dir")]
+    use_tmp_dir: bool,
 }
 
 fn default_git_init() -> bool {
@@ -100,6 +103,10 @@ fn default_use_shell() -> bool {
     true
 }
 
+fn default_use_tmp_dir() -> bool {
+    true
+}
+
 impl Default for TestConfig {
     fn default() -> Self {
         Self {
@@ -107,6 +114,7 @@ impl Default for TestConfig {
             use_shell: default_use_shell(),
             supported_systems: Vec::new(),
             broken_systems: Vec::new(),
+            use_tmp_dir: default_use_tmp_dir(),
         }
     }
 }
@@ -311,37 +319,53 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             )
             .wrap_err("Failed to add devenv input")?;
 
-        // Create temp directory in system temp dir, not the current directory
-        let tmpdir = TempDir::with_prefix(format!("devenv-run-tests-{dir_name}"))
-            .map_err(|e| miette::miette!("Failed to create temp directory: {}", e))?;
-        let devenv_root = tmpdir.path().to_path_buf();
-        let devenv_dotfile = tmpdir.path().join(".devenv");
+        // Determine whether to use a temporary directory
+        let (devenv_root, devenv_dotfile, _tmpdir) = if test_config.use_tmp_dir {
+            // Create temp directory in system temp dir, not the current directory
+            let tmpdir = TempDir::with_prefix(format!("devenv-run-tests-{dir_name}"))
+                .map_err(|e| miette::miette!("Failed to create temp directory: {}", e))?;
+            let devenv_root = tmpdir.path().to_path_buf();
+            let devenv_dotfile = tmpdir.path().join(".devenv");
 
-        // Copy the contents of the test directory to the temporary directory
-        let copy_content_status = Command::new("cp")
-            .arg("-r")
-            .arg(format!("{}/.", path.display()))
-            .arg(&devenv_root)
-            .status()
-            .into_diagnostic()?;
-        if !copy_content_status.success() {
-            return Err(miette::miette!("Failed to copy test directory"));
-        }
-
-        env::set_current_dir(&devenv_root).into_diagnostic()?;
-
-        // Initialize a git repository in the temporary directory if configured to do so.
-        // This helps Nix Flakes and git-hooks find the root of the project.
-        if test_config.git_init {
-            let git_init_status = Command::new("git")
-                .arg("init")
-                .arg("--initial-branch=main")
+            // Copy the contents of the test directory to the temporary directory
+            let copy_content_status = Command::new("cp")
+                .arg("-r")
+                .arg(format!("{}/.", path.display()))
+                .arg(&devenv_root)
                 .status()
                 .into_diagnostic()?;
-            if !git_init_status.success() {
-                return Err(miette::miette!("Failed to initialize the git repository"));
+            if !copy_content_status.success() {
+                return Err(miette::miette!("Failed to copy test directory"));
             }
-        }
+
+            env::set_current_dir(&devenv_root).into_diagnostic()?;
+
+            // Initialize a git repository in the temporary directory if configured to do so.
+            // This helps Nix Flakes and git-hooks find the root of the project.
+            if test_config.git_init {
+                let git_init_status = Command::new("git")
+                    .arg("init")
+                    .arg("--initial-branch=main")
+                    .status()
+                    .into_diagnostic()?;
+                if !git_init_status.success() {
+                    return Err(miette::miette!("Failed to initialize the git repository"));
+                }
+            }
+
+            (devenv_root, devenv_dotfile, Some(tmpdir))
+        } else {
+            // Run tests directly in the test directory
+            let devenv_root = path.to_path_buf();
+            let devenv_dotfile = path.join(".devenv");
+
+            env::set_current_dir(&devenv_root).into_diagnostic()?;
+
+            // Note: git_init is ignored when use_tmp_dir is false, as we assume
+            // the test directory is already set up correctly
+
+            (devenv_root, devenv_dotfile, None)
+        };
 
         let options = DevenvOptions {
             config,
