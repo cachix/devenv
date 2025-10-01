@@ -154,8 +154,9 @@
           };
           options = mkDocOptions { pkgs = pkgs; options = evaluatedModules.options; };
         in
-        workspace // {
-          default = self.packages.${system}.devenv;
+        {
+          inherit (workspace) devenv devenv-tasks devenv-tasks-fast-build;
+          default = builtins.trace (builtins.attrNames workspace) self.packages.${system}.devenv;
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
           devenv-generate-individual-docs =
