@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::SudoContext;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TaskConfig {

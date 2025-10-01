@@ -172,9 +172,10 @@ impl InternalLog {
             msg,
             ..
         } = self
-            && msg.starts_with("\u{1b}[31;1merror:") {
-                return true;
-            }
+            && msg.starts_with("\u{1b}[31;1merror:")
+        {
+            return true;
+        }
 
         false
     }
@@ -186,9 +187,10 @@ impl InternalLog {
             msg,
             ..
         } = self
-            && msg.starts_with("trace:") {
-                return true;
-            }
+            && msg.starts_with("trace:")
+        {
+            return true;
+        }
 
         false
     }

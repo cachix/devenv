@@ -926,9 +926,16 @@ impl Devenv {
             self.up(vec![], &options).await?;
         }
 
-        let span = info_span!("test", devenv.user_message = "Running tests");
+        // Disable the spinner for tests.
+        // Tests can arbitrarily write to stdout/stderr at the moment.
+        // Until that is changed, the spinner must be disabled.
+        let span = info_span!(
+            "test",
+            devenv.user_message = "Running tests",
+            devenv.no_spinner = true,
+            test_script = %test_script
+        );
         let result = async {
-            debug!("Running command: {test_script}");
             process::Command::new(&test_script)
                 .env_clear()
                 .envs(envs)

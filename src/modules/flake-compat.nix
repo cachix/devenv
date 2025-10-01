@@ -85,6 +85,7 @@ let
   # `devenv test` helper command
   devenv-flake-test =
     pkgs.writeShellScriptBin "devenv-flake-test" ''
+      echo "• Testing ..." >&2
       exec ${config.test} "$@"
     '';
 

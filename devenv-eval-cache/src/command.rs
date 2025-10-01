@@ -28,6 +28,7 @@ type OnStderr = Box<dyn Fn(&InternalLog) + Send>;
 
 pub struct CachedCommand<'a> {
     pool: &'a sqlx::SqlitePool,
+    enabled: bool,
     force_refresh: bool,
     extra_paths: Vec<PathBuf>,
     excluded_paths: Vec<PathBuf>,
@@ -38,6 +39,7 @@ impl<'a> CachedCommand<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
             pool,
+            enabled: true,
             force_refresh: false,
             extra_paths: Vec::new(),
             excluded_paths: Vec::new(),
@@ -67,6 +69,12 @@ impl<'a> CachedCommand<'a> {
         self
     }
 
+    /// Disable caching for this command.
+    pub fn disable_cache(&mut self) -> &mut Self {
+        self.enabled = false;
+        self
+    }
+
     pub fn on_stderr<F>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&InternalLog) + Send + 'static,
@@ -84,12 +92,13 @@ impl<'a> CachedCommand<'a> {
         let cmd_hash = compute_string_hash(&raw_cmd);
 
         // Check whether the command has been previously run and the files it depends on have not been changed.
-        if !self.force_refresh
+        if self.enabled
+            && !self.force_refresh
             && let Ok(Some(output)) =
                 query_cached_output(self.pool, &cmd_hash, &self.extra_paths).await
-            {
-                return Ok(output);
-            }
+        {
+            return Ok(output);
+        }
 
         cmd.arg("-vv")
             .arg("--log-format")
@@ -207,16 +216,18 @@ impl<'a> CachedCommand<'a> {
 
         let input_hash = Input::compute_input_hash(&inputs);
 
-        let _ = db::insert_command_with_inputs(
-            self.pool,
-            &raw_cmd,
-            &cmd_hash,
-            &input_hash,
-            &stdout,
-            &inputs,
-        )
-        .await
-        .map_err(CommandError::Sqlx)?;
+        if self.enabled {
+            let _ = db::insert_command_with_inputs(
+                self.pool,
+                &raw_cmd,
+                &cmd_hash,
+                &input_hash,
+                &stdout,
+                &inputs,
+            )
+            .await
+            .map_err(CommandError::Sqlx)?;
+        }
 
         Ok(Output {
             status,

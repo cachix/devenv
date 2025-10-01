@@ -353,25 +353,25 @@ impl Nix {
             }
         }
 
-        let result = if self.global_options.eval_cache
-            && options.cache_output
-            && supports_eval_caching(&cmd)
-            && self.pool.get().is_some()
-        {
+        let result = if supports_eval_caching(&cmd) && self.pool.get().is_some() {
             let pool = self.pool.get().unwrap();
             let mut cached_cmd = CachedCommand::new(pool);
 
-            cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
-            cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
-            cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
-            cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
-            cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
+            if self.global_options.eval_cache && options.cache_output {
+                cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
+                cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
+                cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
+                cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
+                cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
 
-            // Ignore anything in .devenv except for the specifically watched files above.
-            cached_cmd.unwatch_path(&self.paths.dotfile);
+                // Ignore anything in .devenv except for the specifically watched files above.
+                cached_cmd.unwatch_path(&self.paths.dotfile);
 
-            if self.global_options.refresh_eval_cache || options.refresh_cached_output {
-                cached_cmd.force_refresh();
+                if self.global_options.refresh_eval_cache || options.refresh_cached_output {
+                    cached_cmd.force_refresh();
+                }
+            } else {
+                cached_cmd.disable_cache();
             }
 
             if options.logging && !self.global_options.quiet {
@@ -384,18 +384,19 @@ impl Nix {
 
                 cached_cmd.on_stderr(move |log| {
                     if let Some(log) = log.filter_by_level(target_log_level)
-                        && let Some(msg) = log.get_msg() {
-                            use devenv_eval_cache::internal_log::InternalLog;
-                            match log {
-                                InternalLog::Msg { level, .. } => match *level {
-                                    Verbosity::Error => error!("{msg}"),
-                                    Verbosity::Warn => warn!("{msg}"),
-                                    Verbosity::Talkative => debug!("{msg}"),
-                                    _ => info!("{msg}"),
-                                },
+                        && let Some(msg) = log.get_msg()
+                    {
+                        use devenv_eval_cache::internal_log::InternalLog;
+                        match log {
+                            InternalLog::Msg { level, .. } => match *level {
+                                Verbosity::Error => error!("{msg}"),
+                                Verbosity::Warn => warn!("{msg}"),
+                                Verbosity::Talkative => debug!("{msg}"),
                                 _ => info!("{msg}"),
-                            };
+                            },
+                            _ => info!("{msg}"),
                         }
+                    };
                 });
             }
 
@@ -527,37 +528,38 @@ impl Nix {
 
                     // Configure a netrc file with the auth token if available
                     if !cachix_caches.caches.pull.is_empty()
-                        && let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
-                            let netrc_path = self
-                                .netrc_path
-                                .get_or_try_init(|| async {
-                                    let netrc_path = self.paths.dotfile.join("netrc");
-                                    let netrc_path_str = netrc_path.to_string_lossy().to_string();
+                        && let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN")
+                    {
+                        let netrc_path = self
+                            .netrc_path
+                            .get_or_try_init(|| async {
+                                let netrc_path = self.paths.dotfile.join("netrc");
+                                let netrc_path_str = netrc_path.to_string_lossy().to_string();
 
-                                    self.create_netrc_file(
-                                        &netrc_path,
-                                        &cachix_caches.caches.pull,
-                                        &auth_token,
-                                    )
-                                    .await?;
+                                self.create_netrc_file(
+                                    &netrc_path,
+                                    &cachix_caches.caches.pull,
+                                    &auth_token,
+                                )
+                                .await?;
 
-                                    Ok::<String, miette::Report>(netrc_path_str)
-                                })
-                                .await;
+                                Ok::<String, miette::Report>(netrc_path_str)
+                            })
+                            .await;
 
-                            match netrc_path {
-                                Ok(netrc_path) => {
-                                    final_args.extend_from_slice(&[
-                                        "--option",
-                                        "netrc-file",
-                                        netrc_path,
-                                    ]);
-                                }
-                                Err(e) => {
-                                    warn!("${e}")
-                                }
+                        match netrc_path {
+                            Ok(netrc_path) => {
+                                final_args.extend_from_slice(&[
+                                    "--option",
+                                    "netrc-file",
+                                    netrc_path,
+                                ]);
+                            }
+                            Err(e) => {
+                                warn!("${e}")
                             }
                         }
+                    }
                 }
             }
         }
