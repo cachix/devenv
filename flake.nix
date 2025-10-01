@@ -156,7 +156,7 @@
         in
         {
           inherit (workspace) devenv devenv-tasks devenv-tasks-fast-build;
-          default = builtins.trace (builtins.attrNames workspace) self.packages.${system}.devenv;
+          default = self.packages.${system}.devenv;
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
           devenv-generate-individual-docs =
