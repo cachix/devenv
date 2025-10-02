@@ -78,13 +78,13 @@
                     _module.args.pkgs = pkgs.appendOverlays (config.overlays or [ ]);
                   })
                   (inputs.devenv.modules + /top-level.nix)
-                  {
-                    devenv.cliVersion = version;
-                    devenv.root = devenv_root;
-                    devenv.dotfile = devenv_dotfile;
-                  }
                   ({ options, ... }: {
                     config.devenv = lib.mkMerge [
+                      {
+                        cliVersion = version;
+                        root = devenv_root;
+                        dotfile = devenv_dotfile;
+                      }
                       (pkgs.lib.optionalAttrs (builtins.hasAttr "tmpdir" options.devenv) {
                         tmpdir = devenv_tmpdir;
                       })
@@ -100,9 +100,9 @@
                     ];
                   })
                   ({ options, ... }: {
-                    config.git = lib.mkMerge [
+                    config = lib.mkMerge [
                       (pkgs.lib.optionalAttrs (builtins.hasAttr "git" options) {
-                        root = git_root;
+                        git.root = git_root;
                       })
                     ];
                   })
