@@ -26,7 +26,7 @@ jobs:
           - system: aarch64-darwin
             runs-on: '["self-hosted", "macOS", "ARM64"]'
           - system: x86_64-darwin
-            runs-on: '["macos-13"]'
+            runs-on: '["macos-15-intel"]'
     uses: ./.github/workflows/per-system-pipeline.yml
     secrets: inherit
     with:
