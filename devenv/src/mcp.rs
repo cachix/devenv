@@ -86,49 +86,8 @@ impl DevenvMcpServer {
             // let search_output = devenv.nix.search(".*", None).await?;
             // Parse search_output and return packages
         };
-         let devenv = Devenv::new(devenv_options).await;
- 
-         // Assemble the devenv to create required flake files
-         devenv.assemble(true).await?;
- 
-         // Use broad search term to get a wide set of packages
-         // We'll limit results later if needed
-         let search_output = devenv.nix.search(".*", None).await?;
- 
-         // Parse the search results from JSON
-         #[derive(Deserialize)]
-         struct PackageResults(BTreeMap<String, PackageResult>);
- 
-         #[derive(Deserialize)]
-         struct PackageResult {
-             version: String,
-             description: String,
-         }
- 
-         let search_json: PackageResults = serde_json::from_slice(&search_output.stdout)
-             .map_err(|e| miette::miette!("Failed to parse search results: {}", e))?;
- 
-         let packages: Vec<PackageInfo> = search_json
-             .0
-             .into_iter()
-             .map(|(key, value)| {
-                 // Format package name like in devenv.rs search function
-                 let parts: Vec<&str> = key.split('.').collect();
-                 let name = if parts.len() > 2 {
-                     format!("pkgs.{}", parts[2..].join("."))
-                 } else {
-                    format!("pkgs.{key}")
-                 };
- 
-                 PackageInfo {
-                     name,
-                     version: value.version,
-                     description: Some(value.description),
-                 }
-             })
-             .collect();
- 
-         Ok(packages)
+
+        return Ok(Vec::new());
     }
 
     async fn fetch_options(&self) -> Result<Vec<OptionInfo>> {

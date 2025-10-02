@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use devenv_tasks::{
-    Config, RunMode, SudoContext, TaskConfig, Tasks, VerbosityLevel, signal_handler::SignalHandler,
+    Config, RunMode, SudoContext, TaskConfig, Tasks, VerbosityLevel,
 };
 use std::{env, fs, path::PathBuf, sync::Arc};
 use tokio_shutdown::Shutdown;
@@ -59,6 +59,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<(), Box<dyn std::error::Error>> {
+    // Detect and handle sudo.
+    // Drop privileges immediately to avoid creating any files as root.
+    let sudo_context = SudoContext::detect();
+    if let Some(ref ctx) = sudo_context {
+        ctx.drop_privileges()
+            .map_err(|e| format!("Failed to drop privileges: {}", e))?;
+    }
+
     let args = Args::parse();
 
     // Determine verbosity level from DEVENV_CMDLINE
@@ -126,10 +134,6 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<(), Box<dyn std::error::Er
 
             // Run tasks and check completion status
             let _outputs = tasks.run().await;
-
-            if signal_handler.last_signal().is_some() {
-                signal_handler.exit_process();
-            }
 
             // Check task completion status and exit with appropriate code
             let status = tasks.get_completion_status().await;

@@ -20,7 +20,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::OnceCell;
-use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
 use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
 use tracing_subscriber::registry::LookupSpan;
 
@@ -51,7 +50,6 @@ fn get_user_operation_id() -> Option<devenv_tui::OperationId> {
         None
     })
 }
->>>>>>> Conflict 1 of 1 ends
 
 pub struct Nix {
     pub options: nix_backend::Options,

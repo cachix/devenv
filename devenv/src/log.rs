@@ -207,8 +207,6 @@ struct SpanContext {
     operation_id: Option<String>,
     /// Whether the span has an error event.
     has_error: bool,
-    /// Whether the spinner should be disabled for this span.
-    no_spinner: bool,
     /// Span timings
     timings: SpanTimings,
     /// Progress tracking
@@ -521,7 +519,6 @@ where
                 detail: visitor.detail,
                 operation_id: visitor.operation_id,
                 has_error: false,
-                no_spinner: visitor.no_spinner,
                 timings: SpanTimings::new(),
                 progress_current: visitor.progress_current,
                 progress_total: visitor.progress_total,
@@ -534,25 +531,6 @@ where
                 log_stdout_lines: Vec::new(),
                 log_stderr_lines: Vec::new(),
             });
-
-            // If spinner is disabled, emit a start event to show the initial message
-            if visitor.no_spinner {
-                let msg = msg.clone();
-
-                with_event_from_span!(
-                    id,
-                    span,
-                    "message" = msg,
-                    "devenv.is_user_message" = true,
-                    "devenv.span_event_kind" = SpanKind::Start as u8,
-                    "devenv.span_has_error" = false,
-                    |event| {
-                        drop(ext);
-                        drop(span);
-                        ctx.event(&event);
-                    }
-                );
-            }
         }
     }
 
@@ -777,44 +755,35 @@ where
         {
             let ext = span.extensions();
 
-                 if let Some(span_ctx) = ext.get::<SpanContext>()
-                    && visitor.is_ui_message 
-                 {
-                        let time_total = format!("{}", span_ctx.timings.total_duration());
-                        let has_error = span_ctx.has_error;
-                        let formatted_message = format_ui_message(
-                            &span_ctx.ui_type,
-                            &span_ctx.message,
-                            &span_ctx.detail,
-                        );
+            if let Some(span_ctx) = ext.get::<SpanContext>()
+                && visitor.is_ui_message 
+            {
+                let time_total = format!("{}", span_ctx.timings.total_duration());
+                let has_error = span_ctx.has_error;
+                let formatted_message = format_ui_message(
+                    &span_ctx.ui_type,
+                    &span_ctx.message,
+                    &span_ctx.detail,
+                );
 
-                        match span_kind {
-                            SpanKind::Start => {
-                                // IndicatifLayer will handle the spinner, but we still need to
-                                // return early to avoid duplicate output in our format layer
-                                return Ok(());
-                            }
-                            return writeln!(writer, "{msg}");
-                        }
-                        // Otherwise, IndicatifLayer will handle the spinner, but we still need to
+                match span_kind {
+                    SpanKind::Start => {
+                        // IndicatifLayer will handle the spinner, but we still need to
                         // return early to avoid duplicate output in our format layer
                         return Ok(());
                     }
 
-                             SpanKind::End => {
-                                 let prefix = if has_error {
-                                     style("✖").red()
-                                 } else {
-                                     style("✓").green()
-                                 };
-                                return writeln!(
-                                    writer,
-                                    "{} {} in {}",
-                                    prefix, formatted_message, time_total
-                                );
-                             }
-                        }
-                        return writeln!(writer, "{msg} in {time_total}");
+                    SpanKind::End => {
+                        let prefix = if has_error {
+                            style("✖").red()
+                        } else {
+                            style("✓").green()
+                        };
+                        return writeln!(
+                            writer,
+                            "{} {} in {}",
+                            prefix, formatted_message, time_total
+                        );
                     }
                 }
             }

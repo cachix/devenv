@@ -1089,7 +1089,7 @@ impl Devenv {
             "test_run",
             devenv.ui.message = "Running tests",
             devenv.ui.type = "user",
-            devenv.ui.id = "test-run"
+            devenv.ui.id = "test-run",
             test_script = %test_script
         );
         let result = async {

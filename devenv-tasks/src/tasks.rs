@@ -487,13 +487,13 @@ impl Tasks {
                                         Some("cached"),
                                     );
                                 }
-                                Skipped::NotImplemented => {
+                                Skipped::NoCommand => {
                                     tracing_events::emit_task_completed(
                                         task_name,
                                         "completed",
                                         "skipped",
                                         None,
-                                        Some("not_implemented"),
+                                        Some("no_command"),
                                     );
                                 }
                             },

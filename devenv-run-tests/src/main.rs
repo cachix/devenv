@@ -19,14 +19,14 @@ const ALL_SYSTEMS: &[&str] = &[
 ];
 const DEFAULT_DIRECTORIES: &[&str] = &["examples", "tests"];
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug )]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     #[clap(subcommand)]
     command: Commands,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug )]
 enum Commands {
     /// Run tests
     #[clap(name = "run")]

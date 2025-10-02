@@ -287,167 +287,167 @@ impl TaskState {
                 return Ok(TaskCompleted::Skipped(Skipped::Cached(Output(task_output))));
             }
         }
-        if let Some(cmd) = &self.task.command {
-            // Emit tracing event for command start
-            crate::tracing_events::emit_command_start(&self.task.name, cmd);
+        let Some(cmd) = &self.task.command else {
+            return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
+        };
 
-            let (mut command, outputs_file) = self
-                .prepare_command(cmd, outputs)
-                .wrap_err("Failed to prepare task command")?;
+        // Emit tracing event for command start
+        crate::tracing_events::emit_command_start(&self.task.name, cmd);
 
-            let result = command
-                .spawn()
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to spawn command for {cmd}"));
+        let (mut command, outputs_file) = self
+            .prepare_command(cmd, outputs)
+            .wrap_err("Failed to prepare task command")?;
 
-            let mut child = match result {
-                Ok(c) => c,
-                Err(err) => {
-                    // Emit tracing event for command spawn failure
-                    let cmd = self.task.command.as_ref().unwrap();
-                    crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
+        let result = command
+            .spawn()
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to spawn command for {cmd}"));
 
-                    return Ok(TaskCompleted::Failed(
-                        now.elapsed(),
-                        TaskFailure {
-                            stdout: Vec::new(),
-                            stderr: Vec::new(),
-                            error: format!("{err:#}"),
+        let mut child = match result {
+            Ok(c) => c,
+            Err(err) => {
+                // Emit tracing event for command spawn failure
+                let cmd = self.task.command.as_ref().unwrap();
+                crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
+
+                return Ok(TaskCompleted::Failed(
+                    now.elapsed(),
+                    TaskFailure {
+                        stdout: Vec::new(),
+                        stderr: Vec::new(),
+                        error: format!("{err:#}"),
+                    },
+                ));
+            }
+        };
+
+        let stdout = match child.stdout.take() {
+            Some(stdout) => stdout,
+            None => {
+                return Ok(TaskCompleted::Failed(
+                    now.elapsed(),
+                    TaskFailure {
+                        stdout: Vec::new(),
+                        stderr: Vec::new(),
+                        error: "Failed to capture stdout".to_string(),
+                    },
+                ));
+            }
+        };
+        let stderr = match child.stderr.take() {
+            Some(stderr) => stderr,
+            None => {
+                return Ok(TaskCompleted::Failed(
+                    now.elapsed(),
+                    TaskFailure {
+                        stdout: Vec::new(),
+                        stderr: Vec::new(),
+                        error: "Failed to capture stderr".to_string(),
+                    },
+                ));
+            }
+        };
+
+        let mut stderr_reader = BufReader::new(stderr).lines();
+        let mut stdout_reader = BufReader::new(stdout).lines();
+
+        let mut stdout_lines = Vec::new();
+        let mut stderr_lines = Vec::new();
+
+        // Track EOF status for stdout and stderr streams
+        let mut stdout_closed = false;
+        let mut stderr_closed = false;
+
+        // Check if this is a process task (always show output for processes)
+        let is_process = self.task.name.starts_with("devenv:processes:");
+
+        loop {
+            // No need for manual cancellation - tokio-graceful-shutdown will handle task abortion at the parent level
+            // Individual tasks just run until completion or until the JoinSet is aborted by the parent
+            tokio::select! {
+                result = stdout_reader.next_line(), if !stdout_closed => {
+                    match result {
+                        Ok(Some(line)) => {
+                            if self.verbosity == VerbosityLevel::Verbose || is_process {
+                                eprintln!("[{}] {}", self.task.name, line);
+                            }
+                            stdout_lines.push((std::time::Instant::now(), line));
                         },
-                    ));
-                }
-            };
-
-            let stdout = match child.stdout.take() {
-                Some(stdout) => stdout,
-                None => {
-                    return Ok(TaskCompleted::Failed(
-                        now.elapsed(),
-                        TaskFailure {
-                            stdout: Vec::new(),
-                            stderr: Vec::new(),
-                            error: "Failed to capture stdout".to_string(),
+                        Ok(None) => {
+                            stdout_closed = true;
                         },
-                    ));
-                }
-            };
-            let stderr = match child.stderr.take() {
-                Some(stderr) => stderr,
-                None => {
-                    return Ok(TaskCompleted::Failed(
-                        now.elapsed(),
-                        TaskFailure {
-                            stdout: Vec::new(),
-                            stderr: Vec::new(),
-                            error: "Failed to capture stderr".to_string(),
+                        Err(e) => {
+                            error!("Error reading stdout: {}", e);
+                            stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                            stdout_closed = true;
                         },
-                    ));
-                }
-            };
-
-            let mut stderr_reader = BufReader::new(stderr).lines();
-            let mut stdout_reader = BufReader::new(stdout).lines();
-
-            let mut stdout_lines = Vec::new();
-            let mut stderr_lines = Vec::new();
-
-            // Track EOF status for stdout and stderr streams
-            let mut stdout_closed = false;
-            let mut stderr_closed = false;
-
-            // Check if this is a process task (always show output for processes)
-            let is_process = self.task.name.starts_with("devenv:processes:");
-
-            loop {
-                // No need for manual cancellation - tokio-graceful-shutdown will handle task abortion at the parent level
-                // Individual tasks just run until completion or until the JoinSet is aborted by the parent
-                tokio::select! {
-                    result = stdout_reader.next_line(), if !stdout_closed => {
-                        match result {
-                            Ok(Some(line)) => {
-                                if self.verbosity == VerbosityLevel::Verbose || is_process {
-                                    eprintln!("[{}] {}", self.task.name, line);
-                                }
-                                stdout_lines.push((std::time::Instant::now(), line));
-                            },
-                            Ok(None) => {
-                                stdout_closed = true;
-                            },
-                            Err(e) => {
-                                error!("Error reading stdout: {}", e);
-                                stderr_lines.push((std::time::Instant::now(), e.to_string()));
-                                stdout_closed = true;
-                            },
-                        }
                     }
-                    result = stderr_reader.next_line(), if !stderr_closed => {
-                        match result {
-                            Ok(Some(line)) => {
-                                if self.verbosity == VerbosityLevel::Verbose || is_process {
-                                    eprintln!("[{}] {}", self.task.name, line);
-                                }
-                                stderr_lines.push((std::time::Instant::now(), line));
-                            },
-                            Ok(None) => {
-                                stderr_closed = true;
-                            },
-                            Err(e) => {
-                                error!("Error reading stderr: {}", e);
-                                stderr_lines.push((std::time::Instant::now(), e.to_string()));
-                                stderr_closed = true;
-                            },
-                        }
+                }
+                result = stderr_reader.next_line(), if !stderr_closed => {
+                    match result {
+                        Ok(Some(line)) => {
+                            if self.verbosity == VerbosityLevel::Verbose || is_process {
+                                eprintln!("[{}] {}", self.task.name, line);
+                            }
+                            stderr_lines.push((std::time::Instant::now(), line));
+                        },
+                        Ok(None) => {
+                            stderr_closed = true;
+                        },
+                        Err(e) => {
+                            error!("Error reading stderr: {}", e);
+                            stderr_lines.push((std::time::Instant::now(), e.to_string()));
+                            stderr_closed = true;
+                        },
                     }
-                    result = child.wait() => {
-                        match result {
-                            Ok(status) => {
-                                // Emit tracing event for command completion
-                                let cmd = self.task.command.as_ref().unwrap(); // Safe since we're in the command branch
-                                let exit_code = status.code();
-                                let success = status.success();
-                                crate::tracing_events::emit_command_end(&self.task.name, cmd, exit_code, success);
+                }
+                result = child.wait() => {
+                    match result {
+                        Ok(status) => {
+                            // Emit tracing event for command completion
+                            let cmd = self.task.command.as_ref().unwrap(); // Safe since we're in the command branch
+                            let exit_code = status.code();
+                            let success = status.success();
+                            crate::tracing_events::emit_command_end(&self.task.name, cmd, exit_code, success);
 
-                                // Update the file states to capture any changes the task made,
-                                // regardless of whether the task succeeded or failed
-                                let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
-                                for path in expanded_paths {
-                                    cache.update_file_state(&self.task.name, &path).await?;
-                                }
+                            // Update the file states to capture any changes the task made,
+                            // regardless of whether the task succeeded or failed
+                            let expanded_paths = expand_glob_patterns(&self.task.exec_if_modified);
+                            for path in expanded_paths {
+                                cache.update_file_state(&self.task.name, &path).await?;
+                            }
 
-                                if status.success() {
-                                    return Ok(TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await));
-                                } else {
-                                    return Ok(TaskCompleted::Failed(
-                                        now.elapsed(),
-                                        TaskFailure {
-                                            stdout: stdout_lines,
-                                            stderr: stderr_lines,
-                                            error: format!("Task exited with status: {status}"),
-                                        },
-                                    ));
-                                }
-                            },
-                            Err(e) => {
-                                // Emit tracing event for command error
-                                let cmd = self.task.command.as_ref().unwrap(); // Safe since we're in the command branch
-                                crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
-
-                                error!("{}> Error waiting for command: {}", self.task.name, e);
+                            if status.success() {
+                                return Ok(TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await));
+                            } else {
                                 return Ok(TaskCompleted::Failed(
                                     now.elapsed(),
                                     TaskFailure {
                                         stdout: stdout_lines,
                                         stderr: stderr_lines,
-                                        error: format!("Error waiting for command: {e}"),
+                                        error: format!("Task exited with status: {status}"),
                                     },
                                 ));
                             }
+                        },
+                        Err(e) => {
+                            // Emit tracing event for command error
+                            let cmd = self.task.command.as_ref().unwrap(); // Safe since we're in the command branch
+                            crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
+
+                            error!("{}> Error waiting for command: {}", self.task.name, e);
+                            return Ok(TaskCompleted::Failed(
+                                now.elapsed(),
+                                TaskFailure {
+                                    stdout: stdout_lines,
+                                    stderr: stderr_lines,
+                                    error: format!("Error waiting for command: {e}"),
+                                },
+                            ));
                         }
                     }
                 }
             }
-        } else {
-            return Ok(TaskCompleted::Skipped(Skipped::NoCommand));
         }
     }
 }
