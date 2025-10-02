@@ -14,8 +14,8 @@ pub use error::Error;
 pub use privileges::SudoContext;
 pub use tasks::{Tasks, TasksBuilder};
 pub use types::{
-    determine_ui_mode, is_tty, Outputs, TaskCompleted, TaskOutputs, TaskStatus, TasksStatus,
-    UiMode, VerbosityLevel,
+    Outputs, TaskCompleted, TaskOutputs, TaskStatus, TasksStatus, UiMode, VerbosityLevel,
+    determine_ui_mode, is_tty,
 };
 pub use ui::{TasksUi, TasksUiBuilder};
 

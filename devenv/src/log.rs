@@ -379,7 +379,7 @@ where
 
             fn record_str(&mut self, field: &Field, value: &str) {
                 if field.name() == "devenv.ui.message" {
-                     self.0 = Some(value.to_string());
+                    self.0 = Some(value.to_string());
                 }
             }
         }
@@ -390,7 +390,7 @@ where
         if let Some(_ui_message) = visitor.0 {
             // This span has a ui message, so it should get a progress bar
             if let Ok(mut spans) = self.ui_message_spans.write() {
-                 spans.insert(id.clone());
+                spans.insert(id.clone());
             }
 
             // Forward the span to IndicatifLayer - it will show devenv.ui.* fields in {span_fields}
@@ -756,15 +756,12 @@ where
             let ext = span.extensions();
 
             if let Some(span_ctx) = ext.get::<SpanContext>()
-                && visitor.is_ui_message 
+                && visitor.is_ui_message
             {
                 let time_total = format!("{}", span_ctx.timings.total_duration());
                 let has_error = span_ctx.has_error;
-                let formatted_message = format_ui_message(
-                    &span_ctx.ui_type,
-                    &span_ctx.message,
-                    &span_ctx.detail,
-                );
+                let formatted_message =
+                    format_ui_message(&span_ctx.ui_type, &span_ctx.message, &span_ctx.detail);
 
                 match span_kind {
                     SpanKind::Start => {

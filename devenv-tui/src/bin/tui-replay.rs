@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog};
-use devenv_tui::{init_tui, OperationId};
+use devenv_tui::{OperationId, init_tui};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;

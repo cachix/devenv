@@ -1,9 +1,9 @@
-use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use devenv_eval_cache::Op;
+use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{debug, debug_span, info, warn, Instrument};
+use tracing::{Instrument, debug, debug_span, info, warn};
 use tracing_subscriber::registry::LookupSpan;
 
 /// Get the current user operation ID from the active span extensions

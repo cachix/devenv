@@ -3,9 +3,9 @@ use crate::{
     model::{Activity, ActivitySummary, ActivityVariant, Model, TaskDisplayStatus},
 };
 use human_repr::{HumanCount, HumanDuration};
+use iocraft::Context;
 use iocraft::components::ContextProvider;
 use iocraft::prelude::*;
-use iocraft::Context;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 

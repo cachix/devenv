@@ -1,7 +1,5 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{
-    Config, RunMode, SudoContext, TaskConfig, Tasks, VerbosityLevel,
-};
+use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, VerbosityLevel};
 use std::{env, fs, path::PathBuf, sync::Arc};
 use tokio_shutdown::Shutdown;
 

@@ -19,14 +19,14 @@ const ALL_SYSTEMS: &[&str] = &[
 ];
 const DEFAULT_DIRECTORIES: &[&str] = &["examples", "tests"];
 
-#[derive(Parser, Debug )]
+#[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     #[clap(subcommand)]
     command: Commands,
 }
 
-#[derive(Parser, Debug )]
+#[derive(Parser, Debug)]
 enum Commands {
     /// Run tests
     #[clap(name = "run")]
@@ -257,7 +257,10 @@ fn discover_tests(
     Ok(test_infos)
 }
 
-async fn run_tests_in_directory(args: &RunArgs, shutdown: Arc<Shutdown>) -> Result<Vec<TestResult>> {
+async fn run_tests_in_directory(
+    args: &RunArgs,
+    shutdown: Arc<Shutdown>,
+) -> Result<Vec<TestResult>> {
     let cwd = env::current_dir().into_diagnostic()?;
 
     // Discover tests (filtered by current system)
@@ -559,7 +562,7 @@ exec '{bin_dir}/devenv' \
                 wrapper_dir.path().display(),
                 env::var("PATH").unwrap_or_default()
             ),
-         ),
+        ),
         (
             "HOME",
             env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()),
@@ -590,7 +593,7 @@ exec '{bin_dir}/devenv' \
     if let Ok(tzdir) = env::var("TZDIR") {
         env.push(("TZDIR", tzdir));
     }
- 
+
     let mut cmd = Command::new(&executable_path);
     cmd.stdin(Stdio::inherit())
         .stdout(Stdio::inherit())

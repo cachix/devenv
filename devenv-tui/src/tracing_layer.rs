@@ -1,18 +1,19 @@
+use crate::Operation;
 use crate::model::{
     Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, ProgressActivity,
     QueryActivity,
 };
-use crate::Operation;
 use crate::{LogLevel, LogSource, NixActivityState, OperationId, OperationResult};
 use rand;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{
+    Event, Subscriber,
     field::{Field, Visit},
-    span, Event, Subscriber,
+    span,
 };
-use tracing_subscriber::{layer::Context, Layer};
+use tracing_subscriber::{Layer, layer::Context};
 
 /// Tracing layer that integrates with the TUI system
 pub struct DevenvTuiLayer {

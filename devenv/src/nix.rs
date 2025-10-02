@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::OnceCell;
-use tracing::{debug, debug_span, error, info, instrument, warn, Instrument};
+use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
 use tracing_subscriber::registry::LookupSpan;
 
 /// Get the current user operation ID from the active span extensions
