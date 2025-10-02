@@ -60,7 +60,7 @@ You can replace existing devenv modules using the `disabledModules` mechanism. T
     };
   };
 
-  config = lib.mkIf config.languages.rust..enable {
+  config = lib.mkIf config.languages.rust.enable {
     packages = [ pkgs.rustc ];
   };
 }
