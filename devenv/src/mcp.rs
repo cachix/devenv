@@ -1,15 +1,12 @@
 #![allow(dead_code)]
 
 use crate::config::Config;
-use crate::devenv::{Devenv, DevenvOptions};
-use crate::nix_backend;
 use miette::Result;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::{ServerHandler, ServiceExt, tool, tool_router};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -87,7 +84,7 @@ impl DevenvMcpServer {
             // Parse search_output and return packages
         };
 
-        return Ok(Vec::new());
+        Ok(Vec::new())
     }
 
     async fn fetch_options(&self) -> Result<Vec<OptionInfo>> {
@@ -105,7 +102,7 @@ impl DevenvMcpServer {
             // Return parsed options
         };
 
-        return Ok(Vec::new());
+        Ok(Vec::new())
     }
 }
 

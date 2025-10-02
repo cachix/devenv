@@ -3,7 +3,7 @@ use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultTy
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{Instrument, debug, debug_span, info, warn};
+use tracing::{debug, debug_span, info, warn};
 use tracing_subscriber::registry::LookupSpan;
 
 /// Get the current user operation ID from the active span extensions
@@ -12,8 +12,8 @@ fn current_operation_id() -> Option<devenv_tui::OperationId> {
     tracing::dispatcher::get_default(|dispatch| {
         if let Some(registry) = dispatch.downcast_ref::<tracing_subscriber::Registry>() {
             let current_span = tracing::Span::current();
-            if let Some(id) = current_span.id() {
-                if let Some(span_ref) = registry.span(&id) {
+            if let Some(id) = current_span.id()
+                && let Some(span_ref) = registry.span(&id) {
                     // Check if current span has an operation ID (stored by DevenvLayer)
                     if let Some(op_id) = span_ref.extensions().get::<devenv_tui::OperationId>() {
                         return Some(op_id.clone());
@@ -28,7 +28,6 @@ fn current_operation_id() -> Option<devenv_tui::OperationId> {
                         current = parent.parent();
                     }
                 }
-            }
         }
         None
     })
@@ -98,8 +97,8 @@ impl NixLogBridge {
 
     /// Flush any pending evaluation updates
     fn flush_evaluation_updates(&self) {
-        if let Ok(mut state) = self.evaluation_state.lock() {
-            if !state.pending_files.is_empty() {
+        if let Ok(mut state) = self.evaluation_state.lock()
+            && !state.pending_files.is_empty() {
                 if let Ok(current) = self.current_operation_id.lock() {
                     if let Some(operation_id) = current.as_ref() {
                         let files: Vec<String> = state.pending_files.drain(..).collect();
@@ -128,7 +127,6 @@ impl NixLogBridge {
                     tracing::warn!("Failed to lock operation ID for flushing");
                 }
             }
-        }
     }
 
     /// Process a Nix internal log line and emit appropriate tracing events
@@ -205,8 +203,8 @@ impl NixLogBridge {
                 }
                 InternalLog::SetPhase { phase } => {
                     // Find the most recent build activity and update its phase
-                    if let Ok(activities) = self.active_activities.lock() {
-                        if let Some((activity_id, _)) = activities
+                    if let Ok(activities) = self.active_activities.lock()
+                        && let Some((activity_id, _)) = activities
                             .iter()
                             .find(|(_, info)| info.activity_type == ActivityType::Build)
                         {
@@ -224,16 +222,14 @@ impl NixLogBridge {
                                 info!(devenv_log = true, "Build phase: {}", phase);
                             });
                         }
-                    }
                 }
                 InternalLog::Msg { level, ref msg, .. } => {
                     // First check if this is a file evaluation message
-                    if let Some(op) = Op::from_internal_log(&log) {
-                        if let Op::EvaluatedFile { source } = op {
+                    if let Some(op) = Op::from_internal_log(&log)
+                        && let Op::EvaluatedFile { source } = op {
                             self.handle_file_evaluation(operation_id.clone(), source);
                             return;
                         }
-                    }
 
                     // Handle regular log messages from Nix builds
                     if level <= Verbosity::Warn {
@@ -270,8 +266,7 @@ impl NixLogBridge {
 
         match activity_type {
             ActivityType::Build => {
-                let derivation_path = fields
-                    .get(0)
+                let derivation_path = fields.first()
                     .and_then(|f| match f {
                         Field::String(s) => Some(s.clone()),
                         _ => None,
@@ -302,7 +297,7 @@ impl NixLogBridge {
             }
             ActivityType::QueryPathInfo => {
                 if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.get(0), fields.get(1))
+                    (fields.first(), fields.get(1))
                 {
                     let package_name = extract_package_name(store_path);
 
@@ -326,7 +321,7 @@ impl NixLogBridge {
             ActivityType::CopyPath => {
                 // CopyPath is the actual download activity that shows byte progress
                 if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.get(0), fields.get(1))
+                    (fields.first(), fields.get(1))
                 {
                     let package_name = extract_package_name(store_path);
 
@@ -371,8 +366,8 @@ impl NixLogBridge {
 
     /// Handle the stop of a Nix activity
     fn handle_activity_stop(&self, activity_id: u64, success: bool) {
-        if let Ok(mut activities) = self.active_activities.lock() {
-            if let Some(activity_info) = activities.remove(&activity_id) {
+        if let Ok(mut activities) = self.active_activities.lock()
+            && let Some(activity_info) = activities.remove(&activity_id) {
                 // If this is the last activity, flush any pending evaluation updates
                 if activities.is_empty() {
                     self.flush_evaluation_updates();
@@ -460,7 +455,6 @@ impl NixLogBridge {
                     _ => {}
                 }
             }
-        }
     }
 
     /// Handle activity result messages (like progress updates)
@@ -479,10 +473,9 @@ impl NixLogBridge {
                         Some(Field::Int(expected)),
                         Some(Field::Int(running)),
                         Some(Field::Int(failed)),
-                    ) = (fields.get(0), fields.get(1), fields.get(2), fields.get(3))
-                    {
-                        if let Ok(activities) = self.active_activities.lock() {
-                            if let Some(activity_info) = activities.get(&activity_id) {
+                    ) = (fields.first(), fields.get(1), fields.get(2), fields.get(3))
+                        && let Ok(activities) = self.active_activities.lock()
+                            && let Some(activity_info) = activities.get(&activity_id) {
                                 let span = debug_span!(
                                     target: "devenv.nix.progress",
                                     "nix_activity_progress",
@@ -508,20 +501,18 @@ impl NixLogBridge {
                                     );
                                 });
                             }
-                        }
-                    }
                 } else if fields.len() >= 2 {
                     // Fallback to download progress format for backward compatibility
                     if let (Some(Field::Int(downloaded)), total_opt) =
-                        (fields.get(0), fields.get(1))
+                        (fields.first(), fields.get(1))
                     {
                         let total_bytes = match total_opt {
                             Some(Field::Int(total)) => Some(*total),
                             _ => None,
                         };
 
-                        if let Ok(activities) = self.active_activities.lock() {
-                            if let Some(activity_info) = activities.get(&activity_id) {
+                        if let Ok(activities) = self.active_activities.lock()
+                            && let Some(activity_info) = activities.get(&activity_id) {
                                 // Only CopyPath activities have byte-based download progress
                                 if activity_info.activity_type == ActivityType::CopyPath {
                                     let span = debug_span!(
@@ -556,16 +547,15 @@ impl NixLogBridge {
                                     });
                                 }
                             }
-                        }
                     }
                 }
             }
             ResultType::SetPhase => {
                 // Handle build phase changes
-                if let Some(Field::String(phase)) = fields.get(0) {
-                    if let Ok(activities) = self.active_activities.lock() {
-                        if let Some(activity_info) = activities.get(&activity_id) {
-                            if activity_info.activity_type == ActivityType::Build {
+                if let Some(Field::String(phase)) = fields.first()
+                    && let Ok(activities) = self.active_activities.lock()
+                        && let Some(activity_info) = activities.get(&activity_id)
+                            && activity_info.activity_type == ActivityType::Build {
                                 let span = debug_span!(
                                     target: "devenv.nix.build",
                                     "nix_phase_progress",
@@ -581,15 +571,12 @@ impl NixLogBridge {
                                     info!(devenv_log = true, "Build phase: {}", phase);
                                 });
                             }
-                        }
-                    }
-                }
             }
             ResultType::BuildLogLine => {
                 // Handle build log output
-                if let Some(Field::String(log_line)) = fields.get(0) {
-                    if let Ok(activities) = self.active_activities.lock() {
-                        if let Some(activity_info) = activities.get(&activity_id) {
+                if let Some(Field::String(log_line)) = fields.first()
+                    && let Ok(activities) = self.active_activities.lock()
+                        && let Some(activity_info) = activities.get(&activity_id) {
                             let span = debug_span!(
                                 target: "devenv.nix.build",
                                 "build_log",
@@ -608,8 +595,6 @@ impl NixLogBridge {
                                 );
                             });
                         }
-                    }
-                }
             }
             _ => {
                 // Handle other result types as needed
@@ -700,29 +685,27 @@ fn extract_derivation_name(derivation_path: &str) -> String {
         .unwrap_or(derivation_path);
 
     // Extract the name part after the hash
-    if let Some(dash_pos) = path.rfind('-') {
-        if let Some(slash_pos) = path[..dash_pos].rfind('/') {
+    if let Some(dash_pos) = path.rfind('-')
+        && let Some(slash_pos) = path[..dash_pos].rfind('/') {
             return path[slash_pos + 1..].to_string();
         }
-    }
 
     // Fallback: just take the filename
-    path.split('/').last().unwrap_or(path).to_string()
+    path.split('/').next_back().unwrap_or(path).to_string()
 }
 
 /// Extract a human-readable package name from a store path
 fn extract_package_name(store_path: &str) -> String {
     // Extract the name part after the hash (format: /nix/store/hash-name)
-    if let Some(dash_pos) = store_path.rfind('-') {
-        if let Some(slash_pos) = store_path[..dash_pos].rfind('/') {
+    if let Some(dash_pos) = store_path.rfind('-')
+        && let Some(slash_pos) = store_path[..dash_pos].rfind('/') {
             return store_path[slash_pos + 1..].to_string();
         }
-    }
 
     // Fallback: just take the filename
     store_path
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or(store_path)
         .to_string()
 }

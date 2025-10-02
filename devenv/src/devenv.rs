@@ -5,7 +5,7 @@ use clap::crate_version;
 use cli_table::{Table, WithTitle, print_stderr};
 use devenv_tasks::{Config as TasksConfig, Tasks, VerbosityLevel};
 use include_dir::{Dir, include_dir};
-use miette::{Context, IntoDiagnostic, Result, WrapErr, bail, miette};
+use miette::{Context, IntoDiagnostic, Result, bail, miette};
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
 use serde::Deserialize;

@@ -102,7 +102,9 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
 
     let mut devenv = Devenv::new(options).await;
 
-    let result = match command {
+    
+
+    match command {
         Commands::Shell { cmd, ref args } => match cmd {
             Some(cmd) => devenv.exec_in_shell(Some(cmd), args).await,
             None => devenv.shell().await,
@@ -241,7 +243,5 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
         }
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
-    };
-
-    result
+    }
 }

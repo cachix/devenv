@@ -72,8 +72,7 @@ impl NixLogReplayProcessor {
     ) {
         match activity_type {
             ActivityType::Build => {
-                let derivation_path = fields
-                    .get(0)
+                let derivation_path = fields.first()
                     .and_then(|f| match f {
                         Field::String(s) => Some(s.clone()),
                         _ => None,
@@ -105,7 +104,7 @@ impl NixLogReplayProcessor {
             }
             ActivityType::CopyPath => {
                 if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.get(0), fields.get(1))
+                    (fields.first(), fields.get(1))
                 {
                     let package_name = extract_package_name(store_path);
 
@@ -128,7 +127,7 @@ impl NixLogReplayProcessor {
             }
             ActivityType::QueryPathInfo => {
                 if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.get(0), fields.get(1))
+                    (fields.first(), fields.get(1))
                 {
                     let package_name = extract_package_name(store_path);
 
@@ -188,9 +187,9 @@ impl NixLogReplayProcessor {
 
         match result_type {
             ResultType::Progress => {
-                if fields.len() >= 2 {
-                    if let (Some(Field::Int(downloaded)), total_opt) =
-                        (fields.get(0), fields.get(1))
+                if fields.len() >= 2
+                    && let (Some(Field::Int(downloaded)), total_opt) =
+                        (fields.first(), fields.get(1))
                     {
                         let total_bytes = match total_opt {
                             Some(Field::Int(total)) => Some(total),
@@ -220,10 +219,9 @@ impl NixLogReplayProcessor {
                             }
                         });
                     }
-                }
             }
             ResultType::BuildLogLine => {
-                if let Some(Field::String(log_line)) = fields.get(0) {
+                if let Some(Field::String(log_line)) = fields.first() {
                     let span = debug_span!(
                         target: "devenv.nix.build",
                         "build_log",
@@ -256,29 +254,27 @@ fn extract_derivation_name(derivation_path: &str) -> String {
         .unwrap_or(derivation_path);
 
     // Extract the name part after the hash
-    if let Some(dash_pos) = path.rfind('-') {
-        if let Some(slash_pos) = path[..dash_pos].rfind('/') {
+    if let Some(dash_pos) = path.rfind('-')
+        && let Some(slash_pos) = path[..dash_pos].rfind('/') {
             return path[slash_pos + 1..].to_string();
         }
-    }
 
     // Fallback: just take the filename
-    path.split('/').last().unwrap_or(path).to_string()
+    path.split('/').next_back().unwrap_or(path).to_string()
 }
 
 /// Extract a human-readable package name from a store path
 fn extract_package_name(store_path: &str) -> String {
     // Extract the name part after the hash (format: /nix/store/hash-name)
-    if let Some(dash_pos) = store_path.rfind('-') {
-        if let Some(slash_pos) = store_path[..dash_pos].rfind('/') {
+    if let Some(dash_pos) = store_path.rfind('-')
+        && let Some(slash_pos) = store_path[..dash_pos].rfind('/') {
             return store_path[slash_pos + 1..].to_string();
         }
-    }
 
     // Fallback: just take the filename
     store_path
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or(store_path)
         .to_string()
 }

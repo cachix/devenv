@@ -1,7 +1,6 @@
 use console::style;
 use std::collections::HashSet;
 use std::fmt;
-use std::io::{self, IsTerminal};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
@@ -400,20 +399,18 @@ where
 
     fn on_enter(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
         // Only forward if this is a ui message span
-        if let Ok(spans) = self.ui_message_spans.read() {
-            if spans.contains(id) {
+        if let Ok(spans) = self.ui_message_spans.read()
+            && spans.contains(id) {
                 self.inner.on_enter(id, ctx);
             }
-        }
     }
 
     fn on_exit(&self, id: &span::Id, ctx: layer::Context<'_, S>) {
         // Only forward if this is a ui message span
-        if let Ok(spans) = self.ui_message_spans.read() {
-            if spans.contains(id) {
+        if let Ok(spans) = self.ui_message_spans.read()
+            && spans.contains(id) {
                 self.inner.on_exit(id, ctx);
             }
-        }
     }
 
     fn on_close(&self, id: span::Id, ctx: layer::Context<'_, S>) {
@@ -591,9 +588,9 @@ where
 
         // Handle progress and log events
         let target = event.metadata().target();
-        if target == "devenv.ui.progress" || target == "devenv.ui.log" {
-            if let Some(span) = ctx.current_span().id() {
-                if let Some(span_ref) = ctx.span(span) {
+        if (target == "devenv.ui.progress" || target == "devenv.ui.log")
+            && let Some(span) = ctx.current_span().id()
+                && let Some(span_ref) = ctx.span(span) {
                     let mut extensions = span_ref.extensions_mut();
                     if let Some(span_ctx) = extensions.get_mut::<SpanContext>() {
                         // Handle progress updates
@@ -693,8 +690,6 @@ where
                         }
                     }
                 }
-            }
-        }
     }
 }
 

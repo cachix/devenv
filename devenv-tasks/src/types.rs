@@ -35,6 +35,12 @@ pub struct TasksStatus {
     pub cancelled: usize,
 }
 
+impl Default for TasksStatus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TasksStatus {
     /// Create a new empty TasksStatus
     pub fn new() -> Self {

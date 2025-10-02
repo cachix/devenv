@@ -75,8 +75,8 @@ impl HierarchyPrefixComponent {
         }
 
         // Show spinner for top-level items (depth == 0)
-        if self.depth == 0 {
-            if let Some(ref spinner_char) = self.spinner {
+        if self.depth == 0
+            && let Some(ref spinner_char) = self.spinner {
                 prefix_children.push(
                     element!(View(margin_right: 1) {
                         Text(content: spinner_char, color: COLOR_ACTIVE)
@@ -84,7 +84,6 @@ impl HierarchyPrefixComponent {
                     .into_any(),
                 );
             }
-        }
 
         prefix_children
     }
@@ -359,8 +358,8 @@ impl<'a> DownloadActivityComponent<'a> {
                     ProgressBarComponent::new(percent, human_downloaded, human_total, indent)
                         .with_speed(speed);
                 elements.push(progress_bar.render(terminal_width));
-            } else if let Some(progress) = &self.activity.progress {
-                if progress.total.unwrap_or(0) > 0 {
+            } else if let Some(progress) = &self.activity.progress
+                && progress.total.unwrap_or(0) > 0 {
                     let current = progress.current.unwrap_or(0);
                     let total = progress.total.unwrap_or(1);
                     let percent = (current as f64 / total as f64 * 100.0) as u8;
@@ -371,7 +370,6 @@ impl<'a> DownloadActivityComponent<'a> {
                         ProgressBarComponent::new(percent, human_done, human_expected, indent);
                     elements.push(progress_bar.render(terminal_width));
                 }
-            }
         }
 
         element! {
@@ -508,8 +506,8 @@ impl<'a> BuildLogsComponent<'a> {
             LOG_VIEWPORT_COLLAPSED
         };
 
-        if let Some(logs) = &self.logs {
-            if !logs.is_empty() {
+        if let Some(logs) = &self.logs
+            && !logs.is_empty() {
                 // Take the last N lines that fit in viewport
                 let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
 
@@ -535,7 +533,6 @@ impl<'a> BuildLogsComponent<'a> {
                     }.into_any()];
                 }
             }
-        }
 
         // Fallback: show "no logs" message with minimal height
         vec![element! {
@@ -553,14 +550,13 @@ impl<'a> BuildLogsComponent<'a> {
             LOG_VIEWPORT_COLLAPSED
         };
 
-        if let Some(logs) = &self.logs {
-            if !logs.is_empty() {
+        if let Some(logs) = &self.logs
+            && !logs.is_empty() {
                 let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
                 if !log_lines.is_empty() {
                     return log_lines.len();
                 }
             }
-        }
 
         // Fallback: minimal height for "no logs" message
         1

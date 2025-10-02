@@ -307,7 +307,7 @@ impl Model {
         let logs = self
             .build_logs
             .entry(activity_id)
-            .or_insert_with(VecDeque::new);
+            .or_default();
 
         if logs.len() >= MAX_LOG_LINES_PER_BUILD {
             logs.pop_front();
@@ -419,7 +419,7 @@ impl Model {
             let op_activities: Vec<_> = self
                 .activities
                 .values()
-                .filter(|a| &a.operation_id == &operation.id)
+                .filter(|a| a.operation_id == operation.id)
                 .collect();
 
             // Create pseudo evaluation activity if this operation has evaluation data
@@ -464,7 +464,7 @@ impl Model {
 
         // Add actual activities
         for activity in self.activities.values() {
-            if &activity.operation_id == &operation.id {
+            if activity.operation_id == operation.id {
                 activities.push(DisplayActivity {
                     activity: activity.clone(),
                     depth: depth + 1,

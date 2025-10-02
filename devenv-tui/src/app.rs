@@ -16,9 +16,9 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     hooks.use_terminal_events({
         let model = model.clone();
         move |event| {
-            if let TerminalEvent::Key(key_event) = event {
-                if key_event.kind != KeyEventKind::Release {
-                    if let Ok(mut model_guard) = model.lock() {
+            if let TerminalEvent::Key(key_event) = event
+                && key_event.kind != KeyEventKind::Release
+                    && let Ok(mut model_guard) = model.lock() {
                         match key_event.code {
                             KeyCode::Char('c')
                                 if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
@@ -41,8 +41,6 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                             _ => {}
                         }
                     }
-                }
-            }
         }
     });
 
@@ -77,7 +75,8 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     // Render the view
     let model_clone = model.clone();
-    let result = if let Ok(model_guard) = model_clone.lock() {
+    
+    if let Ok(model_guard) = model_clone.lock() {
         element! {
             View(width: terminal_width) {
                 #(vec![view(&model_guard).into()])
@@ -85,8 +84,7 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     } else {
         element!(View(width: terminal_width))
-    };
-    result
+    }
 }
 
 /// Create and run the TUI application
@@ -105,5 +103,5 @@ pub async fn run_app(
     tui_element
         .render_loop()
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        .map_err(|e| std::io::Error::other(e))
 }

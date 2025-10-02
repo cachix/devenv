@@ -1,10 +1,9 @@
 use crate::{
-    cli, config, devenv, log,
+    cli, config, devenv,
     nix_backend::{self, NixBackend},
     nix_log_bridge::NixLogBridge,
 };
 use async_trait::async_trait;
-use blake3;
 use futures::future;
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_conf_parser::NixConf;
@@ -29,8 +28,8 @@ fn get_user_operation_id() -> Option<devenv_tui::OperationId> {
     tracing::dispatcher::get_default(|dispatch| {
         if let Some(registry) = dispatch.downcast_ref::<tracing_subscriber::Registry>() {
             let current_span = tracing::Span::current();
-            if let Some(id) = current_span.id() {
-                if let Some(span_ref) = registry.span(&id) {
+            if let Some(id) = current_span.id()
+                && let Some(span_ref) = registry.span(&id) {
                     // Check if current span has an operation ID (stored by DevenvLayer)
                     if let Some(op_id) = span_ref.extensions().get::<devenv_tui::OperationId>() {
                         return Some(op_id.clone());
@@ -45,7 +44,6 @@ fn get_user_operation_id() -> Option<devenv_tui::OperationId> {
                         current = parent.parent();
                     }
                 }
-            }
         }
         None
     })
@@ -356,7 +354,7 @@ impl Nix {
         mut cmd: std::process::Command,
         options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
-        use devenv_eval_cache::internal_log::Verbosity;
+        
         use devenv_eval_cache::supports_eval_caching;
 
         if options.replace_shell {
@@ -474,8 +472,8 @@ impl Nix {
                     Verbosity::Warn
                 };
 
-                if let Some(filtered_log) = log.filter_by_level(target_log_level) {
-                    if let Some(msg) = filtered_log.get_msg() {
+                if let Some(filtered_log) = log.filter_by_level(target_log_level)
+                    && let Some(msg) = filtered_log.get_msg() {
                         use devenv_eval_cache::internal_log::InternalLog;
                         match filtered_log {
                             InternalLog::Msg { level, .. } => match *level {
@@ -487,12 +485,11 @@ impl Nix {
                             _ => info!("{msg}"),
                         };
                     }
-                }
             }
         });
 
         // Setup tracing span for command execution
-        let pretty_cmd = display_command(&cmd);
+        let pretty_cmd = display_command(cmd);
         let span = debug_span!(
             target: "devenv.ui",
             "nix_command",
@@ -506,7 +503,7 @@ impl Nix {
         // Set current operation for Nix log correlation
         if self.global_options.verbose {
             // In verbose mode: create bridge operation that will be child of the debug span
-            let cmd_string = display_command(&cmd);
+            let cmd_string = display_command(cmd);
             let cmd_hash = blake3::hash(cmd_string.as_bytes());
             let command_operation_id =
                 devenv_tui::OperationId::new(format!("cmd-{}", &cmd_hash.to_hex()[..8]));
@@ -520,7 +517,7 @@ impl Nix {
             .instrument(span)
             .await
             .into_diagnostic()
-            .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
+            .wrap_err_with(|| format!("Failed to run command `{}`", display_command(cmd)))?;
 
         // Clear bridge operation
         nix_bridge.clear_current_operation();

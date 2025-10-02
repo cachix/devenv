@@ -34,7 +34,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         .iter()
         .map(|display_activity| {
             let activity = &display_activity.activity;
-            let is_selected = selected_id.map_or(false, |id| activity.id == id && activity.id != 0);
+            let is_selected = selected_id.is_some_and(|id| activity.id == id && activity.id != 0);
 
             // Pass build logs if this is the selected build activity
             let activity_build_logs =
@@ -48,8 +48,8 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
                 ContextProvider(value: Context::owned(ActivityRenderContext {
                     activity: activity.clone(),
                     depth: display_activity.depth,
-                    is_selected: is_selected,
-                    spinner_frame: spinner_frame,
+                    is_selected,
+                    spinner_frame,
                     build_logs: activity_build_logs,
                     expanded_logs: show_expanded_logs,
                 })) {
@@ -63,7 +63,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
-            has_selection: has_selection,
+            has_selection,
             expanded_logs: model.ui.view_options.show_expanded_logs,
             showing_logs: build_logs.is_some(),
         })) {
@@ -77,7 +77,7 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
     for display_activity in &activities_to_show {
         total_height += 1; // Base height for activity
 
-        let is_selected = selected_id.map_or(false, |id| {
+        let is_selected = selected_id.is_some_and(|id| {
             display_activity.activity.id == id && display_activity.activity.id != 0
         });
 
@@ -85,26 +85,23 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         if matches!(
             display_activity.activity.variant,
             ActivityVariant::Download(_)
-        ) {
-            if let ActivityVariant::Download(ref download_data) = display_activity.activity.variant
+        )
+            && let ActivityVariant::Download(ref download_data) = display_activity.activity.variant
             {
                 if download_data.size_current.is_some() && download_data.size_total.is_some() {
                     total_height += 1; // Extra line for progress bar
-                } else if let Some(progress) = &display_activity.activity.progress {
-                    if progress.total.unwrap_or(0) > 0 {
+                } else if let Some(progress) = &display_activity.activity.progress
+                    && progress.total.unwrap_or(0) > 0 {
                         total_height += 1; // Extra line for progress bar
                     }
-                }
             }
-        }
 
         // Build activities use early return with custom height - account for it
-        if is_selected && matches!(display_activity.activity.variant, ActivityVariant::Build(_)) {
-            if let Some(logs) = build_logs.as_ref() {
+        if is_selected && matches!(display_activity.activity.variant, ActivityVariant::Build(_))
+            && let Some(logs) = build_logs.as_ref() {
                 let build_logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
                 total_height += build_logs_component.calculate_height(); // Add actual log height
             }
-        }
     }
     let min_height = 3; // Minimum height to show at least a few items
     let dynamic_height = total_height.max(min_height) as u32;
@@ -568,15 +565,13 @@ fn build_summary_view_impl(
                 } else {
                     help_children.push(element!(Text(content: " collapse logs • ")).into_any());
                 }
+            } else if use_symbols {
+                help_children.push(element!(Text(content: " ▼ • ")).into_any());
+            // expand symbol
+            } else if use_short_text {
+                help_children.push(element!(Text(content: " expand • ")).into_any());
             } else {
-                if use_symbols {
-                    help_children.push(element!(Text(content: " ▼ • ")).into_any());
-                // expand symbol
-                } else if use_short_text {
-                    help_children.push(element!(Text(content: " expand • ")).into_any());
-                } else {
-                    help_children.push(element!(Text(content: " expand logs • ")).into_any());
-                }
+                help_children.push(element!(Text(content: " expand logs • ")).into_any());
             }
             help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
             if showing_logs {

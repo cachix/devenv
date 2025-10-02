@@ -305,7 +305,7 @@ where
                             .fields
                             .get("activity_id")
                             .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or_else(|| rand::random()); // Generate if not provided
+                            .unwrap_or_else(rand::random); // Generate if not provided
 
                         let total_files_evaluated = visitor
                             .fields
@@ -481,8 +481,8 @@ where
         event.record(&mut visitor);
 
         // Handle task events from devenv-tasks
-        if event.metadata().target().starts_with("devenv_tasks") {
-            if let Some(task_name) = visitor.fields.get("task_name") {
+        if event.metadata().target().starts_with("devenv_tasks")
+            && let Some(task_name) = visitor.fields.get("task_name") {
                 let task_name = task_name.trim_matches('"').to_string();
 
                 // Check for task status updates
@@ -537,7 +537,6 @@ where
                     });
                 }
             }
-        }
 
         // Handle Nix progress and other events
         let target = event.metadata().target();
@@ -549,11 +548,10 @@ where
                         visitor.fields.get("activity_id"),
                     ) {
                         let _operation_id = OperationId::new(operation_id_str.clone());
-                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
-                            if let (Some(done_str), Some(expected_str)) =
+                        if let Ok(activity_id) = activity_id_str.parse::<u64>()
+                            && let (Some(done_str), Some(expected_str)) =
                                 (visitor.fields.get("done"), visitor.fields.get("expected"))
-                            {
-                                if let (Ok(done), Ok(expected)) =
+                                && let (Ok(done), Ok(expected)) =
                                     (done_str.parse::<u64>(), expected_str.parse::<u64>())
                                 {
                                     let _running = visitor
@@ -584,8 +582,6 @@ where
                                         }
                                     });
                                 }
-                            }
-                        }
                     }
                 }
                 "devenv.nix.download" if event.metadata().name() == "nix_download_progress" => {
@@ -606,8 +602,8 @@ where
                                 .and_then(|s| s.parse::<u64>().ok());
 
                             self.update_model(|model| {
-                                if let Some(activity) = model.activities.get_mut(&activity_id) {
-                                    if let ActivityVariant::Download(ref mut download_activity) =
+                                if let Some(activity) = model.activities.get_mut(&activity_id)
+                                    && let ActivityVariant::Download(ref mut download_activity) =
                                         activity.variant
                                     {
                                         // Calculate download speed from previous values
@@ -626,7 +622,6 @@ where
                                         download_activity.size_total = total_bytes;
                                         download_activity.speed = Some(speed);
                                     }
-                                }
                             });
                         }
                     }
@@ -640,13 +635,12 @@ where
                         let _operation_id = OperationId::new(operation_id_str.clone());
                         if let Ok(activity_id) = activity_id_str.parse::<u64>() {
                             self.update_model(|model| {
-                                if let Some(activity) = model.activities.get_mut(&activity_id) {
-                                    if let ActivityVariant::Build(ref mut build_activity) =
+                                if let Some(activity) = model.activities.get_mut(&activity_id)
+                                    && let ActivityVariant::Build(ref mut build_activity) =
                                         activity.variant
                                     {
                                         build_activity.phase = Some(phase.clone());
                                     }
-                                }
                             });
                         }
                     }
@@ -655,13 +649,12 @@ where
                     if let (Some(activity_id_str), Some(line)) = (
                         visitor.fields.get("activity_id"),
                         visitor.fields.get("line"),
-                    ) {
-                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
+                    )
+                        && let Ok(activity_id) = activity_id_str.parse::<u64>() {
                             self.update_model(|model| {
                                 model.add_build_log(activity_id, line.clone());
                             });
                         }
-                    }
                 }
                 "devenv.nix.eval" if event.metadata().name() == "nix_evaluation_progress" => {
                     if let (Some(operation_id_str), Some(files_str)) = (
