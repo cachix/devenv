@@ -326,7 +326,7 @@ impl Nix {
         options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::Verbosity;
-        use devenv_eval_cache::{CachedCommand, supports_eval_caching};
+        use devenv_eval_cache::{NixCommand, supports_eval_caching};
 
         if options.replace_shell {
             if self.global_options.nix_debugger
@@ -355,7 +355,7 @@ impl Nix {
 
         let result = if supports_eval_caching(&cmd) && self.pool.get().is_some() {
             let pool = self.pool.get().unwrap();
-            let mut cached_cmd = CachedCommand::new(pool);
+            let mut cached_cmd = NixCommand::new(pool);
 
             if self.global_options.eval_cache && options.cache_output {
                 cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
@@ -371,7 +371,7 @@ impl Nix {
                     cached_cmd.force_refresh();
                 }
             } else {
-                cached_cmd.disable_cache();
+                cached_cmd.enable_eval_cache(false);
             }
 
             if options.logging && !self.global_options.quiet {
