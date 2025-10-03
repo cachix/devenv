@@ -10,15 +10,22 @@ use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument};
 
-#[derive(Debug)]
+impl std::fmt::Debug for TaskState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskState")
+            .field("task", &self.task)
+            .field("status", &self.status)
+            .field("verbosity", &self.verbosity)
+            .finish()
+    }
+}
+
 pub struct TaskState {
     pub task: TaskConfig,
     pub status: TaskStatus,
     pub verbosity: VerbosityLevel,
-    pub cancellation_token: Option<CancellationToken>,
     pub sudo_context: Option<SudoContext>,
 }
 
@@ -26,14 +33,12 @@ impl TaskState {
     pub fn new(
         task: TaskConfig,
         verbosity: VerbosityLevel,
-        cancellation_token: Option<CancellationToken>,
         sudo_context: Option<SudoContext>,
     ) -> Self {
         Self {
             task,
             status: TaskStatus::Pending,
             verbosity,
-            cancellation_token,
             sudo_context,
         }
     }
@@ -333,34 +338,6 @@ impl TaskState {
 
             loop {
                 tokio::select! {
-                    // Check for cancellation from shared signal handler
-                    _ = async {
-                        if let Some(ref token) = self.cancellation_token {
-                            token.cancelled().await
-                        } else {
-                            std::future::pending::<()>().await
-                        }
-                    } => {
-                        eprintln!("Task {} received shutdown signal, terminating child process", self.task.name);
-
-                        // Kill the child process and its process group
-                        if let Some(pid) = child.id() {
-                            use ::nix::sys::signal::{self, Signal};
-                            use ::nix::unistd::Pid;
-
-                            // Send SIGTERM to the process group first for graceful shutdown
-                            signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM).expect("failed to send SIGTERM to process group");
-                            tokio::select! {
-                                _ = child.wait() => {}
-                                _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
-                                        signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL).expect("failed to send SIGKILL to process group");
-                                        child.wait().await.expect("failed to wait on child process");
-                                }
-                            }
-                        }
-
-                        return Ok(TaskCompleted::Cancelled(now.elapsed()));
-                    }
                     result = stdout_reader.next_line(), if !stdout_closed => {
                         match result {
                             Ok(Some(line)) => {

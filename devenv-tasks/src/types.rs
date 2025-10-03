@@ -77,3 +77,34 @@ pub enum TaskStatus {
     Running(Instant),
     Completed(TaskCompleted),
 }
+
+pub struct TasksStatus {
+    pub pending: usize,
+    pub running: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub skipped: usize,
+    pub dependency_failed: usize,
+    pub cancelled: usize,
+}
+
+impl Default for TasksStatus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TasksStatus {
+    /// Create a new empty TasksStatus
+    pub fn new() -> Self {
+        Self {
+            pending: 0,
+            running: 0,
+            succeeded: 0,
+            failed: 0,
+            skipped: 0,
+            dependency_failed: 0,
+            cancelled: 0,
+        }
+    }
+}
