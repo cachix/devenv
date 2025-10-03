@@ -1,6 +1,7 @@
 use crate::{
     cli, config, devenv,
     nix_backend::{self, NixBackend},
+    nix_log_bridge::NixLogBridge,
 };
 use async_trait::async_trait;
 use futures::future;
@@ -374,15 +375,29 @@ impl Nix {
                 cached_cmd.enable_eval_cache(false);
             }
 
-            if options.logging && !self.global_options.quiet {
-                // Show eval and build logs only in verbose mode
-                let target_log_level = if self.global_options.verbose {
-                    Verbosity::Talkative
-                } else {
-                    Verbosity::Warn
-                };
+            // Setup Nix log bridge for enhanced log processing
+            let nix_bridge = NixLogBridge::new();
 
-                cached_cmd.on_stderr(move |log| {
+            // Add stderr processing callback with proper lifetime management
+            let bridge_for_callback = nix_bridge.clone();
+            let logging = options.logging;
+            let quiet = self.global_options.quiet;
+            let verbose = self.global_options.verbose;
+
+            cached_cmd.on_stderr(move |log| {
+                // Send to Nix log bridge for detailed progress tracking
+                // The bridge will emit appropriate tracing events
+                bridge_for_callback.process_internal_log(log.clone());
+
+                // Only output to tracing logs if logging is enabled
+                // This provides fallback logging when detailed processing is not needed
+                if logging && !quiet {
+                    let target_log_level = if verbose {
+                        Verbosity::Talkative
+                    } else {
+                        Verbosity::Warn
+                    };
+
                     if let Some(log) = log.filter_by_level(target_log_level)
                         && let Some(msg) = log.get_msg()
                     {
@@ -396,9 +411,22 @@ impl Nix {
                             },
                             _ => info!("{msg}"),
                         }
-                    };
-                });
+                    }
+                }
+            });
+
+            // Set current operation for Nix log correlation
+            if self.global_options.verbose {
+                // In verbose mode: create bridge operation that will be child of the debug span
+                let cmd_string = display_command(&cmd);
+                // Use a simple hash of the command for the operation ID
+                use std::hash::{Hash, Hasher};
+                let mut cmd_hash = std::collections::hash_map::DefaultHasher::new();
+                cmd_string.hash(&mut cmd_hash);
+                let command_operation_id = format!("nix-cmd-{:x}", cmd_hash.finish());
+                nix_bridge.set_current_operation(command_operation_id);
             }
+            // In non-verbose mode: don't set bridge operation, logs will attach via fallback
 
             let pretty_cmd = display_command(&cmd);
             let span = debug_span!(
@@ -413,6 +441,10 @@ impl Nix {
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
 
+            // Clear bridge operation
+            nix_bridge.clear_current_operation();
+
+            // Record cache status if applicable
             if output.cache_hit {
                 tracing::Span::current().record(
                     "cache_status",
