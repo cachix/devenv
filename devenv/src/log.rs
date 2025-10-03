@@ -6,16 +6,17 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
+    Event, Subscriber,
     field::{Field, Visit},
-    span, Event, Subscriber,
+    span,
 };
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
-    fmt::{format::Writer, FmtContext, FormatEvent, FormatFields},
+    EnvFilter, Layer,
+    fmt::{FmtContext, FormatEvent, FormatFields, format::Writer},
     layer,
     prelude::*,
     registry::LookupSpan,
-    EnvFilter, Layer,
 };
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]

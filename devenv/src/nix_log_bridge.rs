@@ -3,7 +3,7 @@ use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultTy
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{debug, debug_span, info, warn};
+use tracing::{Span, debug, debug_span, error, info, trace, warn};
 
 /// Simple operation ID type for correlating Nix activities
 pub type OperationId = String;
@@ -28,7 +28,7 @@ struct EvaluationState {
     /// Last time we sent an evaluation progress event
     last_progress_update: Option<Instant>,
     /// The span tracking the entire evaluation operation
-    span: Option<tracing::Span>,
+    span: Option<Span>,
 }
 
 /// Information about an active Nix activity
@@ -37,7 +37,7 @@ struct NixActivityInfo {
     #[allow(dead_code)] // Kept for future activity correlation
     operation_id: OperationId,
     activity_type: ActivityType,
-    span: tracing::Span,
+    span: Span,
 }
 
 impl NixLogBridge {
@@ -83,12 +83,12 @@ impl NixLogBridge {
             if let Ok(current) = self.current_operation_id.lock() {
                 if current.is_some() {
                     let files: Vec<String> = state.pending_files.drain(..).collect();
-                    tracing::debug!("Flushing {} pending evaluation files", files.len());
+                    trace!("Flushing {} pending evaluation files", files.len());
 
                     // Emit tracing event for evaluation progress using stored span
                     if let Some(ref span) = state.span {
                         span.in_scope(|| {
-                            info!(
+                            debug!(
                                 devenv.user_message = format!("Evaluated {} files", files.len()),
                                 files = ?files,
                                 "Evaluated {} files", files.len()
@@ -96,13 +96,13 @@ impl NixLogBridge {
                         });
                     }
                 } else {
-                    tracing::warn!(
+                    warn!(
                         "No operation ID available for flushing {} pending files",
                         state.pending_files.len()
                     );
                 }
             } else {
-                tracing::warn!("Failed to lock operation ID for flushing");
+                warn!("Failed to lock operation ID for flushing");
             }
         }
     }
@@ -115,7 +115,7 @@ impl NixLogBridge {
                     self.handle_internal_log(internal_log);
                 }
                 Err(e) => {
-                    tracing::debug!("Failed to parse Nix internal log: {} - line: {}", e, line);
+                    warn!("Failed to parse Nix internal log: {} - line: {}", e, line);
                 }
             }
         }
@@ -203,9 +203,9 @@ impl NixLogBridge {
                     // Handle regular log messages from Nix builds
                     if level <= Verbosity::Warn {
                         match level {
-                            Verbosity::Error => tracing::error!("{}", msg),
-                            Verbosity::Warn => tracing::warn!("{}", msg),
-                            _ => tracing::info!("{}", msg),
+                            Verbosity::Error => error!("{msg}"),
+                            Verbosity::Warn => warn!("{msg}"),
+                            _ => info!("{msg}"),
                         }
                     }
                 }
@@ -354,7 +354,7 @@ impl NixLogBridge {
             }
             _ => {
                 // For other activity types, we can add support as needed
-                tracing::debug!("Unhandled Nix activity type: {:?}", activity_type);
+                debug!("Unhandled Nix activity type: {:?}", activity_type);
             }
         }
     }
@@ -487,7 +487,6 @@ impl NixLogBridge {
                                 activity_info.span.in_scope(|| {
                                     debug!(
                                         devenv.user_message = %message,
-                                        devenv.no_spinner = true,
                                         bytes_downloaded = downloaded,
                                         total_bytes = ?total_bytes,
                                         "{}", message
@@ -522,7 +521,6 @@ impl NixLogBridge {
                 {
                     activity_info.span.in_scope(|| {
                         info!(
-                            devenv.no_spinner = true,
                             line = %log_line,
                             "Build output: {}", log_line
                         );
@@ -531,7 +529,7 @@ impl NixLogBridge {
             }
             _ => {
                 // Handle other result types as needed
-                tracing::debug!("Unhandled Nix result type: {:?}", result_type);
+                debug!("Unhandled Nix result type: {:?}", result_type);
             }
         }
     }
@@ -579,7 +577,6 @@ impl NixLogBridge {
                     span.in_scope(|| {
                         info!(
                             devenv.user_message = format!("Evaluating Nix files ({} total)", state.total_files_evaluated),
-                            devenv.no_spinner = true,
                             files = ?files,
                             total_files_evaluated = state.total_files_evaluated,
                             "Evaluated {} files (total: {})",
