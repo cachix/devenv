@@ -1,7 +1,7 @@
 # Overlays
 
 !!! tip "New in version 1.4.2"
-    
+
     [Read more about overlays in the v1.5 release post](blog/posts/devenv-v1.5-overlays-and-performance.md)
 
 Overlays in devenv allow you to modify or extend the default package set (`pkgs`) that devenv uses. This is useful when you need to:
@@ -40,6 +40,7 @@ To add overlays to your devenv configuration, use the `overlays` option in your 
 ## How overlays work
 
 Each overlay is a function that takes two arguments:
+
 - `final`: The final package set after all overlays are applied
 - `prev`: The package set as it existed before this overlay (but after previous overlays)
 
