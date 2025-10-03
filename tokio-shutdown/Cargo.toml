@@ -7,7 +7,14 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+futures.workspace = true
 nix = { workspace = true, features = ["signal", "process"] }
-tokio = { workspace = true, features = ["sync", "macros", "rt", "signal", "time"] }
+tokio = { workspace = true, features = [
+  "sync",
+  "macros",
+  "rt",
+  "signal",
+  "time",
+] }
 tokio-util = { workspace = true }
-futures = { workspace = true }
+tracing.workspace = true

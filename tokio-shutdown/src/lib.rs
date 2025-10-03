@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use tokio::signal;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
+use tracing::info;
 
 /// A graceful shutdown manager for tokio applications
 #[derive(Debug)]
@@ -128,15 +129,15 @@ impl Shutdown {
 
             tokio::select! {
                 _ = sigint.recv() => {
-                    eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                    info!("Received SIGINT (Ctrl+C), shutting down gracefully...");
                     shutdown.last_signal.store(Signal::SIGINT as i32, Ordering::Relaxed);
                 }
                 _ = sigterm.recv() => {
-                    eprintln!("Received SIGTERM, shutting down gracefully...");
+                    info!("Received SIGTERM, shutting down gracefully...");
                     shutdown.last_signal.store(Signal::SIGTERM as i32, Ordering::Relaxed);
                 }
                 _ = sighup.recv() => {
-                    eprintln!("Received SIGHUP, shutting down gracefully...");
+                    info!("Received SIGHUP, shutting down gracefully...");
                     shutdown.last_signal.store(Signal::SIGHUP as i32, Ordering::Relaxed);
                 }
             }
