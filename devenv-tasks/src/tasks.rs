@@ -15,7 +15,6 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument};
 
 /// Builder for Tasks configuration
@@ -23,29 +22,27 @@ pub struct TasksBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    cancellation_token: Option<CancellationToken>,
+    shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl TasksBuilder {
-    /// Create a new builder with required configuration
-    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+    /// Create a new builder with required configuration and subsys
+    pub fn new(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    ) -> Self {
         Self {
             config,
             verbosity,
             db_path: None,
-            cancellation_token: None,
+            shutdown,
         }
     }
 
     /// Set the database path
     pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
         self.db_path = Some(db_path);
-        self
-    }
-
-    /// Set the cancellation token for shutdown support
-    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
-        self.cancellation_token = Some(token);
         self
     }
 
@@ -89,7 +86,6 @@ impl TasksBuilder {
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
                 task,
                 self.verbosity,
-                self.cancellation_token.clone(),
                 self.config.sudo_context.clone(),
             ))));
             task_indices.insert(name, index);
@@ -106,7 +102,7 @@ impl TasksBuilder {
             tasks_order: vec![],
             run_mode: self.config.run_mode,
             cache,
-            cancellation_token: self.cancellation_token,
+            shutdown: self.shutdown,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -115,7 +111,16 @@ impl TasksBuilder {
     }
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for Tasks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tasks")
+            .field("root_names", &self.root_names)
+            .field("run_mode", &self.run_mode)
+            .field("shutdown", &"<Shutdown>")
+            .finish()
+    }
+}
+
 pub struct Tasks {
     pub roots: Vec<NodeIndex>,
     // Stored for reporting
@@ -127,13 +132,17 @@ pub struct Tasks {
     pub notify_ui: Arc<Notify>,
     pub run_mode: RunMode,
     pub cache: TaskCache,
-    pub cancellation_token: Option<CancellationToken>,
+    pub shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl Tasks {
     /// Create a new TasksBuilder for configuring Tasks
-    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksBuilder {
-        TasksBuilder::new(config, verbosity)
+    pub fn builder(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    ) -> TasksBuilder {
+        TasksBuilder::new(config, verbosity, shutdown)
     }
 
     fn resolve_namespace_roots(
@@ -467,10 +476,30 @@ impl Tasks {
             }
         }
 
-        while let Some(res) = running_tasks.join_next().await {
-            match res {
-                Ok(_) => (),
-                Err(e) => error!("Task crashed: {}", e),
+        loop {
+            if self.shutdown.is_cancelled() {
+                // Shutdown requested - abort remaining tasks and drain them
+                running_tasks.abort_all();
+
+                // Drain the aborted tasks to ensure proper cleanup
+                while let Some(res) = running_tasks.join_next().await {
+                    if let Err(e) = res {
+                        error!("Aborted task error: {}", e);
+                    }
+                }
+                break;
+            }
+
+            // Wait for next task completion
+            if let Some(res) = running_tasks.join_next().await {
+                match res {
+                    Ok(_) => (),
+                    Err(e) => error!("Task crashed: {}", e),
+                }
+                // Continue the loop to wait for more tasks
+            } else {
+                // No more tasks to wait for
+                break;
             }
         }
 

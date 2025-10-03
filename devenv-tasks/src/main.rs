@@ -1,9 +1,7 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{
-    Config, RunMode, SudoContext, TaskConfig, TasksUi, VerbosityLevel,
-    signal_handler::SignalHandler,
-};
+use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, TasksUi, VerbosityLevel};
 use std::{env, fs, path::PathBuf};
+use tokio_shutdown::Shutdown;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -104,17 +102,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sudo_context: sudo_context.clone(),
             };
 
-            // Create a global signal handler
-            let signal_handler = SignalHandler::start();
+            // Create shutdown handler with signal support
+            let shutdown = Shutdown::new();
+            shutdown.install_signals().await;
 
-            let mut tasks_ui = TasksUi::builder(config, verbosity)
-                .with_cancellation_token(signal_handler.cancellation_token())
+            let mut tasks_ui = TasksUi::builder(config, verbosity, shutdown.clone())
                 .build()
                 .await?;
             let (status, _outputs) = tasks_ui.run().await?;
 
-            if signal_handler.last_signal().is_some() {
-                signal_handler.exit_process();
+            if shutdown.last_signal().is_some() {
+                shutdown.exit_process();
             }
 
             if status.failed + status.dependency_failed > 0 {

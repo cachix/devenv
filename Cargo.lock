@@ -1295,6 +1295,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-shutdown",
  "tokio-test",
  "tokio-util",
  "tracing",
