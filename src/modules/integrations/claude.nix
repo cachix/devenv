@@ -39,20 +39,19 @@ let
   # Collect all hooks by type
   allHooks = lib.mapAttrsToList
     (
-      name: hook:
-        lib.mkIf hook.enable {
-          type = hook.hookType;
-          hook = {
-            matcher = hook.matcher;
-            command = hook.command;
-          };
-        }
+      name: hook: {
+        type = hook.hookType;
+        hook = {
+          matcher = hook.matcher;
+          command = hook.command;
+        };
+      }
     )
-    cfg.hooks;
+    (lib.filterAttrs (name: hook: hook.enable) cfg.hooks);
 
   # Group hooks by type
   groupedHooks = lib.mapAttrs (k: v: map (h: h.hook) v) (
-    lib.groupBy (h: h.type) (lib.filter (h: h != false) allHooks)
+    lib.groupBy (h: h.type) allHooks
   );
 
   # Add pre-commit hook if git-hooks are enabled
