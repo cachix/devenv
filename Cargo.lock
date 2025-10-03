@@ -5922,6 +5922,7 @@ name = "tokio-shutdown"
 version = "1.9.3"
 dependencies = [
  "futures",
+ "nix 0.30.1",
  "tokio",
  "tokio-util",
 ]
