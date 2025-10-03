@@ -2,8 +2,9 @@ use crate::config::{Config, RunMode};
 use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
+use crate::tracing_events;
 use crate::types::{
-    Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel,
+    Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, TasksStatus, VerbosityLevel,
 };
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -143,6 +144,28 @@ impl Tasks {
         shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
     ) -> TasksBuilder {
         TasksBuilder::new(config, verbosity, shutdown)
+    }
+
+    /// Get the current task completion status
+    pub async fn get_completion_status(&self) -> TasksStatus {
+        let mut status = TasksStatus::new();
+
+        for index in &self.tasks_order {
+            let task_state = self.graph[*index].read().await;
+            match &task_state.status {
+                TaskStatus::Pending => status.pending += 1,
+                TaskStatus::Running(_) => status.running += 1,
+                TaskStatus::Completed(completed) => match completed {
+                    TaskCompleted::Success(_, _) => status.succeeded += 1,
+                    TaskCompleted::Failed(_, _) => status.failed += 1,
+                    TaskCompleted::Skipped(_) => status.skipped += 1,
+                    TaskCompleted::DependencyFailed => status.dependency_failed += 1,
+                    TaskCompleted::Cancelled(_) => status.cancelled += 1,
+                },
+            }
+        }
+
+        status
     }
 
     fn resolve_namespace_roots(
@@ -368,6 +391,18 @@ impl Tasks {
             }
 
             if dependency_failed {
+                let task_name = {
+                    let task_state_read = task_state.read().await;
+                    task_state_read.task.name.clone()
+                };
+                tracing_events::emit_task_completed(
+                    &task_name,
+                    "completed",
+                    "dependency_failed",
+                    None,
+                    Some("dependency_failed"),
+                );
+
                 let mut task_state = task_state.write().await;
                 task_state.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
                 self.notify_finished.notify_one();
@@ -376,6 +411,12 @@ impl Tasks {
                 let now = Instant::now();
 
                 // hold write lock only to update the status
+                {
+                    let task_state_read = task_state.read().await;
+                    let task_name = task_state_read.task.name.clone();
+                    tracing_events::emit_task_start(&task_name);
+                    tracing_events::emit_task_status_change(&task_name, "running", None);
+                }
                 {
                     let mut task_state = task_state.write().await;
                     task_state.status = TaskStatus::Running(now);
@@ -467,6 +508,62 @@ impl Tasks {
                             }
                             _ => {}
                         }
+                        let task_name = &task_state.task.name;
+
+                        // Emit comprehensive tracing event for completion
+                        match &completed {
+                            TaskCompleted::Success(duration, _) => {
+                                tracing_events::emit_task_completed(
+                                    task_name,
+                                    "completed",
+                                    "success",
+                                    Some(duration.as_secs_f64()),
+                                    None,
+                                );
+                            }
+                            TaskCompleted::Failed(duration, _) => {
+                                tracing_events::emit_task_completed(
+                                    task_name,
+                                    "completed",
+                                    "failed",
+                                    Some(duration.as_secs_f64()),
+                                    None,
+                                );
+                            }
+                            TaskCompleted::Skipped(skipped) => match skipped {
+                                Skipped::Cached(_) => {
+                                    tracing_events::emit_task_completed(
+                                        task_name,
+                                        "completed",
+                                        "cached",
+                                        None,
+                                        Some("cached"),
+                                    );
+                                }
+                                Skipped::NoCommand => {
+                                    tracing_events::emit_task_completed(
+                                        task_name,
+                                        "completed",
+                                        "skipped",
+                                        None,
+                                        Some("no command"),
+                                    );
+                                }
+                            },
+                            TaskCompleted::DependencyFailed => {
+                                // Already emitted above
+                            }
+                            TaskCompleted::Cancelled(duration) => {
+                                tracing_events::emit_task_completed(
+                                    task_name,
+                                    "completed",
+                                    "cancelled",
+                                    Some(duration.as_secs_f64()),
+                                    Some("cancelled"),
+                                );
+                            }
+                        }
+
                         task_state.status = TaskStatus::Completed(completed);
                     }
 
