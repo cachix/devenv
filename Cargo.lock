@@ -1253,6 +1253,7 @@ dependencies = [
  "serde_json",
  "similar",
  "tokio",
+ "tokio-shutdown",
  "tokio-tar",
  "tokio-util",
  "tracing",
@@ -1270,6 +1271,7 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tokio",
+ "tokio-shutdown",
 ]
 
 [[package]]
