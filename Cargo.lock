@@ -1193,6 +1193,7 @@ dependencies = [
  "sqlx",
  "tempfile",
  "tokio",
+ "tokio-shutdown",
  "tracing",
  "tracing-indicatif",
  "tracing-subscriber",
@@ -5912,6 +5913,15 @@ checksum = "05f63835928ca123f1bef57abbcd23bb2ba0ac9ae1235f1e65bda0d06e7786bd"
 dependencies = [
  "rustls",
  "tokio",
+]
+
+[[package]]
+name = "tokio-shutdown"
+version = "1.9.3"
+dependencies = [
+ "futures",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

@@ -2,14 +2,15 @@
 resolver = "2"
 members = [
   "devenv",
-  "devenv-generate",
+  "devenv-cache-core",
   "devenv-eval-cache",
+  "devenv-generate",
   "devenv-run-tests",
   "devenv-tasks",
   "http-client-tls",
   "nix-conf-parser",
+  "tokio-shutdown",
   "xtask",
-  "devenv-cache-core",
 ]
 
 [workspace.package]
@@ -27,6 +28,7 @@ devenv-tasks = { path = "devenv-tasks" }
 devenv-cache-core = { path = "devenv-cache-core" }
 http-client-tls = { path = "http-client-tls" }
 nix-conf-parser = { path = "nix-conf-parser" }
+tokio-shutdown = { path = "tokio-shutdown" }
 xtask = { path = "xtask" }
 
 ansiterm = "0.12.2"

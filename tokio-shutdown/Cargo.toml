@@ -1,0 +1,12 @@
+[package]
+name = "tokio-shutdown"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["sync", "macros", "rt", "signal", "time"] }
+tokio-util = { workspace = true }
+futures = { workspace = true }
