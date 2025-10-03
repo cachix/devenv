@@ -1145,7 +1145,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.9.2"
+version = "1.9.3"
 dependencies = [
  "async-trait",
  "clap",
@@ -1202,7 +1202,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-cache-core"
-version = "1.9.2"
+version = "1.9.3"
 dependencies = [
  "blake3",
  "miette",
@@ -1217,7 +1217,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "1.9.2"
+version = "1.9.3"
 dependencies = [
  "blake3",
  "devenv-cache-core",
@@ -1237,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.9.2"
+version = "1.9.3"
 dependencies = [
  "binaryornot",
  "clap",
@@ -1258,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "1.9.2"
+version = "1.9.3"
 dependencies = [
  "clap",
  "devenv",
@@ -1272,7 +1272,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "1.9.2"
+version = "1.9.3"
 dependencies = [
  "blake3",
  "clap",
