@@ -1,6 +1,10 @@
+use nix::sys::signal::{
+    self as nix_signal, SaFlags, SigAction, SigHandler as NixSigHandler, SigSet, Signal,
+};
+use nix::unistd;
 use std::future::Future;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use tokio::signal;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
@@ -11,6 +15,7 @@ pub struct Shutdown {
     token: CancellationToken,
     task_count: AtomicUsize,
     shutdown_complete: Notify,
+    last_signal: AtomicI32,
 }
 
 impl Shutdown {
@@ -20,6 +25,7 @@ impl Shutdown {
             token: CancellationToken::new(),
             task_count: AtomicUsize::new(0),
             shutdown_complete: Notify::new(),
+            last_signal: AtomicI32::new(0),
         })
     }
 
@@ -117,13 +123,21 @@ impl Shutdown {
                 .expect("Failed to install SIGINT handler");
             let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate())
                 .expect("Failed to install SIGTERM handler");
+            let mut sighup = signal::unix::signal(signal::unix::SignalKind::hangup())
+                .expect("Failed to install SIGHUP handler");
 
             tokio::select! {
                 _ = sigint.recv() => {
-                    println!("Received SIGINT, shutting down gracefully...");
+                    eprintln!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                    shutdown.last_signal.store(Signal::SIGINT as i32, Ordering::Relaxed);
                 }
                 _ = sigterm.recv() => {
-                    println!("Received SIGTERM, shutting down gracefully...");
+                    eprintln!("Received SIGTERM, shutting down gracefully...");
+                    shutdown.last_signal.store(Signal::SIGTERM as i32, Ordering::Relaxed);
+                }
+                _ = sighup.recv() => {
+                    eprintln!("Received SIGHUP, shutting down gracefully...");
+                    shutdown.last_signal.store(Signal::SIGHUP as i32, Ordering::Relaxed);
                 }
             }
 
@@ -144,6 +158,35 @@ impl Shutdown {
     /// Check if shutdown has been triggered
     pub fn is_cancelled(&self) -> bool {
         self.token.is_cancelled()
+    }
+
+    /// Get a clone of the cancellation token.
+    /// This token can be shared across multiple tasks and components.
+    pub fn cancellation_token(&self) -> CancellationToken {
+        self.token.clone()
+    }
+
+    /// Get the last signal that was received, if any.
+    pub fn last_signal(&self) -> Option<Signal> {
+        match self.last_signal.load(Ordering::Relaxed) {
+            0 => None,
+            i => Signal::try_from(i).ok(),
+        }
+    }
+
+    /// Restore the default handler for the last received signal and re-raise the signal
+    /// to terminate with the correct exit code.
+    pub fn exit_process(&self) -> ! {
+        let signal = self.last_signal().unwrap_or(Signal::SIGTERM);
+        let action = SigAction::new(NixSigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
+        unsafe {
+            nix_signal::sigaction(signal, &action)
+                .expect("Failed to restore default signal handler");
+            nix_signal::kill(unistd::getpid(), signal).expect("Failed to re-raise signal");
+        }
+
+        // Unreachable: something went wrong
+        std::process::exit(1);
     }
 }
 
@@ -375,5 +418,45 @@ mod tests {
         // Wait for the task to complete
         let result = handle.await.unwrap();
         assert_eq!(result, Some(Err("cancellable task failed"))); // Error should be propagated
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_token_sharing() {
+        let shutdown = Shutdown::new();
+        let token1 = shutdown.cancellation_token();
+        let token2 = shutdown.cancellation_token();
+
+        // Manually trigger shutdown to test behavior
+        shutdown.shutdown().await;
+
+        // Small delay to ensure cancellation propagates
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        assert!(token1.is_cancelled());
+        assert!(token2.is_cancelled());
+        assert!(shutdown.is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_notification() {
+        let shutdown = Shutdown::new();
+        let token = shutdown.cancellation_token();
+
+        // Spawn a task that waits for cancellation
+        let notified = tokio::spawn(async move {
+            token.cancelled().await;
+            true
+        });
+
+        // Cancel after a small delay
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            shutdown.shutdown().await;
+        });
+
+        // The task should complete when cancelled
+        let result = tokio::time::timeout(Duration::from_millis(200), notified).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().unwrap());
     }
 }
