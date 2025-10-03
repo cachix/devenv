@@ -1,11 +1,12 @@
 use std::future::Future;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::signal;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
 /// A graceful shutdown manager for tokio applications
+#[derive(Debug)]
 pub struct Shutdown {
     token: CancellationToken,
     task_count: AtomicUsize,
