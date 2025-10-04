@@ -354,7 +354,7 @@ impl NixLogBridge {
             }
             _ => {
                 // For other activity types, we can add support as needed
-                debug!("Unhandled Nix activity type: {:?}", activity_type);
+                trace!("Unhandled Nix activity type: {:?}", activity_type);
             }
         }
     }
@@ -529,7 +529,7 @@ impl NixLogBridge {
             }
             _ => {
                 // Handle other result types as needed
-                debug!("Unhandled Nix result type: {:?}", result_type);
+                trace!("Unhandled Nix result type: {:?}", result_type);
             }
         }
     }
