@@ -2,8 +2,9 @@ use crate::config::{Config, RunMode};
 use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
+use crate::tracing_events;
 use crate::types::{
-    Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel,
+    Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, TasksStatus, VerbosityLevel,
 };
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -15,7 +16,6 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinSet;
 use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument};
 
 /// Builder for Tasks configuration
@@ -23,29 +23,27 @@ pub struct TasksBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    cancellation_token: Option<CancellationToken>,
+    shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl TasksBuilder {
-    /// Create a new builder with required configuration
-    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+    /// Create a new builder with required configuration and subsys
+    pub fn new(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    ) -> Self {
         Self {
             config,
             verbosity,
             db_path: None,
-            cancellation_token: None,
+            shutdown,
         }
     }
 
     /// Set the database path
     pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
         self.db_path = Some(db_path);
-        self
-    }
-
-    /// Set the cancellation token for shutdown support
-    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
-        self.cancellation_token = Some(token);
         self
     }
 
@@ -89,7 +87,6 @@ impl TasksBuilder {
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
                 task,
                 self.verbosity,
-                self.cancellation_token.clone(),
                 self.config.sudo_context.clone(),
             ))));
             task_indices.insert(name, index);
@@ -106,7 +103,7 @@ impl TasksBuilder {
             tasks_order: vec![],
             run_mode: self.config.run_mode,
             cache,
-            cancellation_token: self.cancellation_token,
+            shutdown: self.shutdown,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -115,7 +112,16 @@ impl TasksBuilder {
     }
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for Tasks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tasks")
+            .field("root_names", &self.root_names)
+            .field("run_mode", &self.run_mode)
+            .field("shutdown", &"<Shutdown>")
+            .finish()
+    }
+}
+
 pub struct Tasks {
     pub roots: Vec<NodeIndex>,
     // Stored for reporting
@@ -127,13 +133,39 @@ pub struct Tasks {
     pub notify_ui: Arc<Notify>,
     pub run_mode: RunMode,
     pub cache: TaskCache,
-    pub cancellation_token: Option<CancellationToken>,
+    pub shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl Tasks {
     /// Create a new TasksBuilder for configuring Tasks
-    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksBuilder {
-        TasksBuilder::new(config, verbosity)
+    pub fn builder(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    ) -> TasksBuilder {
+        TasksBuilder::new(config, verbosity, shutdown)
+    }
+
+    /// Get the current task completion status
+    pub async fn get_completion_status(&self) -> TasksStatus {
+        let mut status = TasksStatus::new();
+
+        for index in &self.tasks_order {
+            let task_state = self.graph[*index].read().await;
+            match &task_state.status {
+                TaskStatus::Pending => status.pending += 1,
+                TaskStatus::Running(_) => status.running += 1,
+                TaskStatus::Completed(completed) => match completed {
+                    TaskCompleted::Success(_, _) => status.succeeded += 1,
+                    TaskCompleted::Failed(_, _) => status.failed += 1,
+                    TaskCompleted::Skipped(_) => status.skipped += 1,
+                    TaskCompleted::DependencyFailed => status.dependency_failed += 1,
+                    TaskCompleted::Cancelled(_) => status.cancelled += 1,
+                },
+            }
+        }
+
+        status
     }
 
     fn resolve_namespace_roots(
@@ -359,6 +391,18 @@ impl Tasks {
             }
 
             if dependency_failed {
+                let task_name = {
+                    let task_state_read = task_state.read().await;
+                    task_state_read.task.name.clone()
+                };
+                tracing_events::emit_task_completed(
+                    &task_name,
+                    "completed",
+                    "dependency_failed",
+                    None,
+                    Some("dependency_failed"),
+                );
+
                 let mut task_state = task_state.write().await;
                 task_state.status = TaskStatus::Completed(TaskCompleted::DependencyFailed);
                 self.notify_finished.notify_one();
@@ -367,6 +411,12 @@ impl Tasks {
                 let now = Instant::now();
 
                 // hold write lock only to update the status
+                {
+                    let task_state_read = task_state.read().await;
+                    let task_name = task_state_read.task.name.clone();
+                    tracing_events::emit_task_start(&task_name);
+                    tracing_events::emit_task_status_change(&task_name, "running", None);
+                }
                 {
                     let mut task_state = task_state.write().await;
                     task_state.status = TaskStatus::Running(now);
@@ -458,6 +508,62 @@ impl Tasks {
                             }
                             _ => {}
                         }
+                        let task_name = &task_state.task.name;
+
+                        // Emit comprehensive tracing event for completion
+                        match &completed {
+                            TaskCompleted::Success(duration, _) => {
+                                tracing_events::emit_task_completed(
+                                    task_name,
+                                    "completed",
+                                    "success",
+                                    Some(duration.as_secs_f64()),
+                                    None,
+                                );
+                            }
+                            TaskCompleted::Failed(duration, _) => {
+                                tracing_events::emit_task_completed(
+                                    task_name,
+                                    "completed",
+                                    "failed",
+                                    Some(duration.as_secs_f64()),
+                                    None,
+                                );
+                            }
+                            TaskCompleted::Skipped(skipped) => match skipped {
+                                Skipped::Cached(_) => {
+                                    tracing_events::emit_task_completed(
+                                        task_name,
+                                        "completed",
+                                        "cached",
+                                        None,
+                                        Some("cached"),
+                                    );
+                                }
+                                Skipped::NoCommand => {
+                                    tracing_events::emit_task_completed(
+                                        task_name,
+                                        "completed",
+                                        "skipped",
+                                        None,
+                                        Some("no command"),
+                                    );
+                                }
+                            },
+                            TaskCompleted::DependencyFailed => {
+                                // Already emitted above
+                            }
+                            TaskCompleted::Cancelled(duration) => {
+                                tracing_events::emit_task_completed(
+                                    task_name,
+                                    "completed",
+                                    "cancelled",
+                                    Some(duration.as_secs_f64()),
+                                    Some("cancelled"),
+                                );
+                            }
+                        }
+
                         task_state.status = TaskStatus::Completed(completed);
                     }
 
@@ -467,10 +573,30 @@ impl Tasks {
             }
         }
 
-        while let Some(res) = running_tasks.join_next().await {
-            match res {
-                Ok(_) => (),
-                Err(e) => error!("Task crashed: {}", e),
+        loop {
+            if self.shutdown.is_cancelled() {
+                // Shutdown requested - abort remaining tasks and drain them
+                running_tasks.abort_all();
+
+                // Drain the aborted tasks to ensure proper cleanup
+                while let Some(res) = running_tasks.join_next().await {
+                    if let Err(e) = res {
+                        error!("Aborted task error: {}", e);
+                    }
+                }
+                break;
+            }
+
+            // Wait for next task completion
+            if let Some(res) = running_tasks.join_next().await {
+                match res {
+                    Ok(_) => (),
+                    Err(e) => error!("Task crashed: {}", e),
+                }
+                // Continue the loop to wait for more tasks
+            } else {
+                // No more tasks to wait for
+                break;
             }
         }
 

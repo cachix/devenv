@@ -2,7 +2,7 @@ use console::style;
 use std::collections::HashSet;
 use std::fmt;
 use std::io::{self, IsTerminal};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing::{
@@ -54,10 +54,11 @@ pub enum LogFormat {
 }
 
 pub fn init_tracing_default() {
-    init_tracing(Level::default(), LogFormat::default());
+    let shutdown = tokio_shutdown::Shutdown::new();
+    init_tracing(Level::default(), LogFormat::default(), shutdown);
 }
 
-pub fn init_tracing(level: Level, log_format: LogFormat) {
+pub fn init_tracing(level: Level, log_format: LogFormat, _shutdown: Arc<tokio_shutdown::Shutdown>) {
     let devenv_layer = DevenvLayer::new();
 
     let filter = EnvFilter::builder()

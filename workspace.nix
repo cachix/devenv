@@ -17,6 +17,7 @@ let
         ./devenv-tasks
         ./http-client-tls
         ./nix-conf-parser
+        ./tokio-shutdown
         ./xtask
       ])
       # Ignore local builds
