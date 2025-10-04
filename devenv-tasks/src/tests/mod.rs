@@ -9,8 +9,15 @@ use sqlx::Row;
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
+use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::fs::{self, File};
+use tokio_shutdown::Shutdown;
+
+/// Create a dummy shutdown handle for tests
+fn create_dummy_shutdown() -> Arc<Shutdown> {
+    Shutdown::new()
+}
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -40,7 +47,7 @@ async fn test_task_name() -> Result<(), Error> {
         }))
         .unwrap();
         assert_matches!(
-            Tasks::builder(config, VerbosityLevel::Verbose)
+            Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
                 .with_db_path(db_path.clone())
                 .build()
                 .await,
@@ -65,7 +72,7 @@ async fn test_task_name() -> Result<(), Error> {
         }))
         .unwrap();
         assert_matches!(
-            Tasks::builder(config, VerbosityLevel::Verbose)
+            Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
                 .with_db_path(db_path.clone())
                 .build()
                 .await,
@@ -120,6 +127,7 @@ async fn test_basic_tasks() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -164,6 +172,7 @@ async fn test_tasks_cycle() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -223,7 +232,7 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
     }))
     .unwrap();
 
-    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose)
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -260,7 +269,7 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
     }))
     .unwrap();
 
-    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path2)
         .build()
         .await?;
@@ -329,7 +338,7 @@ exit 0
     }))
     .unwrap();
 
-    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose)
+    let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -369,7 +378,7 @@ exit 0
     }))
     .unwrap();
 
-    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path)
         .build()
         .await?;
@@ -451,7 +460,7 @@ echo "Task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -499,7 +508,7 @@ echo "Task executed successfully"
     }))
     .unwrap();
 
-    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -554,7 +563,7 @@ echo "Task executed successfully"
     }))
     .unwrap();
 
-    let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose)
+    let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path)
         .build()
         .await?;
@@ -634,7 +643,7 @@ echo "Multiple files task executed successfully"
     .unwrap();
 
     // Create tasks with multiple files in exec_if_modified
-    let tasks = Tasks::builder(config1, VerbosityLevel::Verbose)
+    let tasks = Tasks::builder(config1, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -672,7 +681,7 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::builder(config2, VerbosityLevel::Verbose)
+    let tasks = Tasks::builder(config2, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -704,7 +713,7 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks2 = Tasks::builder(config3, VerbosityLevel::Verbose)
+    let tasks2 = Tasks::builder(config3, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -738,7 +747,7 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::builder(config4, VerbosityLevel::Verbose)
+    let tasks = Tasks::builder(config4, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -778,7 +787,7 @@ echo "Multiple files task executed successfully"
     }))
     .unwrap();
 
-    let tasks = Tasks::builder(config5, VerbosityLevel::Verbose)
+    let tasks = Tasks::builder(config5, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -852,7 +861,7 @@ echo "Task executed successfully"
         .unwrap();
 
         // Create the tasks with explicit db path
-        let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose)
+        let tasks1 = Tasks::builder(config1, VerbosityLevel::Verbose, create_dummy_shutdown())
             .with_db_path(db_path.clone())
             .build()
             .await?;
@@ -898,7 +907,7 @@ echo "Task executed successfully"
         .unwrap();
 
         // Create the tasks with explicit db path
-        let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+        let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, create_dummy_shutdown())
             .with_db_path(db_path.clone())
             .build()
             .await?;
@@ -965,7 +974,7 @@ echo "Task executed successfully"
         .unwrap();
 
         // Create the tasks with explicit db path
-        let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose)
+        let tasks3 = Tasks::builder(config3, VerbosityLevel::Verbose, create_dummy_shutdown())
             .with_db_path(db_path)
             .build()
             .await?;
@@ -1064,7 +1073,7 @@ echo "Task completed and modified the file"
     };
 
     // Create and run the tasks
-    let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -1121,7 +1130,7 @@ echo "Task completed and modified the file"
     }))
     .unwrap();
 
-    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose)
+    let tasks2 = Tasks::builder(config2, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path)
         .build()
         .await?;
@@ -1200,7 +1209,7 @@ exit 1
     };
 
     // Create and run the tasks
-    let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+    let tasks = Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
         .with_db_path(db_path.clone())
         .build()
         .await?;
@@ -1277,6 +1286,7 @@ async fn test_nonexistent_script() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -1325,6 +1335,7 @@ async fn test_status_without_command() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -1368,10 +1379,14 @@ async fn test_run_mode() -> Result<(), Error> {
 
     // Single task
     {
-        let tasks = Tasks::builder(config.clone(), VerbosityLevel::Verbose)
-            .with_db_path(db_path.clone())
-            .build()
-            .await?;
+        let tasks = Tasks::builder(
+            config.clone(),
+            VerbosityLevel::Verbose,
+            create_dummy_shutdown(),
+        )
+        .with_db_path(db_path.clone())
+        .build()
+        .await?;
         tasks.run().await;
 
         let task_statuses = inspect_tasks(&tasks).await;
@@ -1389,7 +1404,7 @@ async fn test_run_mode() -> Result<(), Error> {
             run_mode: RunMode::Before,
             ..config.clone()
         };
-        let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+        let tasks = Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
             .with_db_path(db_path.clone())
             .build()
             .await?;
@@ -1410,7 +1425,7 @@ async fn test_run_mode() -> Result<(), Error> {
             run_mode: RunMode::After,
             ..config.clone()
         };
-        let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+        let tasks = Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
             .with_db_path(db_path.clone())
             .build()
             .await?;
@@ -1431,7 +1446,7 @@ async fn test_run_mode() -> Result<(), Error> {
             run_mode: RunMode::All,
             ..config.clone()
         };
-        let tasks = Tasks::builder(config, VerbosityLevel::Verbose)
+        let tasks = Tasks::builder(config, VerbosityLevel::Verbose, create_dummy_shutdown())
             .with_db_path(db_path.clone())
             .build()
             .await?;
@@ -1483,6 +1498,7 @@ async fn test_before_tasks() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -1535,6 +1551,7 @@ async fn test_after_tasks() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -1588,6 +1605,7 @@ async fn test_before_and_after_tasks() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -1641,6 +1659,7 @@ async fn test_transitive_dependencies() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -1694,6 +1713,7 @@ async fn test_non_root_before_and_after() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -1756,6 +1776,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -1803,6 +1824,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -1846,6 +1868,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -1900,6 +1923,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -1943,6 +1967,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -2005,6 +2030,7 @@ async fn test_dependency_failure() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -2069,6 +2095,7 @@ exit 0
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -2134,6 +2161,7 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -2196,6 +2224,7 @@ fi
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
@@ -2251,6 +2280,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -2272,6 +2302,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -2293,6 +2324,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -2314,6 +2346,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -2335,6 +2368,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -2360,6 +2394,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path.clone())
     .build()
@@ -2394,6 +2429,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
         }))
         .unwrap(),
         VerbosityLevel::Verbose,
+        create_dummy_shutdown(),
     )
     .with_db_path(db_path)
     .build()
