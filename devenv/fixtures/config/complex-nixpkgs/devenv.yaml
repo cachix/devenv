@@ -1,0 +1,10 @@
+nixpkgs:
+  allowUnfree: true
+  per-platform:
+    x86_64-linux:
+      allowBroken: true
+    aarch64-darwin:
+      cudaSupport: true
+imports:
+  - ./platform-specific
+  - ./cuda-config

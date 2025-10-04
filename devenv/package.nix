@@ -15,6 +15,8 @@
 , protobuf
 , pkg-config
 , glibcLocalesUtf8
+, build_tasks ? false
+,
 }:
 
 rustPlatform.buildRustPackage {
@@ -56,10 +58,9 @@ rustPlatform.buildRustPackage {
 
   postInstall =
     let
-      setDefaultLocaleArchive =
-        lib.optionalString (glibcLocalesUtf8 != null) ''
-          --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
-        '';
+      setDefaultLocaleArchive = lib.optionalString (glibcLocalesUtf8 != null) ''
+        --set-default LOCALE_ARCHIVE ${glibcLocalesUtf8}/lib/locale/locale-archive
+      '';
     in
     ''
       wrapProgram $out/bin/devenv \

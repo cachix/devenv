@@ -300,25 +300,6 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         );
         eprintln!("{}", "-".repeat(50));
 
-        let mut config = devenv::config::Config::load_from(path)?;
-        for input in args.override_input.chunks_exact(2) {
-            config
-                .override_input_url(&input[0], &input[1])
-                .wrap_err(format!(
-                    "Failed to override input {} with {}",
-                    &input[0], &input[1]
-                ))?;
-        }
-
-        // Override the input for the devenv module
-        config
-            .add_input(
-                "devenv",
-                &format!("path:{}?dir=src/modules", cwd.display()),
-                &[],
-            )
-            .wrap_err("Failed to add devenv input")?;
-
         // Determine whether to use a temporary directory
         let (devenv_root, devenv_dotfile, _tmpdir) = if test_config.use_tmp_dir {
             // Create temp directory in system temp dir, not the current directory
@@ -367,6 +348,36 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             (devenv_root, devenv_dotfile, None)
         };
 
+        // Run .patch.sh if it exists (must run before loading config)
+        let patch_script = PathBuf::from(".patch.sh");
+        if patch_script.exists() {
+            eprintln!("    Running .patch.sh");
+            let _ = Command::new("bash")
+                .arg(&patch_script)
+                .status()
+                .into_diagnostic()?;
+        }
+
+        // Now load config from the current directory (which might be temp dir)
+        let mut config = devenv::config::Config::load_from(&devenv_root)?;
+        for input in args.override_input.chunks_exact(2) {
+            config
+                .override_input_url(&input[0], &input[1])
+                .wrap_err(format!(
+                    "Failed to override input {} with {}",
+                    &input[0], &input[1]
+                ))?;
+        }
+
+        // Override the input for the devenv module
+        config
+            .add_input(
+                "devenv",
+                &format!("path:{}?dir=src/modules", cwd.display()),
+                &[],
+            )
+            .wrap_err("Failed to add devenv input")?;
+
         let options = DevenvOptions {
             config,
             devenv_root: Some(devenv_root.clone()),
@@ -376,18 +387,6 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
         let devenv = Devenv::new(options).await;
 
         eprintln!("  Running {dir_name}");
-
-        // A script to patch files in the working directory before the shell.
-        let patch_script = ".patch.sh";
-
-        // Run .patch.sh if it exists
-        if PathBuf::from(patch_script).exists() {
-            eprintln!("    Running {patch_script}");
-            let _ = Command::new("bash")
-                .arg(patch_script)
-                .status()
-                .into_diagnostic()?;
-        }
 
         // A script to run inside the shell before the test.
         let setup_script = ".setup.sh";

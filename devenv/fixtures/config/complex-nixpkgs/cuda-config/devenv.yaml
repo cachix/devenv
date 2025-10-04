@@ -1,0 +1,6 @@
+nixpkgs:
+  cudaSupport: true
+  cudaCapabilities: ["8.0", "8.6"]
+  per-platform:
+    x86_64-linux:
+      cudaCapabilities: ["9.0"]  # Should override previous
