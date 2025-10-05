@@ -1,6 +1,0 @@
-inputs:
-  root:
-    url: path:../
-    flake: false
-imports:
-  - root/common
