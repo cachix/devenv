@@ -2,12 +2,14 @@ use clap::Parser;
 use devenv::{Devenv, DevenvOptions, log};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{
     env, fs,
     path::PathBuf,
     process::{Command, ExitCode, Stdio},
 };
 use tempfile::TempDir;
+use tokio_shutdown::Shutdown;
 
 const ALL_SYSTEMS: &[&str] = &[
     "x86_64-linux",
@@ -255,7 +257,10 @@ fn discover_tests(
     Ok(test_infos)
 }
 
-async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
+async fn run_tests_in_directory(
+    args: &RunArgs,
+    shutdown: Arc<Shutdown>,
+) -> Result<Vec<TestResult>> {
     let cwd = env::current_dir().into_diagnostic()?;
 
     // Discover tests (filtered by current system)
@@ -372,6 +377,7 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             devenv_root: Some(devenv_root.clone()),
             devenv_dotfile: Some(devenv_dotfile),
             global_options: Some(devenv::GlobalOptions::default()),
+            shutdown: shutdown.clone(), // Pass the shutdown
         };
         let devenv = Devenv::new(options).await;
 
@@ -464,18 +470,33 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
 
 #[tokio::main]
 async fn main() -> Result<ExitCode> {
-    log::init_tracing_default();
-
-    // If DEVENV_RUN_TESTS is set, run the tests.
     if env::var("DEVENV_RUN_TESTS") == Ok("1".to_string()) {
+        // Phase 2: Run the actual tests with proper shutdown handling
+        let shutdown = Shutdown::new();
+        shutdown.install_signals().await;
+        log::init_tracing(
+            log::Level::default(),
+            log::LogFormat::default(),
+            shutdown.clone(),
+        );
         let args = Args::parse();
-        match execute_command(&args).await {
-            Ok(_) => return Ok(ExitCode::SUCCESS),
-            Err(err) => {
-                eprintln!("Error: {err}");
+
+        tokio::select! {
+            result = execute_command(&args, shutdown.clone()) => {
+                match result {
+                    Ok(()) => {},
+                    Err(e) => {
+                        eprintln!("Error: {e}");
+                        return Ok(ExitCode::FAILURE);
+                    }
+                }
+            },
+            _ = shutdown.wait_for_shutdown() => {
+                eprintln!("Task was cancelled");
                 return Ok(ExitCode::FAILURE);
             }
-        };
+        }
+        return Ok(ExitCode::SUCCESS);
     }
 
     // Otherwise, run the tests in a subprocess with a fresh environment.
@@ -589,15 +610,15 @@ exec '{bin_dir}/devenv' \
     }
 }
 
-async fn execute_command(args: &Args) -> Result<()> {
+async fn execute_command(args: &Args, shutdown: Arc<Shutdown>) -> Result<()> {
     match &args.command {
-        Commands::Run(run_args) => run_tests(run_args).await,
+        Commands::Run(run_args) => run_tests(run_args, shutdown).await,
         Commands::GenerateJson(gen_args) => generate_json(gen_args).await,
     }
 }
 
-async fn run_tests(args: &RunArgs) -> Result<()> {
-    let test_results = run_tests_in_directory(args).await?;
+async fn run_tests(args: &RunArgs, shutdown: Arc<Shutdown>) -> Result<()> {
+    let test_results = run_tests_in_directory(args, shutdown).await?;
     let num_tests = test_results.len();
     let num_failed_tests = test_results.iter().filter(|r| !r.passed).count();
 

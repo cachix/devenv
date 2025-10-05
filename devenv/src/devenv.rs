@@ -2,10 +2,10 @@ use super::{cli, config, log::HumanReadableDuration, nix_backend, tasks, util};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
-use cli_table::Table;
-use cli_table::{WithTitle, print_stderr};
+use cli_table::{Table, WithTitle, print_stderr};
+use devenv_tasks::{Config as TasksConfig, Tasks, VerbosityLevel};
 use include_dir::{Dir, include_dir};
-use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
+use miette::{Context, IntoDiagnostic, Result, bail, miette};
 use once_cell::sync::Lazy;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
@@ -50,12 +50,24 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 // project vars
 pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
-#[derive(Default, Debug)]
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
+    pub shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+}
+
+impl DevenvOptions {
+    pub fn new(shutdown: std::sync::Arc<tokio_shutdown::Shutdown>) -> Self {
+        Self {
+            config: config::Config::default(),
+            global_options: None,
+            devenv_root: None,
+            devenv_dotfile: None,
+            shutdown,
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -97,6 +109,9 @@ pub struct Devenv {
     // TODO: make private.
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
+
+    // Shutdown handle for coordinated shutdown
+    shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 }
 
 impl Devenv {
@@ -192,6 +207,7 @@ impl Devenv {
             has_processes: Arc::new(OnceCell::new()),
             secretspec_resolved,
             container_name: None,
+            shutdown: options.shutdown,
         }
     }
 
@@ -214,7 +230,7 @@ impl Devenv {
         }
 
         for filename in REQUIRED_FILES {
-            info!("Creating {}", filename);
+            info!(devenv.log = true, file = %filename, "Creating file");
 
             let path = PROJECT_DIR
                 .get_file(filename)
@@ -400,26 +416,102 @@ impl Devenv {
         self.exec_in_shell(None, &[]).await
     }
 
-    /// Execute a command by replacing the current process using exec.
+    /// Execute a command by spawning it as a child process and waiting for completion.
     ///
     /// This method accepts `Option<String>` for the command to support both:
     /// - Interactive shell: `exec_in_shell(None, &[])`
     /// - Command execution: `exec_in_shell(Some(cmd), args)`
     ///
-    /// **Important**: This function never returns `Ok(())` on success because `exec()`
-    /// replaces the current process. The `Result<()>` return type only represents
-    /// potential errors during setup or if `exec()` fails to start the new process.
-    /// On successful exec, this function never returns.
+    /// This function spawns the shell/command as a child process and properly handles
+    /// signals like Ctrl+C by forwarding them to the child process, allowing for
+    /// proper cleanup and termination.
     pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
-        let shell_cmd = self.prepare_shell(&cmd, args).await?;
-        info!(devenv.is_user_message = true, "Entering shell");
-        let err = shell_cmd.into_std().exec();
+        let mut shell_cmd = self.prepare_shell(&cmd, args).await?;
+        info!(
+            target = "devenv.ui",
+            devenv.ui.message = "Entering shell",
+            devenv.ui.type = "user",
+            devenv.ui.id = "enter-shell",
+            "Entering shell"
+        );
 
-        let cmd_context = match &cmd {
-            Some(c) => format!("command '{c}'"),
-            None => "interactive shell".to_string(),
-        };
-        bail!("Failed to exec into shell with {}: {}", cmd_context, err);
+        // Spawn the shell as a child process instead of exec
+        let mut child = shell_cmd.spawn().into_diagnostic().with_context(|| {
+            let cmd_context = match &cmd {
+                Some(c) => format!("command '{c}'"),
+                None => "interactive shell".to_string(),
+            };
+            format!("Failed to spawn {cmd_context}")
+        })?;
+
+        // Set up signal handlers to forward signals to the child process
+        let child_id = child.id();
+        if let Some(pid) = child_id {
+            let child_pid = Pid::from_raw(pid as i32);
+
+            // Set up signal forwarding in a separate task
+            let _signal_task = tokio::spawn(async move {
+                let mut sigint =
+                    match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+                    {
+                        Ok(signal) => signal,
+                        Err(e) => {
+                            debug!("Failed to setup SIGINT forwarding: {}", e);
+                            return;
+                        }
+                    };
+
+                let mut sigterm =
+                    match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                    {
+                        Ok(signal) => signal,
+                        Err(e) => {
+                            debug!("Failed to setup SIGTERM forwarding: {}", e);
+                            return;
+                        }
+                    };
+
+                loop {
+                    tokio::select! {
+                        _ = sigint.recv() => {
+                            debug!("Forwarding SIGINT to child process {}", child_pid);
+                            if let Err(e) = signal::kill(child_pid, signal::Signal::SIGINT) {
+                                debug!("Failed to forward SIGINT to child: {}", e);
+                                break;
+                            }
+                        }
+                        _ = sigterm.recv() => {
+                            debug!("Forwarding SIGTERM to child process {}", child_pid);
+                            if let Err(e) = signal::kill(child_pid, signal::Signal::SIGTERM) {
+                                debug!("Failed to forward SIGTERM to child: {}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Wait for the child process to complete
+        let exit_status = child.wait().await.into_diagnostic().with_context(|| {
+            let cmd_context = match &cmd {
+                Some(c) => format!("command '{c}'"),
+                None => "interactive shell".to_string(),
+            };
+            format!("Failed to wait for {cmd_context}")
+        })?;
+
+        // Exit with the same code as the child process
+        if let Some(code) = exit_status.code() {
+            if code != 0 {
+                std::process::exit(code);
+            }
+        } else {
+            // Child was terminated by a signal
+            std::process::exit(1);
+        }
+
+        Ok(())
     }
 
     /// Run a command and return the output.
@@ -430,7 +522,13 @@ impl Devenv {
     /// to return control to the caller with the command's output.
     pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let span = info_span!("running_in_shell", devenv.user_message = "Running in shell");
+        let span = info_span!(
+            target: "devenv.ui",
+            "running_in_shell",
+            devenv.ui.message = "Running in shell",
+            devenv.ui.type = "user",
+            devenv.ui.id = "run-in-shell"
+        );
         // Note that tokio's `output()` always configures stdout/stderr as pipes.
         // Use `spawn` + `wait_with_output` instead.
         let proc = shell_cmd
@@ -452,16 +550,28 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let span = info_span!("update", devenv.user_message = msg);
+        let span = info_span!(
+            target: "devenv.ui",
+            "update",
+            devenv.ui.message = msg,
+            devenv.ui.type = "user",
+            devenv.ui.id = "update",
+            input = ?input_name
+        );
         self.nix.update(input_name).instrument(span).await?;
 
         Ok(())
     }
 
     #[instrument(
+        target = "devenv.ui",
         name = "building_container",
         skip(self),
-        fields(devenv.user_message = format!("Building {name} container"))
+        fields(
+            devenv.ui.message = format!("Building {name} container"),
+            devenv.ui.type = "user",
+            devenv.ui.id = format!("build-container-{name}")
+        )
     )]
     pub async fn container_build(&mut self, name: &str) -> Result<String> {
         // This container name is passed to the flake as an argument and tells the module system
@@ -561,7 +671,13 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        info!(devenv.is_user_message = true, "Running container {name}",);
+        info!(
+            target = "devenv.ui",
+            devenv.ui.message = format!("Running container {name}"),
+            devenv.ui.type = "user",
+            devenv.ui.id = format!("run-container-{name}"),
+            "Running container {name}"
+        );
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
@@ -593,11 +709,14 @@ impl Devenv {
         let (to_gc, removed_symlinks) = {
             // TODO: No newline
             let span = info_span!(
+                target: "devenv.ui",
                 "cleanup_symlinks",
-                devenv.user_message = format!(
+                devenv.ui.message = format!(
                     "Removing non-existing symlinks in {}",
                     &self.devenv_home_gc.display()
-                )
+                ),
+                devenv.ui.type = "user",
+                devenv.ui.id = "cleanup-symlinks"
             );
             span.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
         };
@@ -611,9 +730,11 @@ impl Devenv {
 
         {
             let span = info_span!(
+                target: "devenv.ui",
                 "nix_gc",
-                devenv.user_message =
-                    "Running garbage collection (this process will take some time)"
+                devenv.ui.message = "Running garbage collection (this process will take some time)",
+                devenv.ui.type = "user",
+                devenv.ui.id = "nix-gc"
             );
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
@@ -634,9 +755,12 @@ impl Devenv {
     }
 
     #[instrument(
+        target = "devenv.ui",
         skip(self),
         fields(
-            devenv.user_message = "Searching options and packages",
+            devenv.ui.message = "Searching options and packages",
+            devenv.ui.type = "user",
+            devenv.ui.id = "search"
         )
     )]
     pub async fn search(&self, name: &str) -> Result<()> {
@@ -737,7 +861,13 @@ impl Devenv {
 
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
-            let span = info_span!("load_tasks", devenv.user_message = "Evaluating tasks");
+            let span = info_span!(
+                target: "devenv.ui",
+                "load_tasks",
+                devenv.ui.message = "Evaluating tasks",
+                devenv.ui.type = "user",
+                devenv.ui.id = "load-tasks"
+            );
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
                 .build(&["devenv.config.task.config"], None, Some(&gc_root))
@@ -754,7 +884,7 @@ impl Devenv {
     }
 
     pub async fn tasks_run(
-        &self,
+        self,
         roots: Vec<String>,
         run_mode: devenv_tasks::RunMode,
     ) -> Result<()> {
@@ -778,14 +908,14 @@ impl Devenv {
 
         // Convert global options to verbosity level
         let verbosity = if self.global_options.quiet {
-            tasks::VerbosityLevel::Quiet
+            VerbosityLevel::Quiet
         } else if self.global_options.verbose {
-            tasks::VerbosityLevel::Verbose
+            VerbosityLevel::Verbose
         } else {
-            tasks::VerbosityLevel::Normal
+            VerbosityLevel::Normal
         };
 
-        let config = tasks::Config {
+        let config = TasksConfig {
             roots,
             tasks,
             run_mode,
@@ -796,11 +926,30 @@ impl Devenv {
             serde_json::to_string_pretty(&config).unwrap()
         );
 
-        let mut tui = tasks::TasksUi::builder(config, verbosity).build().await?;
-        let (tasks_status, outputs) = tui.run().await?;
+        // Create Tasks instance using devenv-tasks execution engine
+        // Note: This consumes the subsys handle, which is fine since tasks_run is the final operation
+        let task_builder = Tasks::builder(config, verbosity, self.shutdown.clone());
 
-        if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
-            miette::bail!("Some tasks failed");
+        let tasks = task_builder
+            .build()
+            .await
+            .wrap_err("Failed to create tasks")?;
+
+        // Run tasks directly - TUI will observe via tracing events
+        let outputs = tasks.run().await;
+
+        // Check for task failures by examining completion status
+        let completion_status = tasks.get_completion_status().await;
+        if completion_status.failed > 0 || completion_status.dependency_failed > 0 {
+            error!(
+                "Tasks failed: {} failed, {} dependency failed",
+                completion_status.failed, completion_status.dependency_failed
+            );
+            bail!(
+                "Task execution failed: {} tasks failed, {} tasks had dependency failures",
+                completion_status.failed,
+                completion_status.dependency_failed
+            );
         }
 
         println!(
@@ -905,7 +1054,13 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let span = info_span!("test", devenv.user_message = "Building tests");
+            let span = info_span!(
+                target: "devenv.ui",
+                "test_build",
+                devenv.ui.message = "Building tests",
+                devenv.ui.type = "user",
+                devenv.ui.id = "test-build"
+            );
             let gc_root = self.devenv_dot_gc.join("test");
             let test_script = self
                 .nix
@@ -930,9 +1085,11 @@ impl Devenv {
         // Tests can arbitrarily write to stdout/stderr at the moment.
         // Until that is changed, the spinner must be disabled.
         let span = info_span!(
-            "test",
-            devenv.user_message = "Running tests",
-            devenv.no_spinner = true,
+            target: "devenv.ui",
+            "test_run",
+            devenv.ui.message = "Running tests",
+            devenv.ui.type = "user",
+            devenv.ui.id = "test-run",
             test_script = %test_script
         );
         let result = async {
@@ -971,7 +1128,14 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<()> {
-        let span = info_span!("build", devenv.user_message = "Building");
+        let span = info_span!(
+            target: "devenv.ui",
+            "build",
+            devenv.ui.message = "Building",
+            devenv.ui.type = "user",
+            devenv.ui.id = "build",
+            attributes = ?attributes
+        );
         async move {
             self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
@@ -1030,8 +1194,11 @@ impl Devenv {
         }
 
         let span = info_span!(
+            target: "devenv.ui",
             "build_processes",
-            devenv.user_message = "Building processes"
+            devenv.ui.message = "Building processes",
+            devenv.ui.type = "user",
+            devenv.ui.id = "build-processes"
         );
         let proc_script_string = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
@@ -1045,7 +1212,13 @@ impl Devenv {
         .instrument(span)
         .await?;
 
-        let span = info_span!("up", devenv.user_message = "Starting processes");
+        let span = info_span!(
+            target: "devenv.ui",
+            "up",
+            devenv.ui.message = "Starting processes",
+            devenv.ui.type = "user",
+            devenv.ui.id = "up"
+        );
         async {
             let processes = processes.join(" ");
 
@@ -1511,8 +1684,16 @@ impl Devenv {
         Ok(())
     }
 
-    #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
+        let _span = tracing::info_span!(
+            target: "devenv.ui",
+            "get_dev_environment",
+            devenv.ui.message = "Building shell",
+            devenv.ui.type = "user",
+            devenv.ui.id = "get-dev-environment"
+        )
+        .entered();
+
         self.assemble(false).await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");

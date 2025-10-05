@@ -1,6 +1,7 @@
 use crate::{
     cli, config, devenv,
     nix_backend::{self, NixBackend},
+    nix_log_bridge::NixLogBridge,
 };
 use async_trait::async_trait;
 use futures::future;
@@ -13,12 +14,40 @@ use std::env;
 use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process;
+
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::OnceCell;
 use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
+use tracing_subscriber::registry::LookupSpan;
+
+/// Get the current user operation ID from the active span extensions
+fn get_user_operation_id() -> Option<devenv_tui::OperationId> {
+    // Try to get the tracing registry from the current subscriber
+    tracing::dispatcher::get_default(|dispatch| {
+        if let Some(registry) = dispatch.downcast_ref::<tracing_subscriber::Registry>() {
+            let current_span = tracing::Span::current();
+            if let Some(id) = current_span.id()
+                && let Some(span_ref) = registry.span(&id) {
+                    // Check if current span has an operation ID (stored by DevenvLayer)
+                    if let Some(op_id) = span_ref.extensions().get::<devenv_tui::OperationId>() {
+                        return Some(op_id.clone());
+                    }
+
+                    // Walk up parent spans to find a user operation
+                    let mut current = span_ref.parent();
+                    while let Some(parent) = current {
+                        if let Some(op_id) = parent.extensions().get::<devenv_tui::OperationId>() {
+                            return Some(op_id.clone());
+                        }
+                        current = parent.parent();
+                    }
+                }
+        }
+        None
+    })
+}
 
 pub struct Nix {
     pub options: nix_backend::Options,
@@ -325,8 +354,8 @@ impl Nix {
         mut cmd: std::process::Command,
         options: &nix_backend::Options,
     ) -> Result<devenv_eval_cache::Output> {
-        use devenv_eval_cache::internal_log::Verbosity;
-        use devenv_eval_cache::{CachedCommand, supports_eval_caching};
+        
+        use devenv_eval_cache::supports_eval_caching;
 
         if options.replace_shell {
             if self.global_options.nix_debugger
@@ -335,7 +364,11 @@ impl Nix {
                 cmd.arg("--debugger");
             }
 
-            debug!("Running command: {}", display_command(&cmd));
+            debug!(
+                devenv.log = true,
+                "Running command: {}",
+                display_command(&cmd)
+            );
 
             let error = cmd.exec();
             error!(
@@ -345,103 +378,16 @@ impl Nix {
             bail!("Failed to replace shell")
         }
 
-        if options.logging {
-            cmd.stdin(process::Stdio::inherit())
-                .stderr(process::Stdio::inherit());
-            if options.logging_stdout {
-                cmd.stdout(std::process::Stdio::inherit());
-            }
-        }
+        // Always use NixCommand for consistent log parsing and TUI integration
+        // Only enable caching if both eval caching is supported and database pool is available
+        let enable_caching = supports_eval_caching(&cmd)
+            && self.pool.get().is_some()
+            && self.global_options.eval_cache
+            && options.cache_output;
 
-        let result = if supports_eval_caching(&cmd) && self.pool.get().is_some() {
-            let pool = self.pool.get().unwrap();
-            let mut cached_cmd = CachedCommand::new(pool);
-
-            if self.global_options.eval_cache && options.cache_output {
-                cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
-                cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
-                cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
-                cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
-                cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
-
-                // Ignore anything in .devenv except for the specifically watched files above.
-                cached_cmd.unwatch_path(&self.paths.dotfile);
-
-                if self.global_options.refresh_eval_cache || options.refresh_cached_output {
-                    cached_cmd.force_refresh();
-                }
-            } else {
-                cached_cmd.disable_cache();
-            }
-
-            if options.logging && !self.global_options.quiet {
-                // Show eval and build logs only in verbose mode
-                let target_log_level = if self.global_options.verbose {
-                    Verbosity::Talkative
-                } else {
-                    Verbosity::Warn
-                };
-
-                cached_cmd.on_stderr(move |log| {
-                    if let Some(log) = log.filter_by_level(target_log_level)
-                        && let Some(msg) = log.get_msg()
-                    {
-                        use devenv_eval_cache::internal_log::InternalLog;
-                        match log {
-                            InternalLog::Msg { level, .. } => match *level {
-                                Verbosity::Error => error!("{msg}"),
-                                Verbosity::Warn => warn!("{msg}"),
-                                Verbosity::Talkative => debug!("{msg}"),
-                                _ => info!("{msg}"),
-                            },
-                            _ => info!("{msg}"),
-                        }
-                    };
-                });
-            }
-
-            let pretty_cmd = display_command(&cmd);
-            let span = debug_span!(
-                "Running command",
-                command = pretty_cmd.as_str(),
-                devenv.user_message = format!("Running command: {}", pretty_cmd)
-            );
-            let output = cached_cmd
-                .output(&mut cmd)
-                .instrument(span)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))?;
-
-            if output.cache_hit {
-                tracing::Span::current().record(
-                    "cache_status",
-                    if output.cache_hit { "hit" } else { "miss" },
-                );
-            }
-
-            output
-        } else {
-            let pretty_cmd = display_command(&cmd);
-            let span = debug_span!(
-                "Running command",
-                command = pretty_cmd.as_str(),
-                devenv.user_message = format!("Running command: {}", pretty_cmd)
-            );
-            let output = span.in_scope(|| {
-                cmd.output()
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("Failed to run command `{}`", display_command(&cmd)))
-            })?;
-
-            devenv_eval_cache::Output {
-                status: output.status,
-                stdout: output.stdout,
-                stderr: output.stderr,
-                inputs: vec![],
-                cache_hit: false,
-            }
-        };
+        let result = self
+            .run_with_cached_command(&mut cmd, options, enable_caching)
+            .await?;
 
         tracing::Span::current().record("output", format!("{result:?}"));
 
@@ -472,6 +418,119 @@ impl Nix {
         }
 
         Ok(result)
+    }
+
+    /// Run a command using NixCommand with unified log parsing and TUI bridge integration
+    async fn run_with_cached_command(
+        &self,
+        cmd: &mut std::process::Command,
+        options: &nix_backend::Options,
+        enable_caching: bool,
+    ) -> Result<devenv_eval_cache::Output> {
+        use devenv_eval_cache::NixCommand;
+        use devenv_eval_cache::internal_log::Verbosity;
+
+        let pool = self.pool.get().unwrap();
+        let mut cached_cmd = NixCommand::new(pool);
+
+        // Configure caching behavior
+        cached_cmd.enable_eval_cache(enable_caching);
+        if self.global_options.refresh_eval_cache || options.refresh_cached_output {
+            cached_cmd.force_refresh();
+        }
+
+        // Add path watching for dependency tracking
+        cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
+        cached_cmd.watch_path(self.paths.root.join("devenv.yaml"));
+        cached_cmd.watch_path(self.paths.root.join("devenv.lock"));
+        cached_cmd.watch_path(self.paths.dotfile.join("flake.json"));
+        cached_cmd.watch_path(self.paths.dotfile.join("cli-options.nix"));
+
+        // Ignore anything in .devenv except for the specifically watched files above.
+        cached_cmd.unwatch_path(&self.paths.dotfile);
+
+        // Setup Nix log bridge for enhanced log processing
+        let nix_bridge = NixLogBridge::new();
+
+        // Add stderr processing callback with proper lifetime management
+        let bridge_for_callback = nix_bridge.clone();
+        let logging = options.logging;
+        let quiet = self.global_options.quiet;
+        let verbose = self.global_options.verbose;
+
+        cached_cmd.on_stderr(move |log| {
+            // Send to Nix log bridge for detailed progress tracking
+            // The bridge will emit appropriate tracing events
+            bridge_for_callback.process_internal_log(log.clone());
+
+            // Only output to tracing logs if logging is enabled
+            // This provides fallback logging when detailed processing is not needed
+            if logging && !quiet {
+                let target_log_level = if verbose {
+                    Verbosity::Talkative
+                } else {
+                    Verbosity::Warn
+                };
+
+                if let Some(filtered_log) = log.filter_by_level(target_log_level)
+                    && let Some(msg) = filtered_log.get_msg() {
+                        use devenv_eval_cache::internal_log::InternalLog;
+                        match filtered_log {
+                            InternalLog::Msg { level, .. } => match *level {
+                                Verbosity::Error => error!("{msg}"),
+                                Verbosity::Warn => warn!("{msg}"),
+                                Verbosity::Talkative => debug!("{msg}"),
+                                _ => info!("{msg}"),
+                            },
+                            _ => info!("{msg}"),
+                        };
+                    }
+            }
+        });
+
+        // Setup tracing span for command execution
+        let pretty_cmd = display_command(cmd);
+        let span = debug_span!(
+            target: "devenv.ui",
+            "nix_command",
+            devenv.ui.message = format!("{}", pretty_cmd),
+            devenv.ui.type = "command",
+            devenv.ui.detail = "nix",
+            devenv.ui.id = format!("nix-{}", blake3::hash(pretty_cmd.as_bytes()).to_hex()[..8].to_string()),
+            command = pretty_cmd.as_str()
+        );
+
+        // Set current operation for Nix log correlation
+        if self.global_options.verbose {
+            // In verbose mode: create bridge operation that will be child of the debug span
+            let cmd_string = display_command(cmd);
+            let cmd_hash = blake3::hash(cmd_string.as_bytes());
+            let command_operation_id =
+                devenv_tui::OperationId::new(format!("cmd-{}", &cmd_hash.to_hex()[..8]));
+            nix_bridge.set_current_operation(command_operation_id);
+        }
+        // In non-verbose mode: don't set bridge operation, logs will attach via fallback
+
+        // Execute the command
+        let output = cached_cmd
+            .output(cmd)
+            .instrument(span)
+            .await
+            .into_diagnostic()
+            .wrap_err_with(|| format!("Failed to run command `{}`", display_command(cmd)))?;
+
+        // Clear bridge operation
+        nix_bridge.clear_current_operation();
+
+        // Record cache status if applicable
+        if output.cache_hit {
+            tracing::Span::current().record(
+                "cache_status",
+                if output.cache_hit { "hit" } else { "miss" },
+            );
+        }
+
+        Ok(output)
     }
 
     // We have a separate function to avoid recursion as this needs to call self.prepare_command
@@ -889,7 +948,10 @@ impl Nix {
             };
 
             info!(
-                devenv.is_user_message = true,
+                target = "devenv.ui",
+                devenv.ui.message = format!("Using Cachix caches: {}", caches.caches.pull.join(", ")),
+                devenv.ui.type = "user",
+                devenv.ui.id = "cachix-info",
                 "Using Cachix caches: {}",
                 caches.caches.pull.join(", "),
             );

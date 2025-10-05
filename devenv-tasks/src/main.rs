@@ -1,9 +1,7 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{
-    Config, RunMode, SudoContext, TaskConfig, TasksUi, VerbosityLevel,
-    signal_handler::SignalHandler,
-};
-use std::{env, fs, path::PathBuf};
+use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, VerbosityLevel};
+use std::{env, fs, path::PathBuf, sync::Arc};
+use tokio_shutdown::Shutdown;
 
 #[derive(Parser)]
 #[clap(author, version, about)]
@@ -37,6 +35,28 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Detect and handle sudo.
+    // Drop privileges immediately to avoid creating any files as root.
+    let sudo_context = SudoContext::detect();
+    if let Some(ref ctx) = sudo_context {
+        ctx.drop_privileges()
+            .map_err(|e| format!("Failed to drop privileges: {}", e))?;
+    }
+
+    let shutdown = Shutdown::new();
+    shutdown.install_signals().await;
+
+    tokio::select! {
+        result = run_tasks(shutdown.clone()) => result?,
+        _ = shutdown.wait_for_shutdown() => {
+            eprintln!("Task was cancelled");
+            std::process::exit(1);
+        }
+    };
+    Ok(())
+}
+
+async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<(), Box<dyn std::error::Error>> {
     // Detect and handle sudo.
     // Drop privileges immediately to avoid creating any files as root.
     let sudo_context = SudoContext::detect();
@@ -104,20 +124,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sudo_context: sudo_context.clone(),
             };
 
-            // Create a global signal handler
-            let signal_handler = SignalHandler::start();
-
-            let mut tasks_ui = TasksUi::builder(config, verbosity)
-                .with_cancellation_token(signal_handler.cancellation_token())
+            // Create Tasks instance with shutdown support
+            let tasks = Tasks::builder(config, verbosity, shutdown)
                 .build()
-                .await?;
-            let (status, _outputs) = tasks_ui.run().await?;
+                .await
+                .map_err(|e| format!("Failed to create tasks: {e}"))?;
 
-            if signal_handler.last_signal().is_some() {
-                signal_handler.exit_process();
-            }
+            // Run tasks and check completion status
+            let _outputs = tasks.run().await;
 
-            if status.failed + status.dependency_failed > 0 {
+            // Check task completion status and exit with appropriate code
+            let status = tasks.get_completion_status().await;
+            if status.has_failures() {
                 std::process::exit(1);
             }
         }
@@ -135,10 +153,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            if !output.as_object().unwrap().contains_key("devenv") {
+            if !output
+                .as_object()
+                .ok_or_else(|| miette::miette!("Output is not a JSON object"))?
+                .contains_key("devenv")
+            {
                 output["devenv"] = serde_json::json!({});
             }
-            if !output["devenv"].as_object().unwrap().contains_key("env") {
+            if !output["devenv"]
+                .as_object()
+                .ok_or_else(|| miette::miette!("devenv field is not a JSON object"))?
+                .contains_key("env")
+            {
                 output["devenv"]["env"] = serde_json::json!({});
             }
             output["devenv"]["env"] = serde_json::Value::Object(

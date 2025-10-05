@@ -3,10 +3,10 @@ inputs:
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
   rust-overlay:
-    url: github:oxalica/rust-overlay
-    inputs:
-      nixpkgs:
-        follows: nixpkgs
+     url: github:oxalica/rust-overlay
+     inputs:
+       nixpkgs:
+         follows: nixpkgs
   nix:
     url: github:cachix/nix/devenv-2.30.5
   devenv:
