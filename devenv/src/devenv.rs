@@ -1082,19 +1082,67 @@ impl Devenv {
                     .await?
             };
 
+            // Check if processes are already running (prevents conflicts in both detached and non-detached modes)
+            let processes_pid_path = self.processes_pid();
+            if processes_pid_path.exists() {
+                let existing_pid_str = fs::read_to_string(&processes_pid_path)
+                    .await
+                    .into_diagnostic()
+                    .wrap_err("Failed to read processes.pid file")?;
+
+                if let Ok(existing_pid) = existing_pid_str.trim().parse::<i32>() {
+                    let pid = Pid::from_raw(existing_pid);
+
+                    // Check if the process is still running using signal 0 (null signal)
+                    match signal::kill(pid, None) {
+                        Ok(_) => {
+                            // Process is still running
+                            bail!(
+                                "Processes are already running with PID {}. Stop them first with: devenv processes down",
+                                existing_pid
+                            );
+                        }
+                        Err(nix::errno::Errno::ESRCH) => {
+                            // Process not found - stale PID file, clean it up
+                            warn!("Found stale processes.pid file with PID {}. Cleaning up.", existing_pid);
+                            fs::remove_file(&processes_pid_path)
+                                .await
+                                .into_diagnostic()
+                                .wrap_err("Failed to remove stale processes.pid file")?;
+                        }
+                        Err(e) => {
+                            // Some other error checking the process
+                            warn!("Error checking process {}: {}. Proceeding anyway.", existing_pid, e);
+                            fs::remove_file(&processes_pid_path)
+                                .await
+                                .into_diagnostic()
+                                .wrap_err("Failed to remove processes.pid file")?;
+                        }
+                    }
+                }
+            }
+
             if options.detach {
                 let process = if !options.log_to_file {
                     cmd.stdout(Stdio::inherit())
                         .stderr(Stdio::inherit())
                         .spawn()
-                        .expect("Failed to spawn process")
+                        .into_diagnostic()
+                        .wrap_err("Failed to spawn process")?
                 } else {
                     let log_file = std::fs::File::create(self.processes_log())
-                        .expect("Failed to create PROCESSES_LOG");
-                    cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
-                        .stderr(log_file)
-                        .spawn()
-                        .expect("Failed to spawn process")
+                        .into_diagnostic()
+                        .wrap_err("Failed to create processes log file")?;
+                    cmd.stdout(
+                        log_file
+                            .try_clone()
+                            .into_diagnostic()
+                            .wrap_err("Failed to clone log file handle")?,
+                    )
+                    .stderr(log_file)
+                    .spawn()
+                    .into_diagnostic()
+                    .wrap_err("Failed to spawn process")?
                 };
 
                 let pid = process
@@ -1102,13 +1150,23 @@ impl Devenv {
                     .ok_or_else(|| miette!("Failed to get process ID"))?;
                 fs::write(self.processes_pid(), pid.to_string())
                     .await
-                    .expect("Failed to write PROCESSES_PID");
+                    .into_diagnostic()
+                    .wrap_err("Failed to write processes.pid file")?;
                 info!("PID is {}", pid);
                 if options.log_to_file {
                     info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
                 info!("Stop:      $ devenv processes stop");
             } else {
+                // Write current process PID before exec replaces this process
+                let current_pid = std::process::id();
+                fs::write(self.processes_pid(), current_pid.to_string())
+                    .await
+                    .into_diagnostic()
+                    .wrap_err("Failed to write processes.pid file")?;
+                info!("PID is {}", current_pid);
+                info!("Stop:      $ devenv processes stop");
+
                 let err = cmd.into_std().exec();
                 bail!(err);
             }
