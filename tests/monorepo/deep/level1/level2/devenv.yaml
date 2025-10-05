@@ -1,0 +1,8 @@
+imports:
+  # Test absolute path from git root
+  - /tests/monorepo/common
+  # Test multiple upward traversals
+  - ../../../shared
+  - ../../../project-a
+  # Test absolute path that goes into parent directory (should be local)
+  - /tests/monorepo/deep/level1

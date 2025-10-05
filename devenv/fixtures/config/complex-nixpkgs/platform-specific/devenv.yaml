@@ -1,0 +1,10 @@
+nixpkgs:
+  allowBroken: true
+  per-platform:
+    x86_64-linux:
+      cudaSupport: true
+      cudaCapabilities: ["7.5"]
+    x86_64-darwin:
+      allowUnfree: true
+    aarch64-darwin:
+      allowBroken: true  # Should override base's cudaSupport: true

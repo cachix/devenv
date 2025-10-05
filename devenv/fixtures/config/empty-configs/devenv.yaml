@@ -1,0 +1,5 @@
+# Empty base config
+imports:
+  - ./empty
+  - ./with-content
+  - ./no-yaml-dir

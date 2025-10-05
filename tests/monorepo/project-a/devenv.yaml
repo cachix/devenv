@@ -1,0 +1,7 @@
+imports:
+  # Test upward relative path (should become a flake input)
+  - ../shared
+  # Test absolute path from git root
+  - /tests/monorepo/common
+  # Test local relative path (stays local)
+  - ./submodule

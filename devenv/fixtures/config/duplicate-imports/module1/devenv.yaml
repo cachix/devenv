@@ -1,0 +1,4 @@
+imports:
+  - /devenv/fixtures/config/duplicate-imports/shared  # Also imports shared
+permittedInsecurePackages:
+  - "module1-package"

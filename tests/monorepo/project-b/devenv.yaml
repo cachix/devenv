@@ -1,0 +1,9 @@
+imports:
+  # Test upward relative path
+  - ../shared
+  # Test upward path to sibling project
+  - ../project-a
+  # Test upward path to sibling's submodule
+  - ../project-a/submodule
+  # Test absolute path from git root
+  - /tests/monorepo/common

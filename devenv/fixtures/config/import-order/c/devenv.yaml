@@ -1,0 +1,3 @@
+allowBroken: true
+imports:
+  - /devenv/fixtures/config/import-order/d

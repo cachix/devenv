@@ -1,0 +1,5 @@
+nixpkgs:
+  allowUnfree: true
+  cudaCapabilities: ["7.5"]
+imports:
+  - ./sub

@@ -54,7 +54,13 @@
                 then ./. + (builtins.substring 1 255 path)
                 else ./. + (builtins.substring 1 255 path) + "/devenv.nix"
                 else if lib.hasPrefix "../" path
-                then throw "devenv: ../ is not supported for imports"
+                then
+                # For parent directory paths, concatenate with /.
+                # ./. refers to the directory containing this file (project root)
+                # So ./. + "/../shared" = <project-root>/../shared
+                  if lib.hasSuffix ".nix" path
+                  then ./. + "/${path}"
+                  else ./. + "/${path}/devenv.nix"
                 else
                   let
                     paths = lib.splitString "/" path;

@@ -1,0 +1,9 @@
+imports:
+  # Upward with explicit .nix extension
+  - ../shared/devenv.nix
+  # Absolute with .nix extension
+  - /tests/monorepo/common/devenv.nix
+  # Local .nix file
+  - ./extra.nix
+  # Directory import without extension
+  - ../project-a
