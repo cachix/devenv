@@ -10,6 +10,7 @@
 , rustPlatform
 , devenv-nix
 , cachix
+, git
 , openssl
 , dbus
 , protobuf
@@ -30,6 +31,7 @@ rustPlatform.buildRustPackage {
     makeBinaryWrapper
     pkg-config
     protobuf
+    git
   ];
 
   buildInputs = [
@@ -54,6 +56,11 @@ rustPlatform.buildRustPackage {
   # Fix proto files for snix dependencies
   preBuild = ''
     export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
+    # Initialize git repo for tests that use git-root-relative imports
+    cd $NIX_BUILD_TOP/source
+    git init
+    git add -A
+    cd -
   '';
 
   postInstall =

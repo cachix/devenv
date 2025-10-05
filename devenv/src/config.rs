@@ -182,6 +182,9 @@ pub struct Config {
     #[setting(nested)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub secretspec: Option<SecretspecConfig>,
+    /// Git repository root path (not serialized, computed during load)
+    #[serde(skip)]
+    pub git_root: Option<PathBuf>,
 }
 
 #[derive(schematic::Config, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -273,22 +276,23 @@ impl Config {
             .file_optional(&base_yaml)
             .into_diagnostic()
             .wrap_err_with(|| {
-                format!(
-                    "Failed to load base configuration file: {}",
-                    base_yaml.display()
-                )
+                format!("Failed to load configuration file: {}", base_yaml.display())
             })?;
         let temp_result = temp_loader.load().into_diagnostic().wrap_err_with(|| {
             format!(
-                "Failed to load base configuration from: {}",
+                "Failed to parse configuration from: {}",
                 base_yaml.display()
             )
         })?;
+
+        // Detect git repository root for import resolution
+        let git_root = Self::detect_git_root(base_path);
 
         // Recursively collect all imported yaml files
         Self::collect_import_files(
             &temp_result.config.imports,
             base_path,
+            git_root.as_deref(),
             &mut yaml_files,
             &mut visited,
             0,
@@ -348,29 +352,20 @@ impl Config {
                 let mut normalized = None;
                 for config_dir in config_dirs.iter().rev() {
                     let resolved = config_dir.join(path_str);
-
-                    // Check if this resolution makes sense (exists or could exist)
-                    let norm = if let Ok(canonical) = resolved.canonicalize() {
-                        if let Ok(base_canonical) = base_path.canonicalize() {
-                            pathdiff::diff_paths(&canonical, &base_canonical)
-                        } else {
-                            pathdiff::diff_paths(&resolved, base_path)
-                        }
-                    } else {
-                        pathdiff::diff_paths(&resolved, base_path)
-                    };
-
-                    if norm.is_some() {
-                        normalized = norm;
+                    if let Some(norm) = Self::normalize_path(&resolved, base_path) {
+                        normalized = Some(norm);
                         break;
                     }
                 }
 
                 if let Some(rel_to_base) = normalized {
                     let new_url = if had_prefix {
-                        format!("path:{}", rel_to_base.display())
+                        format!(
+                            "path:{}",
+                            rel_to_base.strip_prefix("./").unwrap_or(&rel_to_base)
+                        )
                     } else {
-                        format!("./{}", rel_to_base.display())
+                        rel_to_base
                     };
                     input.url = Some(new_url);
                 }
@@ -378,46 +373,234 @@ impl Config {
         }
 
         // Rebuild imports: normalize file imports we loaded, preserve everything else
-        let normalized_file_imports: Vec<String> = yaml_files
-            .get(1..) // Skip base devenv.yaml (if it exists)
-            .unwrap_or(&[])
-            .iter()
-            .filter_map(|yaml_path| {
-                let import_dir = yaml_path.parent()?;
-                let rel_path = pathdiff::diff_paths(import_dir, base_path)?;
-                Some(format!("./{}", rel_path.display()))
-            })
-            .collect();
+        let mut final_imports = Vec::new();
+        let mut seen = HashSet::new();
 
-        // Create set for lookup before moving the vec
-        let normalized_set: HashSet<String> = normalized_file_imports.iter().cloned().collect();
-
-        // Start with normalized file imports
-        let mut final_imports = normalized_file_imports;
-
-        // Add base imports that are:
-        // - input-based (not file paths), OR
-        // - file-based but not loaded (missing dirs)
-        for import in &temp_result.config.imports {
-            let is_file_based = import.starts_with("./") || import.starts_with("../");
-            if !is_file_based || !normalized_set.contains(import) {
-                if !final_imports.contains(import) {
-                    final_imports.push(import.clone());
+        // Add all loaded file imports (normalized)
+        for yaml_path in yaml_files.iter().skip(1) {
+            if let Some(import_dir) = yaml_path.parent() {
+                if let Some(normalized) = Self::normalize_path(import_dir, base_path) {
+                    if seen.insert(normalized.clone()) {
+                        final_imports.push(normalized);
+                    }
                 }
             }
         }
 
-        // Add input-based imports from merged config (from nested configs)
+        // Add imports from base config that weren't loaded as files
+        for import in &temp_result.config.imports {
+            let normalized = if import.starts_with('/') {
+                // Transform git-root path to relative path
+                if let Some(root) = &git_root {
+                    let absolute_path = root.join(import.strip_prefix('/').unwrap());
+                    Self::normalize_path(&absolute_path, base_path)
+                        .unwrap_or_else(|| import.clone())
+                } else {
+                    import.clone()
+                }
+            } else {
+                import.clone()
+            };
+
+            if seen.insert(normalized.clone()) {
+                final_imports.push(normalized);
+            }
+        }
+
+        // Add non-file-based imports from merged config
         for import in &config.imports {
-            let is_file_based = import.starts_with("./") || import.starts_with("../");
-            if !is_file_based && !final_imports.contains(import) {
+            if !Self::is_file_import(import) && seen.insert(import.clone()) {
                 final_imports.push(import.clone());
             }
         }
 
         config.imports = final_imports;
+        config.git_root = git_root;
 
         Ok(config)
+    }
+
+    /// Detects the git repository root starting from the given path.
+    ///
+    /// # Arguments
+    /// * `start_path` - The directory to start searching from
+    ///
+    /// # Returns
+    /// Some(PathBuf) with the git root if found, None otherwise
+    fn detect_git_root(start_path: &Path) -> Option<PathBuf> {
+        std::process::Command::new("git")
+            .args(["rev-parse", "--show-toplevel"])
+            .current_dir(start_path)
+            .output()
+            .ok()
+            .and_then(|output| {
+                if output.status.success() {
+                    let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    Some(PathBuf::from(path_str))
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Checks if an import is a file-based import (relative or absolute path).
+    fn is_file_import(import: &str) -> bool {
+        import.starts_with("./") || import.starts_with("../") || import.starts_with('/')
+    }
+
+    /// Normalizes a path relative to a base directory.
+    /// Returns a path string with ./ prefix for local paths, or no prefix for ../ paths.
+    fn normalize_path(source: &Path, base: &Path) -> Option<String> {
+        let canonical_source = source.canonicalize().ok();
+        let canonical_base = base.canonicalize().ok();
+
+        match (canonical_source, canonical_base) {
+            (Some(src), Some(base_canon)) => pathdiff::diff_paths(&src, &base_canon).map(|rel| {
+                let rel_str = rel.display().to_string();
+                if rel_str.starts_with("../") || rel_str.starts_with("..\\") {
+                    rel_str
+                } else {
+                    format!("./{}", rel_str)
+                }
+            }),
+            _ => {
+                // Fallback if canonicalization fails
+                pathdiff::diff_paths(source, base).map(|rel| {
+                    let rel_str = rel.display().to_string();
+                    if rel_str.starts_with("../") || rel_str.starts_with("..\\") {
+                        rel_str
+                    } else {
+                        format!("./{}", rel_str)
+                    }
+                })
+            }
+        }
+    }
+
+    /// Validates that an import path stays within a security root.
+    fn validate_within_root(
+        import_path: &Path,
+        security_root: &Path,
+        import: &str,
+        git_root: Option<&Path>,
+    ) -> Result<()> {
+        let canonical_import = import_path.canonicalize().ok();
+        let canonical_root = security_root.canonicalize().ok();
+
+        // Try to validate using canonical paths if both exist
+        if let (Some(import_canon), Some(root_canon)) = (&canonical_import, &canonical_root) {
+            if !import_canon.starts_with(root_canon) {
+                bail!(
+                    "Import path '{}' resolves outside the {} which is not allowed. Imports must stay within the {}.",
+                    import,
+                    if git_root.is_some() {
+                        "git repository"
+                    } else {
+                        "base directory"
+                    },
+                    if git_root.is_some() {
+                        "repository"
+                    } else {
+                        "project directory"
+                    }
+                );
+            }
+        } else if canonical_import.is_none() && canonical_root.is_some() {
+            // Import path doesn't exist, but root does - validate lexically
+            // First make the import path absolute, then normalize
+            let canonical_root = canonical_root.unwrap();
+
+            let abs_import = if import_path.is_absolute() {
+                Self::normalize_path_components(import_path)
+            } else {
+                // Make relative path absolute from current directory first
+                if let Ok(cwd) = std::env::current_dir() {
+                    let absolute = cwd.join(import_path);
+                    Self::normalize_path_components(&absolute)
+                } else {
+                    // Can't get cwd, skip validation
+                    return Ok(());
+                }
+            };
+
+            if !abs_import.starts_with(&canonical_root) {
+                bail!(
+                    "Import path '{}' resolves outside the {} which is not allowed. Imports must stay within the {}.",
+                    import,
+                    if git_root.is_some() {
+                        "git repository"
+                    } else {
+                        "base directory"
+                    },
+                    if git_root.is_some() {
+                        "repository"
+                    } else {
+                        "project directory"
+                    }
+                );
+            }
+        }
+        // If both paths don't exist or only root doesn't exist, skip validation
+        // The path will be validated when it's actually used
+
+        Ok(())
+    }
+
+    /// Normalizes a path by resolving `.` and `..` components without requiring the path to exist.
+    fn normalize_path_components(path: &Path) -> PathBuf {
+        let mut components = Vec::new();
+
+        for component in path.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    // Pop the last component if it's not a root component
+                    if let Some(last) = components.last() {
+                        match last {
+                            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                                // Don't pop root components
+                            }
+                            _ => {
+                                components.pop();
+                            }
+                        }
+                    }
+                }
+                std::path::Component::CurDir => {
+                    // Skip current directory references
+                }
+                _ => {
+                    components.push(component);
+                }
+            }
+        }
+
+        components.iter().collect()
+    }
+
+    /// Resolves an import path relative to base_path or git_root.
+    fn resolve_import_path(
+        import: &str,
+        base_path: &Path,
+        git_root: Option<&Path>,
+    ) -> Result<PathBuf> {
+        let resolved = if import.starts_with('/') {
+            if let Some(root) = git_root {
+                root.join(import.strip_prefix('/').unwrap())
+            } else {
+                bail!(
+                    "Absolute import path '{}' requires a git repository. Use relative paths (e.g., './' or '../') instead.",
+                    import
+                );
+            }
+        } else {
+            base_path.join(import)
+        };
+
+        // Security check
+        let security_root = git_root.unwrap_or(base_path);
+        Self::validate_within_root(&resolved, security_root, import, git_root)?;
+
+        Ok(resolved)
     }
 
     /// Recursively collects all import files starting from the given imports list.
@@ -429,6 +612,7 @@ impl Config {
     /// # Arguments
     /// * `imports` - List of import paths (directories) to process
     /// * `base_path` - The base directory for resolving relative import paths
+    /// * `git_root` - Optional git repository root for resolving absolute paths and security checks
     /// * `yaml_files` - Accumulator for collecting YAML file paths in load order
     /// * `visited` - Set of canonical paths already visited (prevents circular imports)
     /// * `depth` - Current recursion depth (prevents stack overflow)
@@ -439,12 +623,13 @@ impl Config {
     /// # Errors
     /// Returns an error if:
     /// - Maximum import depth is exceeded
-    /// - Path traversal is detected (import escapes project directory)
+    /// - Path traversal is detected (import escapes git repository or base directory)
     /// - Import file cannot be read or parsed
     /// - Import path cannot be canonicalized
     fn collect_import_files(
         imports: &[String],
         base_path: &Path,
+        git_root: Option<&Path>,
         yaml_files: &mut Vec<PathBuf>,
         visited: &mut HashSet<PathBuf>,
         depth: usize,
@@ -459,23 +644,8 @@ impl Config {
         }
 
         for import in imports {
-            // Security check: forbid parent directory references using pathdiff
-            let import_path = base_path.join(import);
-
-            // Use pathdiff to check if the resolved path escapes the base directory
-            if let Some(relative) = pathdiff::diff_paths(&import_path, base_path) {
-                if relative.starts_with("..") {
-                    bail!(
-                        "Import path '{}' resolves outside the base directory which is not allowed. Imports must stay within the project directory.",
-                        import
-                    );
-                }
-            } else {
-                bail!(
-                    "Import path '{}' cannot be resolved relative to the base path.",
-                    import
-                );
-            }
+            // Resolve and validate the import path
+            let import_path = Self::resolve_import_path(import, base_path, git_root)?;
 
             if import_path.is_dir() {
                 let yaml_path = import_path.join(YAML_CONFIG);
@@ -505,13 +675,13 @@ impl Config {
                         .file_optional(&yaml_path)
                         .into_diagnostic()
                         .wrap_err_with(|| {
-                            format!(
-                                "Failed to load import configuration file: {}",
-                                yaml_path.display()
-                            )
+                            format!("Failed to load configuration file: {}", yaml_path.display())
                         })?;
                     let temp_result = temp_loader.load().into_diagnostic().wrap_err_with(|| {
-                        format!("Failed to load import file: {}", yaml_path.display())
+                        format!(
+                            "Failed to parse configuration from: {}",
+                            yaml_path.display()
+                        )
                     })?;
 
                     // Recursively collect imports from this config
@@ -519,6 +689,7 @@ impl Config {
                     Self::collect_import_files(
                         &temp_result.config.imports,
                         &import_path,
+                        git_root,
                         yaml_files,
                         visited,
                         depth + 1,
@@ -960,8 +1131,10 @@ mod tests {
 
         assert!(result.is_err(), "Expected error but got: {:?}", result);
         let error_message = result.unwrap_err().to_string();
+        // Check for path traversal error (message varies depending on git repo detection)
         assert!(
-            error_message.contains("resolves outside the base directory which is not allowed. Imports must stay within the project directory"),
+            error_message.contains("resolves outside the")
+                && error_message.contains("which is not allowed"),
             "Expected path traversal error, got: {}",
             error_message
         );

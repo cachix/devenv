@@ -1446,22 +1446,11 @@ impl Devenv {
 
         let username = whoami::username();
 
-        // Detect git repository root
-        let git_root = std::process::Command::new("git")
-            .args(["rev-parse", "--show-toplevel"])
-            .current_dir(&self.devenv_root)
-            .output()
-            .ok()
-            .and_then(|output| {
-                if output.status.success() {
-                    Some(format!(
-                        "\"{}\"",
-                        String::from_utf8_lossy(&output.stdout).trim()
-                    ))
-                } else {
-                    None
-                }
-            })
+        // Get git repository root from config (already detected during config load)
+        let git_root = config
+            .git_root
+            .as_ref()
+            .map(|path| format!("\"{}\"", path.display()))
             .unwrap_or_else(|| "null".to_string());
 
         let vars = indoc::formatdoc!(
