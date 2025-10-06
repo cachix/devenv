@@ -13,6 +13,8 @@ that developers can override some things for their local use case.
 
 ### devenv.local.yaml
 
+!!! tip "New in version 1.10"
+
 Same as `devenv.yaml`, but not meant to be committed into the Git repository so
 that developers can override some things for their local use case.
 
