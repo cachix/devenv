@@ -1083,6 +1083,48 @@ impl Devenv {
             };
 
             if options.detach {
+                // Check if processes are already running
+                if self.processes_pid().exists() {
+                    match fs::read_to_string(self.processes_pid()).await {
+                        Ok(pid_str) => {
+                            if let Ok(pid_num) = pid_str.trim().parse::<i32>() {
+                                let pid = Pid::from_raw(pid_num);
+                                match signal::kill(pid, None) {
+                                    Ok(_) => {
+                                        // Process is running
+                                        bail!("Processes already running with PID {}. Stop them first with: devenv processes down", pid);
+                                    }
+                                    Err(::nix::errno::Errno::ESRCH) => {
+                                        // Process not found - stale PID file
+                                        warn!("Found stale PID file with PID {}. Removing it.", pid);
+                                        fs::remove_file(self.processes_pid())
+                                            .await
+                                            .expect("Failed to remove stale PID file");
+                                    }
+                                    Err(_) => {
+                                        // Other error - remove stale file
+                                        warn!("Found invalid PID file. Removing it.");
+                                        fs::remove_file(self.processes_pid())
+                                            .await
+                                            .expect("Failed to remove stale PID file");
+                                    }
+                                }
+                            } else {
+                                // Invalid PID format
+                                warn!("Found invalid PID file. Removing it.");
+                                fs::remove_file(self.processes_pid())
+                                    .await
+                                    .expect("Failed to remove stale PID file");
+                            }
+                        }
+                        Err(_) => {
+                            // Could not read file
+                            warn!("Found unreadable PID file. Removing it.");
+                            let _ = fs::remove_file(self.processes_pid()).await;
+                        }
+                    }
+                }
+
                 let process = if !options.log_to_file {
                     cmd.stdout(Stdio::inherit())
                         .stderr(Stdio::inherit())
