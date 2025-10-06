@@ -10,14 +10,12 @@
 , rustPlatform
 , devenv-nix
 , cachix
-, git
+, gitMinimal
 , openssl
 , dbus
 , protobuf
 , pkg-config
 , glibcLocalesUtf8
-, build_tasks ? false
-,
 }:
 
 rustPlatform.buildRustPackage {
@@ -31,7 +29,6 @@ rustPlatform.buildRustPackage {
     makeBinaryWrapper
     pkg-config
     protobuf
-    git
   ];
 
   buildInputs = [
@@ -42,7 +39,7 @@ rustPlatform.buildRustPackage {
 
   postConfigure = ''
     # Create proto directory structure that snix expects
-    cd "$NIX_BUILD_TOP/cargo-vendor-dir"
+    pushd "$NIX_BUILD_TOP/cargo-vendor-dir"
     mkdir -p snix/{castore,store,build}/protos
 
     # Link proto files to the expected locations
@@ -50,17 +47,21 @@ rustPlatform.buildRustPackage {
     [ -d snix-store-*/protos ] && cp snix-store-*/protos/*.proto snix/store/protos/ 2>/dev/null || true
     [ -d snix-build-*/protos ] && cp snix-build-*/protos/*.proto snix/build/protos/ 2>/dev/null || true
 
-    cd - > /dev/null
+    popd
   '';
 
-  # Fix proto files for snix dependencies
   preBuild = ''
+    # Fix proto files for snix dependencies
     export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
+  '';
+
+  nativeCheckInputs = [ gitMinimal ];
+  preCheck = ''
     # Initialize git repo for tests that use git-root-relative imports
-    cd $NIX_BUILD_TOP/source
-    git init
+    pushd $NIX_BUILD_TOP/source
+    git init -b main
     git add -A
-    cd -
+    popd
   '';
 
   postInstall =
