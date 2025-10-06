@@ -46,7 +46,7 @@ pub struct Config {
     pub roots: Vec<String>,
     pub run_mode: RunMode,
     #[serde(skip)]
-    pub sudo_context: Option<SudoContext>,
+    pub sudo_context: Option<std::sync::Arc<SudoContext>>,
 }
 
 impl TryFrom<serde_json::Value> for Config {

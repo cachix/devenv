@@ -151,7 +151,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
                 tasks,
                 roots,
                 run_mode: mode,
-                sudo_context: sudo_context.clone(),
+                sudo_context: sudo_context.map(Arc::new),
             };
 
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))

@@ -88,7 +88,7 @@ impl TasksBuilder {
             let index = graph.add_node(Arc::new(RwLock::new(TaskState::new(
                 task,
                 self.verbosity,
-                self.config.sudo_context.clone(),
+                self.config.sudo_context.as_ref().map(Arc::clone),
             ))));
             task_indices.insert(name, index);
         }

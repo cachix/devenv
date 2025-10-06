@@ -11,11 +11,12 @@ clap.workspace = true
 console.workspace = true
 miette.workspace = true
 petgraph.workspace = true
+secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["signal"] }
+tokio = { workspace = true, features = ["io-std", "signal"] }
 tokio-shutdown.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
