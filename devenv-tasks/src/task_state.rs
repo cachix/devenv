@@ -77,18 +77,22 @@ impl TaskState {
     ) -> Result<(Command, tempfile::NamedTempFile)> {
         // If we dropped privileges but have sudo context, restore sudo for the task
         let mut command = if let Some(_ctx) = &self.sudo_context {
-            // Wrap with sudo to restore elevated privileges
-            let mut sudo_cmd = Command::new("sudo");
-            // Use -E to preserve environment variables
+            // Wrap in `sh` to be able to shutdown the process without elevated priveleges.
+            let mut sudo_cmd = Command::new("sh");
+            // Launch the command with elevated priveleges.
+            // Use -E to preserve environment variables.
             // The command here is a store path to a task script, not an arbitrary shell command.
-            sudo_cmd.args(["-E", cmd]);
+            sudo_cmd.args(["-c", &format!("sudo -E -S {cmd}")]);
             sudo_cmd
         } else {
             // Normal execution - no sudo involved
             Command::new(cmd)
         };
 
-        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::piped());
 
         // Set working directory if specified
         if let Some(cwd) = &self.task.cwd {
@@ -197,7 +201,20 @@ impl TaskState {
                 .wrap_err("Failed to prepare status command")?;
 
             // Use spawn and wait with output to properly handle status script execution
-            match command.output().await {
+            let result = async {
+                let mut child = command.spawn()?;
+                let mut stdin_opt = child.stdin.take();
+                if let Some(sudo_context) = &self.sudo_context {
+                    if let Some(stdin) = stdin_opt.as_mut() {
+                        use tokio::io::AsyncWriteExt;
+                        stdin.write_all(sudo_context.password.as_bytes()).await?;
+                        stdin.flush().await?;
+                    }
+                }
+                child.wait_with_output().await
+            }
+            .await;
+            match result {
                 Ok(output) => {
                     if output.status.success() {
                         let output = Output(cached_output);
@@ -272,10 +289,20 @@ impl TaskState {
                 .prepare_command(cmd, outputs)
                 .wrap_err("Failed to prepare task command")?;
 
-            let result = command
-                .spawn()
-                .into_diagnostic()
-                .wrap_err_with(|| format!("Failed to spawn command for {cmd}"));
+            // Use spawn and wait with output to properly handle status script execution
+            let result = async {
+                let mut child = command.spawn()?;
+                let mut stdin_opt = child.stdin.take();
+                if let Some(sudo_context) = &self.sudo_context {
+                    if let Some(stdin) = stdin_opt.as_mut() {
+                        use tokio::io::AsyncWriteExt;
+                        stdin.write_all(sudo_context.password.as_bytes()).await?;
+                        stdin.flush().await?;
+                    }
+                }
+                tokio::io::Result::Ok(child)
+            }
+            .await;
 
             let mut child = match result {
                 Ok(c) => c,
