@@ -40,7 +40,7 @@ Create a shared configuration with common settings:
     ];
   };
 
-  pre-commit.hooks = {
+  git-hooks.hooks = {
     prettier.enable = true;
     nixpkgs-fmt.enable = true;
   };
