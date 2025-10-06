@@ -97,15 +97,21 @@ The downside is that you will have to manually update the URL and content hash o
 The `direnvrc` can be found at:
 
 ```text
-https://raw.githubusercontent.com/cachix/devenv/VERSION/direnvrc
+https://raw.githubusercontent.com/cachix/devenv/VERSION/devenv/direnvrc
 ```
 
 Replace `VERSION` with a valid git tag or branch name.
 
+For instance, for version 1.9.2, use:
+
+```text
+https://raw.githubusercontent.com/cachix/devenv/v1.9.2/devenv/direnvrc
+```
+
 To use it in your `.envrc`, first compute its sha256 hash:
 
 ```shell-session
-direnv fetchurl "https://raw.githubusercontent.com/cachix/devenv/VERSION/direnvrc"
+direnv fetchurl "https://raw.githubusercontent.com/cachix/devenv/VERSION/devenv/direnvrc"
 ```
 
 ```shell-session
@@ -115,7 +121,7 @@ Found hash: <HASH>
 Then modify your `.envrc`, updating the URL and inserting the computed hash from the previous step:
 
 ```bash
-source_url "https://raw.githubusercontent.com/cachix/devenv/VERSION/direnvrc" "<HASH>"
+source_url "https://raw.githubusercontent.com/cachix/devenv/VERSION/devenv/direnvrc" "<HASH>"
 
 use devenv
 ```
