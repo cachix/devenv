@@ -1,6 +1,6 @@
 # Monorepo with Shared Configurations
 
-!!! info "New in version 2.10"
+!!! info "New in version 1.10"
 
 This guide shows how to structure a monorepo where multiple services share common configurations.
 
