@@ -15,7 +15,7 @@ let
   # Tracking: https://github.com/NixOS/nixpkgs/issues/302376
   packageBin = pkgs.runCommandLocal "pre-commit-bin" { } ''
     mkdir -p $out/bin
-    ln -s ${cfg.package}/bin/pre-commit $out/bin/pre-commit
+    ln -s ${lib.getExe cfg.package} $out/bin/pre-commit-bin
   '';
 
   anyEnabled = builtins.any (hook: hook.enable) (lib.attrValues cfg.hooks);
@@ -35,7 +35,7 @@ in
         (git-hooks-module + "/modules/all-modules.nix")
         {
           rootSrc = self;
-          package = pkgs.pre-commit;
+          package = lib.mkDefault pkgs.pre-commit;
           tools = import (git-hooks-module + "/nix/call-tools.nix") pkgs;
         }
       ];
@@ -94,7 +94,7 @@ in
           before = [ "devenv:enterShell" ];
         };
         "devenv:git-hooks:run" = {
-          exec = "pre-commit run -a";
+          exec = "pre-commit-bin run -a";
           before = [ "devenv:enterTest" ];
         };
       };
