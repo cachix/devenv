@@ -83,7 +83,7 @@ imports:
   - /shared
 ```
 
-The API service inherits the `allowUnfree` setting and nixpkgs input. Note that this merging only applies to local filesystem imports—imports from inputs still only load Nix configurations.
+The API service inherits the `allowUnfree` setting and nixpkgs input. Note that this merging only applies to local filesystem imports — imports from inputs still only load Nix configurations ([#2205](https://github.com/cachix/devenv/issues/2205)).
 
 ## devenv.local.yaml support
 
