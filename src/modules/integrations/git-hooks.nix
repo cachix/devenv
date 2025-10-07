@@ -13,9 +13,9 @@ let
   # This affects all packages built with `buildPythonApplication` or `toPythonApplication`.
   # pre-commit is particularly annoying as it is difficult for end-users to track down.
   # Tracking: https://github.com/NixOS/nixpkgs/issues/302376
-  packageBin = pkgs.runCommandLocal "pre-commit-bin" { } ''
+  packageBin = pkgs.runCommandLocal "pre-commit-bin" { meta.mainProgram = cfg.package.meta.mainProgram; } ''
     mkdir -p $out/bin
-    ln -s ${lib.getExe cfg.package} $out/bin/pre-commit-bin
+    ln -s ${lib.getExe cfg.package} $out/bin/${cfg.package.meta.mainProgram}
   '';
 
   anyEnabled = builtins.any (hook: hook.enable) (lib.attrValues cfg.hooks);
@@ -94,7 +94,7 @@ in
           before = [ "devenv:enterShell" ];
         };
         "devenv:git-hooks:run" = {
-          exec = "pre-commit-bin run -a";
+          exec = "${packageBin.meta.mainProgram} run -a";
           before = [ "devenv:enterTest" ];
         };
       };
