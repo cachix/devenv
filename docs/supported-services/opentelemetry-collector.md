@@ -100,21 +100,7 @@ YAML 1\.1 value
 
 
 *Default:*
-
-```
-{
-  extensions = {
-    health_check = {
-      endpoint = "localhost:13133";
-    };
-  };
-  service = {
-    extensions = [
-      "health_check"
-    ];
-  };
-}
-```
+` defaultSettings `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/opentelemetry-collector.nix)
