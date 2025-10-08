@@ -15,6 +15,10 @@ on:
         description: "Git ref to checkout"
         required: false
         type: string
+      nixpkgs-input:
+        description: "An optional nixpkgs input to test against"
+        required: false
+        type: string
 
 jobs:
   build:
@@ -33,6 +37,7 @@ jobs:
       system: ${{ inputs.system }}
       runs-on: ${{ inputs.runs-on }}
       ref: ${{ inputs.ref }}
+      nixpkgs-input: ${{ inputs.nixpkgs-input }}
 
   examples:
     needs: [build, test]
@@ -43,3 +48,4 @@ jobs:
       system: ${{ inputs.system }}
       runs-on: ${{ inputs.runs-on }}
       ref: ${{ inputs.ref }}
+      nixpkgs-input: ${{ inputs.nixpkgs-input }}

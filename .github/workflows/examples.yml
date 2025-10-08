@@ -15,6 +15,10 @@ on:
         description: "Runner to use"
         required: true
         type: string
+      nixpkgs-input:
+        description: "An optional nixpkgs input to test against"
+        required: false
+        type: string
 
 jobs:
   generate-examples:
@@ -75,4 +79,7 @@ jobs:
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
       - name: Run examples
-        run: devenv-run-tests run --only ${{ matrix.example.name }} examples
+        run: |
+          devenv-run-tests \
+            ${{ inputs.nixpkgs-input && format('--override-input nixpkgs {0}', inputs.nixpkgs-input) || '' }} \
+            run --only ${{ matrix.example.name }} examples
