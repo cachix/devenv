@@ -231,4 +231,44 @@ else
   exit 1
 fi
 
+# Test 15: CLI parsing - profile without subcommand (issue #2206)
+echo "Test 15: CLI parsing - profile without subcommand"
+version_output=$(devenv --profile basic 2>&1)
+if echo "$version_output" | grep -q "devenv.*(.*)"; then
+  echo "✓ Profile flag parses correctly without subcommand (shows version)"
+else
+  echo "✗ Profile flag parsing failed without subcommand: $version_output"
+  exit 1
+fi
+
+# Test 16: CLI parsing - profile with --help flag (issue #2206)
+echo "Test 16: CLI parsing - profile with --help flag"
+help_output=$(devenv --profile basic --help 2>&1)
+if echo "$help_output" | grep -q "Usage: devenv"; then
+  echo "✓ Help displays correctly with --profile flag"
+else
+  echo "✗ Help not working with --profile flag"
+  exit 1
+fi
+
+# Test 17: CLI parsing - profile with subcommand and --help (issue #2206)
+echo "Test 17: CLI parsing - profile with subcommand and --help"
+help_output=$(devenv --profile basic test --help 2>&1)
+if echo "$help_output" | grep -q "Run tests" && echo "$help_output" | grep -q "Usage: devenv test"; then
+  echo "✓ Subcommand help displays correctly with --profile flag"
+else
+  echo "✗ Subcommand help not working with --profile flag: $help_output"
+  exit 1
+fi
+
+# Test 18: CLI parsing - multiple profiles with --help (issue #2206)
+echo "Test 18: CLI parsing - multiple profiles with --help"
+help_output=$(devenv --profile basic --profile backend --help 2>&1)
+if echo "$help_output" | grep -q "Usage: devenv"; then
+  echo "✓ Help displays correctly with multiple --profile flags"
+else
+  echo "✗ Help not working with multiple --profile flags"
+  exit 1
+fi
+
 echo "All profile tests passed!"

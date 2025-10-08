@@ -174,6 +174,8 @@ pub struct GlobalOptions {
         short = 'P',
         long,
         global = true,
+        num_args = 1,
+        action = clap::ArgAction::Append,
         help = "Activate one or more profiles defined in devenv.nix",
         long_help = "Activate one or more profiles defined in devenv.nix.\n\nProfiles allow you to define different configurations that can be merged with your base configuration.\n\nSee https://devenv.sh/profiles for more information.\n\nExamples:\n  --profile python-3.14\n  --profile backend --profile fast-startup"
     )]
