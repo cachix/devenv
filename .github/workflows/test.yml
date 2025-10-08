@@ -15,6 +15,10 @@ on:
         description: "Runner to use"
         required: true
         type: string
+      nixpkgs-input:
+        description: "An optional nixpkgs input to test against"
+        required: false
+        type: string
 
 jobs:
   tests:
@@ -40,9 +44,15 @@ jobs:
       - name: Test tasks outside shell
         run: devenv tasks run devenv:enterShell
       - name: Run devenv-test-cli
-        run: devenv shell devenv-test-cli
+        run: |
+          devenv \
+            ${{ inputs.nixpkgs-input && format('--override-input nixpkgs {0}', inputs.nixpkgs-input) || '' }} \
+            shell devenv-test-cli
       - name: Run tests
-        run: devenv-run-tests run tests
+        run: |
+          devenv-run-tests \
+            ${{ inputs.nixpkgs-input && format('--override-input nixpkgs {0}', inputs.nixpkgs-input) || '' }} \
+            run tests
 
 
   direnv:
@@ -75,7 +85,10 @@ jobs:
           devenv_dir=$PWD
           tmp="$(mktemp -d)"
           pushd "$tmp"
-            nix shell nixpkgs#direnv -c devenv --override-input devenv path:$devenv_dir?dir=src/modules init
+            nix shell nixpkgs#direnv -c devenv \
+              ${{ inputs.nixpkgs-input && format('--override-input nixpkgs {0}', inputs.nixpkgs-input) || '' }} \
+              --override-input devenv path:$devenv_dir?dir=src/modules \
+              init
           popd
 
   fish-zsh:
