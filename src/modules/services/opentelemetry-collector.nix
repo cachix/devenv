@@ -55,7 +55,8 @@ in
         Refer to https://opentelemetry.io/docs/collector/configuration/
         for more information on how to configure the Collector.
       '';
-      defaultText = defaultSettings;
+      default = defaultSettings;
+      defaultText = lib.literalExpression "defaultSettings";
     };
   };
 
