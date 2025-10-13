@@ -88,7 +88,7 @@ impl NixLogBridge {
                     // Emit tracing event for evaluation progress using stored span
                     if let Some(ref span) = state.span {
                         span.in_scope(|| {
-                            debug!(
+                            trace!(
                                 devenv.user_message = format!("Evaluated {} files", files.len()),
                                 files = ?files,
                                 "Evaluated {} files", files.len()
