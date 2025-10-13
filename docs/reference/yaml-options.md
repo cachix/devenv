@@ -9,9 +9,11 @@
 | inputs                                                        | Defaults to `inputs.nixpkgs.url: github:cachix/devenv-nixpkgs/rolling`.       |
 | inputs.&lt;name&gt;                                           | Identifier name used when passing the input in your ``devenv.nix`` function.  |
 | inputs.&lt;name&gt;.flake                                     | Does the input contain ``flake.nix`` or ``devenv.nix``. Defaults to ``true``. |
+| inputs.&lt;name&gt;.follows                                       | Another input to "inherit" from by name. [Following inputs](#following-inputs).                                |
+| inputs.&lt;name&gt;.inputs.&lt;name&gt;.follows                                      | Override nested inputs by name. [Supported formats](#supported-uri-formats).                                |
 | inputs.&lt;name&gt;.overlays                                  | A list of overlays to include from the input.                                 |
-| inputs.&lt;name&gt;.url                                       | URI specification of the input, see below for possible values.                |
-|                                                               |                                                                               |
+| inputs.&lt;name&gt;.url                                       | URI specification of the input. [Supported formats](#supported-uri-formats).                                |
+|                                                               |                                                                              |
 | nixpkgs.allowBroken                                           | Allow packages marked as broken. Defaults to `false`.                         |
 | nixpkgs.allowUnfree                                           | Allow unfree packages. Defaults to `false`.                                   |
 | nixpkgs.cudaCapabilities                                      | Select CUDA capabilities for nixpkgs. Defaults to `[]`                        |
@@ -49,19 +51,103 @@
     - `impure`
     - `allowBroken`
 
-## inputs.&lt;name&gt;.url
+## Inputs
 
-- github:NixOS/nixpkgs/master
-- github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3
-- github:foo/bar?dir=subdir
-- git+ssh://git@github.com/NixOS/nix?ref=v1.2.3
-- git+https://git.somehost.tld/user/path?ref=branch&rev=fdc8ef970de2b4634e1b3dca296e1ed918459a9e
-- path:/path/to/repo
-- hg+https://...
-- tarball+https://example.com/foobar.tar.gz
-- sourcehut:~misterio/nix-colors/21c1a380a6915d890d408e9f22203436a35bb2de?host=hg.sr.ht
-- file+https://
-- file:///some/absolute/file.tar.gz
+### Supported URI formats
+
+`inputs.<name>.url` is a URI format that allows importing external repositories, files, directories, and more as inputs to your development environment.
+
+devenv supports the same URI specification for inputs as Nix Flakes.
+
+For a more detailed description of the supported URI formats, see the [Nix manual](<https://nix.dev/manual/nix/latest/command-ref/new-cli/nix3-flake.html#types>).
+
+We'll list the most common examples below.
+
+#### GitHub
+
+- `github:NixOS/nixpkgs/master`
+- `github:NixOS/nixpkgs?rev=238b18d7b2c8239f676358634bfb32693d3706f3`
+- `github:org/repo?dir=subdir`
+- `github:org/repo?tag=v1.0.0`
+
+#### GitLab
+
+- `gitlab:owner/repo/branch`
+- `gitlab:owner/repo/commit`
+- `gitlab:owner/repo?host=git.example.org`
+
+#### Git repositories
+
+- `git+ssh://git@github.com/NixOS/nix?ref=v1.2.3`
+- `git+https://git.somehost.tld/user/path?ref=branch&rev=fdc8ef970de2b4634e1b3dca296e1ed918459a9e`
+- `git+file:///some/absolute/path/to/repo`
+
+#### Mercurial
+
+- `hg+https://...`
+- `hg+ssh://...`
+- `hg+file://...`
+
+#### Sourcehut
+
+- `sourcehut:~misterio/nix-colors/21c1a380a6915d890d408e9f22203436a35bb2de?host=hg.sr.ht`
+
+#### Tarballs
+
+- `tarball+https://example.com/foobar.tar.gz`
+
+#### Local files
+
+Path inputs don't respect `.gitignore` and will copy the entire directory to the Nix store.
+To avoid unnecessarily copying large development directories, consider using `git+file` instead.
+
+- `path:/path/to/repo`
+- `file+https://`
+- `file:///some/absolute/file.tar.gz`
+
+### Following inputs
+
+Inputs can also "follow" other inputs by name.
+
+The two main use-cases for this are to:
+
+- Inherit inputs from other `devenv.yaml`s or external flake projects.
+- Reduce the number of repeated inputs that need to be downloaded by overriding nested inputs.
+
+`follows` are specified by name. Nested inputs can be referenced by name using `/` as a separator.
+
+For example, to use a `nixpkgs` input from a shared `base-project` input:
+
+```yaml hl_lines="5"
+inputs:
+  base-project:
+    url: github:owner/repo
+  nixpkgs:
+    follows: base-project/nixpkgs
+```
+
+!!! warn "Locked inputs and follows"
+
+    "Follows" are fetched and re-locked using the URI of the followed inputs.
+    The external project's lock file will not constrain the revision.
+
+    For example, it's common to reference `nixpkgs-unstable` without specifying a revision.
+    The input is locked to a specific revision when fetched and this information is saved to either a `devenv.lock` or `flake.lock` file.
+
+    Following this input from another project will re-fetch the latest revison, which may be different from the lcoked revision used in the original project.
+
+Or to override the `nixpkgs` input of another input to reduce the number of times `nixpkgs` has to be downloaded:
+
+```yaml hl_lines="6-8"
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+  git-hooks:
+    url: github:cachix/git-hooks.nix
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
+```
 
 ## An extensive example
 
@@ -121,18 +207,3 @@ nixpkgs:
       permittedUnfreePackages:
         - some-package
 ```
-
-### What if a package is out of date?
-
-- Open [nixpkgs repo](https://github.com/NixOS/nixpkgs) and press `t` to search for your package.
-- Try to update/change the package using [the nixpkgs contributing guide](https://nixos.org/manual/nixpkgs/stable/#chap-quick-start), optionally contacting the maintainer for help if you get stuck.
-- Make a PR and remember the branch name.
-- Add it to your devenv.yaml using the nixpkgs input in form of 'github:$GH_USERNAME/nixpkgs/master', edit `devenv.yaml`:
-
-```yaml
-inputs:
-  nixpkgs:
-    url: 'github:$GH_USERNAME/nixpkgs/MYBRANCH'
-```
-
-

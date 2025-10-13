@@ -2,7 +2,11 @@
 
 ### Getting a recent version of a package from `nixpkgs-unstable`
 
-By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/devenv-10-rewrite-in-rust/#devenv-nixpkgs) with additional fixes. This fork can be several months behind `nixpkgs-unstable`. You can still get a more recently updated package from `nixpkgs-unstable` into your devenv.
+By default, new devenv projects are configured to use a fork of `nixpkgs` called [`devenv-nixpkgs/rolling`](https://github.com/cachix/devenv-nixpkgs).
+
+`devenv-nixpkgs/rolling` is tested against devenv's test suite and receives monthly updates, as well as interim stability patches that affect devenv's most popular services and integrations.
+
+For some packages that are updated frequently, you may want to use a more recent version from `nixpkgs-unstable`.
 
 1. Add `nixpkgs-unstable` input to `devenv.yaml`:
 
@@ -11,7 +15,7 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
      nixpkgs:
        url: github:cachix/devenv-nixpkgs/rolling
      nixpkgs-unstable:
-       url: github:nixos/nixpkgs/nixpkgs-unstable
+       url: github:NixOS/nixpkgs/nixpkgs-unstable
    ```
 
 2. Use the package in your `devenv.nix`:
@@ -26,7 +30,25 @@ By default, devenv [uses a fork of nixpkgs](https://devenv.sh/blog/2024/03/20/de
        pkgs-unstable.elmPackages.elm-test-rs
      ];
    }
+
    ```
+
+### How do I contribute a package or a fix to `nixpkgs`?
+
+For temporary fixes, we recommend using either [overlays](overlays.md) or a [different nixpkgs input](#getting-a-recent-version-of-a-package-from-nixpkgs-unstable).
+
+You can also consider contributing your changes back to [`nixpkgs`](https://github.com/NixOS/nixpkgs).
+Follow the [nixpkgs contributing guide](https://github.com/NixOS/nixpkgs/blob/master/pkgs/README.md) to get started.
+
+Once you've forked and cloned `nixpkgs`, test your changes with devenv:
+
+```yaml
+inputs:
+  nixpkgs:
+    url: github:username/nixpkgs/branch
+    # Or a local path to nixpkgs
+    # url: path:/path/to/local/nixpkgs/clone
+```
 
 ### Add a directory to `$PATH`
 
@@ -55,7 +77,6 @@ This example adds Elixir install scripts to `~/.mix/escripts`:
 }
 ```
 
-
 ## Container patterns
 
 ### Exclude packages from a container
@@ -70,7 +91,6 @@ This example adds Elixir install scripts to `~/.mix/escripts`:
 }
 ```
 
-
 ## Cross-platform patterns
 
 ### Configure the shell based on the current machine
@@ -80,11 +100,11 @@ A number of helper functions exist in `pkgs.stdenv` to help you dynamically conf
 
 A few of the most commonly used functions are:
 
-- `stdenv.isLinux` to target machines running Linux
-- `stdenv.isDarwin` to target machines running macOS
++ `stdenv.isLinux` to target machines running Linux
++ `stdenv.isDarwin` to target machines running macOS
 
-- `stdenv.isAarch64` to target ARM64 processors
-- `stdenv.isx86_64` to target X86_64 processors
++ `stdenv.isAarch64` to target ARM64 processors
++ `stdenv.isx86_64` to target X86_64 processors
 
 ```nix title="devenv.nix" hl_lines="4 6 14"
 { pkgs, lib, ... }: {
@@ -180,6 +200,7 @@ You can use the [`apple.sdk`](reference/options.md#applesdk) option to override 
   # apple.sdk = null;
 }
 ```
+
 <div class="result" markdown>
 
 !!! note "Legacy framework pattern"
@@ -199,7 +220,6 @@ You can use the [`apple.sdk`](reference/options.md#applesdk) option to override 
     This is no longer necessary. Frameworks are bundled together in a single versioned SDK.
 
 </div>
-
 
 ### Run x86 binaries on Apple Silicon with Rosetta
 
