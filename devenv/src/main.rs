@@ -3,6 +3,7 @@ use clap_complete::CompleteEnv;
 use devenv::{
     Devenv, RunMode,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
+    processes::ProcessCommand,
     tracing as devenv_tracing,
 };
 use devenv_activity::ActivityLevel;
@@ -168,12 +169,15 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     // Channel to signal TUI when backend is fully done (including cleanup)
     let (backend_done_tx, backend_done_rx) = tokio::sync::oneshot::channel();
 
+    // Channel for process commands (restart, etc.) from TUI to process manager
+    let (command_tx, command_rx) = tokio::sync::mpsc::channel::<ProcessCommand>(16);
+
     // Devenv on background thread (own runtime with GC-registered workers)
     let shutdown_clone = shutdown.clone();
     let devenv_thread = std::thread::spawn(move || {
         build_gc_runtime().block_on(async {
             let output = tokio::select! {
-                output = run_devenv(cli, shutdown_clone.clone()) => output,
+                output = run_devenv(cli, shutdown_clone.clone(), Some(command_rx)) => output,
                 _ = shutdown_clone.wait_for_shutdown() => DevenvOutput::done(),
             };
 
@@ -191,8 +195,12 @@ async fn run_with_tui(cli: Cli) -> Result<()> {
     });
 
     // TUI on main thread (owns terminal)
-    let tui_app = devenv_tui::TuiApp::new(activity_rx, shutdown.clone()).filter_level(filter_level);
-    let _ = tui_app.run(backend_done_rx).await;
+    // Runs until backend signals completion, then drains remaining events
+    let _ = devenv_tui::TuiApp::new(activity_rx, shutdown.clone())
+        .with_command_sender(command_tx)
+        .filter_level(filter_level)
+        .run(backend_done_rx)
+        .await;
 
     // Restore terminal to normal state (disable raw mode, show cursor)
     devenv_tui::app::restore_terminal();
@@ -234,7 +242,7 @@ fn run_with_legacy_cli(cli: Cli) -> Result<()> {
         devenv_tracing::init_cli_tracing(level, cli.global_options.trace_output.as_ref());
 
         tokio::select! {
-            output = run_devenv(cli, shutdown.clone()) => output,
+            output = run_devenv(cli, shutdown.clone(), None) => output,
             _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
         }
     });
@@ -258,7 +266,7 @@ fn run_with_tracing(cli: Cli) -> Result<()> {
         );
 
         tokio::select! {
-            output = run_devenv(cli, shutdown.clone()) => output,
+            output = run_devenv(cli, shutdown.clone(), None) => output,
             _ = shutdown.wait_for_shutdown() => DevenvOutput::done(),
         }
     });
@@ -315,7 +323,11 @@ impl DevenvOutput {
 }
 
 /// Setup devenv and run the command.
-async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> DevenvOutput {
+async fn run_devenv(
+    cli: Cli,
+    shutdown: Arc<Shutdown>,
+    command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+) -> DevenvOutput {
     // Command is guaranteed to exist (Version/Direnvrc handled in main)
     let command = cli.command.clone().expect("Command should exist");
     let nix_debugger = cli.global_options.nix_debugger;
@@ -416,7 +428,7 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> DevenvOutput {
     let mut devenv = Devenv::new(options).await;
 
     // Run the command
-    let result = run_devenv_inner(&mut devenv, command).await;
+    let result = run_devenv_inner(&mut devenv, command, command_rx).await;
 
     // If nix_debugger is enabled and command failed, keep devenv for REPL debugging
     if nix_debugger && result.is_err() {
@@ -430,7 +442,11 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> DevenvOutput {
 }
 
 /// Run the devenv command.
-async fn run_devenv_inner(devenv: &mut Devenv, command: Commands) -> Result<CommandResult> {
+async fn run_devenv_inner(
+    devenv: &mut Devenv,
+    command: Commands,
+    command_rx: Option<tokio::sync::mpsc::Receiver<ProcessCommand>>,
+) -> Result<CommandResult> {
     let result = match command {
         Commands::Shell { cmd, ref args } => {
             let shell_config = match cmd {
@@ -530,12 +546,13 @@ async fn run_devenv_inner(devenv: &mut Devenv, command: Commands) -> Result<Comm
                 },
         } => {
             let options = devenv::ProcessOptions {
+                envs: None,
                 detach,
                 log_to_file: detach,
                 strict_ports,
-                ..Default::default()
+                command_rx,
             };
-            match devenv.up(processes, &options).await? {
+            match devenv.up(processes, options).await? {
                 RunMode::Detached => CommandResult::Done,
                 RunMode::Foreground(shell_command) => CommandResult::Exec(shell_command.command),
             }

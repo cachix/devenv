@@ -48,6 +48,9 @@ devenv-eval-cache = { path = "../devenv-eval-cache" }
 # Activity system
 devenv-activity = { path = "../devenv-activity" }
 
+# Process control
+devenv-processes = { path = "../devenv-processes" }
+
 # Shared task types
 devenv-cache-core = { path = "../devenv-cache-core" }
 

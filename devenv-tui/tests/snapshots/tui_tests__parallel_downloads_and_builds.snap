@@ -2,8 +2,8 @@
 source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
-⠋ Building hello-2.12 buildPhase
-⠋ Building curl-8.1.0 configurePhase
+⠋ Building  hello-2.12 buildPhase
+⠋ Building  curl-8.1.0 configurePhase
 ⠋ Downloading openssl-3.0.0 from cache.nixos.org
     ────────────────────────────────────────────────15MB / 30MB at 150MB/s
 ⠋ Downloading glibc-2.37 from cache.nixos.org

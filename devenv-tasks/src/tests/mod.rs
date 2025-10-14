@@ -126,7 +126,7 @@ async fn test_basic_tasks() -> Result<(), Error> {
     .with_db_path(db_path)
     .build()
     .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -230,7 +230,7 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks1.run().await;
+    tasks1.run(false).await;
 
     assert_eq!(tasks1.tasks_order.len(), 1);
 
@@ -267,7 +267,7 @@ echo 'Task 2 is running' && echo 'Task 2 completed'
         .with_db_path(db_path2)
         .build()
         .await?;
-    tasks2.run().await;
+    tasks2.run(false).await;
 
     assert_eq!(tasks2.tasks_order.len(), 1);
 
@@ -336,7 +336,7 @@ exit 0
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs1 = tasks1.run().await;
+    let outputs1 = tasks1.run(false).await;
 
     // Print the status and outputs for debugging
     let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
@@ -376,7 +376,7 @@ exit 0
         .with_db_path(db_path)
         .build()
         .await?;
-    let outputs2 = tasks2.run().await;
+    let outputs2 = tasks2.run(false).await;
 
     // Print the status and outputs for debugging
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
@@ -460,7 +460,7 @@ echo "Task executed successfully"
         .await?;
 
     // Run task first time - should execute
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
 
     // Print status for debugging
     let status = &tasks.graph[tasks.tasks_order[0]].read().await.status;
@@ -506,7 +506,7 @@ echo "Task executed successfully"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs2 = tasks2.run().await;
+    let outputs2 = tasks2.run(false).await;
 
     // Print status for debugging
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
@@ -561,7 +561,7 @@ echo "Task executed successfully"
         .with_db_path(db_path)
         .build()
         .await?;
-    let outputs3 = tasks3.run().await;
+    let outputs3 = tasks3.run(false).await;
 
     // Print status for debugging
     let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
@@ -643,7 +643,7 @@ echo "Multiple files task executed successfully"
         .await?;
 
     // Run task first time - should execute
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
 
     // Check that task was executed
     assert_matches!(
@@ -679,7 +679,7 @@ echo "Multiple files task executed successfully"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
 
     // Verify the output is preserved in the skipped task
     assert_eq!(
@@ -711,7 +711,7 @@ echo "Multiple files task executed successfully"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs2 = tasks2.run().await;
+    let outputs2 = tasks2.run(false).await;
 
     // Verify output is still preserved on subsequent runs
     assert_eq!(
@@ -745,7 +745,7 @@ echo "Multiple files task executed successfully"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
 
     // Verify the output after modification of second file
     assert_eq!(
@@ -785,7 +785,7 @@ echo "Multiple files task executed successfully"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
 
     // Verify the output when both files have been modified
     assert_eq!(
@@ -861,7 +861,7 @@ echo "Task executed successfully"
             .await?;
 
         // Run task first time - should execute
-        let outputs1 = tasks1.run().await;
+        let outputs1 = tasks1.run(false).await;
 
         // Print the status and outputs for debugging
         let status1 = &tasks1.graph[tasks1.tasks_order[0]].read().await.status;
@@ -905,7 +905,7 @@ echo "Task executed successfully"
             .with_db_path(db_path.clone())
             .build()
             .await?;
-        let outputs2 = tasks2.run().await;
+        let outputs2 = tasks2.run(false).await;
 
         // Print the status and outputs for debugging
         let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
@@ -972,7 +972,7 @@ echo "Task executed successfully"
             .with_db_path(db_path)
             .build()
             .await?;
-        let outputs3 = tasks3.run().await;
+        let outputs3 = tasks3.run(false).await;
 
         // Print the status and outputs for debugging
         let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;
@@ -1071,7 +1071,7 @@ echo "Task completed and modified the file"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     // Check the modified file content
     let modified_content = fs::read_to_string(&test_file_path).await?;
@@ -1128,7 +1128,7 @@ echo "Task completed and modified the file"
         .with_db_path(db_path)
         .build()
         .await?;
-    tasks2.run().await;
+    tasks2.run(false).await;
 
     // Check that the task was skipped
     let status = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
@@ -1198,7 +1198,7 @@ exit 1
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     // Check that the task failed
     let status = &tasks.graph[tasks.tasks_order[0]].read().await.status;
@@ -1372,7 +1372,7 @@ async fn test_nonexistent_script() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -1567,7 +1567,7 @@ async fn test_run_mode() -> Result<(), Error> {
             .with_db_path(db_path.clone())
             .build()
             .await?;
-        tasks.run().await;
+        tasks.run(false).await;
 
         let task_statuses = inspect_tasks(&tasks).await;
         assert_matches!(
@@ -1588,7 +1588,7 @@ async fn test_run_mode() -> Result<(), Error> {
             .with_db_path(db_path.clone())
             .build()
             .await?;
-        tasks.run().await;
+        tasks.run(false).await;
         let task_statuses = inspect_tasks(&tasks).await;
         assert_matches!(
             &task_statuses[..],
@@ -1609,7 +1609,7 @@ async fn test_run_mode() -> Result<(), Error> {
             .with_db_path(db_path.clone())
             .build()
             .await?;
-        tasks.run().await;
+        tasks.run(false).await;
         let task_statuses = inspect_tasks(&tasks).await;
         assert_matches!(
             &task_statuses[..],
@@ -1630,7 +1630,7 @@ async fn test_run_mode() -> Result<(), Error> {
             .with_db_path(db_path.clone())
             .build()
             .await?;
-        tasks.run().await;
+        tasks.run(false).await;
         let task_statuses = inspect_tasks(&tasks).await;
         assert_matches!(
             &task_statuses[..],
@@ -1683,7 +1683,7 @@ async fn test_before_tasks() -> Result<(), Error> {
     .with_db_path(db_path)
     .build()
     .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -1736,7 +1736,7 @@ async fn test_after_tasks() -> Result<(), Error> {
     .with_db_path(db_path.clone())
     .build()
     .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -1790,7 +1790,7 @@ async fn test_before_and_after_tasks() -> Result<(), Error> {
     .with_db_path(db_path)
     .build()
     .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -1844,7 +1844,7 @@ async fn test_transitive_dependencies() -> Result<(), Error> {
     .with_db_path(db_path)
     .build()
     .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -1898,7 +1898,7 @@ async fn test_non_root_before_and_after() -> Result<(), Error> {
     .with_db_path(db_path)
     .build()
     .await?;
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
@@ -1962,7 +1962,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -2010,7 +2010,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks2.run().await;
+    tasks2.run(false).await;
 
     let task_statuses2 = inspect_tasks(&tasks2).await;
 
@@ -2054,7 +2054,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks3.run().await;
+    tasks3.run(false).await;
 
     let task_statuses3 = inspect_tasks(&tasks3).await;
 
@@ -2109,7 +2109,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks4.run().await;
+    tasks4.run(false).await;
 
     let task_statuses4 = inspect_tasks(&tasks4).await;
 
@@ -2153,7 +2153,7 @@ async fn test_namespace_matching() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks5.run().await;
+    tasks5.run(false).await;
 
     let task_statuses5 = inspect_tasks(&tasks5).await;
 
@@ -2216,18 +2216,17 @@ async fn test_dependency_failure() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses_slice = &task_statuses.as_slice();
+    // With @complete semantics (default for oneshot), task_2 runs even if task_1 fails
+    // because @complete means "wait for task to finish" regardless of success/failure
     assert_matches!(
         *task_statuses_slice,
         [
             (task_1, TaskStatus::Completed(TaskCompleted::Failed(_, _))),
-            (
-                task_2,
-                TaskStatus::Completed(TaskCompleted::DependencyFailed)
-            )
+            (task_2, TaskStatus::Completed(TaskCompleted::Success(_, _)))
         ] if task_1 == "myapp:task_1" && task_2 == "myapp:task_2"
     );
 
@@ -2281,7 +2280,7 @@ exit 0
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -2347,7 +2346,7 @@ echo '{"key": "value3"}' > $DEVENV_TASK_OUTPUT_FILE
     .build()
     .await?;
 
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
 
     let keys: Vec<_> = outputs.keys().collect();
     assert_eq!(keys, vec!["myapp:task_1", "myapp:task_2", "myapp:task_3"]);
@@ -2410,7 +2409,7 @@ fi
     .build()
     .await?;
 
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
     let task_statuses = inspect_tasks(&tasks).await;
     let task_statuses = task_statuses.as_slice();
     assert_matches!(
@@ -2580,7 +2579,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -2615,7 +2614,7 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
     .build()
     .await?;
 
-    tasks.run().await;
+    tasks.run(false).await;
 
     let task_statuses = inspect_tasks(&tasks).await;
 
@@ -2676,7 +2675,7 @@ async fn test_task_cancellation_during_execution() -> Result<(), Error> {
     });
 
     // Run tasks
-    tasks.run().await;
+    tasks.run(false).await;
 
     // Verify task was cancelled
     let task_statuses = inspect_tasks(&tasks).await;
@@ -2733,7 +2732,7 @@ async fn test_task_cancellation_waiting_for_dependencies() -> Result<(), Error> 
     });
 
     // Run tasks
-    tasks.run().await;
+    tasks.run(false).await;
 
     // Verify both tasks were cancelled
     let task_statuses = inspect_tasks(&tasks).await;
@@ -2803,7 +2802,7 @@ async fn test_multiple_tasks_cancellation() -> Result<(), Error> {
     });
 
     // Run tasks
-    tasks.run().await;
+    tasks.run(false).await;
 
     // Verify all tasks were cancelled
     let task_statuses = inspect_tasks(&tasks).await;
@@ -2862,7 +2861,7 @@ async fn test_wait_for_tasks_complete_without_cancellation() -> Result<(), Error
 
     // Run tasks without triggering shutdown
     // tasks.run() uses wait_all() internally via the JoinSet, so when it returns all tasks are complete
-    tasks.run().await;
+    tasks.run(false).await;
 
     // Verify all tasks completed successfully (not cancelled)
     let task_statuses = inspect_tasks(&tasks).await;
@@ -2935,7 +2934,7 @@ echo "Command v1 executed"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks1.run().await;
+    tasks1.run(false).await;
 
     match &tasks1.graph[tasks1.tasks_order[0]].read().await.status {
         TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
@@ -2958,7 +2957,7 @@ echo "Command v1 executed"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    tasks2.run().await;
+    tasks2.run(false).await;
 
     match &tasks2.graph[tasks2.tasks_order[0]].read().await.status {
         TaskStatus::Completed(TaskCompleted::Skipped(_)) => {}
@@ -2990,7 +2989,7 @@ echo "Command v2 executed"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs3 = tasks3.run().await;
+    let outputs3 = tasks3.run(false).await;
 
     match &tasks3.graph[tasks3.tasks_order[0]].read().await.status {
         TaskStatus::Completed(TaskCompleted::Success(_, _)) => {}
@@ -3843,7 +3842,7 @@ echo "Dotfiles task executed successfully"
         .await?;
 
     // Run task first time - should execute
-    let outputs = tasks.run().await;
+    let outputs = tasks.run(false).await;
 
     // Print status for debugging
     let status = &tasks.graph[tasks.tasks_order[0]].read().await.status;
@@ -3888,7 +3887,7 @@ echo "Dotfiles task executed successfully"
         .with_db_path(db_path.clone())
         .build()
         .await?;
-    let outputs2 = tasks2.run().await;
+    let outputs2 = tasks2.run(false).await;
 
     // Print status for debugging
     let status2 = &tasks2.graph[tasks2.tasks_order[0]].read().await.status;
@@ -3942,7 +3941,7 @@ echo "Dotfiles task executed successfully"
         .with_db_path(db_path)
         .build()
         .await?;
-    let outputs3 = tasks3.run().await;
+    let outputs3 = tasks3.run(false).await;
 
     // Print status for debugging
     let status3 = &tasks3.graph[tasks3.tasks_order[0]].read().await.status;

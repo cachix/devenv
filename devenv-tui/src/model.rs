@@ -1,7 +1,8 @@
 use crate::app::TuiConfig;
 use devenv_activity::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, EvalOp, Evaluate,
-    ExpectedCategory, Fetch, FetchKind, Message, Operation, SetExpected, Task,
+    ExpectedCategory, Fetch, FetchKind, Message, Operation, Process, ProcessStatus, SetExpected,
+    Task,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -100,6 +101,11 @@ pub struct MessageActivity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ProcessActivity {
+    pub status: ProcessStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ActivityVariant {
     Task(TaskActivity),
     UserOperation,
@@ -112,6 +118,8 @@ pub enum ActivityVariant {
     FetchTree,
     /// Devenv-specific operations (e.g., "Building shell", "Entering shell")
     Devenv,
+    /// Long-running managed processes
+    Process(ProcessActivity),
     /// Standalone messages displayed as children of their parent activity
     Message(MessageActivity),
     Unknown,
@@ -334,6 +342,7 @@ impl ActivityModel {
             ActivityEvent::Evaluate(eval_event) => self.handle_evaluate_event(eval_event),
             ActivityEvent::Task(task_event) => self.handle_task_event(task_event),
             ActivityEvent::Command(cmd_event) => self.handle_command_event(cmd_event),
+            ActivityEvent::Process(proc_event) => self.handle_process_event(proc_event),
             ActivityEvent::Operation(op_event) => self.handle_operation_event(op_event),
             ActivityEvent::Message(msg) => self.handle_message(msg),
             ActivityEvent::SetExpected(expected) => self.handle_set_expected(expected),
@@ -591,6 +600,50 @@ impl ActivityModel {
                 id, line, is_error, ..
             } => {
                 self.handle_activity_log(id, line, is_error);
+            }
+        }
+    }
+
+    fn handle_process_event(&mut self, event: Process) {
+        match event {
+            Process::Start {
+                id,
+                name,
+                parent,
+                command,
+                level,
+                ..
+            } => {
+                let variant = ActivityVariant::Process(ProcessActivity {
+                    status: ProcessStatus::Running,
+                });
+                self.create_activity(id, name, parent, command, variant, level);
+            }
+            Process::Complete { id, outcome, .. } => {
+                // Update status to Stopped before completing
+                if let Some(activity) = self.activities.get_mut(&id) {
+                    if let ActivityVariant::Process(ref mut proc) = activity.variant {
+                        proc.status = ProcessStatus::Stopped;
+                    }
+                }
+                self.handle_activity_complete(id, outcome);
+            }
+            Process::Log {
+                id, line, is_error, ..
+            } => {
+                self.handle_activity_log(id, line, is_error);
+            }
+            Process::Status { id, status, .. } => {
+                if let Some(activity) = self.activities.get_mut(&id) {
+                    if let ActivityVariant::Process(ref mut proc) = activity.variant {
+                        proc.status = status;
+                    }
+                    // Restarting status reactivates a failed/completed process
+                    if matches!(status, ProcessStatus::Restarting) {
+                        activity.state = NixActivityState::Active;
+                        activity.completed_at = None;
+                    }
+                }
             }
         }
     }

@@ -7,11 +7,12 @@ use tracing::Span;
 
 use crate::Timestamp;
 use crate::builders::{
-    BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder, TaskBuilder,
+    BuildBuilder, CommandBuilder, EvaluateBuilder, FetchBuilder, OperationBuilder, ProcessBuilder,
+    TaskBuilder,
 };
 use crate::events::{
     ActivityEvent, ActivityLevel, ActivityOutcome, Build, Command, Evaluate, Fetch, FetchKind,
-    Operation, Task,
+    Operation, Process, ProcessStatus, Task,
 };
 use crate::stack::{ACTIVITY_STACK, get_current_stack, send_activity_event};
 
@@ -23,6 +24,7 @@ pub enum ActivityType {
     Evaluate,
     Task,
     Command,
+    Process,
     Operation,
 }
 
@@ -82,6 +84,11 @@ impl Activity {
     /// Create a builder for a Command activity
     pub fn command(name: impl Into<String>) -> CommandBuilder {
         CommandBuilder::new(name)
+    }
+
+    /// Create a builder for a Process activity (long-running managed process)
+    pub fn process(name: impl Into<String>) -> ProcessBuilder {
+        ProcessBuilder::new(name)
     }
 
     /// Create a builder for an Operation activity
@@ -197,6 +204,13 @@ impl Activity {
         }
     }
 
+    /// Reset outcome to success (for restarting failed processes)
+    pub fn reset(&self) {
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::Success;
+        }
+    }
+
     /// Update progress (for Build, Task, and Operation activities)
     ///
     /// For Operation activities, an optional detail string can be provided to show
@@ -299,6 +313,12 @@ impl Activity {
                 is_error: false,
                 timestamp: Timestamp::now(),
             }),
+            ActivityType::Process => ActivityEvent::Process(Process::Log {
+                id: self.id,
+                line: line_str,
+                is_error: false,
+                timestamp: Timestamp::now(),
+            }),
             ActivityType::Operation => ActivityEvent::Operation(Operation::Log {
                 id: self.id,
                 line: line_str,
@@ -333,6 +353,12 @@ impl Activity {
                 is_error: true,
                 timestamp: Timestamp::now(),
             }),
+            ActivityType::Process => ActivityEvent::Process(Process::Log {
+                id: self.id,
+                line: line_str,
+                is_error: true,
+                timestamp: Timestamp::now(),
+            }),
             ActivityType::Operation => ActivityEvent::Operation(Operation::Log {
                 id: self.id,
                 line: line_str,
@@ -342,6 +368,18 @@ impl Activity {
             _ => return,
         };
         send_activity_event(event);
+    }
+
+    /// Set process status (for Process activities only)
+    pub fn set_status(&self, status: ProcessStatus) {
+        let _guard = self.span.enter();
+        if matches!(self.activity_type, ActivityType::Process) {
+            send_activity_event(ActivityEvent::Process(Process::Status {
+                id: self.id,
+                status,
+                timestamp: Timestamp::now(),
+            }));
+        }
     }
 }
 
@@ -401,6 +439,11 @@ impl Drop for Activity {
                 timestamp: Timestamp::now(),
             }),
             ActivityType::Command => ActivityEvent::Command(Command::Complete {
+                id: self.id,
+                outcome,
+                timestamp: Timestamp::now(),
+            }),
+            ActivityType::Process => ActivityEvent::Process(Process::Complete {
                 id: self.id,
                 outcome,
                 timestamp: Timestamp::now(),

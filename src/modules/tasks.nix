@@ -1,6 +1,7 @@
 { pkgs, lib, config, ... }@inputs:
 let
   types = lib.types;
+  listenType = import ./lib/listen.nix { inherit lib; };
 
   # Attempt to evaluate devenv-tasks using the exact nixpkgs used by the root devenv flake.
   # If the locked input is not what we expect, fall back to evaluating with the user's nixpkgs.
@@ -115,6 +116,13 @@ let
               exec_if_modified = config.execIfModified;
               cwd = config.cwd;
               show_output = config.showOutput;
+              process = {
+                restart = config.restart;
+                max_restarts = config.max_restarts;
+                listen = config.listen;
+                watch = config.watch;
+                notify = config.notify;
+              };
             };
             description = "Internal configuration for the task.";
           };
@@ -171,6 +179,119 @@ let
             type = types.nullOr types.str;
             default = null;
             description = "Working directory to run the task in. If not specified, the current working directory will be used.";
+          };
+
+          # Process-specific configuration (only used when type = "process")
+          restart = lib.mkOption {
+            type = types.enum [ "never" "always" "on_failure" ];
+            default = "on_failure";
+            description = ''
+              Process restart policy:
+              - never: Never restart the process
+              - always: Always restart when it exits
+              - on_failure: Restart only on failure (non-zero exit code)
+
+              Only used when type = "process".
+            '';
+          };
+
+          max_restarts = lib.mkOption {
+            type = types.nullOr types.int;
+            default = 5;
+            description = ''
+              Maximum number of restart attempts. null means unlimited restarts.
+
+              Only used when type = "process".
+            '';
+          };
+
+          listen = lib.mkOption {
+            type = types.listOf listenType;
+            default = [ ];
+            description = ''
+              Socket activation configuration for systemd-style socket passing.
+
+              Only used when type = "process".
+            '';
+            example = [
+              {
+                name = "http";
+                kind = "tcp";
+                address = "127.0.0.1:8080";
+              }
+              {
+                name = "admin";
+                kind = "unix_stream";
+                path = "$DEVENV_STATE/admin.sock";
+                mode = 384; # 0o600
+              }
+            ];
+          };
+
+          watch = lib.mkOption {
+            type = types.submodule {
+              options = {
+                paths = lib.mkOption {
+                  type = types.listOf types.path;
+                  default = [ ];
+                  description = ''
+                    Paths to watch for changes (files or directories).
+                    When files in these paths change, the process will be restarted.
+
+                    Only used when type = "process".
+                  '';
+                };
+
+                extensions = lib.mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = ''
+                    File extensions to watch (e.g., "rs", "js", "py").
+                    If empty, all file extensions are watched.
+
+                    Only used when type = "process".
+                  '';
+                };
+
+                ignore = lib.mkOption {
+                  type = types.listOf types.str;
+                  default = [ ];
+                  description = ''
+                    Glob patterns to ignore (e.g., ".git", "target", "*.log").
+
+                    Only used when type = "process".
+                  '';
+                };
+              };
+            };
+            default = { };
+            description = ''
+              File watching configuration for automatic process restarts.
+
+              Only used when type = "process".
+            '';
+          };
+
+          notify = lib.mkOption {
+            type = types.submodule {
+              options.enable = lib.mkOption {
+                type = types.bool;
+                default = false;
+                description = ''
+                  Enable systemd notify protocol for readiness signaling.
+                  When enabled, the process must send READY=1 to the NOTIFY_SOCKET
+                  before dependent tasks with @ready suffix will be unblocked.
+
+                  Only used when type = "process".
+                '';
+              };
+            };
+            default = { };
+            description = ''
+              Systemd notify protocol configuration for readiness signaling.
+
+              Only used when type = "process".
+            '';
           };
         };
       });
@@ -234,14 +355,14 @@ in
     };
     enterShell = ''
       if [ -z "''${DEVENV_SKIP_TASKS:-}" ]; then
-        ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all || exit $?
+        ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
         if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
           source "$DEVENV_DOTFILE/load-exports"
         fi
       fi
     '';
     enterTest = lib.mkBefore ''
-      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all || exit $?
+      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all --cache-dir ${lib.escapeShellArg config.devenv.dotfile} --runtime-dir ${lib.escapeShellArg config.devenv.runtime} || exit $?
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi

@@ -3,10 +3,11 @@ use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::types::{
-    DependencyKind, Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, TasksStatus,
-    VerbosityLevel,
+    DependencyKind, Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, TaskType,
+    TasksStatus, VerbosityLevel,
 };
 use devenv_activity::{Activity, ActivityInstrument, TaskInfo, emit_task_hierarchy, next_id};
+use devenv_processes::NativeProcessManager;
 use petgraph::algo::{has_path_connecting, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::{EdgeRef, Reversed};
@@ -27,7 +28,7 @@ pub struct TasksBuilder {
 }
 
 impl TasksBuilder {
-    /// Create a new builder with required configuration and subsys
+    /// Create a new builder with required configuration
     pub fn new(
         config: Config,
         verbosity: VerbosityLevel,
@@ -41,7 +42,7 @@ impl TasksBuilder {
         }
     }
 
-    /// Set the database path
+    /// Set the database path for task caching
     pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
         self.db_path = Some(db_path);
         self
@@ -56,12 +57,24 @@ impl TasksBuilder {
                 )))
             })?
         } else {
-            TaskCache::new().await.map_err(|e| {
+            TaskCache::new(&self.config.cache_dir).await.map_err(|e| {
                 Error::IoError(std::io::Error::other(format!(
                     "Failed to initialize task cache: {e}"
                 )))
             })?
         };
+
+        // Create process manager for long-running process tasks
+        // Note: empty process_configs since tasks manage processes individually via start_command()
+        let process_manager = Arc::new(
+            NativeProcessManager::new(self.config.runtime_dir.clone(), HashMap::new()).map_err(
+                |e| {
+                    Error::IoError(std::io::Error::other(format!(
+                        "Failed to initialize process manager: {e}"
+                    )))
+                },
+            )?,
+        );
 
         let mut graph = DiGraph::new();
         let mut task_indices = HashMap::new();
@@ -105,6 +118,8 @@ impl TasksBuilder {
             run_mode: self.config.run_mode,
             cache,
             shutdown: self.shutdown,
+            process_manager,
+            env: self.config.env,
         };
 
         tasks.resolve_dependencies(task_indices).await?;
@@ -135,6 +150,10 @@ pub struct Tasks {
     pub run_mode: RunMode,
     pub cache: TaskCache,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
+    /// Process manager for running long-lived process tasks
+    pub process_manager: Arc<NativeProcessManager>,
+    /// Environment variables to pass to processes
+    pub env: HashMap<String, String>,
 }
 
 impl Tasks {
@@ -226,6 +245,7 @@ impl Tasks {
     ) -> Result<(), Error> {
         let mut unresolved = HashSet::new();
         let mut edges_to_add = Vec::new();
+        let mut validation_errors = Vec::new();
 
         for index in self.graph.node_indices() {
             let task_state = &self.graph[index].read().await;
@@ -235,7 +255,53 @@ impl Tasks {
                 let dep_spec = parse_dependency(dep_name)?;
 
                 if let Some(dep_idx) = task_indices.get(&dep_spec.name) {
-                    edges_to_add.push((*dep_idx, index, dep_spec.kind));
+                    let dep_task = &self.graph[*dep_idx].read().await;
+
+                    // Resolve the dependency kind based on task type if not explicitly specified
+                    // Default: Ready for process tasks, Complete for oneshot tasks
+                    let resolved_kind = dep_spec.kind.unwrap_or_else(|| {
+                        if dep_task.task.r#type == TaskType::Process {
+                            DependencyKind::Ready
+                        } else {
+                            DependencyKind::Complete
+                        }
+                    });
+
+                    // Validate: oneshot tasks only support @complete, not @ready
+                    if resolved_kind == DependencyKind::Ready
+                        && dep_task.task.r#type == TaskType::Oneshot
+                    {
+                        validation_errors.push(format!(
+                            "Task '{}' depends on '{}@ready' but oneshot tasks don't support @ready. \
+                             Use @complete instead (or no suffix for default behavior).",
+                            task_state.task.name, dep_spec.name
+                        ));
+                    }
+
+                    // Validate @ready dependencies on process tasks require notify/listen
+                    if resolved_kind == DependencyKind::Ready
+                        && dep_task.task.r#type == TaskType::Process
+                    {
+                        let has_notify = dep_task
+                            .task
+                            .process
+                            .as_ref()
+                            .and_then(|p| p.notify.as_ref())
+                            .map_or(false, |n| n.enable);
+                        let has_listen = dep_task
+                            .task
+                            .process
+                            .as_ref()
+                            .map_or(false, |p| !p.listen.is_empty());
+                        if !has_notify && !has_listen {
+                            validation_errors.push(format!(
+                                "Task '{}' depends on '{}@ready' but process has no notify.enable or listen config. \
+                                 Add notify.enable = true or configure listen sockets for the process.",
+                                task_state.task.name, dep_spec.name
+                            ));
+                        }
+                    }
+                    edges_to_add.push((*dep_idx, index, resolved_kind));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), dep_name.clone()));
                 }
@@ -246,11 +312,60 @@ impl Tasks {
                 let dep_spec = parse_dependency(before_name)?;
 
                 if let Some(before_idx) = task_indices.get(&dep_spec.name) {
-                    edges_to_add.push((index, *before_idx, dep_spec.kind));
+                    // For 'before' relationships, the current task is the dependency source
+                    // Resolve kind based on current task's type if not explicitly specified
+                    let resolved_kind = dep_spec.kind.unwrap_or_else(|| {
+                        if task_state.task.r#type == TaskType::Process {
+                            DependencyKind::Ready
+                        } else {
+                            DependencyKind::Complete
+                        }
+                    });
+
+                    // Validate: oneshot tasks only support @complete, not @ready
+                    if resolved_kind == DependencyKind::Ready
+                        && task_state.task.r#type == TaskType::Oneshot
+                    {
+                        validation_errors.push(format!(
+                            "Task '{}' uses @ready in 'before' but oneshot tasks don't support @ready. \
+                             Use @complete instead (or no suffix for default behavior).",
+                            task_state.task.name
+                        ));
+                    }
+
+                    // Validate @ready dependencies - current task must have notify/listen if it's a process
+                    if resolved_kind == DependencyKind::Ready
+                        && task_state.task.r#type == TaskType::Process
+                    {
+                        let has_notify = task_state
+                            .task
+                            .process
+                            .as_ref()
+                            .and_then(|p| p.notify.as_ref())
+                            .map_or(false, |n| n.enable);
+                        let has_listen = task_state
+                            .task
+                            .process
+                            .as_ref()
+                            .map_or(false, |p| !p.listen.is_empty());
+                        if !has_notify && !has_listen {
+                            validation_errors.push(format!(
+                                "Process '{}' has tasks depending on it via @ready but has no notify.enable or listen config. \
+                                 Add notify.enable = true or configure listen sockets for the process.",
+                                task_state.task.name
+                            ));
+                        }
+                    }
+                    edges_to_add.push((index, *before_idx, resolved_kind));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), before_name.clone()));
                 }
             }
+        }
+
+        // Return validation errors first
+        if !validation_errors.is_empty() {
+            return Err(Error::InvalidDependency(validation_errors.join("\n")));
         }
 
         for (from, to, kind) in edges_to_add {
@@ -386,14 +501,20 @@ impl Tasks {
     }
 
     #[instrument(skip(self))]
-    pub async fn run(&self) -> Outputs {
+    pub async fn run(&self, is_process_mode: bool) -> Outputs {
         // Create an orchestration-level Operation activity to track overall progress
         // Using Operation (not Task) so it doesn't count in the task summary
+        let (label, item_type) = if is_process_mode {
+            ("Running processes", "processes")
+        } else {
+            ("Running tasks", "tasks")
+        };
         let orchestration_activity = Arc::new(
-            Activity::operation("Running tasks")
+            Activity::operation(label)
                 .detail(format!(
-                    "{} tasks, roots: {:?}",
+                    "{} {}, roots: {:?}",
                     self.tasks_order.len(),
+                    item_type,
                     self.root_names
                 ))
                 .parent(None)
@@ -450,33 +571,55 @@ impl Tasks {
                 'dependency_check: loop {
                     let mut dependencies_completed = true;
 
+                    // Check each dependency with its edge weight (Ready or Complete)
                     for edge in self
                         .graph
                         .edges_directed(*index, petgraph::Direction::Incoming)
                     {
                         let dep_index = edge.source();
                         let dep_kind = edge.weight();
+                        let dep_status = &self.graph[dep_index].read().await.status;
 
-                        match &self.graph[dep_index].read().await.status {
-                            TaskStatus::Completed(completed) => {
-                                // Only propagate failure for Ready/Succeeded dependencies
-                                // Complete dependencies just wait for the task to finish (soft dependency)
-                                if *dep_kind != DependencyKind::Complete && completed.has_failed() {
-                                    dependency_failed = true;
-                                    break 'dependency_check;
-                                }
+                        let satisfied = match (dep_status, dep_kind) {
+                            // @ready dependencies
+                            (TaskStatus::ProcessReady, DependencyKind::Ready) => {
+                                // Process is ready and healthy
+                                true
                             }
-                            TaskStatus::ProcessReady => {
-                                // Process is ready and healthy, dependency is satisfied
+                            (
+                                TaskStatus::Completed(TaskCompleted::Success(_, _)),
+                                DependencyKind::Ready,
+                            ) => {
+                                // Oneshot task completed successfully
+                                true
                             }
-                            TaskStatus::Pending => {
-                                dependencies_completed = false;
-                                break;
+                            (
+                                TaskStatus::Completed(TaskCompleted::Skipped(_)),
+                                DependencyKind::Ready,
+                            ) => {
+                                // Task was skipped (cached or no command)
+                                true
                             }
-                            TaskStatus::Running(_) => {
-                                dependencies_completed = false;
-                                break;
+
+                            // @complete dependencies
+                            (TaskStatus::Completed(_), DependencyKind::Complete) => {
+                                // Task has completed (any completion state)
+                                true
                             }
+
+                            // Failure handling
+                            (TaskStatus::Completed(completed), _) if completed.has_failed() => {
+                                dependency_failed = true;
+                                break 'dependency_check;
+                            }
+
+                            // Not yet satisfied
+                            _ => false,
+                        };
+
+                        if !satisfied {
+                            dependencies_completed = false;
+                            break;
                         }
                     }
 
@@ -526,6 +669,55 @@ impl Tasks {
 
             // Run the task
 
+            // Check if this is a process task (long-running)
+            let is_process_task = {
+                let task_state = task_state.read().await;
+                task_state.task.r#type == TaskType::Process
+            };
+
+            if is_process_task {
+                // Process task: spawn and transition to ProcessReady immediately
+                // Process activities are created as direct children of orchestration activity
+
+                let task_state_clone = Arc::clone(task_state);
+                let notify_finished_clone = Arc::clone(&self.notify_finished);
+                let notify_ui_clone = Arc::clone(&self.notify_ui);
+                let process_manager_clone = self.process_manager.clone();
+                let parent_id = orchestration_activity.id();
+                let env = &self.env;
+
+                // Spawn the process using the process manager
+                match task_state_clone
+                    .write()
+                    .await
+                    .run_process(&process_manager_clone, Some(parent_id), env)
+                    .await
+                {
+                    Ok(()) => {
+                        // Process is now running and ready
+                        notify_finished_clone.notify_one();
+                        notify_ui_clone.notify_one();
+                    }
+                    Err(e) => {
+                        // Failed to start process
+                        error!("Failed to start process task {}: {}", task_name, e);
+                        let mut task_state = task_state_clone.write().await;
+                        task_state.status = TaskStatus::Completed(TaskCompleted::Failed(
+                            std::time::Duration::ZERO,
+                            TaskFailure {
+                                stdout: Vec::new(),
+                                stderr: Vec::new(),
+                                error: format!("Failed to start process: {e}"),
+                            },
+                        ));
+                        notify_finished_clone.notify_one();
+                        notify_ui_clone.notify_one();
+                    }
+                }
+                continue;
+            }
+
+            // Oneshot task: run once and complete
             // Reset the timer
             let now = Instant::now();
 

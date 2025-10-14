@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 3bfb8610ebb16b72bb94a90dfa26b86fe668579e4680ef0c5c17284140ddc405 # shrinks to task_names = ["A:a", "8:A"], prefix = "8"
+cc 56376304f5bb5bfeadc7a99b40e9592aeff62218a3cafc22894998107560110c # shrinks to task_names = ["-:A", "0:-", "A:_", "0:a", "0:_", "-:B", "a:0", "-:a", "0:0"], task_index = 0

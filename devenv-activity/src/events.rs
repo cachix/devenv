@@ -14,6 +14,7 @@ pub enum ActivityEvent {
     Evaluate(Evaluate),
     Task(Task),
     Command(Command),
+    Process(Process),
     Operation(Operation),
     Message(Message),
     /// Aggregate expected counts announcement from Nix
@@ -286,6 +287,55 @@ pub enum Command {
         is_error: bool,
         timestamp: Timestamp,
     },
+}
+
+/// Process activity events - for long-running managed processes
+#[derive(Debug, Clone, Serialize, Deserialize, Valuable)]
+#[serde(tag = "event", rename_all = "lowercase")]
+pub enum Process {
+    Start {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        parent: Option<u64>,
+        /// The command being executed
+        #[serde(skip_serializing_if = "Option::is_none")]
+        command: Option<String>,
+        #[serde(default)]
+        level: ActivityLevel,
+        timestamp: Timestamp,
+    },
+    Complete {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        outcome: ActivityOutcome,
+        timestamp: Timestamp,
+    },
+    Log {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        line: String,
+        #[serde(default)]
+        is_error: bool,
+        timestamp: Timestamp,
+    },
+    Status {
+        #[serde(alias = "activity_id")]
+        id: u64,
+        status: ProcessStatus,
+        timestamp: Timestamp,
+    },
+}
+
+/// Status of a managed process
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Valuable)]
+#[serde(rename_all = "lowercase")]
+pub enum ProcessStatus {
+    Running,
+    Ready,
+    Restarting,
+    Stopped,
 }
 
 /// Operation activity events - generic devenv operations with log support

@@ -7,6 +7,8 @@ license.workspace = true
 [dependencies]
 devenv-activity.workspace = true
 devenv-cache-core.workspace = true
+devenv-processes.workspace = true
+devenv-tui.workspace = true
 
 clap.workspace = true
 console.workspace = true
@@ -27,7 +29,7 @@ shell-escape.workspace = true
 glob = "0.3.3"
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["user"] }
+nix = { workspace = true, features = ["user", "signal"] }
 
 [dev-dependencies]
 pretty_assertions.workspace = true

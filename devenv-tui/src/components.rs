@@ -224,19 +224,24 @@ impl ActivityTextComponent {
         // Only add action text if action is not empty
         if !self.action.is_empty() {
             // Action word should be capitalized
-            let action_text = format!(
-                "{}{}",
-                self.action
-                    .chars()
-                    .next()
-                    .unwrap_or_default()
-                    .to_uppercase()
-                    .collect::<String>(),
-                &self.action[1..]
-            );
+            let action_text = {
+                let mut chars = self.action.chars();
+                match chars.next() {
+                    Some(first) => {
+                        format!(
+                            "{}{}",
+                            first.to_uppercase().collect::<String>(),
+                            chars.as_str()
+                        )
+                    }
+                    None => String::new(),
+                }
+            };
             final_prefix.push(
-                element!(View(width: action_text.len() as u32, flex_shrink: 0.0) {
-                    Text(content: action_text, color: name_color, weight: Weight::Bold)
+                element!(View(width: (action_text.chars().count() + 1) as u32, flex_shrink: 0.0) {
+                    View(margin_right: 1) {
+                        Text(content: action_text, color: name_color, weight: Weight::Bold)
+                    }
                 })
                 .into_any(),
             );
@@ -684,6 +689,7 @@ pub struct ExpandedContentComponent<'a> {
     pub lines: Option<&'a VecDeque<String>>,
     pub empty_message: &'a str,
     pub max_lines: usize,
+    pub depth: usize,
 }
 
 impl<'a> ExpandedContentComponent<'a> {
@@ -692,6 +698,7 @@ impl<'a> ExpandedContentComponent<'a> {
             lines,
             empty_message: "  → no content",
             max_lines: LOG_VIEWPORT_COLLAPSED,
+            depth: 0,
         }
     }
 
@@ -705,7 +712,15 @@ impl<'a> ExpandedContentComponent<'a> {
         self
     }
 
+    pub fn with_depth(mut self, depth: usize) -> Self {
+        self.depth = depth;
+        self
+    }
+
     pub fn render(&self) -> Vec<AnyElement<'static>> {
+        // Calculate indentation based on depth (2 base + 2 per depth level)
+        let indent = 2 + (self.depth * 2);
+
         if let Some(lines) = &self.lines
             && !lines.is_empty()
         {
@@ -719,7 +734,7 @@ impl<'a> ExpandedContentComponent<'a> {
                 for line in visible_lines {
                     line_elements.push(
                         element! {
-                            View(height: 1, flex_direction: FlexDirection::Row, padding_left: 2, padding_right: 1) {
+                            View(height: 1, flex_direction: FlexDirection::Row, padding_left: indent as u32, padding_right: 1) {
                                 Text(content: line.clone(), color: Color::AnsiValue(245))
                             }
                         }
@@ -738,7 +753,7 @@ impl<'a> ExpandedContentComponent<'a> {
 
         // Fallback: show empty message with minimal height
         vec![element! {
-            View(height: 1, flex_direction: FlexDirection::Column, padding_left: 2, padding_right: 1) {
+            View(height: 1, flex_direction: FlexDirection::Column, padding_left: indent as u32, padding_right: 1) {
                 Text(content: self.empty_message.to_string(), color: Color::AnsiValue(245))
             }
         }

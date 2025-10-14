@@ -3,8 +3,8 @@ source: devenv-tui/tests/tui_tests.rs
 expression: output
 ---
 ⠋ Building shell
-  └ ⠋ Building wrapper-scripts buildPhase
-    └ ⠋ Downloading bash-5.2 from cache.nixos.org
+  ⎿ ⠋ Building  wrapper-scripts buildPhase
+    ⎿ ⠋ Downloading bash-5.2 from cache.nixos.org
         ──────────────────────────────────────────────500kB / 1MB at 5MB/s
       └ ⠋ Downloading readline-8.2 from cache.nixos.org
         └ ⠋ Downloading ncurses-6.4 from cache.nixos.org

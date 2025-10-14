@@ -17,6 +17,7 @@
 , protobuf
 , pkg-config
 , glibcLocalesUtf8
+, bash
 , nix
 , llvmPackages
 , boehmgc
@@ -75,7 +76,7 @@ rustPlatform.buildRustPackage {
     export PROTO_ROOT="$NIX_BUILD_TOP/cargo-vendor-dir"
   '';
 
-  nativeCheckInputs = [ gitMinimal ];
+  nativeCheckInputs = [ gitMinimal bash ];
   preCheck = ''
     # Initialize git repo for tests that use git-root-relative imports
     pushd $NIX_BUILD_TOP/source

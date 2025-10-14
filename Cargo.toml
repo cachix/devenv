@@ -9,6 +9,7 @@ members = [
   "devenv-eval-cache",
   "devenv-nix-backend",
   "devenv-nix-backend-macros",
+  "devenv-processes",
   "devenv-run-tests",
   "devenv-snix-backend",
   "devenv-tasks",
@@ -31,6 +32,7 @@ devenv-activity = { path = "devenv-activity" }
 devenv-activity-macros = { path = "devenv-activity-macros" }
 devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
+devenv-processes = { path = "devenv-processes" }
 devenv-run-tests = { path = "devenv-run-tests" }
 devenv-snix-backend = { path = "devenv-snix-backend" }
 devenv-nix-backend = { path = "devenv-nix-backend" }
@@ -60,6 +62,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.48", features = ["derive", "cargo", "env"] }
 clap_complete = { version = "4.5.58", features = ["unstable-dynamic"] }
 cstr = "0.2"
+daemonize = "0.5"
 cli-table = "0.5.0"
 console = "0.16.1"
 dotlock = "0.5.0"
@@ -135,15 +138,22 @@ walkdir = "2.5"
 url = "2"
 human-repr = "1.1"
 insta = { version = "1.40", features = ["filters", "json"] }
+watchexec = "8.0"
+watchexec-filterer-globset = "8.0"
+watchexec-supervisor = "5.0"
+signal-hook = "0.3"
+signal-hook-tokio = { version = "0.3", features = ["futures-v0_3"] }
+socket2 = "0.5"
+ctrlc = "3.4"
+process-wrap = { version = "9.0", features = ["tokio1"] }
+portable-pty = "0.9.0"
 
 reqwest = { version = "0.13", features = ["json", "query", "stream"] }
-rmcp = { version = "0.7", features = [
-  "server",
-  "transport-io",
-  "transport-streamable-http-server",
-] }
 axum = "0.8"
+caps = "0.5"
+rmcp = { version = "0.7", features = ["server", "transport-io", "transport-streamable-http-server"] }
 rmcp-macros = "0.7"
+sd-notify = "0.4"
 
 # Optional snix dependencies
 snix-eval = { git = "https://github.com/cachix/snix", rev = "50b41ae7e05b423a7525b4dda53d372a71931506" }
@@ -162,6 +172,7 @@ crossterm = "0.28.1"
 # Patched TUI dependencies to supported rendering to stderr
 iocraft = { git = "https://github.com/sandydoo/iocraft", branch = "feat-configure-output" }
 crossterm = { git = "https://github.com/sandydoo/crossterm", branch = "0.28-cachix" }
+
 
 [profile.release]
 strip = "symbols"

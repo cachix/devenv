@@ -3,11 +3,13 @@ use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use devenv_activity::{Activity, ActivityInstrument, ActivityLevel};
+use devenv_processes::{NativeProcessManager, ProcessConfig};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix::sys::signal::{self as nix_signal, Signal};
 use nix::unistd::Pid;
 use std::collections::BTreeMap;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -185,6 +187,82 @@ impl TaskState {
             Err(_) => None,
         };
         Output(output)
+    }
+
+    /// Run a process task (long-running)
+    ///
+    /// This spawns a process using NativeProcessManager and immediately returns
+    /// ProcessReady status. The process will stay alive until explicitly stopped
+    /// via the process manager's stop_all().
+    pub async fn run_process(
+        &mut self,
+        manager: &Arc<NativeProcessManager>,
+        parent_id: Option<u64>,
+        env: &std::collections::HashMap<String, String>,
+    ) -> Result<()> {
+        let Some(cmd) = &self.task.command else {
+            return Err(miette::miette!(
+                "Process task {} has no command",
+                self.task.name
+            ));
+        };
+
+        tracing::info!("Starting process task: {}", self.task.name);
+
+        // Use short process name (strip "devenv:processes:" prefix for display)
+        let process_name = self
+            .task
+            .name
+            .strip_prefix("devenv:processes:")
+            .unwrap_or(&self.task.name)
+            .to_string();
+
+        // Build process config, merging task config with process-specific overrides
+        let mut config = if let Some(ref process) = self.task.process {
+            ProcessConfig {
+                name: process_name,
+                exec: cmd.clone(),
+                cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
+                ..process.clone()
+            }
+        } else {
+            ProcessConfig {
+                name: process_name,
+                exec: cmd.clone(),
+                cwd: self.task.cwd.clone().map(std::path::PathBuf::from),
+                restart: devenv_processes::RestartPolicy::OnFailure,
+                max_restarts: Some(5),
+                ..Default::default()
+            }
+        };
+
+        // Merge devenv shell environment into process config
+        // Process-specific env vars take precedence over shell env
+        let mut merged_env = env.clone();
+        merged_env.extend(config.env.clone());
+        config.env = merged_env;
+
+        // Check if we need to wait for readiness (notify enabled or has listen sockets)
+        let requires_ready_wait =
+            config.notify.as_ref().map_or(false, |n| n.enable) || !config.listen.is_empty();
+
+        // Start the process via the manager (which tracks it for shutdown)
+        manager.start_command(&config, parent_id).await?;
+
+        // Wait for ready signal if notify is enabled or has listen sockets
+        if requires_ready_wait {
+            tracing::info!("Waiting for process {} to signal ready...", self.task.name);
+            let ready_notify = manager.get_ready_notify(&config.name).await?;
+            ready_notify.notified().await;
+            tracing::info!("Process {} signaled ready", self.task.name);
+        }
+
+        // Transition to ProcessReady
+        self.status = TaskStatus::ProcessReady;
+
+        tracing::info!("Process task {} is ready", self.task.name);
+
+        Ok(())
     }
 
     /// Run this task with a pre-assigned activity ID.

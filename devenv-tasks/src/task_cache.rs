@@ -53,15 +53,9 @@ pub struct TaskCache {
 }
 
 impl TaskCache {
-    /// Create a new TaskCache using the DEVENV_DOTFILE environment variable.
-    pub async fn new() -> CacheResult<Self> {
-        let cache_dir = std::env::var("DEVENV_DOTFILE")
-            .map_err(|_| CacheError::missing_env_var("DEVENV_DOTFILE"))?;
-
-        // Proper path joining instead of string concatenation
-        let mut db_path = PathBuf::from(cache_dir);
-        db_path.push("tasks.db");
-
+    /// Create a new TaskCache with the given cache directory.
+    pub async fn new(cache_dir: &PathBuf) -> CacheResult<Self> {
+        let db_path = cache_dir.join("tasks.db");
         Self::with_db_path(db_path).await
     }
 

@@ -13,6 +13,7 @@ default-run = "devenv"
 devenv-activity.workspace = true
 devenv-core.workspace = true
 devenv-eval-cache.workspace = true
+devenv-processes.workspace = true
 devenv-tasks.workspace = true
 devenv-tui.workspace = true
 devenv-cache-core.workspace = true

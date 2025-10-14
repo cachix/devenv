@@ -1,6 +1,4 @@
-use super::{tasks, tracing::HumanReadableDuration, util};
-use ::nix::sys::signal;
-use ::nix::unistd::Pid;
+use super::{processes, tasks, util};
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
@@ -38,7 +36,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
-use tracing::{Instrument, debug, info, instrument, trace, warn};
+use tracing::{Instrument, debug, info, instrument, trace};
 
 // templates
 // Note: gitignore is stored without the dot to work around include_dir not including dotfiles
@@ -110,6 +108,8 @@ pub struct ProcessOptions<'a> {
     pub log_to_file: bool,
     /// When true, fail if a port is in use instead of auto-allocating the next available.
     pub strict_ports: bool,
+    /// Command receiver for process control (restart, etc.)
+    pub command_rx: Option<tokio::sync::mpsc::Receiver<processes::ProcessCommand>>,
 }
 
 /// A shell command ready to be executed.
@@ -407,6 +407,10 @@ impl Devenv {
     /// Get the path to the .devenv directory
     pub fn dotfile(&self) -> &Path {
         &self.devenv_dotfile
+    }
+
+    pub fn native_manager_pid_file(&self) -> PathBuf {
+        self.devenv_dotfile.join("native-manager.pid")
     }
 
     pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
@@ -1013,11 +1017,15 @@ impl Devenv {
             tasks::VerbosityLevel::Normal
         };
 
+        let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
         let config = tasks::Config {
             roots,
             tasks,
             run_mode,
+            runtime_dir,
+            cache_dir: self.devenv_dotfile.clone(),
             sudo_context: None,
+            env: envs,
         };
 
         if let Ok(config_value) = devenv_activity::SerdeValue::from_serialize(&config) {
@@ -1032,7 +1040,7 @@ impl Devenv {
         // In TUI mode, skip TasksUi to avoid corrupting the TUI display
         // TUI captures activity events directly via the channel initialized in main.rs
         let (status, outputs) = if self.global_options.tui {
-            let outputs = tasks.run().await;
+            let outputs = tasks.run(false).await;
             let status = tasks.get_completion_status().await;
             (status, outputs)
         } else {
@@ -1044,7 +1052,7 @@ impl Devenv {
             let tasks_clone = Arc::clone(&tasks);
 
             // Spawn task runner - UI will detect completion via JoinHandle
-            let run_handle = tokio::spawn(async move { tasks_clone.run().await });
+            let run_handle = tokio::spawn(async move { tasks_clone.run(false).await });
 
             // Run UI - processes events and waits for run_handle
             let ui = TasksUi::new(Arc::clone(&tasks), activity_rx, verbosity);
@@ -1094,11 +1102,11 @@ impl Devenv {
             })?;
 
         // Run script and capture its environment exports
-        // Set DEVENV_SKIP_TASKS to prevent enterShell tasks from running during env capture
+        // We need to let enterShell tasks run to ensure the complete environment is captured
+        // (e.g., Python virtualenv setup adds .devenv/state/venv/bin to PATH)
         let output = self
             .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
-            .env("DEVENV_SKIP_TASKS", "1")
             .output()
             .await
             .into_diagnostic()
@@ -1168,9 +1176,10 @@ impl Devenv {
                 detach: true,
                 log_to_file: false,
                 strict_ports: false,
+                command_rx: None,
             };
             // up() with detach returns RunMode::Detached, not Exec
-            self.up(vec![], &options).await?;
+            self.up(vec![], options).await?;
         }
 
         // Run the test script through the shell, which runs enterShell tasks first
@@ -1312,7 +1321,7 @@ impl Devenv {
     pub async fn up<'a>(
         &self,
         processes: Vec<String>,
-        options: &'a ProcessOptions<'a>,
+        mut options: ProcessOptions<'a>,
     ) -> Result<RunMode> {
         // Set strict port mode before assemble (which triggers port allocation)
         self.port_allocator.set_strict(options.strict_ports);
@@ -1327,232 +1336,164 @@ impl Devenv {
             bail!("No processes defined");
         }
 
-        let proc_script_string = {
+        // Get shell environment (common for both managers)
+        let envs = if let Some(envs) = options.envs {
+            envs.clone()
+        } else {
+            self.capture_shell_environment().await?
+        };
+
+        // Check which process manager to use
+        let implementation = self
+            .nix
+            .eval(&["devenv.config.process.manager.implementation"])
+            .await?
+            .trim()
+            .trim_matches('"')
+            .to_string();
+
+        // Create appropriate manager based on implementation
+        if implementation == "native" {
+            info!("Using native process manager with task-based dependency ordering");
+
+            // Load task configurations from Nix
+            let gc_root = self.devenv_dot_gc.join("task-config");
+            let paths = self
+                .nix
+                .build(&["devenv.config.task.config"], None, Some(&gc_root))
+                .await?;
+            let config_json = fs::read_to_string(&paths[0])
+                .await
+                .into_diagnostic()
+                .wrap_err("Failed to read task configuration")?;
+            let task_configs: Vec<tasks::TaskConfig> = serde_json::from_str(&config_json)
+                .into_diagnostic()
+                .wrap_err("Failed to parse task configuration")?;
+
+            // Determine which process tasks to run
+            let roots: Vec<String> = if processes.is_empty() {
+                // Start all process tasks
+                task_configs
+                    .iter()
+                    .filter(|t| t.name.starts_with("devenv:processes:"))
+                    .map(|t| t.name.clone())
+                    .collect()
+            } else {
+                // Start specific processes
+                processes
+                    .iter()
+                    .map(|p| format!("devenv:processes:{}", p))
+                    .collect()
+            };
+
+            if roots.is_empty() {
+                bail!("No process tasks found to run");
+            }
+
+            debug!(
+                "Running {} process tasks with dependency ordering: {:?}",
+                roots.len(),
+                roots
+            );
+
+            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+            let config = tasks::Config {
+                tasks: task_configs,
+                roots,
+                run_mode: tasks::RunMode::All,
+                runtime_dir,
+                cache_dir: self.devenv_dotfile.clone(),
+                sudo_context: None,
+                env: envs,
+            };
+
+            // Build and run tasks with dependency ordering
+            let tasks_runner =
+                tasks::Tasks::builder(config, tasks::VerbosityLevel::Normal, self.shutdown.clone())
+                    .build()
+                    .await
+                    .map_err(|e| miette!("Failed to build task runner: {}", e))?;
+
+            // Set the command receiver on the process manager if provided
+            if let Some(rx) = options.command_rx.take() {
+                tasks_runner.process_manager.set_command_receiver(rx).await;
+            }
+
+            // Run tasks - this starts processes in dependency order
+            // Pass true for is_process_mode to show "Running processes" instead of "Running tasks"
+            let _outputs = tasks_runner.run(true).await;
+
+            // For foreground mode, run the event loop
+            if !options.detach {
+                tasks_runner
+                    .process_manager
+                    .run_foreground()
+                    .await
+                    .map_err(|e| miette!("Process manager error: {}", e))?;
+            }
+
+            return Ok(RunMode::Detached);
+        }
+
+        // Non-native manager (process-compose)
+        let manager: Box<dyn processes::ProcessManager> = {
+            // Build process-compose script
             let activity = Activity::operation("Building processes").start();
-            async {
+            let procfile_script = async {
                 let gc_root = self.devenv_dot_gc.join("procfilescript");
                 let paths = self
                     .nix
                     .build(&["devenv.config.procfileScript"], None, Some(&gc_root))
                     .await?;
-                let proc_script_string = paths[0].to_string_lossy().to_string();
-                Ok::<String, miette::Report>(proc_script_string)
+                Ok::<PathBuf, miette::Report>(paths[0].clone())
             }
             .in_activity(&activity)
-            .await?
+            .await?;
+
+            // Use devenv_dotfile as state dir for backwards compatibility
+            Box::new(processes::ProcessComposeManager::new(
+                procfile_script,
+                self.devenv_dotfile.clone(),
+            ))
         };
 
-        let activity = Activity::operation("Starting processes").start();
-        async {
-            let processes = processes.join(" ");
+        // Start processes via ProcessManager trait
+        let start_options = processes::StartOptions {
+            processes,
+            detach: options.detach,
+            log_to_file: options.log_to_file,
+            env: envs,
+        };
 
-            let processes_script = self.devenv_dotfile.join("processes");
-            // we force disable process compose tui if detach is enabled
-            let tui = if options.detach {
-                "export PC_TUI_ENABLED=0"
-            } else {
-                ""
-            };
-            fs::write(
-                &processes_script,
-                indoc::formatdoc! {"
-                #!/usr/bin/env bash
-                {tui}
-                exec {proc_script_string} {processes}
-            "},
-            )
-            .await
-            .expect("Failed to write PROCESSES_SCRIPT");
+        manager.start(start_options).await?;
 
-            fs::set_permissions(&processes_script, std::fs::Permissions::from_mode(0o755))
-                .await
-                .expect("Failed to set permissions");
-
-            let mut cmd = if let Some(envs) = options.envs {
-                let mut cmd = process::Command::new("bash");
-                cmd.arg(processes_script.to_string_lossy().to_string())
-                    .env_clear()
-                    .envs(envs);
-                cmd
-            } else {
-                self.prepare_shell(&Some(processes_script.to_string_lossy().to_string()), &[])
-                    .await?
-            };
-
-            // Release port reservations just before spawning processes.
-            // Ports were held during Nix evaluation to prevent race conditions.
-            // Dropping the guard releases the TcpListeners so processes can bind.
-            drop(self.port_allocator.take_reservations());
-
-            if options.detach {
-                // Check if processes are already running
-                if self.processes_pid().exists() {
-                    match fs::read_to_string(self.processes_pid()).await {
-                        Ok(pid_str) => {
-                            if let Ok(pid_num) = pid_str.trim().parse::<i32>() {
-                                let pid = Pid::from_raw(pid_num);
-                                match signal::kill(pid, None) {
-                                    Ok(_) => {
-                                        // Process is running
-                                        bail!("Processes already running with PID {}. Stop them first with: devenv processes down", pid);
-                                    }
-                                    Err(::nix::errno::Errno::ESRCH) => {
-                                        // Process not found - stale PID file
-                                        warn!("Found stale PID file with PID {}. Removing it.", pid);
-                                        fs::remove_file(self.processes_pid())
-                                            .await
-                                            .expect("Failed to remove stale PID file");
-                                    }
-                                    Err(_) => {
-                                        // Other error - remove stale file
-                                        warn!("Found invalid PID file. Removing it.");
-                                        fs::remove_file(self.processes_pid())
-                                            .await
-                                            .expect("Failed to remove stale PID file");
-                                    }
-                                }
-                            } else {
-                                // Invalid PID format
-                                warn!("Found invalid PID file. Removing it.");
-                                fs::remove_file(self.processes_pid())
-                                    .await
-                                    .expect("Failed to remove stale PID file");
-                            }
-                        }
-                        Err(_) => {
-                            // Could not read file
-                            warn!("Found unreadable PID file. Removing it.");
-                            let _ = fs::remove_file(self.processes_pid()).await;
-                        }
-                    }
-                }
-
-                let process = if !options.log_to_file {
-                    // Detached daemon: redirect to null to avoid corrupting TUI
-                    cmd.stdout(Stdio::null())
-                        .stderr(Stdio::null())
-                        .spawn()
-                        .expect("Failed to spawn process")
-                } else {
-                    let log_file = std::fs::File::create(self.processes_log())
-                        .expect("Failed to create PROCESSES_LOG");
-                    cmd.stdout(log_file.try_clone().expect("Failed to clone Stdio"))
-                        .stderr(log_file)
-                        .spawn()
-                        .expect("Failed to spawn process")
-                };
-
-                let pid = process
-                    .id()
-                    .ok_or_else(|| miette!("Failed to get process ID"))?;
-                fs::write(self.processes_pid(), pid.to_string())
-                    .await
-                    .expect("Failed to write PROCESSES_PID");
-                info!("PID is {}", pid);
-                if options.log_to_file {
-                    info!("See logs:  $ tail -f {}", self.processes_log().display());
-                }
-                info!("Stop:      $ devenv processes stop");
-                Ok(RunMode::Detached)
-            } else {
-                Ok(RunMode::Foreground(ShellCommand {
-                    command: cmd.into_std(),
-                }))
-            }
-        }
-        .in_activity(&activity)
-        .await
+        // ProcessComposeManager foreground mode uses exec() and never returns here.
+        // In detached mode, we reach here.
+        Ok(RunMode::Detached)
     }
 
     pub async fn down(&self) -> Result<()> {
-        if !PathBuf::from(&self.processes_pid()).exists() {
+        // Determine which manager is running and create appropriate instance
+        let manager: Box<dyn processes::ProcessManager> = if self.native_manager_pid_file().exists()
+        {
+            // Native process manager is running
+            let runtime_dir = processes::get_process_runtime_dir(&self.devenv_runtime)?;
+            Box::new(processes::NativeProcessManager::new(
+                runtime_dir,
+                HashMap::new(),
+            )?)
+        } else if self.processes_pid().exists() {
+            // Process-compose is running
+            // We don't need the procfile_script for stopping, just use a dummy path
+            Box::new(processes::ProcessComposeManager::new(
+                PathBuf::new(),
+                self.devenv_dotfile.clone(),
+            ))
+        } else {
             bail!("No processes running");
-        }
+        };
 
-        let pid = fs::read_to_string(self.processes_pid())
-            .await
-            .into_diagnostic()
-            .wrap_err("Failed to read processes.pid file")?
-            .trim()
-            .parse::<i32>()
-            .into_diagnostic()
-            .wrap_err("Invalid PID in processes.pid file")
-            .map(Pid::from_raw)?;
-
-        info!("Stopping process with PID {}", pid);
-
-        match signal::kill(pid, signal::Signal::SIGTERM) {
-            Ok(_) => {}
-            Err(_) => {
-                bail!("Process with PID {} not found.", pid);
-            }
-        }
-
-        // Wait for the process to actually shut down using exponential backoff
-        let start_time = std::time::Instant::now();
-        let max_wait = std::time::Duration::from_secs(30);
-        let mut wait_interval = std::time::Duration::from_millis(10);
-        const MAX_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
-
-        loop {
-            // Check if process is still running by sending signal 0 (null signal)
-            match signal::kill(pid, None) {
-                Ok(_) => {
-                    // Process still exists
-                    let elapsed = start_time.elapsed();
-                    if elapsed >= max_wait {
-                        message(
-                            ActivityLevel::Warn,
-                            format!(
-                                "Process {} did not shut down gracefully within {} seconds, sending SIGKILL to process group",
-                                pid,
-                                max_wait.as_secs()
-                            ),
-                        );
-
-                        // Send SIGKILL to the entire process group
-                        // Negative PID means send to process group
-                        let pgid = Pid::from_raw(-pid.as_raw());
-                        match signal::kill(pgid, signal::Signal::SIGKILL) {
-                            Ok(_) => info!("Sent SIGKILL to process group {}", pid.as_raw()),
-                            Err(e) => warn!(
-                                "Failed to send SIGKILL to process group {}: {}",
-                                pid.as_raw(),
-                                e
-                            ),
-                        }
-
-                        // Give it a moment to die after SIGKILL
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                        break;
-                    }
-
-                    tokio::time::sleep(wait_interval).await;
-
-                    // Exponential backoff: double the interval up to MAX_INTERVAL
-                    wait_interval = wait_interval.mul_f64(1.5).min(MAX_INTERVAL);
-                }
-                Err(nix::errno::Errno::ESRCH) => {
-                    // ESRCH means "No such process" - it has shut down
-                    debug!(
-                        "Process {} has shut down after {}",
-                        pid,
-                        HumanReadableDuration(start_time.elapsed())
-                    );
-                    break;
-                }
-                Err(e) => {
-                    // Some other error occurred
-                    warn!("Error checking process {}: {}", pid, e);
-                    break;
-                }
-            }
-        }
-
-        fs::remove_file(self.processes_pid())
-            .await
-            .expect("Failed to remove PROCESSES_PID");
-        Ok(())
+        manager.stop().await
     }
 
     /// Assemble the devenv environment and return the serialized NixArgs string.
@@ -2230,6 +2171,7 @@ mod tests {
                 input: None,
                 cwd: None,
                 show_output: false,
+                process: None,
             },
             TaskConfig {
                 name: "devenv:lint".to_string(),
@@ -2242,6 +2184,7 @@ mod tests {
                 input: None,
                 cwd: None,
                 show_output: false,
+                process: None,
             },
             // Level 2 tasks (depend on Level 1)
             TaskConfig {
@@ -2255,6 +2198,7 @@ mod tests {
                 input: None,
                 cwd: None,
                 show_output: false,
+                process: None,
             },
             // Different namespace
             TaskConfig {
@@ -2268,6 +2212,7 @@ mod tests {
                 input: None,
                 cwd: None,
                 show_output: false,
+                process: None,
             },
             TaskConfig {
                 name: "myapp:build".to_string(),
@@ -2280,6 +2225,7 @@ mod tests {
                 input: None,
                 cwd: None,
                 show_output: false,
+                process: None,
             },
             // Level 3 (deeply nested)
             TaskConfig {
@@ -2293,6 +2239,7 @@ mod tests {
                 input: None,
                 cwd: None,
                 show_output: false,
+                process: None,
             },
             // Standalone task
             TaskConfig {
@@ -2306,6 +2253,7 @@ mod tests {
                 input: None,
                 cwd: None,
                 show_output: false,
+                process: None,
             },
         ];
 

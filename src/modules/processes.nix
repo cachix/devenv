@@ -1,6 +1,7 @@
 { config, options, lib, pkgs, ... }:
 let
   types = lib.types;
+  listenType = import ./lib/listen.nix { inherit lib; };
 
   # Get primops from _module.args (set via specialArgs in bootstrapLib.nix)
   # Use default empty attrset if not available (e.g., when evaluated without devenv CLI)
@@ -61,6 +62,86 @@ let
         description = "Working directory to run the process in. If not specified, the current working directory will be used.";
       };
 
+      # Native process manager configuration (devenv-tasks)
+      type = lib.mkOption {
+        type = types.enum [ "foreground" "oneshot" ];
+        default = "foreground";
+        description = ''
+          Process type:
+          - foreground: Standard process that runs continuously, can restart based on policy
+          - oneshot: Run-to-completion task that executes once and never restarts
+
+          Only used when using native process manager.
+        '';
+      };
+
+      restart = lib.mkOption {
+        type = types.enum [ "never" "always" "on_failure" ];
+        default = "on_failure";
+        description = ''
+          Process restart policy:
+          - never: Never restart the process
+          - always: Always restart when it exits
+          - on_failure: Restart only on failure (non-zero exit code)
+
+          Only used when using native process manager.
+          Ignored when process_type is "oneshot".
+        '';
+      };
+
+      max_restarts = lib.mkOption {
+        type = types.nullOr types.int;
+        default = 5;
+        description = ''
+          Maximum number of restart attempts. null means unlimited restarts.
+
+          Only used when using native process manager.
+        '';
+      };
+
+      listen = lib.mkOption {
+        type = types.listOf listenType;
+        default = [ ];
+        description = ''
+          Socket activation configuration for systemd-style socket passing.
+
+          Only used when using native process manager.
+        '';
+        example = [
+          {
+            name = "http";
+            kind = "tcp";
+            address = "127.0.0.1:8080";
+          }
+          {
+            name = "admin";
+            kind = "unix_stream";
+            path = "$DEVENV_STATE/admin.sock";
+            mode = 384; # 0o600
+          }
+        ];
+      };
+
+      after = lib.mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = ''
+          Tasks that must be ready before this process starts.
+          Use task names like "devenv:processes:postgres" or "myapp:setup".
+          Supports @ready (default) and @complete suffixes.
+        '';
+        example = [ "devenv:processes:postgres" "myapp:migrations@complete" ];
+      };
+
+      before = lib.mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        description = ''
+          Tasks that should start after this process is ready.
+        '';
+        example = [ "devenv:processes:nginx" ];
+      };
+
       process-compose = lib.mkOption {
         # TODO: type up as a submodule for discoverability
         type = (pkgs.formats.yaml { }).type;
@@ -82,6 +163,89 @@ let
           depends_on.some-other-process.condition =
             "process_completed_successfully";
         };
+      };
+
+      watch = lib.mkOption {
+        type = types.submodule {
+          options = {
+            paths = lib.mkOption {
+              type = types.listOf types.path;
+              default = [ ];
+              description = ''
+                Paths to watch for changes (files or directories).
+                When files in these paths change, the process will be restarted.
+
+                Only used when using native process manager.
+              '';
+              example = lib.literalExpression ''
+                [ ./src ./config.yaml ]
+              '';
+            };
+
+            extensions = lib.mkOption {
+              type = types.listOf types.str;
+              default = [ ];
+              description = ''
+                File extensions to watch (e.g., "rs", "js", "py").
+                If empty, all file extensions are watched.
+
+                Only used when using native process manager.
+              '';
+              example = [ "rs" "toml" ];
+            };
+
+            ignore = lib.mkOption {
+              type = types.listOf types.str;
+              default = [ ];
+              description = ''
+                Glob patterns to ignore (e.g., ".git", "target", "*.log").
+
+                Only used when using native process manager.
+              '';
+              example = [ "*.log" ".git" "target" ];
+            };
+          };
+        };
+        default = { };
+        description = ''
+          File watching configuration for automatic process restarts.
+
+          Only used when using native process manager.
+        '';
+        example = lib.literalExpression ''
+          {
+            paths = [ ./src ];
+            extensions = [ "rs" "toml" ];
+            ignore = [ "target" ];
+          }
+        '';
+      };
+
+      notify = lib.mkOption {
+        type = types.submodule {
+          options.enable = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = ''
+              Enable systemd notify protocol for readiness signaling.
+              When enabled, the process must send READY=1 to the NOTIFY_SOCKET
+              before dependent tasks with @ready suffix will be unblocked.
+
+              Only used when using native process manager.
+            '';
+          };
+        };
+        default = { };
+        description = ''
+          Systemd notify protocol configuration for readiness signaling.
+
+          Only used when using native process manager.
+        '';
+        example = lib.literalExpression ''
+          {
+            enable = true;
+          }
+        '';
       };
     };
   });
@@ -177,6 +341,13 @@ in
       internal = true;
       description = "The command to run each process through devenv-tasks with exec prefix for proper signal handling.";
     };
+
+    process.nativeConfigJson = lib.mkOption {
+      type = types.package;
+      internal = true;
+      default = pkgs.writeText "process-config.json" (builtins.toJSON { });
+      description = "JSON configuration for native process manager";
+    };
   };
 
   config = lib.mkMerge [
@@ -217,8 +388,16 @@ in
             type = "process";
             exec = process.exec;
             cwd = process.cwd;
+            after = process.after;
+            before = process.before;
             # Always show output for process tasks so process-compose can capture it
             showOutput = true;
+            # Process-specific configuration
+            restart = process.restart;
+            max_restarts = process.max_restarts;
+            listen = process.listen;
+            watch = process.watch;
+            notify = process.notify;
           };
         })
         config.processes;

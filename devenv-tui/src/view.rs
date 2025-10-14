@@ -5,7 +5,7 @@ use crate::{
         TaskDisplayStatus, TerminalSize, UiState,
     },
 };
-use devenv_activity::ActivityLevel;
+use devenv_activity::{ActivityLevel, ProcessStatus};
 use human_repr::{HumanCount, HumanDuration};
 use iocraft::Context;
 use iocraft::components::ContextProvider;
@@ -23,7 +23,6 @@ pub fn view(
     let active_activities = model.get_display_activities();
 
     let summary = model.calculate_summary();
-    let has_selection = ui_state.selected_activity.is_some();
     let selected_id = ui_state.selected_activity;
     let terminal_size = ui_state.terminal_size;
 
@@ -121,7 +120,7 @@ pub fn view(
     let summary_view = element! {
         ContextProvider(value: Context::owned(SummaryViewContext {
             summary: summary.clone(),
-            has_selection,
+            selected: selected_activity.cloned(),
             showing_logs: selected_logs.is_some(),
             can_go_up,
             can_go_down,
@@ -537,6 +536,52 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
             return main_line;
         }
+        ActivityVariant::Process(process_data) => {
+            let status_text = match process_data.status {
+                ProcessStatus::Running => Some("running"),
+                ProcessStatus::Ready => Some("ready"),
+                ProcessStatus::Restarting => Some("restarting"),
+                ProcessStatus::Stopped => Some("stopped"),
+            };
+
+            // For selected process activities, show expandable logs
+            if *is_selected && logs.is_some() {
+                let prefix = build_activity_prefix(*depth, *completed);
+
+                let main_line =
+                    ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
+                        .with_suffix(status_text.map(String::from))
+                        .with_selection(*is_selected)
+                        .render(terminal_width, *depth, prefix);
+
+                // Create multi-line element with log list
+                let mut elements = vec![main_line];
+
+                // Add log list (collapsed preview, press 'e' to expand)
+                let logs_component = ExpandedContentComponent::new(logs.as_deref())
+                    .with_depth(*depth)
+                    .with_empty_message("→ no output yet (press 'e' to expand)");
+                let log_elements = logs_component.render();
+                elements.extend(log_elements);
+
+                // Calculate total height
+                let log_viewport_height = logs_component.calculate_height();
+                let total_height = (1 + log_viewport_height).min(50) as u32;
+                return element! {
+                    View(height: total_height, flex_direction: FlexDirection::Column) {
+                        #(elements)
+                    }
+                }
+                .into_any();
+            }
+
+            let prefix = build_activity_prefix(*depth, *completed);
+
+            return ActivityTextComponent::new("".to_string(), activity.name.clone(), elapsed_str)
+                .with_suffix(status_text.map(String::from))
+                .with_selection(*is_selected)
+                .render(terminal_width, *depth, prefix);
+        }
         ActivityVariant::Message(msg_data) => {
             // Determine icon and color based on message level
             // Following CLI conventions: errors get ✗, others get • (dot)
@@ -698,7 +743,7 @@ fn ActivityItem(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 #[derive(Clone)]
 struct SummaryViewContext {
     summary: ActivitySummary,
-    has_selection: bool,
+    selected: Option<Activity>,
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
@@ -711,7 +756,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let ctx = hooks.use_context::<SummaryViewContext>();
     let SummaryViewContext {
         summary,
-        has_selection,
+        selected,
         showing_logs,
         can_go_up,
         can_go_down,
@@ -719,7 +764,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     build_summary_view_impl(
         summary,
-        *has_selection,
+        selected.as_ref(),
         *showing_logs,
         *can_go_up,
         *can_go_down,
@@ -730,7 +775,7 @@ fn SummaryView(hooks: Hooks) -> impl Into<AnyElement<'static>> {
 /// Build the summary view with colored counts
 fn build_summary_view_impl(
     summary: &ActivitySummary,
-    has_selection: bool,
+    selected: Option<&Activity>,
     showing_logs: bool,
     can_go_up: bool,
     can_go_down: bool,
@@ -738,6 +783,11 @@ fn build_summary_view_impl(
 ) -> AnyElement<'static> {
     let mut children = vec![];
     let mut has_content = false;
+
+    // Derive capabilities from selected activity
+    let has_selection = selected.is_some();
+    let is_process =
+        matches!(selected, Some(a) if matches!(a.variant, ActivityVariant::Process(_)));
 
     // Determine display mode based on terminal width
     let use_symbols = terminal_width < 60; // Use unicode symbols for very narrow terminals
@@ -933,6 +983,14 @@ fn build_summary_view_impl(
             help_children.push(element!(Text(content: " expand • ")).into_any());
         } else {
             help_children.push(element!(Text(content: " expand logs • ")).into_any());
+        }
+        if is_process {
+            help_children.push(element!(Text(content: "^r", color: COLOR_INTERACTIVE)).into_any());
+            if use_short_text {
+                help_children.push(element!(Text(content: " restart • ")).into_any());
+            } else {
+                help_children.push(element!(Text(content: " restart process • ")).into_any());
+            }
         }
         help_children.push(element!(Text(content: "Esc", color: COLOR_INTERACTIVE)).into_any());
         if showing_logs {
