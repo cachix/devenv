@@ -2,6 +2,22 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use tokio::time::{Duration, Instant};
 
+/// Task type: oneshot (run once) or process (long-running)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskType {
+    /// Task runs once and completes (default)
+    Oneshot,
+    /// Task is a long-running process
+    Process,
+}
+
+impl Default for TaskType {
+    fn default() -> Self {
+        TaskType::Oneshot
+    }
+}
+
 /// Verbosity levels for task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VerbosityLevel {
@@ -216,5 +232,7 @@ impl TaskCompleted {
 pub enum TaskStatus {
     Pending,
     Running(Instant),
+    /// Process task is ready and healthy (not used yet, for future process support)
+    ProcessReady,
     Completed(TaskCompleted),
 }

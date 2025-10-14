@@ -1,7 +1,9 @@
 use crate::SudoContext;
 use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
-use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
+use crate::types::{
+    Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, TaskType, VerbosityLevel,
+};
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix::sys::signal::{self as nix_signal, Signal};
 use nix::unistd::Pid;
@@ -350,15 +352,14 @@ impl TaskState {
         let mut stderr_reader = BufReader::new(stderr).lines();
         let mut stdout_reader = BufReader::new(stdout).lines();
 
+        let is_process = self.task.r#type == TaskType::Process;
+
         let mut stdout_lines = Vec::new();
         let mut stderr_lines = Vec::new();
 
         // Track EOF status for stdout and stderr streams
         let mut stdout_closed = false;
         let mut stderr_closed = false;
-
-        // Check if this is a process task (always show output for processes)
-        let is_process = self.task.name.starts_with("devenv:processes:");
 
         loop {
             tokio::select! {

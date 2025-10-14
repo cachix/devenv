@@ -34,6 +34,14 @@ impl TasksUi {
                     tasks_status.pending += 1;
                     continue;
                 }
+                TaskStatus::ProcessReady => {
+                    // Process is ready and healthy, treat as running
+                    tasks_status.running += 1;
+                    (
+                        console::style(format!("{:17}", "Ready")).green().bold(),
+                        None,
+                    )
+                }
                 TaskStatus::Running(started) => {
                     tasks_status.running += 1;
                     (
@@ -242,6 +250,24 @@ impl TasksUi {
                     let task_name = &task_state.task.name;
                     let current_status = match &task_state.status {
                         TaskStatus::Pending => "Pending".to_string(),
+                        TaskStatus::ProcessReady => {
+                            if let Some(previous) = last_statuses.get(task_name) {
+                                if previous != "Ready" {
+                                    self.console_write_line(&format!(
+                                        "{:17} {}",
+                                        console::style("Ready").green().bold(),
+                                        console::style(task_name).bold()
+                                    ))?;
+                                }
+                            } else {
+                                self.console_write_line(&format!(
+                                    "{:17} {}",
+                                    console::style("Ready").green().bold(),
+                                    console::style(task_name).bold()
+                                ))?;
+                            }
+                            "Ready".to_string()
+                        }
                         TaskStatus::Running(_) => {
                             if let Some(previous) = last_statuses.get(task_name) {
                                 if previous != "Running" {

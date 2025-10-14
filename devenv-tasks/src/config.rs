@@ -1,9 +1,12 @@
 use crate::SudoContext;
+use crate::types::TaskType;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TaskConfig {
     pub name: String,
+    #[serde(default)]
+    pub r#type: TaskType,
     #[serde(default)]
     pub after: Vec<String>,
     #[serde(default)]

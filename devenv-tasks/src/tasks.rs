@@ -73,6 +73,7 @@ impl TasksBuilder {
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
                 || task.name.ends_with(':')
+                || task.name.contains('@')
                 || !task
                     .name
                     .chars()
@@ -395,6 +396,10 @@ impl Tasks {
                         _ = self.shutdown.wait_for_shutdown() => {
                             cancelled = true;
                             break 'dependency_check;
+                        }
+                        TaskStatus::ProcessReady => {
+                            // For now, treat ProcessReady as completed (will be refined in future commits)
+                            // This maintains backward compatibility
                         }
                     }
                 }
