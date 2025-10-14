@@ -1298,6 +1298,7 @@ dependencies = [
  "devenv-eval-cache",
  "devenv-snix-backend",
  "devenv-tasks",
+ "devenv-tui",
  "dialoguer",
  "dotlock",
  "fd-lock",

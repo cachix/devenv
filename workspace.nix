@@ -22,6 +22,7 @@ let
           ./devenv-snix-backend
           ./devenv-run-tests
           ./devenv-tasks
+          ./devenv-tui
           ./http-client-tls
           ./nix-conf-parser
           ./tokio-shutdown

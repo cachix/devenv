@@ -16,6 +16,9 @@ pub enum LogFormat {
     TracingPretty,
     /// A JSON log format used for machine consumption.
     TracingJson,
+    // TODO: no sure this should live in core
+    /// Interactive Terminal User Interface with real-time progress.
+    Tui,
 }
 
 #[derive(Clone, Debug, Parser)]
