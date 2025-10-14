@@ -112,8 +112,9 @@ where
             }
         }
 
-        // Handle spans with devenv.ui.message
-        let has_ui_message = visitor.fields.contains_key("devenv.ui.message");
+        // Handle spans with devenv.ui.message or devenv.user_message (backward compatibility)
+        let has_ui_message = visitor.fields.contains_key("devenv.ui.message")
+            || visitor.fields.contains_key("devenv.user_message");
         if has_ui_message {
             let operation_id = visitor
                 .fields
@@ -125,6 +126,7 @@ where
             let message = visitor
                 .fields
                 .get("devenv.ui.message")
+                .or_else(|| visitor.fields.get("devenv.user_message"))
                 .unwrap_or(&metadata.name().to_string())
                 .clone();
 
@@ -626,13 +628,12 @@ where
                         }
                     }
                 }
-                "devenv.nix.build" if event.metadata().name() == "nix_phase_progress" => {
-                    if let (Some(operation_id_str), Some(activity_id_str), Some(phase)) = (
-                        visitor.fields.get("devenv.ui.id"),
+                "devenv.nix.build" => {
+                    // Handle phase updates
+                    if let (Some(activity_id_str), Some(phase)) = (
                         visitor.fields.get("activity_id"),
                         visitor.fields.get("phase"),
                     ) {
-                        let _operation_id = OperationId::new(operation_id_str.clone());
                         if let Ok(activity_id) = activity_id_str.parse::<u64>() {
                             self.update_model(|model| {
                                 if let Some(activity) = model.activities.get_mut(&activity_id)
@@ -644,17 +645,17 @@ where
                             });
                         }
                     }
-                }
-                "devenv.nix.build" if event.metadata().name() == "build_log" => {
+                    // Handle build logs
                     if let (Some(activity_id_str), Some(line)) = (
                         visitor.fields.get("activity_id"),
                         visitor.fields.get("line"),
-                    )
-                        && let Ok(activity_id) = activity_id_str.parse::<u64>() {
+                    ) {
+                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
                             self.update_model(|model| {
                                 model.add_build_log(activity_id, line.clone());
                             });
                         }
+                    }
                 }
                 "devenv.nix.eval" if event.metadata().name() == "nix_evaluation_progress" => {
                     if let (Some(operation_id_str), Some(files_str)) = (
