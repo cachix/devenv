@@ -13705,7 +13705,7 @@ boolean
 
 
 
-Which package of Erlang to use.
+Which Erlang package to use.
 
 
 

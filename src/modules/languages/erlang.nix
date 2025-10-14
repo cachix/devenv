@@ -2,7 +2,8 @@
 
 let
   cfg = config.languages.erlang;
-  rebar3 = pkgs.rebar3.overrideAttrs (oldAttrs: {
+  # There's no override available
+  rebar3 = pkgs.rebar3.overrideAttrs (_: {
     buildInputs = [ cfg.package ];
   });
 in
@@ -12,18 +13,17 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      description = "Which package of Erlang to use.";
-      default = pkgs.erlang_27;
+      description = "Which Erlang package to use.";
+      default = pkgs.erlang;
       defaultText = lib.literalExpression "pkgs.erlang";
     };
   };
 
-  config = lib.mkIf cfg.enable
-    {
-      packages = [
-        cfg.package
-        pkgs.erlang-ls
-        rebar3
-      ];
-    };
+  config = lib.mkIf cfg.enable {
+    packages = [
+      cfg.package
+      pkgs.erlang-language-platform
+      rebar3
+    ];
+  };
 }
