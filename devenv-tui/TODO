@@ -1,0 +1,2 @@
+- BUG: doesn't show the latest evaluated file
+- BUG: parse "evaluating flake" to track begining/ending of eval per flake
