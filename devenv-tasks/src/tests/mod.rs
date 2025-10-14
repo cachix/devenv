@@ -2516,13 +2516,12 @@ mod property_tests {
     }
 
     // Helper function to extract namespace matching logic
+    // Accepts a db_path to allow reuse across multiple calls
     pub async fn get_matching_task_names(
         task_names: &[String],
         query: &str,
+        db_path: &std::path::Path,
     ) -> Result<Vec<String>, Error> {
-        let temp_dir = TempDir::new().unwrap();
-        let db_path = temp_dir.path().join("tasks.db");
-
         // Create dummy scripts for all tasks
         let dummy_script = create_basic_script("dummy").unwrap();
         let script_path = dummy_script.to_str().unwrap();
@@ -2546,7 +2545,7 @@ mod property_tests {
         .unwrap();
 
         let tasks_result = Tasks::builder(config, VerbosityLevel::Quiet, Shutdown::new())
-            .with_db_path(db_path)
+            .with_db_path(db_path.to_path_buf())
             .build()
             .await;
 
@@ -2582,6 +2581,10 @@ mod property_tests {
             prefix in valid_segment()
         ) {
             tokio_test::block_on(async {
+                // Create database once for this test invocation
+                let temp_dir = TempDir::new().unwrap();
+                let db_path = temp_dir.path().join("tasks.db");
+
                 // Expected matches: all tasks that start with "prefix:"
                 let expected_matches: Vec<String> = task_names.iter()
                     .filter(|name| name.starts_with(&format!("{}:", prefix)))
@@ -2593,7 +2596,7 @@ mod property_tests {
                     return Ok(());
                 }
 
-                let actual_matches = get_matching_task_names(&task_names, &prefix).await?;
+                let actual_matches = get_matching_task_names(&task_names, &prefix, &db_path).await?;
 
                 // Sort both for comparison
                 let mut expected_sorted = expected_matches.clone();
@@ -2611,13 +2614,17 @@ mod property_tests {
             task_index in 0..15usize
         ) {
             tokio_test::block_on(async {
+                // Create database once for this test invocation
+                let temp_dir = TempDir::new().unwrap();
+                let db_path = temp_dir.path().join("tasks.db");
+
                 // Skip if index is out of bounds
                 if task_index >= task_names.len() {
                     return Ok(());
                 }
 
                 let exact_task = &task_names[task_index];
-                let matches = get_matching_task_names(&task_names, exact_task).await?;
+                let matches = get_matching_task_names(&task_names, exact_task, &db_path).await?;
 
                 // Should match exactly one task
                 prop_assert_eq!(matches.len(), 1);
@@ -2633,6 +2640,10 @@ mod property_tests {
             prefix in valid_segment()
         ) {
             tokio_test::block_on(async {
+                // Create database once for this test invocation
+                let temp_dir = TempDir::new().unwrap();
+                let db_path = temp_dir.path().join("tasks.db");
+
                 // Skip if no tasks match this prefix
                 let has_matches = task_names.iter()
                     .any(|name| name.starts_with(&format!("{}:", prefix)));
@@ -2640,8 +2651,8 @@ mod property_tests {
                     return Ok(());
                 }
 
-                let matches_without_colon = get_matching_task_names(&task_names, &prefix).await?;
-                let matches_with_colon = get_matching_task_names(&task_names, &format!("{}:", prefix)).await?;
+                let matches_without_colon = get_matching_task_names(&task_names, &prefix, &db_path).await?;
+                let matches_with_colon = get_matching_task_names(&task_names, &format!("{}:", prefix), &db_path).await?;
 
                 prop_assert_eq!(matches_without_colon, matches_with_colon);
 
@@ -2655,7 +2666,11 @@ mod property_tests {
             prefix in valid_segment()
         ) {
             tokio_test::block_on(async {
-                let matches = get_matching_task_names(&task_names, &prefix).await?;
+                // Create database once for this test invocation
+                let temp_dir = TempDir::new().unwrap();
+                let db_path = temp_dir.path().join("tasks.db");
+
+                let matches = get_matching_task_names(&task_names, &prefix, &db_path).await?;
 
                 // All matched tasks should start with the prefix
                 for matched_task in &matches {
@@ -2684,6 +2699,10 @@ mod property_tests {
             task_names in task_hierarchy()
         ) {
             tokio_test::block_on(async {
+                // Create database once for this test invocation (reused across all iterations)
+                let temp_dir = TempDir::new().unwrap();
+                let db_path = temp_dir.path().join("tasks.db");
+
                 // For each task, test that shorter prefixes include longer ones
                 for task in &task_names {
                     let segments: Vec<&str> = task.split(':').collect();
@@ -2700,8 +2719,8 @@ mod property_tests {
                             continue;
                         }
 
-                        let shorter_matches = get_matching_task_names(&task_names, &shorter_prefix).await?;
-                        let longer_matches = get_matching_task_names(&task_names, &longer_prefix).await?;
+                        let shorter_matches = get_matching_task_names(&task_names, &shorter_prefix, &db_path).await?;
+                        let longer_matches = get_matching_task_names(&task_names, &longer_prefix, &db_path).await?;
 
                         // Every task matched by longer prefix should also be matched by shorter prefix
                         for longer_match in &longer_matches {
