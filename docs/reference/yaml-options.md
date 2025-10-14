@@ -126,16 +126,6 @@ inputs:
     follows: base-project/nixpkgs
 ```
 
-!!! warn "Locked inputs and follows"
-
-    "Follows" are fetched and re-locked using the URI of the followed inputs.
-    The external project's lock file will not constrain the revision.
-
-    For example, it's common to reference `nixpkgs-unstable` without specifying a revision.
-    The input is locked to a specific revision when fetched and this information is saved to either a `devenv.lock` or `flake.lock` file.
-
-    Following this input from another project will re-fetch the latest revison, which may be different from the lcoked revision used in the original project.
-
 Or to override the `nixpkgs` input of another input to reduce the number of times `nixpkgs` has to be downloaded:
 
 ```yaml hl_lines="6-8"
