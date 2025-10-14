@@ -314,9 +314,8 @@ impl TasksUi {
                                     "".to_string(),
                                 ),
                                 TaskCompleted::Cancelled(duration) => {
-                                    let duration_str = duration
-                                        .map(|d| format!(" ({d:.2?})"))
-                                        .unwrap_or_default();
+                                    let duration_str =
+                                        duration.map(|d| format!(" ({d:.2?})")).unwrap_or_default();
                                     (
                                         format!("Cancelled{duration_str}"),
                                         console::style("Cancelled").yellow().bold(),

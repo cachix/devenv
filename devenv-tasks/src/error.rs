@@ -12,6 +12,7 @@ pub enum Error {
     MissingCommand(String),
     TasksNotFound(Vec<(String, String)>),
     InvalidTaskName(String),
+    InvalidDependency(String),
     // TODO: be more precies where the cycle happens
     CycleDetected(String),
 }
@@ -39,6 +40,7 @@ impl Display for Error {
                 f,
                 "Invalid task name: {task}. Task names must be in format 'namespace:name' and can only contain alphanumeric characters, ':', '-', and '_'. The '@' character is reserved for dependency suffix notation."
             ),
+            Error::InvalidDependency(msg) => write!(f, "{msg}"),
         }
     }
 }

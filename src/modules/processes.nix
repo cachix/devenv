@@ -119,13 +119,6 @@ in
       internal = true;
       default = pkgs.writeShellScript "no-processes" "";
     };
-
-    process.nativeConfigJson = lib.mkOption {
-      type = types.package;
-      internal = true;
-      default = pkgs.writeText "process-config.json" (builtins.toJSON { });
-      description = "JSON configuration for native process manager";
-    };
   };
 
   config = lib.mkIf (config.processes != { }) {

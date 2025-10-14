@@ -49,6 +49,15 @@ let
       in
       {
         options = {
+          type = lib.mkOption {
+            type = types.enum [ "oneshot" "process" ];
+            default = "oneshot";
+            description = ''
+              Type of task:
+              - oneshot: Task runs once and completes (default)
+              - process: Task is a long-running process
+            '';
+          };
           exec = lib.mkOption {
             type = types.nullOr types.str;
             default = null;
@@ -92,6 +101,7 @@ let
             internal = true;
             default = {
               name = name;
+              type = config.type;
               description = config.description;
               status = config.statusCommand;
               after = config.after;

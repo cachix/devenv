@@ -2454,7 +2454,8 @@ async fn test_task_cancellation_during_execution() -> Result<(), Error> {
     let db_path = temp_dir.path().join("tasks.db");
 
     // Create a long-running task
-    let long_script = create_script("#!/bin/sh\necho 'Starting long task' && sleep 10 && echo 'Never reached'")?;
+    let long_script =
+        create_script("#!/bin/sh\necho 'Starting long task' && sleep 10 && echo 'Never reached'")?;
 
     let shutdown = Shutdown::new();
 

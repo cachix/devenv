@@ -27429,6 +27429,30 @@ null or string
 
 
 
+## tasks.\<name>.type
+
+
+
+Type of task:
+
+ - oneshot: Task runs once and completes (default)
+ - process: Task is a long-running process
+
+
+
+*Type:*
+one of “oneshot”, “process”
+
+
+
+*Default:*
+` "oneshot" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## unsetEnvVars
 
 
