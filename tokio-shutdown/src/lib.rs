@@ -35,7 +35,10 @@ impl Shutdown {
     }
 
     fn unregister_task(&self) {
-        let remaining = self.task_count.fetch_sub(1, Ordering::Relaxed) - 1;
+        let remaining = self
+            .task_count
+            .fetch_sub(1, Ordering::AcqRel)
+            .saturating_sub(1);
         if remaining == 0 && self.token.is_cancelled() {
             self.shutdown_complete.notify_waiters();
         }

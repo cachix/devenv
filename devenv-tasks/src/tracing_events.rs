@@ -9,7 +9,7 @@ use tracing::{debug, error, info, warn};
 pub fn emit_task_start(task_name: &str) {
     info!(
         target: "devenv.ui",
-        task_name = %task_name,
+        task_name,
         devenv.ui.message = task_name,
         devenv.ui.type = "task",
         devenv.ui.detail = "starting",
@@ -22,8 +22,8 @@ pub fn emit_task_start(task_name: &str) {
 pub fn emit_task_status_change(task_name: &str, status: &str, result: Option<&str>) {
     info!(
         target: "devenv.ui.progress",
-        task_name = %task_name,
-        status = %status,
+        task_name,
+        status,
         ?result,
         devenv.ui.id = format!("task-{}", task_name),
         devenv.ui.detail = status,
@@ -34,9 +34,9 @@ pub fn emit_task_status_change(task_name: &str, status: &str, result: Option<&st
 /// Emit a debug event for command execution
 pub fn emit_command_start(task_name: &str, command: &str) {
     debug!(
-        target: "devenv_tasks",
-        task_name = %task_name,
-        command = %command,
+        target: "devenv.tasks",
+        task_name,
+        command,
         devenv.log = true,
         "Executing command"
     );
@@ -46,19 +46,19 @@ pub fn emit_command_start(task_name: &str, command: &str) {
 pub fn emit_command_end(task_name: &str, command: &str, exit_code: Option<i32>, success: bool) {
     if success {
         debug!(
-            target: "devenv_tasks",
-            task_name = %task_name,
-            command = %command,
-            exit_code = ?exit_code,
+            target: "devenv.tasks",
+            task_name,
+            command,
+            ?exit_code,
             devenv.log = true,
             "Command completed successfully"
         );
     } else {
         warn!(
-            target: "devenv_tasks",
-            task_name = %task_name,
-            command = %command,
-            exit_code = ?exit_code,
+            target: "devenv.tasks",
+            task_name,
+            command,
+            ?exit_code,
             devenv.log = true,
             "Command failed"
         );
@@ -73,94 +73,96 @@ pub fn emit_task_completed(
     duration_secs: Option<f64>,
     reason: Option<&str>,
 ) {
+    let target = "devenv.ui.progress";
+    let id = format!("task-{task_name}");
     match result {
         "success" => {
             info!(
-                target: "devenv.ui.progress",
-                task_name = %task_name,
-                status = %status,
-                result = %result,
+                target,
+                task_name,
+                status,
+                result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.id = id,
                 devenv.ui.detail = "completed successfully",
                 "Task completed successfully"
             );
         }
         "failed" => {
             error!(
-                target: "devenv.ui.progress",
-                task_name = %task_name,
-                status = %status,
-                result = %result,
+                target,
+                task_name,
+                status,
+                result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.id = id,
                 devenv.ui.detail = "failed",
                 "Task failed"
             );
         }
         "cached" => {
             info!(
-                target: "devenv.ui.progress",
-                task_name = %task_name,
-                status = %status,
-                result = %result,
+                target,
+                task_name,
+                status,
+                result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.id = id,
                 devenv.ui.detail = "skipped (cached)",
                 "Task skipped (cached)"
             );
         }
         "skipped" => {
             info!(
-                target: "devenv.ui.progress",
-                task_name = %task_name,
-                status = %status,
-                result = %result,
+                target,
+                task_name,
+                status,
+                result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.id = id,
                 devenv.ui.detail = "skipped",
                 "Task skipped"
             );
         }
         "dependency_failed" => {
             warn!(
-                target: "devenv.ui.progress",
-                task_name = %task_name,
-                status = %status,
-                result = %result,
+                target,
+                task_name,
+                status,
+                result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.id = id,
                 devenv.ui.detail = "skipped due to dependency failure",
                 "Task skipped due to dependency failure"
             );
         }
         "cancelled" => {
             warn!(
-                target: "devenv.ui.progress",
-                task_name = %task_name,
-                status = %status,
-                result = %result,
+                target,
+                task_name,
+                status,
+                result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.id = %id,
                 devenv.ui.detail = "cancelled",
                 "Task cancelled"
             );
         }
         _ => {
             info!(
-                target: "devenv.ui.progress",
-                task_name = %task_name,
-                status = %status,
-                result = %result,
+                target,
+                task_name,
+                status,
+                result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = format!("task-{}", task_name),
+                devenv.ui.id = %id,
                 devenv.ui.detail = "completed",
                 "Task completed"
             );

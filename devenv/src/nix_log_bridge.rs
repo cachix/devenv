@@ -77,33 +77,40 @@ impl NixLogBridge {
 
     /// Flush any pending evaluation updates
     fn flush_evaluation_updates(&self) {
-        if let Ok(mut state) = self.evaluation_state.lock()
-            && !state.pending_files.is_empty()
-        {
-            if let Ok(current) = self.current_operation_id.lock() {
-                if current.is_some() {
-                    let files: Vec<String> = state.pending_files.drain(..).collect();
-                    trace!("Flushing {} pending evaluation files", files.len());
+        let Ok(mut state) = self.evaluation_state.lock() else {
+            warn!("Failed to lock evaluation state for flushing");
+            return;
+        };
 
-                    // Emit tracing event for evaluation progress using stored span
-                    if let Some(ref span) = state.span {
-                        span.in_scope(|| {
-                            trace!(
-                                devenv.user_message = format!("Evaluated {} files", files.len()),
-                                files = ?files,
-                                "Evaluated {} files", files.len()
-                            );
-                        });
-                    }
-                } else {
-                    warn!(
-                        "No operation ID available for flushing {} pending files",
-                        state.pending_files.len()
-                    );
-                }
-            } else {
-                warn!("Failed to lock operation ID for flushing");
-            }
+        if state.pending_files.is_empty() {
+            return;
+        }
+
+        let Ok(current) = self.current_operation_id.lock() else {
+            warn!("Failed to lock operation ID for flushing");
+            return;
+        };
+
+        if current.is_none() {
+            warn!(
+                "No operation ID available for flushing {} pending files",
+                state.pending_files.len()
+            );
+            return;
+        }
+
+        let files: Vec<String> = state.pending_files.drain(..).collect();
+        trace!("Flushing {} pending evaluation files", files.len());
+
+        // Emit tracing event for evaluation progress using stored span
+        if let Some(ref span) = state.span {
+            span.in_scope(|| {
+                trace!(
+                    devenv.user_message = format!("Evaluated {} files", files.len()),
+                    files = ?files,
+                    "Evaluated {} files", files.len()
+                );
+            });
         }
     }
 
@@ -561,13 +568,11 @@ impl NixLogBridge {
 
             // Check if we should send a batch update
             let now = Instant::now();
-            let should_send = state.pending_files.len() >= BATCH_SIZE
-                || (state.last_progress_update.is_some()
-                    && now.duration_since(
-                        state
-                            .last_progress_update
-                            .expect("last_progress_update should be Some when is_some() is true"),
-                    ) >= BATCH_TIMEOUT);
+            let batch_full = state.pending_files.len() >= BATCH_SIZE;
+            let timeout_exceeded = state
+                .last_progress_update
+                .is_some_and(|last| now.duration_since(last) >= BATCH_TIMEOUT);
+            let should_send = batch_full || timeout_exceeded;
 
             if should_send && !state.pending_files.is_empty() {
                 let files: Vec<String> = state.pending_files.drain(..).collect();
