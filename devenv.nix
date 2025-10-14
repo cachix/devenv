@@ -1,31 +1,46 @@
-{ inputs
-, pkgs
-, lib
-, config
-, ...
+{
+  inputs,
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 {
   env = {
+    # The path to the eval cache database (for migrations)
+    DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
+
+    # The Nix CLI for devenv to use when run with `cargo run`.
     DEVENV_NIX = inputs.nix.packages.${pkgs.stdenv.system}.nix-cli;
-    # ignore annoying browserlists warning that breaks pre-commit hooks
-    BROWSERSLIST_IGNORE_OLD_DATA = "1";
+
     RUST_LOG = "devenv=debug";
     RUST_LOG_SPAN_EVENTS = "full";
-    DATABASE_URL = "sqlite:.devenv/nix-eval-cache.db";
   };
 
+  # Configure Claude Code
   claude.code = {
     enable = true;
     permissions = {
       WebFetch = {
-        allow = [ "domain:github.com" "domain:docs.rs" "domain:docs.anthropic.com" ];
+        allow = [
+          "domain:github.com"
+          "domain:docs.rs"
+          "domain:docs.anthropic.com"
+        ];
       };
       Bash = {
-        allow = [ "rg:*" "cargo test:*" "nix search:*" "devenv-run-tests:*" "nix-instantiate:*" ];
+        allow = [
+          "rg:*"
+          "cargo test:*"
+          "nix search:*"
+          "devenv-run-tests:*"
+          "nix-instantiate:*"
+        ];
       };
     };
   };
 
+  # Project dependencies
   packages = [
     pkgs.cairo
     pkgs.git
@@ -44,38 +59,19 @@
   ];
 
   languages = {
+    # For developing the Nix modules
     nix.enable = true;
-    # for cli
+
+    # For developing the devenv CLI
     rust.enable = true;
-    # for docs
-    python = {
-      enable = true;
-      # speed it up
-      uv.enable = true;
-      venv = {
-        enable = true;
-        requirements = ./requirements.txt;
-      };
-    };
-    javascript = {
-      enable = true;
-      npm = {
-        enable = true;
-        install.enable = true;
-      };
-    };
   };
 
   devcontainer = {
     enable = true;
     settings.customizations.vscode.extensions = [ "jnoortheen.nix-ide" ];
   };
-  difftastic.enable = true;
 
-  processes = {
-    docs.exec = "mkdocs serve";
-    tailwind.exec = "watchexec -e html,css,js devenv-generate-doc-css";
-  };
+  difftastic.enable = true;
 
   scripts.devenv-test-cli = {
     description = "Test devenv CLI.";
@@ -140,10 +136,7 @@
       rm -rf "$tmp"
     '';
   };
-  scripts."devenv-generate-doc-css" = {
-    description = "Generate CSS for the docs.";
-    exec = "${lib.getExe pkgs.tailwindcss} -m -i docs/assets/extra.css -o docs/assets/output.css";
-  };
+
   scripts."devenv-generate-doc-options" = {
     description = "Generate option docs.";
     exec = ''
@@ -158,6 +151,7 @@
       sed -i 's/\\\././g' $output_file
     '';
   };
+
   scripts."devenv-generate-languages-example" = {
     description = "Generate an example enabling every supported language.";
     exec = ''
@@ -208,68 +202,55 @@
   scripts."devenv-verify-individual-docs" = {
     description = "Generate missing template markdown files";
     exec = ''
+      process_directory() {
+        local nix_dir=$1
+        local md_dir=$2
+        local category=$3
 
-          process_directory() {
-            local nix_dir=$1
-            local md_dir=$2
-            local category=$3
+        nixFiles=($(ls $nix_dir/*.nix))
+        mdFiles=($(ls $md_dir/*.md))
 
-            nixFiles=($(ls $nix_dir/*.nix))
-            mdFiles=($(ls $md_dir/*.md))
+        declare -a nixList
+        declare -a mdList
 
-            declare -a nixList
-            declare -a mdList
+        # Remove extensions and populate lists
+        for file in "''${nixFiles[@]}"; do
+          baseName=$(basename "$file" .nix)
+          nixList+=("$baseName")
+        done
 
-            # Remove extensions and populate lists
-            for file in "''${nixFiles[@]}"; do
-              baseName=$(basename "$file" .nix)
-              nixList+=("$baseName")
-            done
+        for file in "''${mdFiles[@]}"; do
+          baseName=$(basename "$file" .md)
+          mdList+=("$baseName")
+        done
 
-            for file in "''${mdFiles[@]}"; do
-              baseName=$(basename "$file" .md)
-              mdList+=("$baseName")
-            done
+        IFS=$'\n' sorted_nix=($(sort <<<"''${nixList[*]}"))
+        IFS=$'\n' sorted_md=($(sort <<<"''${mdList[*]}"))
 
-            IFS=$'\n' sorted_nix=($(sort <<<"''${nixList[*]}"))
-            IFS=$'\n' sorted_md=($(sort <<<"''${mdList[*]}"))
-
-            # Compare and create missing files
-            missing_files=()
-            for item in "''${sorted_nix[@]}"; do
-              if [[ ! " ''${sorted_md[@]} " =~ " $item " ]]; then
-                missing_files+=("$item")
-                cat << EOF > "$md_dir/$item.md"
-
+        # Compare and create missing files
+        missing_files=()
+        for item in "''${sorted_nix[@]}"; do
+          if [[ ! " ''${sorted_md[@]} " =~ " $item " ]]; then
+            missing_files+=("$item")
+            cat << EOF > "$md_dir/$item.md"
 
       [comment]: # (Please add your documentation on top of this line)
 
       @AUTOGEN_OPTIONS@
       EOF
-                echo "Created missing file: $md_dir/$item.md"
-              fi
-            done
+            echo "Created missing file: $md_dir/$item.md"
+          fi
+        done
 
-            if [ ''${#missing_files[@]} -eq 0 ]; then
-              echo "All $category docs markdown files are present."
-            fi
-          }
+        if [ ''${#missing_files[@]} -eq 0 ]; then
+          echo "All $category docs markdown files are present."
+        fi
+      }
 
-          process_directory "src/modules/languages" "docs/individual-docs/languages" "language"
-          process_directory "src/modules/services" "docs/individual-docs/services" "service"
-          process_directory "src/modules/process-managers" "docs/individual-docs/process-managers" "process manager"
+      process_directory "src/modules/languages" "docs/individual-docs/languages" "language"
+      process_directory "src/modules/services" "docs/individual-docs/services" "service"
+      process_directory "src/modules/process-managers" "docs/individual-docs/process-managers" "process manager"
     '';
-  };
-
-  tasks = {
-    "devenv:compile-requirements" = {
-      before = [ "devenv:python:virtualenv" ];
-      exec = "uv pip compile requirements.in -o requirements.txt";
-      execIfModified = [
-        "requirements.in"
-        "requirements.txt"
-      ];
-    };
   };
 
   git-hooks.hooks = {
@@ -283,12 +264,6 @@
         MD033 = false;
         MD034 = false;
       };
-    };
-    generate-doc-css = {
-      enable = true;
-      name = "generate-doc-css";
-      entry = config.scripts."devenv-generate-doc-css".exec;
-      files = "docs/assets/extra.css";
     };
   };
 }

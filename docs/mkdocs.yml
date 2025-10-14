@@ -4,6 +4,7 @@ site_url: "https://devenv.sh"
 repo_name: "cachix/devenv"
 repo_url: "https://github.com/cachix/devenv"
 edit_uri: "edit/main/docs"
+docs_dir: "src"
 strict: true
 validation:
   omitted_files: warn
@@ -21,7 +22,7 @@ theme:
   favicon: assets/favicon.svg
   icon:
     repo: fontawesome/brands/github
-  custom_dir: docs/overrides
+  custom_dir: src/overrides
   palette:
     # Palette toggle for automatic mode
     - media: "(prefers-color-scheme)"
@@ -33,7 +34,7 @@ theme:
     - media: "(prefers-color-scheme: light)"
       accent: "#FBFBFB"
       primary: white
-      scheme: default 
+      scheme: default
       toggle:
         icon: material/weather-sunny
         name: Switch to dark mode

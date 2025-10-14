@@ -1,26 +1,26 @@
+# DO NOT add editor or system-specific files here.
+# Add them to your global gitignore instead in `$XDG_CONFIG_HOME/git/ignore`
+
 # Nix & devenv
 result
 /.env
 /.env.*
 .devenv*
 .direnv*
-/.cache
 /.pre-commit-config.yaml
 man
 
 # mkdocs
-site/
+/docs/site/
+/docs/.cache/
 
-# examples
-examples/rust/app/target
+# Examples
+examples/rust/app/target/
 
 # Rust
-target
+target/
 
 # JavaScript
-/node_modules
+node_modules/
 
 **/.claude/settings.local.json
-
-# MacOS Finder folder attributes store
-.DS_Store
