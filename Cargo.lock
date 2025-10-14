@@ -5920,7 +5920,7 @@ dependencies = [
 
 [[package]]
 name = "tokio-shutdown"
-version = "1.9.3"
+version = "1.10.1"
 dependencies = [
  "futures",
  "nix 0.30.1",
