@@ -1206,6 +1206,7 @@ dependencies = [
  "devenv-cache-core",
  "devenv-eval-cache",
  "devenv-tasks",
+ "devenv-tui",
  "dialoguer",
  "dotlock",
  "fd-lock",

@@ -12,6 +12,9 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let model = hooks.use_context::<Arc<Mutex<Model>>>();
     let (terminal_width, _terminal_height) = hooks.use_terminal_size();
 
+    // Use state to trigger re-renders
+    let tick = hooks.use_state(|| 0u64);
+
     // Handle keyboard events directly
     hooks.use_terminal_events({
         let model = model.clone();
@@ -44,10 +47,12 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         }
     });
 
-    // Spinner animation update loop - also triggers re-renders to pick up model changes
+    // Spinner animation update loop - triggers re-renders via state updates
     hooks.use_future({
         let model = model.clone();
+        let mut tick = tick.clone();
         async move {
+            let mut counter = 0u64;
             loop {
                 tokio::time::sleep(Duration::from_millis(50)).await;
 
@@ -68,7 +73,10 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
                         break;
                     }
                 }
-                // The model mutation above triggers a re-render, which picks up all changes
+
+                // Trigger re-render by updating state
+                counter += 1;
+                tick.set(counter);
             }
         }
     });

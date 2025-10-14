@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog};
 use devenv_tui::{OperationId, init_tui};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -11,16 +12,19 @@ use std::sync::{Arc, Mutex};
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
 use tracing::{debug_span, info, warn};
+use tracing::span::EnteredSpan;
 
 /// Simple replay processor that emits tracing events for Nix logs
 struct NixLogReplayProcessor {
     current_operation_id: Arc<Mutex<Option<OperationId>>>,
+    active_spans: Arc<Mutex<HashMap<u64, EnteredSpan>>>,
 }
 
 impl NixLogReplayProcessor {
     fn new() -> Self {
         Self {
             current_operation_id: Arc::new(Mutex::new(None)),
+            active_spans: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -99,9 +103,10 @@ impl NixLogReplayProcessor {
                     machine = ?machine
                 );
 
-                span.in_scope(|| {
-                    info!(devenv.log = true, "Building {}", derivation_name);
-                });
+                let entered_span = span.entered();
+                if let Ok(mut spans) = self.active_spans.lock() {
+                    spans.insert(activity_id, entered_span);
+                }
             }
             ActivityType::CopyPath => {
                 if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
@@ -121,9 +126,10 @@ impl NixLogReplayProcessor {
                         substituter = %substituter
                     );
 
-                    span.in_scope(|| {
-                        info!(devenv.log = true, "Downloading {}", package_name);
-                    });
+                    let entered_span = span.entered();
+                    if let Ok(mut spans) = self.active_spans.lock() {
+                        spans.insert(activity_id, entered_span);
+                    }
                 }
             }
             ActivityType::QueryPathInfo => {
@@ -145,9 +151,10 @@ impl NixLogReplayProcessor {
                         substituter = %substituter
                     );
 
-                    span.in_scope(|| {
-                        info!(devenv.log = true, "Querying {}", package_name);
-                    });
+                    let entered_span = span.entered();
+                    if let Ok(mut spans) = self.active_spans.lock() {
+                        spans.insert(activity_id, entered_span);
+                    }
                 }
             }
             ActivityType::FetchTree => {
@@ -162,9 +169,10 @@ impl NixLogReplayProcessor {
                     message = %text
                 );
 
-                span.in_scope(|| {
-                    info!(devenv.log = true, "Fetching {}", text);
-                });
+                let entered_span = span.entered();
+                if let Ok(mut spans) = self.active_spans.lock() {
+                    spans.insert(activity_id, entered_span);
+                }
             }
             _ => {
                 // For other activity types, emit a debug event
@@ -173,9 +181,11 @@ impl NixLogReplayProcessor {
         }
     }
 
-    fn handle_activity_stop(&self, _activity_id: u64, _success: bool) {
-        // Activity stop is handled automatically when the span drops
-        // The DevenvTuiLayer will generate the appropriate end events
+    fn handle_activity_stop(&self, activity_id: u64, _success: bool) {
+        // Remove the span from active spans - dropping it will close the span
+        if let Ok(mut spans) = self.active_spans.lock() {
+            spans.remove(&activity_id);
+        }
     }
 
     fn handle_activity_result(
@@ -193,51 +203,50 @@ impl NixLogReplayProcessor {
                         (fields.first(), fields.get(1))
                 {
                     let total_bytes = match total_opt {
-                        Some(Field::Int(total)) => Some(total),
+                        Some(Field::Int(total)) => Some(*total),
                         _ => None,
                     };
 
-                    let span = debug_span!(
+                    // Emit progress event (not a span)
+                    tracing::event!(
                         target: "devenv.nix.download",
-                        "nix_download_progress",
+                        tracing::Level::DEBUG,
                         devenv.ui.message = "download progress",
-                        devenv.ui.type = "download",
+                        devenv.ui.id = "progress",
                         activity_id = activity_id,
-                        bytes_downloaded = downloaded,
-                        total_bytes = ?total_bytes
+                        bytes_downloaded = *downloaded,
+                        total_bytes = ?total_bytes,
+                        "Download progress: {} / {:?} bytes",
+                        downloaded,
+                        total_bytes
                     );
-                    span.in_scope(|| {
-                        if let Some(total) = total_bytes {
-                            let percent = (*downloaded as f64 / *total as f64) * 100.0;
-                            tracing::debug!(
-                                "Download progress: {} / {} bytes ({:.1}%)",
-                                downloaded,
-                                total,
-                                percent
-                            );
-                        } else {
-                            tracing::debug!("Download progress: {} bytes", downloaded);
-                        }
-                    });
+                }
+            }
+            ResultType::SetPhase => {
+                if let Some(Field::String(phase)) = fields.first() {
+                    // Emit phase change event
+                    tracing::event!(
+                        target: "devenv.nix.build",
+                        tracing::Level::DEBUG,
+                        devenv.ui.message = "build phase",
+                        devenv.ui.id = "phase",
+                        activity_id = activity_id,
+                        phase = phase.as_str(),
+                        "Build phase: {}", phase
+                    );
                 }
             }
             ResultType::BuildLogLine => {
                 if let Some(Field::String(log_line)) = fields.first() {
-                    let span = debug_span!(
+                    // Emit build log event (not a span)
+                    tracing::event!(
                         target: "devenv.nix.build",
-                        "build_log",
+                        tracing::Level::INFO,
                         devenv.ui.message = "build log",
-                        devenv.ui.type = "build",
                         activity_id = activity_id,
-                        line = %log_line
+                        line = %log_line,
+                        "Build log: {}", log_line
                     );
-                    span.in_scope(|| {
-                        info!(
-                            target: "devenv.ui.log",
-                            stdout = %log_line,
-                            "Build output: {}", log_line
-                        );
-                    });
                 }
             }
             _ => {
@@ -317,10 +326,12 @@ fn parse_log_line(line: &str) -> Result<LogEntry> {
 async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
 
-    tokio::select! {
-        _ = run_replay(shutdown.clone()) => {}
-        _ = shutdown.wait_for_shutdown() => {}
-    }
+    // Run replay and then wait for shutdown
+    run_replay(shutdown.clone()).await?;
+
+    // Keep running until Ctrl+C
+    eprintln!("Replay complete. Press Ctrl+C to exit.");
+    shutdown.wait_for_shutdown().await;
 
     Ok(())
 }
@@ -372,18 +383,23 @@ async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
 
     // Start TUI in background
     let tui_shutdown = shutdown.clone();
-    tokio::spawn(async move { devenv_tui::app::run_app(model, tui_shutdown).await });
+    let tui_handle = tokio::spawn(async move {
+        match devenv_tui::app::run_app(model, tui_shutdown).await {
+            Ok(_) => eprintln!("TUI exited normally"),
+            Err(e) => eprintln!("TUI error: {}", e),
+        }
+    });
 
     // Create main operation
     let main_op_id = OperationId::new("replay");
 
-    // Start replay operation via tracing
-    info!(
-        target: "devenv.ui",
-        id = %main_op_id,
-        message = format!("Replaying {} log entries", entries.len()),
-        "Starting log replay"
+    // Start replay operation via tracing - using a span so the TUI layer can capture it
+    let replay_span = debug_span!(
+        "replay_operation",
+        devenv.ui.message = format!("Replaying {} log entries", entries.len()),
+        devenv.ui.id = %main_op_id,
     );
+    let _guard = replay_span.enter();
 
     // Set current operation for Nix processor
     nix_processor.set_current_operation(main_op_id.clone());
@@ -441,9 +457,14 @@ async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
         }
     }
 
-    // Give TUI a moment to display the final state
-    sleep(Duration::from_millis(100)).await;
+    // Keep the span open and let activities continue to be displayed
+    // Don't drop _guard here - keep the replay operation active
+    info!("Replay finished. Activities are still visible in the TUI.");
 
-    // Span will close automatically when _guard is dropped, completing the operation
+    // Check if TUI is still running
+    if tui_handle.is_finished() {
+        eprintln!("Warning: TUI task has already exited!");
+    }
+
     Ok(())
 }
