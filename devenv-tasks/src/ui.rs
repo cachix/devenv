@@ -1,54 +1,27 @@
 use console::Term;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
+use tokio_shutdown::Shutdown;
 
-use crate::types::{Skipped, TaskCompleted, TaskStatus};
+use crate::types::{Skipped, TaskCompleted, TaskStatus, TasksStatus};
 use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
-
-/// Status information for all tasks
-pub struct TasksStatus {
-    lines: Vec<String>,
-    pub pending: usize,
-    pub running: usize,
-    pub succeeded: usize,
-    pub failed: usize,
-    pub skipped: usize,
-    pub dependency_failed: usize,
-    pub cancelled: usize,
-}
-
-impl TasksStatus {
-    fn new() -> Self {
-        Self {
-            lines: vec![],
-            pending: 0,
-            running: 0,
-            succeeded: 0,
-            failed: 0,
-            skipped: 0,
-            dependency_failed: 0,
-            cancelled: 0,
-        }
-    }
-}
 
 /// Builder for TasksUi configuration
 pub struct TasksUiBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    cancellation_token: Option<CancellationToken>,
+    shutdown: Arc<Shutdown>,
 }
 
 impl TasksUiBuilder {
-    /// Create a new builder with required configuration
-    pub fn new(config: Config, verbosity: VerbosityLevel) -> Self {
+    /// Create a new builder with required configuration and shutdown
+    pub fn new(config: Config, verbosity: VerbosityLevel, shutdown: Arc<Shutdown>) -> Self {
         Self {
             config,
             verbosity,
             db_path: None,
-            cancellation_token: None,
+            shutdown,
         }
     }
 
@@ -58,22 +31,12 @@ impl TasksUiBuilder {
         self
     }
 
-    /// Set the cancellation token for shutdown support
-    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
-        self.cancellation_token = Some(token);
-        self
-    }
-
     /// Build the TasksUi instance
     pub async fn build(self) -> Result<TasksUi, Error> {
-        let mut tasks_builder = Tasks::builder(self.config, self.verbosity);
+        let mut tasks_builder = Tasks::builder(self.config, self.verbosity, self.shutdown);
 
         if let Some(db_path) = self.db_path {
             tasks_builder = tasks_builder.with_db_path(db_path);
-        }
-
-        if let Some(token) = self.cancellation_token.clone() {
-            tasks_builder = tasks_builder.with_cancellation_token(token);
         }
 
         let tasks = tasks_builder.build().await?;
@@ -95,12 +58,17 @@ pub struct TasksUi {
 
 impl TasksUi {
     /// Create a new TasksUiBuilder for configuring TasksUi
-    pub fn builder(config: Config, verbosity: VerbosityLevel) -> TasksUiBuilder {
-        TasksUiBuilder::new(config, verbosity)
+    pub fn builder(
+        config: Config,
+        verbosity: VerbosityLevel,
+        shutdown: Arc<Shutdown>,
+    ) -> TasksUiBuilder {
+        TasksUiBuilder::new(config, verbosity, shutdown)
     }
 
-    async fn get_tasks_status(&self) -> TasksStatus {
+    async fn get_tasks_status(&self) -> (TasksStatus, Vec<String>) {
         let mut tasks_status = TasksStatus::new();
+        let mut task_lines = Vec::new();
 
         for index in &self.tasks.tasks_order {
             let (task_status, task_name) = {
@@ -166,7 +134,7 @@ impl TasksUi {
                 None => "".to_string(),
             };
 
-            tasks_status.lines.push(format!(
+            task_lines.push(format!(
                 "{} {:40} {:10}",
                 status_text,
                 console::style(task_name).bold(),
@@ -174,7 +142,7 @@ impl TasksUi {
             ));
         }
 
-        tasks_status
+        (tasks_status, task_lines)
     }
 
     /// Run all tasks
@@ -185,7 +153,7 @@ impl TasksUi {
         // If in quiet mode, just wait for tasks to complete
         if self.verbosity == VerbosityLevel::Quiet {
             loop {
-                let tasks_status = self.get_tasks_status().await;
+                let (tasks_status, _) = self.get_tasks_status().await;
                 if tasks_status.pending == 0 && tasks_status.running == 0 {
                     break;
                 }
@@ -199,7 +167,7 @@ impl TasksUi {
                 self.console_write_line(&styled_errors.to_string())?;
             }
 
-            let tasks_status = self.get_tasks_status().await;
+            let (tasks_status, _) = self.get_tasks_status().await;
             return Ok((tasks_status, handle.await.unwrap()));
         }
 
@@ -220,7 +188,7 @@ impl TasksUi {
         let mut last_statuses = std::collections::HashMap::new();
 
         loop {
-            let tasks_status = self.get_tasks_status().await;
+            let (tasks_status, task_lines) = self.get_tasks_status().await;
             let status_summary = [
                 if tasks_status.pending > 0 {
                     format!(
@@ -296,14 +264,14 @@ impl TasksUi {
 
                 let output = format!(
                     "{}\n{status_summary}{}{elapsed_time}",
-                    tasks_status.lines.join("\n"),
+                    task_lines.join("\n"),
                     " ".repeat(
                         (19 + self.tasks.longest_task_name)
                             .saturating_sub(console::measure_text_width(&status_summary))
                             .max(1)
                     )
                 );
-                if !tasks_status.lines.is_empty() {
+                if !task_lines.is_empty() {
                     let output = console::Style::new().apply_to(output);
                     if last_list_height > 0 {
                         self.term.move_cursor_up(last_list_height as usize)?;
@@ -312,7 +280,7 @@ impl TasksUi {
                     self.console_write_line(&output.to_string())?;
                 }
 
-                last_list_height = tasks_status.lines.len() as u16 + 1;
+                last_list_height = task_lines.len() as u16 + 1;
             } else {
                 // Non-interactive mode - print only status changes
                 for task_state in self.tasks.graph.node_weights() {
@@ -415,7 +383,7 @@ impl TasksUi {
             self.console_write_line(&styled_errors.to_string())?;
         }
 
-        let tasks_status = self.get_tasks_status().await;
+        let (tasks_status, _) = self.get_tasks_status().await;
         Ok((tasks_status, handle.await.unwrap()))
     }
 

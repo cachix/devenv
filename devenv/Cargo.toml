@@ -40,6 +40,7 @@ sha2.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true
 tokio.workspace = true
+tokio-shutdown.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-indicatif.workspace = true

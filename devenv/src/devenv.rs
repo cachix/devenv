@@ -50,12 +50,37 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
 // project vars
 pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct DevenvOptions {
     pub config: config::Config,
     pub global_options: Option<cli::GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
+    pub shutdown: Arc<tokio_shutdown::Shutdown>,
+}
+
+impl DevenvOptions {
+    pub fn new(shutdown: Arc<tokio_shutdown::Shutdown>) -> Self {
+        Self {
+            config: config::Config::default(),
+            global_options: None,
+            devenv_root: None,
+            devenv_dotfile: None,
+            shutdown,
+        }
+    }
+}
+
+impl Default for DevenvOptions {
+    fn default() -> Self {
+        Self {
+            config: config::Config::default(),
+            global_options: None,
+            devenv_root: None,
+            devenv_dotfile: None,
+            shutdown: tokio_shutdown::Shutdown::new(),
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -97,6 +122,9 @@ pub struct Devenv {
     // TODO: make private.
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
+
+    // Shutdown handle for coordinated shutdown
+    shutdown: Arc<tokio_shutdown::Shutdown>,
 }
 
 impl Devenv {
@@ -192,6 +220,7 @@ impl Devenv {
             has_processes: Arc::new(OnceCell::new()),
             secretspec_resolved,
             container_name: None,
+            shutdown: options.shutdown,
         }
     }
 
@@ -796,7 +825,9 @@ impl Devenv {
             serde_json::to_string_pretty(&config).unwrap()
         );
 
-        let mut tui = tasks::TasksUi::builder(config, verbosity).build().await?;
+        let mut tui = tasks::TasksUi::builder(config, verbosity, self.shutdown.clone())
+            .build()
+            .await?;
         let (tasks_status, outputs) = tui.run().await?;
 
         if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {

@@ -1193,6 +1193,7 @@ dependencies = [
  "sqlx",
  "tempfile",
  "tokio",
+ "tokio-shutdown",
  "tracing",
  "tracing-indicatif",
  "tracing-subscriber",
@@ -1252,6 +1253,7 @@ dependencies = [
  "serde_json",
  "similar",
  "tokio",
+ "tokio-shutdown",
  "tokio-tar",
  "tokio-util",
  "tracing",
@@ -1269,6 +1271,7 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "tokio",
+ "tokio-shutdown",
 ]
 
 [[package]]
@@ -1292,6 +1295,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.16",
  "tokio",
+ "tokio-shutdown",
  "tokio-test",
  "tokio-util",
  "tracing",
@@ -5912,6 +5916,17 @@ checksum = "05f63835928ca123f1bef57abbcd23bb2ba0ac9ae1235f1e65bda0d06e7786bd"
 dependencies = [
  "rustls",
  "tokio",
+]
+
+[[package]]
+name = "tokio-shutdown"
+version = "1.10.1"
+dependencies = [
+ "futures",
+ "nix 0.30.1",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
