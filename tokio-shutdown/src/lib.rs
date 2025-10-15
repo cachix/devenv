@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use tokio::signal;
 use tokio::sync::Notify;
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -213,6 +214,14 @@ impl Shutdown {
         self.token.clone()
     }
 
+    /// Create a new ShutdownJoinSet for managing multiple cancellable tasks
+    pub fn join_set<T>(self: &Arc<Self>) -> ShutdownJoinSet<T>
+    where
+        T: 'static,
+    {
+        ShutdownJoinSet::new(Arc::clone(self))
+    }
+
     /// Get the last signal that was received, if any.
     pub fn last_signal(&self) -> Option<Signal> {
         match self.last_signal.load(Ordering::Relaxed) {
@@ -234,6 +243,117 @@ impl Shutdown {
 
         // Unreachable: something went wrong
         std::process::exit(1);
+    }
+}
+
+/// A JoinSet wrapper that integrates with Shutdown for tracking cancellable tasks
+pub struct ShutdownJoinSet<T>
+where
+    T: 'static,
+{
+    join_set: JoinSet<Option<T>>,
+    shutdown: Arc<Shutdown>,
+}
+
+impl<T> ShutdownJoinSet<T>
+where
+    T: 'static,
+{
+    fn new(shutdown: Arc<Shutdown>) -> Self {
+        Self {
+            join_set: JoinSet::new(),
+            shutdown,
+        }
+    }
+
+    /// Spawn a task into this join set
+    /// The task is responsible for handling cancellation via the shutdown's cancellation token
+    pub fn spawn<F, Fut>(&mut self, task: F) -> &mut Self
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let shutdown = Arc::clone(&self.shutdown);
+
+        self.join_set.spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
+            let result = task().await;
+
+            shutdown.unregister_task();
+
+            Some(result)
+        });
+
+        self
+    }
+
+    /// Spawn a cancellable task into this join set
+    pub fn spawn_cancellable<F, Fut, C, CFut>(
+        &mut self,
+        task: F,
+        cleanup: Option<C>,
+    ) -> &mut Self
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+        C: FnOnce() -> CFut + Send + 'static,
+        CFut: Future<Output = ()> + Send + 'static,
+    {
+        let shutdown = Arc::clone(&self.shutdown);
+        let child_token = self.shutdown.token.child_token();
+
+        self.join_set.spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
+            let result = tokio::select! {
+                result = task() => Some(result),
+                _ = child_token.cancelled() => {
+                    if let Some(cleanup) = cleanup {
+                        cleanup().await;
+                    }
+                    None
+                }
+            };
+
+            shutdown.unregister_task();
+
+            result
+        });
+
+        self
+    }
+
+    /// Wait for the next task to complete
+    pub async fn join_next(&mut self) -> Option<Result<Option<T>, tokio::task::JoinError>> {
+        self.join_set.join_next().await
+    }
+
+    /// Wait for all tasks to complete, propagating panics
+    pub async fn wait_all(&mut self) {
+        while let Some(res) = self.join_next().await {
+            match res {
+                Ok(_) => {}
+                Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+                Err(err) => panic!("{err}"),
+            }
+        }
+    }
+
+    /// Check if the join set is empty
+    pub fn is_empty(&self) -> bool {
+        self.join_set.is_empty()
+    }
+
+    /// Get the number of tasks in the join set
+    pub fn len(&self) -> usize {
+        self.join_set.len()
     }
 }
 
