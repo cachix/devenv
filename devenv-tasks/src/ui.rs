@@ -57,13 +57,12 @@ pub struct TasksUi {
 }
 
 impl TasksUi {
-    /// Create a new TasksUiBuilder for configuring TasksUi
-    pub fn builder(
-        config: Config,
-        verbosity: VerbosityLevel,
-        shutdown: Arc<Shutdown>,
-    ) -> TasksUiBuilder {
-        TasksUiBuilder::new(config, verbosity, shutdown)
+    pub fn new(tasks: Arc<Tasks>, verbosity: VerbosityLevel) -> TasksUi {
+        TasksUi {
+            tasks,
+            verbosity,
+            term: Term::stderr(),
+        }
     }
 
     async fn get_tasks_status(&self) -> (TasksStatus, Vec<String>) {
@@ -383,7 +382,7 @@ impl TasksUi {
             self.console_write_line(&styled_errors.to_string())?;
         }
 
-        let (tasks_status, _) = self.get_tasks_status().await;
+        let tasks_status = self.tasks.get_completion_status().await;
         Ok((tasks_status, handle.await.unwrap()))
     }
 
