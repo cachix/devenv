@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use tokio::signal;
 use tokio::sync::Notify;
+use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -15,8 +16,8 @@ use tracing::info;
 pub struct Shutdown {
     token: CancellationToken,
     task_count: AtomicUsize,
-    shutdown_complete: Notify,
     last_signal: AtomicI32,
+    shutdown_complete: Notify,
 }
 
 impl Shutdown {
@@ -25,13 +26,20 @@ impl Shutdown {
         Arc::new(Self {
             token: CancellationToken::new(),
             task_count: AtomicUsize::new(0),
-            shutdown_complete: Notify::new(),
             last_signal: AtomicI32::new(0),
+            shutdown_complete: Notify::new(),
         })
     }
 
-    fn register_task(&self) {
+    fn register_task(&self) -> bool {
+        // Skip registering tasks if cancellation has been requested
+        if self.token.is_cancelled() {
+            return false;
+        }
+
         self.task_count.fetch_add(1, Ordering::Relaxed);
+
+        true
     }
 
     fn unregister_task(&self) {
@@ -39,7 +47,8 @@ impl Shutdown {
             .task_count
             .fetch_sub(1, Ordering::AcqRel)
             .saturating_sub(1);
-        if remaining == 0 && self.token.is_cancelled() {
+
+        if self.token.is_cancelled() && remaining == 0 {
             self.shutdown_complete.notify_waiters();
         }
     }
@@ -55,9 +64,12 @@ impl Shutdown {
         T: Send + 'static,
     {
         let shutdown = Arc::clone(self);
-        shutdown.register_task();
 
         tokio::spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
             tokio::pin!(fut);
             let (result, should_trigger_shutdown) = tokio::select! {
                 res = &mut fut => (Some(res), true),
@@ -67,7 +79,7 @@ impl Shutdown {
             shutdown.unregister_task();
 
             if should_trigger_shutdown {
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
 
             result
@@ -89,9 +101,12 @@ impl Shutdown {
     {
         let shutdown = Arc::clone(self);
         let child_token = self.token.child_token();
-        shutdown.register_task();
 
         tokio::spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
             let result = tokio::select! {
                 result = task() => Some(result),
                 _ = child_token.cancelled() => {
@@ -103,18 +118,18 @@ impl Shutdown {
             };
 
             shutdown.unregister_task();
+
             result
         })
     }
 
     /// Trigger shutdown
-    pub async fn shutdown(&self) {
+    pub fn shutdown(&self) {
         self.token.cancel();
 
-        if self.task_count.load(Ordering::Relaxed) == 0 {
+        // If there are no more tasks, notify that shutdown is complete
+        if self.task_count.load(Ordering::Acquire) == 0 {
             self.shutdown_complete.notify_waiters();
-        } else {
-            self.shutdown_complete.notified().await;
         }
     }
 
@@ -130,22 +145,32 @@ impl Shutdown {
             let mut sighup = signal::unix::signal(signal::unix::SignalKind::hangup())
                 .expect("Failed to install SIGHUP handler");
 
-            tokio::select! {
-                _ = sigint.recv() => {
-                    info!("Received SIGINT (Ctrl+C), shutting down gracefully...");
-                    shutdown.last_signal.store(Signal::SIGINT as i32, Ordering::Relaxed);
-                }
-                _ = sigterm.recv() => {
-                    info!("Received SIGTERM, shutting down gracefully...");
-                    shutdown.last_signal.store(Signal::SIGTERM as i32, Ordering::Relaxed);
-                }
-                _ = sighup.recv() => {
-                    info!("Received SIGHUP, shutting down gracefully...");
-                    shutdown.last_signal.store(Signal::SIGHUP as i32, Ordering::Relaxed);
-                }
-            }
+            loop {
+                let last_signal;
 
-            shutdown.shutdown().await;
+                tokio::select! {
+                    _ = sigint.recv() => {
+                        info!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                        last_signal = Signal::SIGINT;
+                    }
+                    _ = sigterm.recv() => {
+                        info!("Received SIGTERM, shutting down gracefully...");
+                        last_signal = Signal::SIGTERM;
+                    }
+                    _ = sighup.recv() => {
+                        info!("Received SIGHUP, shutting down gracefully...");
+                        last_signal = Signal::SIGHUP;
+                    }
+                }
+
+                // Store the last signal received
+                shutdown
+                    .last_signal
+                    .store(last_signal as i32, Ordering::Relaxed);
+
+                // Trigger shutdown
+                shutdown.shutdown();
+            }
         });
     }
 
@@ -168,6 +193,14 @@ impl Shutdown {
     /// This token can be shared across multiple tasks and components.
     pub fn cancellation_token(&self) -> CancellationToken {
         self.token.clone()
+    }
+
+    /// Create a new ShutdownJoinSet for managing multiple cancellable tasks
+    pub fn join_set<T>(self: &Arc<Self>) -> ShutdownJoinSet<T>
+    where
+        T: 'static,
+    {
+        ShutdownJoinSet::new(Arc::clone(self))
     }
 
     /// Get the last signal that was received, if any.
@@ -194,6 +227,113 @@ impl Shutdown {
     }
 }
 
+/// A JoinSet wrapper that integrates with Shutdown for tracking cancellable tasks
+pub struct ShutdownJoinSet<T>
+where
+    T: 'static,
+{
+    join_set: JoinSet<Option<T>>,
+    shutdown: Arc<Shutdown>,
+}
+
+impl<T> ShutdownJoinSet<T>
+where
+    T: 'static,
+{
+    fn new(shutdown: Arc<Shutdown>) -> Self {
+        Self {
+            join_set: JoinSet::new(),
+            shutdown,
+        }
+    }
+
+    /// Spawn a task into this join set
+    /// The task is responsible for handling cancellation via the shutdown's cancellation token
+    pub fn spawn<F, Fut>(&mut self, task: F) -> &mut Self
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let shutdown = Arc::clone(&self.shutdown);
+
+        self.join_set.spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
+            let result = task().await;
+
+            shutdown.unregister_task();
+
+            Some(result)
+        });
+
+        self
+    }
+
+    /// Spawn a cancellable task into this join set
+    pub fn spawn_cancellable<F, Fut, C, CFut>(&mut self, task: F, cleanup: Option<C>) -> &mut Self
+    where
+        F: FnOnce() -> Fut + Send + 'static,
+        Fut: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+        C: FnOnce() -> CFut + Send + 'static,
+        CFut: Future<Output = ()> + Send + 'static,
+    {
+        let shutdown = Arc::clone(&self.shutdown);
+        let child_token = self.shutdown.token.child_token();
+
+        self.join_set.spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
+            let result = tokio::select! {
+                result = task() => Some(result),
+                _ = child_token.cancelled() => {
+                    if let Some(cleanup) = cleanup {
+                        cleanup().await;
+                    }
+                    None
+                }
+            };
+
+            shutdown.unregister_task();
+
+            result
+        });
+
+        self
+    }
+
+    /// Wait for the next task to complete
+    pub async fn join_next(&mut self) -> Option<Result<Option<T>, tokio::task::JoinError>> {
+        self.join_set.join_next().await
+    }
+
+    /// Wait for all tasks to complete, propagating panics
+    pub async fn wait_all(&mut self) {
+        while let Some(res) = self.join_next().await {
+            match res {
+                Ok(_) => {}
+                Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+                Err(err) => panic!("{err}"),
+            }
+        }
+    }
+
+    /// Check if the join set is empty
+    pub fn is_empty(&self) -> bool {
+        self.join_set.is_empty()
+    }
+
+    /// Get the number of tasks in the join set
+    pub fn len(&self) -> usize {
+        self.join_set.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,7 +348,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(25)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -251,7 +391,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(25)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -296,7 +436,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(15)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -326,7 +466,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(25)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -374,7 +514,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(10)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -431,7 +571,7 @@ mod tests {
         let token2 = shutdown.cancellation_token();
 
         // Manually trigger shutdown to test behavior
-        shutdown.shutdown().await;
+        shutdown.shutdown();
 
         // Small delay to ensure cancellation propagates
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -455,7 +595,7 @@ mod tests {
         // Cancel after a small delay
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
-            shutdown.shutdown().await;
+            shutdown.shutdown();
         });
 
         // The task should complete when cancelled

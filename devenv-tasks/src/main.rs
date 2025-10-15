@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
-use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, TasksUi, VerbosityLevel};
-use std::{env, fs, path::PathBuf};
+use devenv_tasks::{Config, RunMode, SudoContext, TaskConfig, Tasks, TasksUi, VerbosityLevel};
+use std::{env, fmt::Display, fs, path::PathBuf, sync::Arc};
+use thiserror::Error;
 use tokio_shutdown::Shutdown;
 
 #[derive(Parser)]
@@ -33,14 +34,76 @@ enum Command {
     },
 }
 
+type Result<T> = std::result::Result<T, TaskError>;
+
+#[derive(Debug, Clone)]
+enum TaskSource {
+    EnvVar,
+    File(PathBuf),
+}
+
+impl Display for TaskSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TaskSource::EnvVar => write!(f, "DEVENV_TASKS environment variable"),
+            TaskSource::File(path) => write!(f, "tasks file at {}", path.display()),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+enum TaskError {
+    #[error("Failed to read tasks from {task_source}: {error}")]
+    ReadError {
+        task_source: TaskSource,
+        #[source]
+        error: std::io::Error,
+    },
+
+    #[error("Failed to parse tasks from {task_source}: {error}")]
+    ParseError {
+        task_source: TaskSource,
+        #[source]
+        error: serde_json::Error,
+    },
+
+    #[error(
+        "No task source provided: DEVENV_TASKS environment variable not set and no task file specified"
+    )]
+    NoSource,
+
+    #[error("{0}")]
+    Other(String),
+
+    #[error(transparent)]
+    Tasks(#[from] devenv_tasks::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
+    let shutdown = Shutdown::new();
+    shutdown.install_signals().await;
+
+    tokio::select! {
+        result = run_tasks(shutdown.clone()) => result?,
+        _ = shutdown.wait_for_shutdown() => {}
+    };
+
+    Ok(())
+}
+async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
     // Detect and handle sudo.
     // Drop privileges immediately to avoid creating any files as root.
     let sudo_context = SudoContext::detect();
     if let Some(ref ctx) = sudo_context {
         ctx.drop_privileges()
-            .map_err(|e| format!("Failed to drop privileges: {}", e))?;
+            .map_err(|e| TaskError::Other(format!("Failed to drop privileges: {}", e)))?;
     }
 
     let args = Args::parse();
@@ -72,29 +135,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             mode,
             task_file,
         } => {
-            let tasks: Vec<TaskConfig> = {
-                let task_source = || {
-                    task_file
-                        .as_ref()
-                        .map(|p| format!("tasks file at {}", p.display()))
-                        .unwrap_or_else(|| "DEVENV_TASKS".to_string())
-                };
+            let tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
 
-                let data = env::var("DEVENV_TASKS").or_else(|_| {
-                    task_file
-                        .as_ref()
-                        .ok_or_else(|| {
-                            "No task file specified and DEVENV_TASKS environment variable not set"
-                                .to_string()
-                        })
-                        .and_then(|path| {
-                            fs::read_to_string(path)
-                                .map_err(|e| format!("Failed to read {}: {e}", task_source()))
-                        })
-                })?;
-                serde_json::from_str(&data)
-                    .map_err(|e| format!("Failed to parse {} as JSON: {e}", task_source()))?
-            };
             let config = Config {
                 tasks,
                 roots,
@@ -102,20 +144,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 sudo_context: sudo_context.clone(),
             };
 
-            // Create shutdown handler with signal support
-            let shutdown = Shutdown::new();
-            shutdown.install_signals().await;
-
-            let mut tasks_ui = TasksUi::builder(config, verbosity, shutdown.clone())
+            let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))
                 .build()
                 .await?;
-            let (status, _outputs) = tasks_ui.run().await?;
+
+            let (status, _) = TasksUi::new(tasks, verbosity).run().await?;
 
             if shutdown.last_signal().is_some() {
                 shutdown.exit_process();
             }
 
-            if status.failed + status.dependency_failed > 0 {
+            if status.has_failures() {
                 std::process::exit(1);
             }
         }
@@ -153,4 +192,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Fetches task configurations from either the DEVENV_TASKS environment variable or a task file.
+///
+/// Priority order:
+/// 1. DEVENV_TASKS environment variable (takes precedence)
+/// 2. Task file specified via --task-file or DEVENV_TASK_FILE
+///
+/// Returns a vector of task configurations or an error if the source cannot be read or parsed.
+fn fetch_tasks(task_file: &Option<PathBuf>) -> Result<Vec<TaskConfig>> {
+    let (data, task_source) = read_raw_task_source(task_file)?;
+    serde_json::from_str(&data).map_err(|error| TaskError::ParseError { task_source, error })
+}
+
+/// Reads the raw task specification string from either the DEVENV_TASKS environment variable or a file.
+///
+/// Priority order:
+/// 1. DEVENV_TASKS environment variable (checked first)
+/// 2. Task file path (if provided)
+///
+/// Returns the raw JSON string and the source it came from, or an error if no source is available.
+fn read_raw_task_source(task_file: &Option<PathBuf>) -> Result<(String, TaskSource)> {
+    if let Ok(raw) = env::var("DEVENV_TASKS") {
+        return Ok((raw, TaskSource::EnvVar));
+    }
+
+    match task_file {
+        Some(path) => match fs::read_to_string(path) {
+            Ok(data) => Ok((data, TaskSource::File(path.clone()))),
+            Err(error) => Err(TaskError::ReadError {
+                task_source: TaskSource::File(path.clone()),
+                error,
+            }),
+        },
+        None => Err(TaskError::NoSource),
+    }
 }

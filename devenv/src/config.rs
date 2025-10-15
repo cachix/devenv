@@ -378,12 +378,11 @@ impl Config {
 
         // Add all loaded file imports (normalized)
         for yaml_path in yaml_files.iter().skip(1) {
-            if let Some(import_dir) = yaml_path.parent() {
-                if let Some(normalized) = Self::normalize_path(import_dir, base_path) {
-                    if seen.insert(normalized.clone()) {
-                        final_imports.push(normalized);
-                    }
-                }
+            if let Some(import_dir) = yaml_path.parent()
+                && let Some(normalized) = Self::normalize_path(import_dir, base_path)
+                && seen.insert(normalized.clone())
+            {
+                final_imports.push(normalized);
             }
         }
 
@@ -505,11 +504,11 @@ impl Config {
                     }
                 );
             }
-        } else if canonical_import.is_none() && canonical_root.is_some() {
+        } else if canonical_import.is_none()
+            && let Some(canonical_root) = canonical_root
+        {
             // Import path doesn't exist, but root does - validate lexically
             // First make the import path absolute, then normalize
-            let canonical_root = canonical_root.unwrap();
-
             let abs_import = if import_path.is_absolute() {
                 Self::normalize_path_components(import_path)
             } else {

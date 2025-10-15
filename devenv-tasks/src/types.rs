@@ -187,7 +187,9 @@ pub enum TaskCompleted {
     Skipped(Skipped),
     Failed(Duration, TaskFailure),
     DependencyFailed,
-    Cancelled(Duration),
+    /// Cancelled externally.
+    /// If the job was running, contains the duration it ran for.
+    Cancelled(Option<Duration>),
 }
 
 impl TaskCompleted {
@@ -196,6 +198,17 @@ impl TaskCompleted {
             self,
             TaskCompleted::Failed(_, _) | TaskCompleted::DependencyFailed
         )
+    }
+
+    // TODO: use this everywhere instead of ad-hoc strings
+    pub fn to_tracing_status(&self) -> &'static str {
+        match self {
+            TaskCompleted::Success(_, _) => "success",
+            TaskCompleted::Skipped(_) => "skipped",
+            TaskCompleted::Failed(_, _) => "failed",
+            TaskCompleted::DependencyFailed => "dependency_failed",
+            TaskCompleted::Cancelled(_) => "cancelled",
+        }
     }
 }
 

@@ -16,7 +16,7 @@ pub use types::{
     Outputs, TaskCompleted, TaskOutputs, TaskStatus, TasksStatus, UiMode, VerbosityLevel,
     determine_ui_mode, is_tty,
 };
-pub use ui::{TasksUi, TasksUiBuilder};
+pub use ui::TasksUi;
 
 #[cfg(test)]
 mod tests;

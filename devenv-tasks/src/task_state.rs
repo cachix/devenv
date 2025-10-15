@@ -3,6 +3,8 @@ use crate::config::TaskConfig;
 use crate::task_cache::{TaskCache, expand_glob_patterns};
 use crate::types::{Output, Skipped, TaskCompleted, TaskFailure, TaskStatus, VerbosityLevel};
 use miette::{IntoDiagnostic, Result, WrapErr};
+use nix::sys::signal::{self as nix_signal, Signal};
+use nix::unistd::Pid;
 use std::collections::BTreeMap;
 use std::process::Stdio;
 use tokio::fs::File;
@@ -10,6 +12,7 @@ use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument};
 
 impl std::fmt::Debug for TaskState {
@@ -100,10 +103,6 @@ impl TaskState {
             command.current_dir(cwd);
         }
 
-        // Create a new process group for better signal handling
-        // This ensures that signals sent to the parent are propagated to all children
-        command.process_group(0);
-
         // Set DEVENV_TASK_INPUTS
         if let Some(inputs) = &self.task.inputs {
             let inputs_json = serde_json::to_string(inputs)
@@ -170,6 +169,7 @@ impl TaskState {
         now: Instant,
         outputs: &BTreeMap<String, serde_json::Value>,
         cache: &TaskCache,
+        cancellation: CancellationToken,
     ) -> Result<TaskCompleted> {
         tracing::debug!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
@@ -439,6 +439,34 @@ impl TaskState {
                             ));
                         }
                     }
+                }
+                _ = cancellation.cancelled() => {
+                    eprintln!("Task {} received shutdown signal, terminating child process", self.task.name);
+
+                    // Kill the child process and its process group
+                    if let Some(pid) = child.id() {
+                        // Send SIGTERM to the process group first for graceful shutdown
+                        // TODO: whether to signal the process or the progress group could be configurable
+                        // See process compose
+                        let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
+
+                        tokio::select! {
+                            _ = child.wait() => {
+                                // Process exited gracefully
+                            }
+                            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {
+                                // Grace period expired, send SIGKILL
+                                let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);
+                                let _ = child.wait().await;
+                            }
+                        }
+                    }
+
+                    // Emit tracing event for cancelled task
+                    let cmd = self.task.command.as_ref().unwrap();
+                    crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
+
+                    return Ok(TaskCompleted::Cancelled(Some(now.elapsed())));
                 }
             }
         }

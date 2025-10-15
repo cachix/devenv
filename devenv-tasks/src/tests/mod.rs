@@ -2448,6 +2448,247 @@ async fn test_namespace_resolution_edge_cases() -> Result<(), Error> {
     Ok(())
 }
 
+#[tokio::test]
+async fn test_task_cancellation_during_execution() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create a long-running task
+    let long_script = create_script("#!/bin/sh\necho 'Starting long task' && sleep 10 && echo 'Never reached'")?;
+
+    let shutdown = Shutdown::new();
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["test:long_task"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:long_task",
+                    "command": long_script.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        shutdown.clone(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    // Trigger shutdown after a brief delay
+    let shutdown_clone = shutdown.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        shutdown_clone.shutdown();
+    });
+
+    // Run tasks
+    tasks.run().await;
+
+    // Verify task was cancelled
+    let task_statuses = inspect_tasks(&tasks).await;
+    assert_eq!(task_statuses.len(), 1);
+    assert_matches!(
+        task_statuses[0],
+        (ref name, TaskStatus::Completed(TaskCompleted::Cancelled(_)))
+        if name == "test:long_task"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_task_cancellation_waiting_for_dependencies() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create a long-running task and a dependent task
+    let task_a = create_script("#!/bin/sh\necho 'Task A running' && sleep 10")?;
+    let task_b = create_script("#!/bin/sh\necho 'Task B running' && sleep 0.1")?;
+
+    let shutdown = Shutdown::new();
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["test:task_b"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task_a",
+                    "command": task_a.to_str().unwrap()
+                },
+                {
+                    "name": "test:task_b",
+                    "after": ["test:task_a"],
+                    "command": task_b.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        shutdown.clone(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    // Trigger shutdown while task_a is running and task_b is waiting
+    let shutdown_clone = shutdown.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        shutdown_clone.shutdown();
+    });
+
+    // Run tasks
+    tasks.run().await;
+
+    // Verify both tasks were cancelled
+    let task_statuses = inspect_tasks(&tasks).await;
+    assert_eq!(task_statuses.len(), 2);
+
+    for (name, status) in &task_statuses {
+        assert_matches!(
+            status,
+            TaskStatus::Completed(TaskCompleted::Cancelled(_)),
+            "Task {} should be cancelled",
+            name
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_multiple_tasks_cancellation() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create multiple independent long-running tasks
+    let task1 = create_script("#!/bin/sh\necho 'Task 1 running' && sleep 10")?;
+    let task2 = create_script("#!/bin/sh\necho 'Task 2 running' && sleep 10")?;
+    let task3 = create_script("#!/bin/sh\necho 'Task 3 running' && sleep 10")?;
+    let task4 = create_script("#!/bin/sh\necho 'Task 4 running' && sleep 10")?;
+
+    let shutdown = Shutdown::new();
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["test:task_1", "test:task_2", "test:task_3", "test:task_4"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task_1",
+                    "command": task1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task_2",
+                    "command": task2.to_str().unwrap()
+                },
+                {
+                    "name": "test:task_3",
+                    "command": task3.to_str().unwrap()
+                },
+                {
+                    "name": "test:task_4",
+                    "command": task4.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        shutdown.clone(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    // Trigger shutdown after a brief delay
+    let shutdown_clone = shutdown.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        shutdown_clone.shutdown();
+    });
+
+    // Run tasks
+    tasks.run().await;
+
+    // Verify all tasks were cancelled
+    let task_statuses = inspect_tasks(&tasks).await;
+    assert_eq!(task_statuses.len(), 4);
+
+    for (name, status) in &task_statuses {
+        assert_matches!(
+            status,
+            TaskStatus::Completed(TaskCompleted::Cancelled(_)),
+            "Task {} should be cancelled",
+            name
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_wait_for_tasks_complete_without_cancellation() -> Result<(), Error> {
+    let temp_dir = TempDir::new().unwrap();
+    let db_path = temp_dir.path().join("tasks.db");
+
+    // Create several short-duration tasks
+    let task1 = create_script("#!/bin/sh\necho 'Task 1' && sleep 0.1")?;
+    let task2 = create_script("#!/bin/sh\necho 'Task 2' && sleep 0.2")?;
+    let task3 = create_script("#!/bin/sh\necho 'Task 3' && sleep 0.15")?;
+
+    let shutdown = Shutdown::new();
+
+    let tasks = Tasks::builder(
+        Config::try_from(json!({
+            "roots": ["test:task_1", "test:task_2", "test:task_3"],
+            "run_mode": "all",
+            "tasks": [
+                {
+                    "name": "test:task_1",
+                    "command": task1.to_str().unwrap()
+                },
+                {
+                    "name": "test:task_2",
+                    "command": task2.to_str().unwrap()
+                },
+                {
+                    "name": "test:task_3",
+                    "command": task3.to_str().unwrap()
+                }
+            ]
+        }))
+        .unwrap(),
+        VerbosityLevel::Verbose,
+        shutdown.clone(),
+    )
+    .with_db_path(db_path)
+    .build()
+    .await?;
+
+    // Run tasks without triggering shutdown
+    // tasks.run() uses wait_all() internally via the JoinSet, so when it returns all tasks are complete
+    tasks.run().await;
+
+    // Verify all tasks completed successfully (not cancelled)
+    let task_statuses = inspect_tasks(&tasks).await;
+    assert_eq!(task_statuses.len(), 3);
+
+    for (name, status) in &task_statuses {
+        assert_matches!(
+            status,
+            TaskStatus::Completed(TaskCompleted::Success(_, _)),
+            "Task {} should complete successfully",
+            name
+        );
+    }
+
+    Ok(())
+}
+
 async fn inspect_tasks(tasks: &Tasks) -> Vec<(String, TaskStatus)> {
     let mut result = Vec::new();
     for index in &tasks.tasks_order {

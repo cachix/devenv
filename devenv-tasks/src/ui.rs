@@ -1,53 +1,8 @@
 use console::Term;
-use std::path::PathBuf;
 use std::sync::Arc;
-use tokio_shutdown::Shutdown;
 
 use crate::types::{Skipped, TaskCompleted, TaskStatus, TasksStatus};
-use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
-
-/// Builder for TasksUi configuration
-pub struct TasksUiBuilder {
-    config: Config,
-    verbosity: VerbosityLevel,
-    db_path: Option<PathBuf>,
-    shutdown: Arc<Shutdown>,
-}
-
-impl TasksUiBuilder {
-    /// Create a new builder with required configuration and shutdown
-    pub fn new(config: Config, verbosity: VerbosityLevel, shutdown: Arc<Shutdown>) -> Self {
-        Self {
-            config,
-            verbosity,
-            db_path: None,
-            shutdown,
-        }
-    }
-
-    /// Set the database path
-    pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
-        self.db_path = Some(db_path);
-        self
-    }
-
-    /// Build the TasksUi instance
-    pub async fn build(self) -> Result<TasksUi, Error> {
-        let mut tasks_builder = Tasks::builder(self.config, self.verbosity, self.shutdown);
-
-        if let Some(db_path) = self.db_path {
-            tasks_builder = tasks_builder.with_db_path(db_path);
-        }
-
-        let tasks = tasks_builder.build().await?;
-
-        Ok(TasksUi {
-            tasks: Arc::new(tasks),
-            verbosity: self.verbosity,
-            term: Term::stderr(),
-        })
-    }
-}
+use crate::{Error, Outputs, Tasks, VerbosityLevel};
 
 /// UI manager for tasks
 pub struct TasksUi {
@@ -57,13 +12,12 @@ pub struct TasksUi {
 }
 
 impl TasksUi {
-    /// Create a new TasksUiBuilder for configuring TasksUi
-    pub fn builder(
-        config: Config,
-        verbosity: VerbosityLevel,
-        shutdown: Arc<Shutdown>,
-    ) -> TasksUiBuilder {
-        TasksUiBuilder::new(config, verbosity, shutdown)
+    pub fn new(tasks: Tasks, verbosity: VerbosityLevel) -> TasksUi {
+        TasksUi {
+            tasks: Arc::new(tasks),
+            verbosity,
+            term: Term::stderr(),
+        }
     }
 
     async fn get_tasks_status(&self) -> (TasksStatus, Vec<String>) {
@@ -124,7 +78,7 @@ impl TasksUi {
                         console::style(format!("{:17}", "Cancelled"))
                             .yellow()
                             .bold(),
-                        Some(duration),
+                        duration,
                     )
                 }
             };
@@ -333,11 +287,16 @@ impl TasksUi {
                                     console::style("Dependency failed").red().bold(),
                                     "".to_string(),
                                 ),
-                                TaskCompleted::Cancelled(duration) => (
-                                    format!("Cancelled ({duration:.2?})"),
-                                    console::style("Cancelled").yellow().bold(),
-                                    format!(" ({duration:.2?})"),
-                                ),
+                                TaskCompleted::Cancelled(duration) => {
+                                    let duration_str = duration
+                                        .map(|d| format!(" ({d:.2?})"))
+                                        .unwrap_or_default();
+                                    (
+                                        format!("Cancelled{duration_str}"),
+                                        console::style("Cancelled").yellow().bold(),
+                                        duration_str,
+                                    )
+                                }
                             };
 
                             if let Some(previous) = last_statuses.get(task_name) {
@@ -383,7 +342,7 @@ impl TasksUi {
             self.console_write_line(&styled_errors.to_string())?;
         }
 
-        let (tasks_status, _) = self.get_tasks_status().await;
+        let tasks_status = self.tasks.get_completion_status().await;
         Ok((tasks_status, handle.await.unwrap()))
     }
 

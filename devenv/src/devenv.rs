@@ -21,6 +21,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+use tasks::{Tasks, TasksUi};
 use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
@@ -825,12 +826,13 @@ impl Devenv {
             serde_json::to_string_pretty(&config).unwrap()
         );
 
-        let mut tui = tasks::TasksUi::builder(config, verbosity, self.shutdown.clone())
+        let tasks = Tasks::builder(config, verbosity, Arc::clone(&self.shutdown))
             .build()
             .await?;
-        let (tasks_status, outputs) = tui.run().await?;
 
-        if tasks_status.failed > 0 || tasks_status.dependency_failed > 0 {
+        let (status, outputs) = TasksUi::new(tasks, verbosity).run().await?;
+
+        if status.has_failures() {
             miette::bail!("Some tasks failed");
         }
 
