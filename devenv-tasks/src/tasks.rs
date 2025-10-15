@@ -23,7 +23,7 @@ pub struct TasksBuilder {
     config: Config,
     verbosity: VerbosityLevel,
     db_path: Option<PathBuf>,
-    shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    shutdown: Arc<tokio_shutdown::Shutdown>,
 }
 
 impl TasksBuilder {
@@ -31,7 +31,7 @@ impl TasksBuilder {
     pub fn new(
         config: Config,
         verbosity: VerbosityLevel,
-        shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+        shutdown: Arc<tokio_shutdown::Shutdown>,
     ) -> Self {
         Self {
             config,
@@ -133,7 +133,7 @@ pub struct Tasks {
     pub notify_ui: Arc<Notify>,
     pub run_mode: RunMode,
     pub cache: TaskCache,
-    pub shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
+    pub shutdown: Arc<tokio_shutdown::Shutdown>,
 }
 
 impl Tasks {
