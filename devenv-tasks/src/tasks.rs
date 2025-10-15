@@ -88,6 +88,7 @@ impl TasksBuilder {
                 task,
                 self.verbosity,
                 self.config.sudo_context.clone(),
+                self.shutdown.cancellation_token(),
             ))));
             task_indices.insert(name, index);
         }
@@ -351,7 +352,6 @@ impl Tasks {
 
     #[instrument(skip(self))]
     pub async fn run(&self) -> Outputs {
-        let mut running_tasks = JoinSet::new();
         let outputs = Arc::new(Mutex::new(BTreeMap::new()));
 
         for index in &self.tasks_order {
@@ -360,6 +360,11 @@ impl Tasks {
             let mut dependency_failed = false;
 
             'dependency_check: loop {
+                if self.shutdown.is_cancelled() {
+                    dependency_failed = true;
+                    break 'dependency_check;
+                }
+
                 let mut dependencies_completed = true;
                 for dep_index in self
                     .graph
@@ -387,7 +392,13 @@ impl Tasks {
                     break;
                 }
 
-                self.notify_finished.notified().await;
+                tokio::select! {
+                    _ = self.notify_finished.notified() => {},
+                    _ = self.shutdown.wait_for_shutdown() => {
+                        dependency_failed = true;
+                        break 'dependency_check;
+                    }
+                }
             }
 
             if dependency_failed {
@@ -423,185 +434,175 @@ impl Tasks {
                 }
                 self.notify_ui.notify_one();
 
+                // TODO: consider Arc-ing self at this point
                 let task_state_clone = Arc::clone(task_state);
                 let outputs_clone = Arc::clone(&outputs);
                 let notify_finished_clone = Arc::clone(&self.notify_finished);
                 let notify_ui_clone = Arc::clone(&self.notify_ui);
-                // We need to wrap the cache in an Arc to share it safely
+                // TODO: remove this clone
                 let cache = Arc::new(self.cache.clone());
-                running_tasks.spawn(async move {
-                    let completed = {
-                        let outputs = outputs_clone.lock().await.clone();
-                        match task_state_clone
-                            .read()
-                            .await
-                            .run(now, &outputs, &cache)
-                            .await
-                        {
-                            Ok(result) => result,
-                            Err(e) => {
-                                error!("Task failed with error: {}", e);
-                                TaskCompleted::Failed(
-                                    now.elapsed(),
-                                    TaskFailure {
-                                        stdout: Vec::new(),
-                                        stderr: Vec::new(),
-                                        error: format!("Task failed: {e}"),
-                                    },
-                                )
-                            }
-                        }
-                    };
-                    {
-                        let mut task_state = task_state_clone.write().await;
-                        match &completed {
-                            TaskCompleted::Success(_, Output(Some(output))) => {
-                                outputs_clone
-                                    .lock()
-                                    .await
-                                    .insert(task_state.task.name.clone(), output.clone());
+                let shutdown = Arc::clone(&self.shutdown);
 
-                                // Store the task output for all tasks to support future reuse
-                                if let Some(output_value) = output.as_object() {
-                                    let task_name = &task_state.task.name;
-                                    if let Err(e) = cache
-                                        .store_task_output(
-                                            task_name,
-                                            &serde_json::Value::Object(output_value.clone()),
-                                        )
-                                        .await
-                                    {
-                                        tracing::warn!(
-                                            "Failed to store task output for {}: {}",
-                                            task_name,
-                                            e
-                                        );
-                                    }
-                                }
-                            }
-                            TaskCompleted::Skipped(Skipped::Cached(Output(Some(output)))) => {
-                                outputs_clone
-                                    .lock()
+                let handle = shutdown
+                    .cancellable(
+                        move || async move {
+                            let completed = {
+                                let outputs = outputs_clone.lock().await.clone();
+                                match task_state_clone
+                                    .read()
                                     .await
-                                    .insert(task_state.task.name.clone(), output.clone());
-
-                                // Store task output if we're having status or exec_if_modified
-                                if (task_state.task.status.is_some()
-                                    || !task_state.task.exec_if_modified.is_empty())
-                                    && let Some(output_value) = output.as_object()
+                                    .run(now, &outputs, &cache)
+                                    .await
                                 {
-                                    let task_name = &task_state.task.name;
-                                    if let Err(e) = cache
-                                        .store_task_output(
-                                            task_name,
-                                            &serde_json::Value::Object(output_value.clone()),
+                                    Ok(result) => result,
+                                    Err(e) => {
+                                        error!("Task failed with error: {}", e);
+                                        TaskCompleted::Failed(
+                                            now.elapsed(),
+                                            TaskFailure {
+                                                stdout: Vec::new(),
+                                                stderr: Vec::new(),
+                                                error: format!("Task failed: {e}"),
+                                            },
                                         )
-                                        .await
-                                    {
-                                        tracing::warn!(
-                                            "Failed to store task output for {}: {}",
+                                    }
+                                }
+                            };
+                            {
+                                let mut task_state = task_state_clone.write().await;
+                                match &completed {
+                                    TaskCompleted::Success(_, Output(Some(output))) => {
+                                        outputs_clone
+                                            .lock()
+                                            .await
+                                            .insert(task_state.task.name.clone(), output.clone());
+
+                                        // Store the task output for all tasks to support future reuse
+                                        if let Some(output_value) = output.as_object() {
+                                            let task_name = &task_state.task.name;
+                                            if let Err(e) = cache
+                                                .store_task_output(
+                                                    task_name,
+                                                    &serde_json::Value::Object(
+                                                        output_value.clone(),
+                                                    ),
+                                                )
+                                                .await
+                                            {
+                                                tracing::warn!(
+                                                    "Failed to store task output for {}: {}",
+                                                    task_name,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+                                    TaskCompleted::Skipped(Skipped::Cached(Output(Some(
+                                        output,
+                                    )))) => {
+                                        outputs_clone
+                                            .lock()
+                                            .await
+                                            .insert(task_state.task.name.clone(), output.clone());
+
+                                        // Store task output if we're having status or exec_if_modified
+                                        if (task_state.task.status.is_some()
+                                            || !task_state.task.exec_if_modified.is_empty())
+                                            && let Some(output_value) = output.as_object()
+                                        {
+                                            let task_name = &task_state.task.name;
+                                            if let Err(e) = cache
+                                                .store_task_output(
+                                                    task_name,
+                                                    &serde_json::Value::Object(
+                                                        output_value.clone(),
+                                                    ),
+                                                )
+                                                .await
+                                            {
+                                                tracing::warn!(
+                                                    "Failed to store task output for {}: {}",
+                                                    task_name,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                                let task_name = &task_state.task.name;
+
+                                // Emit comprehensive tracing event for completion
+                                match &completed {
+                                    TaskCompleted::Success(duration, _) => {
+                                        tracing_events::emit_task_completed(
                                             task_name,
-                                            e
+                                            "completed",
+                                            "success",
+                                            Some(duration.as_secs_f64()),
+                                            None,
+                                        );
+                                    }
+                                    TaskCompleted::Failed(duration, _) => {
+                                        tracing_events::emit_task_completed(
+                                            task_name,
+                                            "completed",
+                                            "failed",
+                                            Some(duration.as_secs_f64()),
+                                            None,
+                                        );
+                                    }
+                                    TaskCompleted::Skipped(skipped) => match skipped {
+                                        Skipped::Cached(_) => {
+                                            tracing_events::emit_task_completed(
+                                                task_name,
+                                                "completed",
+                                                "cached",
+                                                None,
+                                                Some("cached"),
+                                            );
+                                        }
+                                        Skipped::NoCommand => {
+                                            tracing_events::emit_task_completed(
+                                                task_name,
+                                                "completed",
+                                                "skipped",
+                                                None,
+                                                Some("no command"),
+                                            );
+                                        }
+                                    },
+                                    TaskCompleted::DependencyFailed => {
+                                        // Already emitted above
+                                    }
+                                    TaskCompleted::Cancelled(duration) => {
+                                        tracing_events::emit_task_completed(
+                                            task_name,
+                                            "completed",
+                                            "cancelled",
+                                            Some(duration.as_secs_f64()),
+                                            Some("cancelled"),
                                         );
                                     }
                                 }
-                            }
-                            _ => {}
-                        }
-                        let task_name = &task_state.task.name;
 
-                        // Emit comprehensive tracing event for completion
-                        match &completed {
-                            TaskCompleted::Success(duration, _) => {
-                                tracing_events::emit_task_completed(
-                                    task_name,
-                                    "completed",
-                                    "success",
-                                    Some(duration.as_secs_f64()),
-                                    None,
-                                );
+                                task_state.status = TaskStatus::Completed(completed);
                             }
-                            TaskCompleted::Failed(duration, _) => {
-                                tracing_events::emit_task_completed(
-                                    task_name,
-                                    "completed",
-                                    "failed",
-                                    Some(duration.as_secs_f64()),
-                                    None,
-                                );
-                            }
-                            TaskCompleted::Skipped(skipped) => match skipped {
-                                Skipped::Cached(_) => {
-                                    tracing_events::emit_task_completed(
-                                        task_name,
-                                        "completed",
-                                        "cached",
-                                        None,
-                                        Some("cached"),
-                                    );
-                                }
-                                Skipped::NoCommand => {
-                                    tracing_events::emit_task_completed(
-                                        task_name,
-                                        "completed",
-                                        "skipped",
-                                        None,
-                                        Some("no command"),
-                                    );
-                                }
-                            },
-                            TaskCompleted::DependencyFailed => {
-                                // Already emitted above
-                            }
-                            TaskCompleted::Cancelled(duration) => {
-                                tracing_events::emit_task_completed(
-                                    task_name,
-                                    "completed",
-                                    "cancelled",
-                                    Some(duration.as_secs_f64()),
-                                    Some("cancelled"),
-                                );
-                            }
-                        }
 
-                        task_state.status = TaskStatus::Completed(completed);
-                    }
-
-                    notify_finished_clone.notify_one();
-                    notify_ui_clone.notify_one();
-                });
+                            notify_finished_clone.notify_one();
+                            notify_ui_clone.notify_one();
+                        },
+                        None::<fn() -> std::future::Ready<()>>,
+                    )
+                    .await;
             }
         }
 
-        loop {
-            if self.shutdown.is_cancelled() {
-                // Shutdown requested - abort remaining tasks and drain them
-                running_tasks.abort_all();
-
-                // Drain the aborted tasks to ensure proper cleanup
-                while let Some(res) = running_tasks.join_next().await {
-                    if let Err(e) = res {
-                        error!("Aborted task error: {}", e);
-                    }
-                }
-                break;
-            }
-
-            // Wait for next task completion
-            if let Some(res) = running_tasks.join_next().await {
-                match res {
-                    Ok(_) => (),
-                    Err(e) => error!("Task crashed: {}", e),
-                }
-                // Continue the loop to wait for more tasks
-            } else {
-                // No more tasks to wait for
-                break;
-            }
-        }
+        self.shutdown.wait_for_shutdown_complete().await;
 
         self.notify_finished.notify_one();
         self.notify_ui.notify_one();
+
         Outputs(Arc::try_unwrap(outputs).unwrap().into_inner())
     }
 }

@@ -46,6 +46,7 @@ impl Shutdown {
             .task_count
             .fetch_sub(1, Ordering::AcqRel)
             .saturating_sub(1);
+
         if remaining == 0 && self.token.is_cancelled() {
             self.shutdown_complete.notify_waiters();
         }
@@ -116,6 +117,7 @@ impl Shutdown {
             };
 
             shutdown.unregister_task();
+
             result
         })
     }
