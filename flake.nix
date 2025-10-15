@@ -198,6 +198,7 @@
             inherit config;
             ci = config.ciDerivation;
           };
+          nonFlakeWrapper = import ./wrapper.nix { mkShell = self.lib.mkShell; };
       };
 
       overlays.default = final: prev: {
