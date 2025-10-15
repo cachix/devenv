@@ -1,53 +1,8 @@
 use console::Term;
-use std::path::PathBuf;
 use std::sync::Arc;
-use tokio_shutdown::Shutdown;
 
 use crate::types::{Skipped, TaskCompleted, TaskStatus, TasksStatus};
-use crate::{Config, Error, Outputs, Tasks, VerbosityLevel};
-
-/// Builder for TasksUi configuration
-pub struct TasksUiBuilder {
-    config: Config,
-    verbosity: VerbosityLevel,
-    db_path: Option<PathBuf>,
-    shutdown: Arc<Shutdown>,
-}
-
-impl TasksUiBuilder {
-    /// Create a new builder with required configuration and shutdown
-    pub fn new(config: Config, verbosity: VerbosityLevel, shutdown: Arc<Shutdown>) -> Self {
-        Self {
-            config,
-            verbosity,
-            db_path: None,
-            shutdown,
-        }
-    }
-
-    /// Set the database path
-    pub fn with_db_path(mut self, db_path: PathBuf) -> Self {
-        self.db_path = Some(db_path);
-        self
-    }
-
-    /// Build the TasksUi instance
-    pub async fn build(self) -> Result<TasksUi, Error> {
-        let mut tasks_builder = Tasks::builder(self.config, self.verbosity, self.shutdown);
-
-        if let Some(db_path) = self.db_path {
-            tasks_builder = tasks_builder.with_db_path(db_path);
-        }
-
-        let tasks = tasks_builder.build().await?;
-
-        Ok(TasksUi {
-            tasks: Arc::new(tasks),
-            verbosity: self.verbosity,
-            term: Term::stderr(),
-        })
-    }
-}
+use crate::{Error, Outputs, Tasks, VerbosityLevel};
 
 /// UI manager for tasks
 pub struct TasksUi {
