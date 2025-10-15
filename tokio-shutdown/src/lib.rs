@@ -30,8 +30,15 @@ impl Shutdown {
         })
     }
 
-    fn register_task(&self) {
+    // TODO: use a Result type
+    fn register_task(&self) -> bool {
+        // Skip registering tasks
+        if self.token.is_cancelled() {
+            return false;
+        }
         self.task_count.fetch_add(1, Ordering::Relaxed);
+
+        true
     }
 
     fn unregister_task(&self) {
@@ -55,9 +62,12 @@ impl Shutdown {
         T: Send + 'static,
     {
         let shutdown = Arc::clone(self);
-        shutdown.register_task();
 
         tokio::spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
             tokio::pin!(fut);
             let (result, should_trigger_shutdown) = tokio::select! {
                 res = &mut fut => (Some(res), true),
@@ -67,7 +77,7 @@ impl Shutdown {
             shutdown.unregister_task();
 
             if should_trigger_shutdown {
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
 
             result
@@ -89,9 +99,12 @@ impl Shutdown {
     {
         let shutdown = Arc::clone(self);
         let child_token = self.token.child_token();
-        shutdown.register_task();
 
         tokio::spawn(async move {
+            if !shutdown.register_task() {
+                return None;
+            }
+
             let result = tokio::select! {
                 result = task() => Some(result),
                 _ = child_token.cancelled() => {
@@ -108,13 +121,12 @@ impl Shutdown {
     }
 
     /// Trigger shutdown
-    pub async fn shutdown(&self) {
+    pub fn shutdown(&self) {
         self.token.cancel();
 
-        if self.task_count.load(Ordering::Relaxed) == 0 {
+        // If there are no more tasks, notify that shutdown is complete
+        if self.task_count.load(Ordering::Acquire) == 0 {
             self.shutdown_complete.notify_waiters();
-        } else {
-            self.shutdown_complete.notified().await;
         }
     }
 
@@ -130,22 +142,32 @@ impl Shutdown {
             let mut sighup = signal::unix::signal(signal::unix::SignalKind::hangup())
                 .expect("Failed to install SIGHUP handler");
 
-            tokio::select! {
-                _ = sigint.recv() => {
-                    info!("Received SIGINT (Ctrl+C), shutting down gracefully...");
-                    shutdown.last_signal.store(Signal::SIGINT as i32, Ordering::Relaxed);
-                }
-                _ = sigterm.recv() => {
-                    info!("Received SIGTERM, shutting down gracefully...");
-                    shutdown.last_signal.store(Signal::SIGTERM as i32, Ordering::Relaxed);
-                }
-                _ = sighup.recv() => {
-                    info!("Received SIGHUP, shutting down gracefully...");
-                    shutdown.last_signal.store(Signal::SIGHUP as i32, Ordering::Relaxed);
-                }
-            }
+            loop {
+                let last_signal;
 
-            shutdown.shutdown().await;
+                tokio::select! {
+                    _ = sigint.recv() => {
+                        info!("Received SIGINT (Ctrl+C), shutting down gracefully...");
+                        last_signal = Signal::SIGINT;
+                    }
+                    _ = sigterm.recv() => {
+                        info!("Received SIGTERM, shutting down gracefully...");
+                        last_signal = Signal::SIGTERM;
+                    }
+                    _ = sighup.recv() => {
+                        info!("Received SIGHUP, shutting down gracefully...");
+                        last_signal = Signal::SIGHUP;
+                    }
+                }
+
+                // Store the last signal received
+                shutdown
+                    .last_signal
+                    .store(last_signal as i32, Ordering::Relaxed);
+
+                // Trigger shutdown
+                shutdown.shutdown();
+            }
         });
     }
 
@@ -208,7 +230,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(25)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -251,7 +273,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(25)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -296,7 +318,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(15)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -326,7 +348,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(25)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -374,7 +396,7 @@ mod tests {
             let shutdown = Arc::clone(&shutdown);
             async move {
                 tokio::time::sleep(Duration::from_millis(10)).await;
-                shutdown.shutdown().await;
+                shutdown.shutdown();
             }
         });
 
@@ -431,7 +453,7 @@ mod tests {
         let token2 = shutdown.cancellation_token();
 
         // Manually trigger shutdown to test behavior
-        shutdown.shutdown().await;
+        shutdown.shutdown();
 
         // Small delay to ensure cancellation propagates
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -455,7 +477,7 @@ mod tests {
         // Cancel after a small delay
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(50)).await;
-            shutdown.shutdown().await;
+            shutdown.shutdown();
         });
 
         // The task should complete when cancelled
