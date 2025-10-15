@@ -2,6 +2,51 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use tokio::time::{Duration, Instant};
 
+/// Task type: oneshot (run once) or process (long-running)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskType {
+    /// Task runs once and completes (default)
+    Oneshot,
+    /// Task is a long-running process
+    Process,
+}
+
+impl Default for TaskType {
+    fn default() -> Self {
+        TaskType::Oneshot
+    }
+}
+
+/// Dependency kind: wait for ready state or completion
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyKind {
+    /// Wait for task to be ready/healthy (default)
+    /// - For oneshot tasks: wait for successful completion
+    /// - For process tasks: wait for ProcessReady state
+    Ready,
+    /// Wait for task to complete/shutdown
+    /// - For oneshot tasks: same as Ready (wait for completion)
+    /// - For process tasks: wait for process to shut down
+    Complete,
+}
+
+impl Default for DependencyKind {
+    fn default() -> Self {
+        DependencyKind::Ready
+    }
+}
+
+/// Dependency specification with optional suffix
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencySpec {
+    /// Task name without suffix
+    pub name: String,
+    /// Dependency kind (Ready or Complete)
+    pub kind: DependencyKind,
+}
+
 /// Verbosity levels for task execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VerbosityLevel {
@@ -216,5 +261,7 @@ impl TaskCompleted {
 pub enum TaskStatus {
     Pending,
     Running(Instant),
+    /// Process task is ready and healthy (not used yet, for future process support)
+    ProcessReady,
     Completed(TaskCompleted),
 }

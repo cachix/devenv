@@ -144,6 +144,7 @@ in
       (name: process: {
         name = "devenv:processes:${name}";
         value = {
+          type = "process";
           exec = process.exec;
           cwd = process.cwd;
         };

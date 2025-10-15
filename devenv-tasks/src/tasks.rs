@@ -1,10 +1,11 @@
-use crate::config::{Config, RunMode};
+use crate::config::{Config, RunMode, parse_dependency};
 use crate::error::Error;
 use crate::task_cache::TaskCache;
 use crate::task_state::TaskState;
 use crate::tracing_events;
 use crate::types::{
-    Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, TasksStatus, VerbosityLevel,
+    DependencyKind, Output, Outputs, Skipped, TaskCompleted, TaskFailure, TaskStatus, TasksStatus,
+    VerbosityLevel,
 };
 use petgraph::algo::toposort;
 use petgraph::graph::{DiGraph, NodeIndex};
@@ -73,6 +74,7 @@ impl TasksBuilder {
                 || task.name.split(':').count() < 2
                 || task.name.starts_with(':')
                 || task.name.ends_with(':')
+                || task.name.contains('@')
                 || !task
                     .name
                     .chars()
@@ -126,7 +128,7 @@ pub struct Tasks {
     // Stored for reporting
     pub root_names: Vec<String>,
     pub longest_task_name: usize,
-    pub graph: DiGraph<Arc<RwLock<TaskState>>, ()>,
+    pub graph: DiGraph<Arc<RwLock<TaskState>>, DependencyKind>,
     pub tasks_order: Vec<NodeIndex>,
     pub notify_finished: Arc<Notify>,
     pub notify_ui: Arc<Notify>,
@@ -154,6 +156,7 @@ impl Tasks {
             match &task_state.status {
                 TaskStatus::Pending => status.pending += 1,
                 TaskStatus::Running(_) => status.running += 1,
+                TaskStatus::ProcessReady => status.running += 1,
                 TaskStatus::Completed(completed) => match completed {
                     TaskCompleted::Success(_, _) => status.succeeded += 1,
                     TaskCompleted::Failed(_, _) => status.failed += 1,
@@ -228,24 +231,30 @@ impl Tasks {
             let task_state = &self.graph[index].read().await;
 
             for dep_name in &task_state.task.after {
-                if let Some(dep_idx) = task_indices.get(dep_name) {
-                    edges_to_add.push((*dep_idx, index));
+                // Parse dependency with optional suffix
+                let dep_spec = parse_dependency(dep_name)?;
+
+                if let Some(dep_idx) = task_indices.get(&dep_spec.name) {
+                    edges_to_add.push((*dep_idx, index, dep_spec.kind));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), dep_name.clone()));
                 }
             }
 
             for before_name in &task_state.task.before {
-                if let Some(before_idx) = task_indices.get(before_name) {
-                    edges_to_add.push((index, *before_idx));
+                // Parse dependency with optional suffix
+                let dep_spec = parse_dependency(before_name)?;
+
+                if let Some(before_idx) = task_indices.get(&dep_spec.name) {
+                    edges_to_add.push((index, *before_idx, dep_spec.kind));
                 } else {
                     unresolved.insert((task_state.task.name.clone(), before_name.clone()));
                 }
             }
         }
 
-        for (from, to) in edges_to_add {
-            self.graph.update_edge(from, to, ());
+        for (from, to, kind) in edges_to_add {
+            self.graph.update_edge(from, to, kind);
         }
 
         if unresolved.is_empty() {
@@ -320,12 +329,12 @@ impl Tasks {
             node_map.insert(node, new_node);
         }
 
-        // Add edges to subgraph
+        // Add edges to subgraph, preserving edge weights
         for (&old_node, &new_node) in &node_map {
             for edge in self.graph.edges(old_node) {
                 let target = edge.target();
                 if let Some(&new_target) = node_map.get(&target) {
-                    subgraph.add_edge(new_node, new_target, ());
+                    subgraph.add_edge(new_node, new_target, *edge.weight());
                 }
             }
         }
@@ -374,6 +383,9 @@ impl Tasks {
                                     dependency_failed = true;
                                     break 'dependency_check;
                                 }
+                            }
+                            TaskStatus::ProcessReady => {
+                                // Process is ready and healthy, dependency is satisfied
                             }
                             TaskStatus::Pending => {
                                 dependencies_completed = false;
