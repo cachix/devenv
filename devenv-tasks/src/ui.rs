@@ -78,7 +78,7 @@ impl TasksUi {
                         console::style(format!("{:17}", "Cancelled"))
                             .yellow()
                             .bold(),
-                        Some(duration),
+                        duration,
                     )
                 }
             };
@@ -287,11 +287,16 @@ impl TasksUi {
                                     console::style("Dependency failed").red().bold(),
                                     "".to_string(),
                                 ),
-                                TaskCompleted::Cancelled(duration) => (
-                                    format!("Cancelled ({duration:.2?})"),
-                                    console::style("Cancelled").yellow().bold(),
-                                    format!(" ({duration:.2?})"),
-                                ),
+                                TaskCompleted::Cancelled(duration) => {
+                                    let duration_str = duration
+                                        .map(|d| format!(" ({d:.2?})"))
+                                        .unwrap_or_default();
+                                    (
+                                        format!("Cancelled{duration_str}"),
+                                        console::style("Cancelled").yellow().bold(),
+                                        duration_str,
+                                    )
+                                }
                             };
 
                             if let Some(previous) = last_statuses.get(task_name) {

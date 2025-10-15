@@ -187,7 +187,7 @@ pub enum TaskCompleted {
     Skipped(Skipped),
     Failed(Duration, TaskFailure),
     DependencyFailed,
-    Cancelled(Duration),
+    Cancelled(Option<Duration>),
 }
 
 impl TaskCompleted {

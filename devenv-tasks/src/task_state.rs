@@ -466,7 +466,7 @@ impl TaskState {
                     let cmd = self.task.command.as_ref().unwrap();
                     crate::tracing_events::emit_command_end(&self.task.name, cmd, None, false);
 
-                    return Ok(TaskCompleted::Cancelled(now.elapsed()));
+                    return Ok(TaskCompleted::Cancelled(Some(now.elapsed())));
                 }
             }
         }
