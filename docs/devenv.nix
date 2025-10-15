@@ -94,7 +94,7 @@
   tasks = {
     "devenv:compile-requirements" = {
       before = [ "devenv:python:virtualenv" ];
-      exec = "uv pip compile ${config.git.root}/docs/requirements.in -o ${config.git.root}/docs/requirements.txt";
+      exec = "uv pip compile --no-header ${config.git.root}/docs/requirements.in -o ${config.git.root}/docs/requirements.txt";
       execIfModified = [
         "${config.git.root}/docs/requirements.in"
         "${config.git.root}/docs/requirements.txt"
