@@ -187,6 +187,8 @@ pub enum TaskCompleted {
     Skipped(Skipped),
     Failed(Duration, TaskFailure),
     DependencyFailed,
+    /// Cancelled externally.
+    /// If the job was running, contains the duration it ran for.
     Cancelled(Option<Duration>),
 }
 
