@@ -67,7 +67,9 @@ enum TaskError {
         error: serde_json::Error,
     },
 
-    #[error("No task source provided: DEVENV_TASKS environment variable not set and no task file specified")]
+    #[error(
+        "No task source provided: DEVENV_TASKS environment variable not set and no task file specified"
+    )]
     NoSource,
 
     #[error("{0}")]
@@ -148,15 +150,13 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             let tasks = Tasks::builder(config, verbosity, Arc::clone(&shutdown))
                 .build()
                 .await?;
-            let tasks = Arc::new(tasks);
 
-            TasksUi::new(Arc::clone(&tasks), verbosity).run().await?;
+            let (status, _) = TasksUi::new(tasks, verbosity).run().await?;
 
             if shutdown.last_signal().is_some() {
                 shutdown.exit_process();
             }
 
-            let status = tasks.get_completion_status().await;
             if status.has_failures() {
                 std::process::exit(1);
             }
@@ -206,10 +206,7 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
 /// Returns a vector of task configurations or an error if the source cannot be read or parsed.
 fn fetch_tasks(task_file: &Option<PathBuf>) -> Result<Vec<TaskConfig>> {
     let (data, task_source) = read_raw_task_source(task_file)?;
-    serde_json::from_str(&data).map_err(|error| TaskError::ParseError {
-        task_source,
-        error,
-    })
+    serde_json::from_str(&data).map_err(|error| TaskError::ParseError { task_source, error })
 }
 
 /// Reads the raw task specification string from either the DEVENV_TASKS environment variable or a file.

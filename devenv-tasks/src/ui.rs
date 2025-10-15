@@ -57,9 +57,9 @@ pub struct TasksUi {
 }
 
 impl TasksUi {
-    pub fn new(tasks: Arc<Tasks>, verbosity: VerbosityLevel) -> TasksUi {
+    pub fn new(tasks: Tasks, verbosity: VerbosityLevel) -> TasksUi {
         TasksUi {
-            tasks,
+            tasks: Arc::new(tasks),
             verbosity,
             term: Term::stderr(),
         }
