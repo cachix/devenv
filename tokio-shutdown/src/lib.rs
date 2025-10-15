@@ -17,7 +17,6 @@ pub struct Shutdown {
     token: CancellationToken,
     task_count: AtomicUsize,
     last_signal: AtomicI32,
-    tasks_completed: Notify,
     shutdown_complete: Notify,
 }
 
@@ -28,7 +27,6 @@ impl Shutdown {
             token: CancellationToken::new(),
             task_count: AtomicUsize::new(0),
             last_signal: AtomicI32::new(0),
-            tasks_completed: Notify::new(),
             shutdown_complete: Notify::new(),
         })
     }
@@ -50,12 +48,8 @@ impl Shutdown {
             .fetch_sub(1, Ordering::AcqRel)
             .saturating_sub(1);
 
-        if remaining == 0 {
-            self.tasks_completed.notify_waiters();
-
-            if self.token.is_cancelled() {
-                self.shutdown_complete.notify_waiters();
-            }
+        if self.token.is_cancelled() && remaining == 0 {
+            self.shutdown_complete.notify_waiters();
         }
     }
 
@@ -190,19 +184,6 @@ impl Shutdown {
         self.shutdown_complete.notified().await;
     }
 
-    /// Wait for all tasks to complete
-    pub async fn wait_for_tasks_complete(&self) {
-        // Subscribe first to avoid missing notifications
-        let notified = self.tasks_completed.notified();
-
-        // Check if all tasks have already completed
-        if self.task_count.load(Ordering::Acquire) == 0 {
-            return;
-        }
-
-        notified.await;
-    }
-
     /// Check if shutdown has been triggered
     pub fn is_cancelled(&self) -> bool {
         self.token.is_cancelled()
@@ -292,11 +273,7 @@ where
     }
 
     /// Spawn a cancellable task into this join set
-    pub fn spawn_cancellable<F, Fut, C, CFut>(
-        &mut self,
-        task: F,
-        cleanup: Option<C>,
-    ) -> &mut Self
+    pub fn spawn_cancellable<F, Fut, C, CFut>(&mut self, task: F, cleanup: Option<C>) -> &mut Self
     where
         F: FnOnce() -> Fut + Send + 'static,
         Fut: Future<Output = T> + Send + 'static,
