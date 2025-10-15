@@ -2,7 +2,7 @@
 module.exports = {
   important: '.tailwind',
   content: [
-    './docs/**/*.{js,html}'
+    './src/**/*.{js,html}'
   ],
   darkMode: [
     'selector',

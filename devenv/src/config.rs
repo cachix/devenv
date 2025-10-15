@@ -204,7 +204,7 @@ pub async fn write_json_schema() -> Result<()> {
     let schema = serde_json::to_string_pretty(&schema)
         .into_diagnostic()
         .wrap_err("Failed to serialize JSON schema")?;
-    let path = Path::new("docs/devenv.schema.json");
+    let path = Path::new("docs/src/devenv.schema.json");
     tokio::fs::write(path, &schema)
         .await
         .into_diagnostic()
