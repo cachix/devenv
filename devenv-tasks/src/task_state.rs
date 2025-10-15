@@ -30,7 +30,6 @@ pub struct TaskState {
     pub status: TaskStatus,
     pub verbosity: VerbosityLevel,
     pub sudo_context: Option<SudoContext>,
-    pub cancellation: CancellationToken,
 }
 
 impl TaskState {
@@ -38,14 +37,12 @@ impl TaskState {
         task: TaskConfig,
         verbosity: VerbosityLevel,
         sudo_context: Option<SudoContext>,
-        cancellation: CancellationToken,
     ) -> Self {
         Self {
             task,
             status: TaskStatus::Pending,
             verbosity,
             sudo_context,
-            cancellation,
         }
     }
 
@@ -172,6 +169,7 @@ impl TaskState {
         now: Instant,
         outputs: &BTreeMap<String, serde_json::Value>,
         cache: &TaskCache,
+        cancellation: CancellationToken,
     ) -> Result<TaskCompleted> {
         tracing::debug!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
@@ -442,12 +440,14 @@ impl TaskState {
                         }
                     }
                 }
-                _ = self.cancellation.cancelled() => {
+                _ = cancellation.cancelled() => {
                     eprintln!("Task {} received shutdown signal, terminating child process", self.task.name);
 
                     // Kill the child process and its process group
                     if let Some(pid) = child.id() {
                         // Send SIGTERM to the process group first for graceful shutdown
+                        // TODO: whether to signal the process or the progress group could be configurable
+                        // See process compose
                         let _ = nix_signal::killpg(Pid::from_raw(pid as i32), Signal::SIGTERM);
 
                         tokio::select! {

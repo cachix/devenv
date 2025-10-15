@@ -830,9 +830,8 @@ impl Devenv {
             .build()
             .await?;
         let tasks = Arc::new(tasks);
-        let outputs = TasksUi::new(Arc::clone(&tasks), verbosity).run().await?;
+        let (status, outputs) = TasksUi::new(Arc::clone(&tasks), verbosity).run().await?;
 
-        let status = tasks.get_completion_status().await;
         if status.has_failures() {
             miette::bail!("Some tasks failed");
         }

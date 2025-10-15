@@ -47,7 +47,7 @@ impl Shutdown {
             .fetch_sub(1, Ordering::AcqRel)
             .saturating_sub(1);
 
-        if remaining == 0 && self.token.is_cancelled() {
+        if self.token.is_cancelled() && remaining == 0 {
             self.shutdown_complete.notify_waiters();
         }
     }
