@@ -92,10 +92,7 @@ async fn main() -> Result<()> {
 
     tokio::select! {
         result = run_tasks(shutdown.clone()) => result?,
-        _ = shutdown.wait_for_shutdown() => {
-            eprintln!("Task was cancelled");
-            std::process::exit(1);
-        }
+        _ = shutdown.wait_for_shutdown() => {}
     };
 
     Ok(())

@@ -15,8 +15,9 @@ use tracing::info;
 pub struct Shutdown {
     token: CancellationToken,
     task_count: AtomicUsize,
-    shutdown_complete: Notify,
     last_signal: AtomicI32,
+    tasks_completed: Notify,
+    shutdown_complete: Notify,
 }
 
 impl Shutdown {
@@ -25,17 +26,18 @@ impl Shutdown {
         Arc::new(Self {
             token: CancellationToken::new(),
             task_count: AtomicUsize::new(0),
-            shutdown_complete: Notify::new(),
             last_signal: AtomicI32::new(0),
+            tasks_completed: Notify::new(),
+            shutdown_complete: Notify::new(),
         })
     }
 
-    // TODO: use a Result type
     fn register_task(&self) -> bool {
-        // Skip registering tasks
+        // Skip registering tasks if cancellation has been requested
         if self.token.is_cancelled() {
             return false;
         }
+
         self.task_count.fetch_add(1, Ordering::Relaxed);
 
         true
@@ -47,8 +49,12 @@ impl Shutdown {
             .fetch_sub(1, Ordering::AcqRel)
             .saturating_sub(1);
 
-        if self.token.is_cancelled() && remaining == 0 {
-            self.shutdown_complete.notify_waiters();
+        if remaining == 0 {
+            self.tasks_completed.notify_waiters();
+
+            if self.token.is_cancelled() {
+                self.shutdown_complete.notify_waiters();
+            }
         }
     }
 
@@ -181,6 +187,19 @@ impl Shutdown {
     /// Wait for shutdown to complete (all tasks finished)
     pub async fn wait_for_shutdown_complete(&self) {
         self.shutdown_complete.notified().await;
+    }
+
+    /// Wait for all tasks to complete
+    pub async fn wait_for_tasks_complete(&self) {
+        // Subscribe first to avoid missing notifications
+        let notified = self.tasks_completed.notified();
+
+        // Check if all tasks have already completed
+        if self.task_count.load(Ordering::Acquire) == 0 {
+            return;
+        }
+
+        notified.await;
     }
 
     /// Check if shutdown has been triggered

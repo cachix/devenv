@@ -610,7 +610,7 @@ impl Tasks {
                 .await;
         }
 
-        self.shutdown.wait_for_shutdown_complete().await;
+        self.shutdown.wait_for_tasks_complete().await;
 
         self.notify_finished.notify_one();
         self.notify_ui.notify_one();
