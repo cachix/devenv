@@ -53,6 +53,6 @@ jobs:
 
     - name: Pin release
       run: |
-        tag="${{ inputs.ref }}"
+        tag="${{ inputs.ref }}-${{ inputs.system }}"
         out_path=$(nix build --accept-flake-config --print-out-paths --system ${{ inputs.system }})
         cachix pin devenv "$tag" "$out_path"
