@@ -3,7 +3,7 @@ name: "Pin release on Cachix"
 on:
   workflow_dispatch:
     inputs:
-      tag:
+      ref:
         description: "The existing tag to build and pin"
         type: "string"
         required: true
@@ -12,23 +12,26 @@ on:
     inputs:
       ref:
         description: "Git ref to checkout"
-        required: false
+        required: true
         type: string
+
       system:
         description: "System to pin for"
         required: true
         type: string
+
       runs-on:
         description: "Runner to use"
         required: true
         type: string
+
     secrets:
       CACHIX_AUTH_TOKEN:
         required: true
 
 jobs:
   pin:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(inputs.ref, 'v')
     runs-on: ${{ fromJSON(inputs.runs-on) }}
 
     steps:
@@ -49,4 +52,7 @@ jobs:
         authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
     - name: Pin release
-      run: cachix pin devenv ${{ inputs.ref || github.ref_name }} $(nix build --accept-flake-config --print-out-paths --system ${{ inputs.system }})
+      run: |
+        tag="${{ inputs.ref }}"
+        out_path=$(nix build --accept-flake-config --print-out-paths --system ${{ inputs.system }})
+        cachix pin devenv "$tag" "$out_path"

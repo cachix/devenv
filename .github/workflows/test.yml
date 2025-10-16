@@ -7,14 +7,17 @@ on:
         description: "Git ref to checkout"
         required: false
         type: string
+
       system:
         description: "System to test on"
         required: true
         type: string
+
       runs-on:
         description: "Runner to use"
         required: true
         type: string
+
       nixpkgs-input:
         description: "An optional nixpkgs input to test against"
         required: false
@@ -23,94 +26,120 @@ on:
 jobs:
   tests:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
+
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
       - name: Configure Cachix
         uses: cachix/cachix-action@v16
         with:
           name: devenv
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
       - name: Build devenv
         run: |
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
+
       - name: Test tasks outside shell
         run: devenv tasks run devenv:enterShell
+
+      - name: Build override args
+        id: override-args
+        env:
+          NIXPKGS_INPUT: ${{ inputs.nixpkgs-input }}
+        run: |
+          override_args=""
+          if [ -n "$NIXPKGS_INPUT" ]; then
+            override_args="--override-input nixpkgs $NIXPKGS_INPUT"
+          fi
+          echo "args=$override_args" >> $GITHUB_OUTPUT
+
       - name: Run devenv-test-cli
-        run: |
-          devenv \
-            ${{ inputs.nixpkgs-input && format('--override-input nixpkgs {0}', inputs.nixpkgs-input) || '' }} \
-            shell devenv-test-cli
+        run: devenv ${{ steps.override-args.outputs.args }} shell devenv-test-cli
+
       - name: Run tests
-        run: |
-          devenv-run-tests \
-            ${{ inputs.nixpkgs-input && format('--override-input nixpkgs {0}', inputs.nixpkgs-input) || '' }} \
-            run tests
+        run: devenv-run-tests ${{ steps.override-args.outputs.args }} run tests
 
 
   direnv:
     name: direnv (${{ inputs.system }})
     runs-on: ${{ fromJSON(inputs.runs-on) }}
+
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+
       - name: Configure Cachix
         uses: cachix/cachix-action@v16
         with:
           name: devenv
-          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
       - name: Build devenv
         run: |
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
-      - run: |
+
+      - name: Test direnv
+        env:
+          NIXPKGS_INPUT: ${{ inputs.nixpkgs-input }}
+        run: |
           mkdir -p ~/.config/direnv/
           cat > ~/.config/direnv/direnv.toml << 'EOF'
           [global]
           strict_env = true
           EOF
 
-          devenv_dir=$PWD
+          args=(--override-input devenv "path:$PWD?dir=src/modules")
+          if [ -n "$NIXPKGS_INPUT" ]; then
+            args+=(--override-input nixpkgs "$NIXPKGS_INPUT")
+          fi
+
           tmp="$(mktemp -d)"
           pushd "$tmp"
-            nix shell nixpkgs#direnv -c devenv \
-              ${{ inputs.nixpkgs-input && format('--override-input nixpkgs {0}', inputs.nixpkgs-input) || '' }} \
-              --override-input devenv path:$devenv_dir?dir=src/modules \
-              init
+            nix shell nixpkgs#direnv -c devenv "${args[@]}" init
           popd
 
   fish-zsh:
     name: zsh/fish (${{ inputs.system }})
     runs-on: ${{ fromJSON(inputs.runs-on) }}
+
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+
       - name: Configure Cachix
         uses: cachix/cachix-action@v16
         with:
           name: devenv
-          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
       - name: Build devenv
         run: |
           path=$(nix build -L --print-out-paths)
           echo "$path/bin" >> $GITHUB_PATH
+
       - name: Test devenv in fish and zsh
         run: |
           nix shell nixpkgs#zsh -c zsh -c "devenv version"

@@ -7,10 +7,12 @@ on:
         description: "Git ref to checkout"
         required: false
         type: string
+
       system:
         description: "System to build for"
         required: true
         type: string
+
       runs-on:
         description: "Runner to use"
         required: true
@@ -19,12 +21,15 @@ on:
 jobs:
   build:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
+
     outputs:
       devenv-path: ${{ steps.build-devenv.outputs.path }}
+
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
