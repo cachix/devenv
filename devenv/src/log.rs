@@ -51,6 +51,8 @@ pub enum LogFormat {
     TracingFull,
     /// A pretty human-readable log format used for debugging.
     TracingPretty,
+    /// Interactive Terminal User Interface with real-time progress.
+    Tui,
 }
 
 pub fn init_tracing_default() {
@@ -58,7 +60,7 @@ pub fn init_tracing_default() {
     init_tracing(Level::default(), LogFormat::default(), shutdown);
 }
 
-pub fn init_tracing(level: Level, log_format: LogFormat, _shutdown: Arc<tokio_shutdown::Shutdown>) {
+pub fn init_tracing(level: Level, log_format: LogFormat, shutdown: Arc<tokio_shutdown::Shutdown>) {
     let devenv_layer = DevenvLayer::new();
 
     let filter = EnvFilter::builder()
@@ -119,6 +121,24 @@ pub fn init_tracing(level: Level, log_format: LogFormat, _shutdown: Arc<tokio_sh
                 .with(stderr_layer)
                 .with(devenv_layer)
                 .with(filtered_layer)
+                .init();
+        }
+        LogFormat::Tui => {
+            // Initialize TUI with proper shutdown coordination
+            let tui_handle = devenv_tui::init_tui();
+            let model = tui_handle.model.clone();
+
+            // Spawn TUI app in background
+            let shutdown_clone = shutdown.clone();
+            tokio::spawn(async move {
+                let _ = devenv_tui::app::run_app(model, shutdown_clone).await;
+            });
+
+            // Register layers including TUI layer
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(tui_handle.layer)
+                .with(devenv_layer)
                 .init();
         }
     }
