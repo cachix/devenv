@@ -45,7 +45,7 @@ package
 
 
 *Default:*
-` pkgs.ruby_3 `
+` pkgs.ruby `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/ruby\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
