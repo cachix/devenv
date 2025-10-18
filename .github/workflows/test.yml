@@ -74,7 +74,7 @@ jobs:
         run: devenv ${{ steps.override-args.outputs.args }} shell devenv-test-cli
 
       - name: Run tests
-        run: devenv-run-tests ${{ steps.override-args.outputs.args }} run tests
+        run: devenv-run-tests run tests ${{ steps.override-args.outputs.args }}
 
 
   direnv:
