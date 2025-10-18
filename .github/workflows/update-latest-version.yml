@@ -4,8 +4,10 @@ on:
   push:
     tags:
       - 'v*.*.*'
+
   schedule:
     - cron: '0 * * * *'  # Run hourly
+
   workflow_dispatch:     # Allow manual trigger
 
 jobs:

@@ -7,12 +7,19 @@ on:
         description: "System to build, test, and run examples for"
         required: true
         type: string
+
       runs-on:
         description: "Runner to use for this system"
         required: true
         type: string
+
       ref:
         description: "Git ref to checkout"
+        required: false
+        type: string
+
+      nixpkgs-input:
+        description: "An optional nixpkgs input to test against"
         required: false
         type: string
 
@@ -33,6 +40,7 @@ jobs:
       system: ${{ inputs.system }}
       runs-on: ${{ inputs.runs-on }}
       ref: ${{ inputs.ref }}
+      nixpkgs-input: ${{ inputs.nixpkgs-input }}
 
   examples:
     needs: [build, test]
@@ -43,3 +51,4 @@ jobs:
       system: ${{ inputs.system }}
       runs-on: ${{ inputs.runs-on }}
       ref: ${{ inputs.ref }}
+      nixpkgs-input: ${{ inputs.nixpkgs-input }}

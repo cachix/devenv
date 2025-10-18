@@ -11,6 +11,7 @@ on:
       - "mkdocs.yml"
       - "requirements.in"
       - "requirements.txt"
+
   workflow_dispatch:
     inputs:
       ref:
@@ -26,6 +27,7 @@ concurrency:
 jobs:
   pipeline:
     name: pipeline (${{ matrix.system }})
+
     strategy:
       fail-fast: false
       matrix:
@@ -38,6 +40,7 @@ jobs:
             runs-on: '["self-hosted", "macOS", "ARM64"]'
           - system: x86_64-darwin
             runs-on: '["macos-15-intel"]'
+
     uses: ./.github/workflows/release-per-system.yml
     secrets: inherit
     with:

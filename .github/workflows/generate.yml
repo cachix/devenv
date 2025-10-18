@@ -15,6 +15,7 @@ jobs:
         with:
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
       - uses: cachix/cachix-action@v16
         with:
           name: devenv
@@ -28,6 +29,7 @@ jobs:
 
       - name: Generate doc options
         run: devenv shell devenv-generate-doc-options
+
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}
         with:
@@ -37,6 +39,7 @@ jobs:
 
       - name: Verify individual docs
         run: devenv shell devenv-verify-individual-docs
+
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}
         with:
@@ -49,6 +52,7 @@ jobs:
           devenv shell devenv-generate-docs
           devenv shell devenv-generate-languages-example
           devenv shell devenv-generate-individual-docs
+
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}
         with:
@@ -58,6 +62,7 @@ jobs:
 
       - name: Generate JSON schema
         run: devenv generate-json-schema
+
       - uses: EndBug/add-and-commit@v9
         if: ${{ github.event_name == 'push' }}
         with:

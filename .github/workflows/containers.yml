@@ -8,6 +8,7 @@ on:
         description: "Git revision (tag, commit, or branch) to build from"
         required: false
         type: string
+
   workflow_dispatch:
     inputs:
       ref:
