@@ -4,3 +4,14 @@
 /roadmap/ /blog/2024/10/22/devenv-is-switching-its-nix-implementation-to-tvix/ 302
 /discord https://discord.gg/naMgvexb6q 302
 /guides/profiles /profiles 302
+/common-patterns/#getting-a-recent-version-of-a-package-from-nixpkgs-unstable /recipes/nix/#getting-a-recent-version-of-a-package-from-nixpkgs-unstable 302
+/common-patterns/#how-do-i-contribute-a-package-or-a-fix-to-nixpkgs /recipes/nix/#how-do-i-contribute-a-package-or-a-fix-to-nixpkgs 302
+/common-patterns/#add-a-directory-to-path /recipes/nix/#escape-nix-curly-braces-inside-shell-scripts 302
+/common-patterns/#escape-nix-curly-braces-inside-shell-scripts /recipes/nix/#escape-nix-curly-braces-inside-shell-scripts 302
+/common-patterns/#exclude-packages-from-a-container /recipes/containers/#exclude-packages-from-a-container 302
+/common-patterns/#configure-the-shell-based-on-the-current-machine /recipes/cross-platform/#configure-the-shell-based-on-the-current-machine 302
+/common-patterns/#advanced-conditional-configuration-with-mkif-and-mkmerge /recipes/cross-platform/#advanced-conditional-configuration-with-mkif-and-mkmerge 302
+/common-patterns/#link-against-macos-system-frameworks /recipes/macos/#link-against-macos-system-frameworks 302
+/common-patterns/#run-x86-binaries-on-apple-silicon-with-rosetta /recipes/macos/#run-x86-binaries-on-apple-silicon-with-rosetta 302
+/common-patterns/#compile-x86-dependencies-on-arm-macs-via-rosetta /recipes/macos/#compile-x86-dependencies-on-arm-macs-via-rosetta 302
+/common-patterns /recipes 302

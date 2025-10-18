@@ -39,7 +39,11 @@ nav:
     - Examples: examples.md
     - Editor support: editor-support
   - Reference: reference
-  - Recipes: common-patterns.md
+  - Recipes:
+    - Nix: recipes/nix.md
+    - Containers: recipes/containers.md
+    - Cross-platform: recipes/cross-platform.md
+    - macOS: recipes/macos.md
   - Blog: blog
   - Roadmap:
       # XXX: Override the title to prevent the full blog title from appearing in the nav
