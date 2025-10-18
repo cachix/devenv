@@ -1,23 +1,27 @@
 # Packages
 
-Packages allow you to expose executables and libraries/headers in your environment.
+Packages allow you to add executables and libraries/headers to your environment.
 
 To declare packages, refer to the `pkgs` input and specify `packages` as a list:
+Add packages to the `packages` list
 
 ```nix title="devenv.nix"
 { pkgs, ... }:
 
 {
-  packages = [ 
-    pkgs.git 
+  packages = [
+    # Executables
+    pkgs.git
     pkgs.jq
+    # Libraries
     pkgs.libffi
     pkgs.zlib
   ];
 }
 ```
 
-If you activate your enviroment, you should have tools available:
+Packages are added to the PATH when you activate the shell:
+
 ```shell-session
 $ jq
 jq: command not found
@@ -30,7 +34,7 @@ Entering shell ...
 jq-1.6
 ```
 
-To add unstable packages see [Common patterns](common-patterns.md).
+If you need a newer (or older) version of a certain package, you can [fetch them from another nixpkgs input](recipes/nix.md).
 
 ## Searching
 
@@ -50,8 +54,7 @@ No options found for 'ncdu'.
 Found 3 packages and 0 options for 'ncdu'.
 ```
 
-This will search [available packages](https://search.nixos.org/packages?channel=unstable&query=ncdu)
-for the exact pinned version of Nixpkgs input in your ``devenv.lock``.
+This will search [available packages](https://search.nixos.org/packages?channel=unstable&query=ncdu) for the exact pinned version of Nixpkgs input in your ``devenv.lock``.
 
 ## Searching for a file
 

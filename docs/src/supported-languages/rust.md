@@ -129,7 +129,7 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 
 ### Git hooks
 
-Rust tools integrate seamlessly with [git hooks](/reference/options/#git-hookshooks):
+Rust tools integrate seamlessly with [git hooks](/reference/options.md#git-hookshooks):
 
 ```nix
 {

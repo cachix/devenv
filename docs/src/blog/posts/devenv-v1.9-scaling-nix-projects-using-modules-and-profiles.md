@@ -7,7 +7,7 @@ draft: false
 
 # devenv 1.9: Scaling Nix projects using modules and profiles
 
-[Profiles](/profiles/) are a new way to organize and selectively activate parts of development environment.
+[Profiles][profiles] are a new way to organize and selectively activate parts of development environment.
 
 While we try [our best to ship sane defaults for languages and services](https://en.wikipedia.org/wiki/Convention_over_configuration), each team has its own preferences. We're [still working on uniform interface for language configuration](https://github.com/cachix/devenv/pull/1974) so you'll be able to customize each bit of the environment.
 
@@ -172,10 +172,13 @@ Containers are likely to get a simplification redesign, as we've learned a lot s
 
 ## Getting Started
 
-New to devenv? Start with the [getting started guide](/getting-started/) to learn the basics.
+New to devenv? Start with the [getting started guide][getting-started] to learn the basics.
 
-Check out the [profiles documentation](/profiles) for complete examples.
+Check out the [profiles documentation][profiles] for complete examples.
 
 Join the [devenv Discord community](https://discord.gg/naMgvexb6q) to share how your team uses profiles!
 
 Domen
+
+[getting-started]: /getting-started.md
+[profiles]: /profiles.md

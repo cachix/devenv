@@ -97,8 +97,10 @@ allowUnfree: true
 
 ## Monorepo guide
 
-Check out the new [Monorepo Guide](/guides/monorepo/) for detailed examples and patterns.
+Check out the new [Monorepo Guide][monorepo] for detailed examples and patterns.
 
 Join the [devenv community](https://discord.gg/naMgvexb6q) to share your monorepo experience!
 
 Domen
+
+[monorepo]: /guides/monorepo.md

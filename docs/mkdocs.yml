@@ -8,9 +8,9 @@ docs_dir: "src"
 strict: true
 validation:
   omitted_files: warn
-  absolute_links: info # Or 'relative_to_docs' - new in MkDocs 1.6
+  absolute_links: relative_to_docs
   unrecognized_links: warn
-  anchors: warn # New in MkDocs 1.6
+  anchors: warn
 extra_css:
   - assets/top-level.css
 extra_javascript:
