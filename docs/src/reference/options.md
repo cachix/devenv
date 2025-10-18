@@ -16901,7 +16901,7 @@ package
 
 
 *Default:*
-` pkgs.ruby_3_1 `
+` pkgs.ruby_3 `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/ruby.nix)
