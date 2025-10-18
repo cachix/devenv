@@ -16,8 +16,8 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.ruby_3;
-      defaultText = lib.literalExpression "pkgs.ruby_3";
+      default = pkgs.ruby;
+      defaultText = lib.literalExpression "pkgs.ruby";
       description = "The Ruby package to use.";
     };
 
