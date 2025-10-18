@@ -3,7 +3,7 @@
 {
   languages.php = {
     enable = true;
-    version = "8.1";
+    version = "8.4";
     ini = ''
       memory_limit = 256M
     '';
