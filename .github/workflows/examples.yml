@@ -3,6 +3,12 @@ name: "Examples"
 on:
   workflow_call:
     inputs:
+      repository:
+        description: "Repository to checkout"
+        required: false
+        type: string
+        default: ${{ github.repository }}
+
       ref:
         description: "Git ref to checkout"
         required: false
@@ -34,6 +40,7 @@ jobs:
       - name: Checkout base repo
         uses: actions/checkout@v5
         with:
+          repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
 
       - name: Install Nix
@@ -74,6 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          repository: ${{ inputs.repository }}
           ref: ${{ inputs.ref }}
 
       - name: Install Nix
