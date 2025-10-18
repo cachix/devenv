@@ -14,4 +14,4 @@
 /common-patterns/#link-against-macos-system-frameworks /recipes/macos/#link-against-macos-system-frameworks 302
 /common-patterns/#run-x86-binaries-on-apple-silicon-with-rosetta /recipes/macos/#run-x86-binaries-on-apple-silicon-with-rosetta 302
 /common-patterns/#compile-x86-dependencies-on-arm-macs-via-rosetta /recipes/macos/#compile-x86-dependencies-on-arm-macs-via-rosetta 302
-/common-patterns /recipes 302
+/common-patterns /recipes/nix 302
