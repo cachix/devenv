@@ -337,8 +337,8 @@ async fn run_tests_in_directory(args: &RunArgs) -> Result<Vec<TestResult>> {
             (devenv_root, devenv_dotfile, Some(tmpdir))
         } else {
             // Run tests directly in the test directory
-            let devenv_root = path.to_path_buf();
-            let devenv_dotfile = path.join(".devenv");
+            let devenv_root = cwd.join(path);
+            let devenv_dotfile = devenv_root.join(".devenv");
 
             env::set_current_dir(&devenv_root).into_diagnostic()?;
 
