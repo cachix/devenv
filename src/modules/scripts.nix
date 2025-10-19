@@ -49,23 +49,21 @@ let
             then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
             else pkgs.lib.getExe config.package;
 
-          execScript = pkgs.writeScript "${name}-script" (
+          execScript =
             if builtins.isPath config.exec
-            then ''
-              #!${binary}
-              ${builtins.readFile config.exec}
-            ''
-            else ''
-              #!${binary}
-              ${config.exec}
-            ''
-          );
+            then config.exec
+            else pkgs.writeScript "${name}-script" config.exec;
+
+          # Prepare PATH with any additional packages
+          setupPath = lib.optionalString (config.packages != []) ''
+            PATH="${pkgs.lib.makeBinPath config.packages}:$PATH"
+          '';
         in
         lib.hiPrioSet (
           pkgs.writeScriptBin name ''
-            #!${lib.getExe pkgs.bashInteractive}
-            export PATH=${pkgs.lib.makeBinPath config.packages}:$PATH
-            exec ${execScript} "$@"
+            #!${pkgs.bash}/bin/sh
+            ${setupPath}
+            ${binary} ${execScript} "$@"
           ''
         );
     }
