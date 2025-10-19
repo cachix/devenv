@@ -135,7 +135,7 @@
               allowSubstitutes = false;
             });
 
-          options = pkgs.nixosOptionsDoc (
+          optionsDoc = pkgs.nixosOptionsDoc (
             {
               options = filterOptions filterGitHooks (builtins.removeAttrs options [ "_module" ]);
               transformOptions = opt: (opt // { declarations = map rewriteSource opt.declarations; });
@@ -143,11 +143,11 @@
             // docOpts
           );
         in
-        options
+        optionsDoc
         // {
-          optionsAsciiDoc = disableSubstitutes options.optionsAsciiDoc;
-          optionsJSON = disableSubstitutes options.optionsJSON;
-          optionsCommonMark = disableSubstitutes options.optionsCommonMark;
+          optionsAsciiDoc = disableSubstitutes optionsDoc.optionsAsciiDoc;
+          optionsJSON = disableSubstitutes optionsDoc.optionsJSON;
+          optionsCommonMark = disableSubstitutes optionsDoc.optionsCommonMark;
         };
     in
     {
