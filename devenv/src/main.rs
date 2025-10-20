@@ -216,7 +216,11 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
             command: ProcessesCommand::Down {},
         } => devenv.down().await,
         Commands::Tasks { command } => match command {
-            TasksCommand::Run { tasks, mode } => devenv.tasks_run(tasks, mode).await,
+            TasksCommand::Run {
+                tasks,
+                mode,
+                show_output,
+            } => devenv.tasks_run(tasks, mode, show_output).await,
             TasksCommand::List {} => devenv.tasks_list().await,
         },
         Commands::Inputs { command } => match command {

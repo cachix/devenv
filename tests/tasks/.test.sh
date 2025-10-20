@@ -65,5 +65,32 @@ if devenv tasks run test:python-error 2>&1; then
 fi
 echo "✓ Python error handling works"
 
+# Test: showOutput option displays output
+OUTPUT=$(devenv tasks run test:with-output 2>&1)
+if ! echo "$OUTPUT" | grep -q "VISIBLE_OUTPUT_MARKER"; then
+  echo "FAIL: test:with-output should show output but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+echo "✓ showOutput=true displays output"
+
+# Test: without showOutput hides output
+OUTPUT=$(devenv tasks run test:without-output 2>&1)
+if echo "$OUTPUT" | grep -q "HIDDEN_OUTPUT_MARKER"; then
+  echo "FAIL: test:without-output should hide output but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+echo "✓ showOutput=false hides output"
+
+# Test: --show-output flag overrides and shows output
+OUTPUT=$(devenv tasks run test:without-output --show-output 2>&1)
+if ! echo "$OUTPUT" | grep -q "HIDDEN_OUTPUT_MARKER"; then
+  echo "FAIL: --show-output flag should show output but didn't"
+  echo "Got output: $OUTPUT"
+  exit 1
+fi
+echo "✓ --show-output flag displays output"
+
 echo ""
 echo "All task tests passed!"

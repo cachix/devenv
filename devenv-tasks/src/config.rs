@@ -22,6 +22,8 @@ pub struct TaskConfig {
     pub inputs: Option<serde_json::Value>,
     #[serde(default)]
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub show_output: bool,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, clap::ValueEnum)]

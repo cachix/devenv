@@ -137,6 +137,8 @@ pub struct TaskConfig {
     pub status: Option<String>,
     pub exec_if_modified: Vec<String>,
     pub inputs: Option<serde_json::Value>,
+    #[serde(default)]
+    pub show_output: bool,
 }
 
 /// Execution mode determining which tasks to run
