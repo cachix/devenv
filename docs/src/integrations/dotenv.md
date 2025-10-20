@@ -1,3 +1,14 @@
+!!! danger "The `.env` file leaks into `nix` store"
+
+    When you use the `.env` file to store secrets, beware that this
+    integration copies these secrets (the entire `.env` file actually)
+    into the `nix` store. Depending on your threat model, this can leak
+    your secrets publicly: anybody with read-access to your `nix` store
+    (any user on a typical nixos setup) can read your secrets.
+
+    The new [SecretSpec][secretspec] integration does not suffer from
+    this problem.
+
 !!! tip "Consider SecretSpec for new projects"
 
     For new projects, consider using [SecretSpec][secretspec] instead of `.env` files. SecretSpec provides:
