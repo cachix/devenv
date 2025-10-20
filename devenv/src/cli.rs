@@ -63,7 +63,9 @@ pub struct GlobalOptions {
     pub log_format: LogFormat,
 
     #[arg(short = 'j', long,
-        global = true, help = "Maximum number of Nix builds at any time.",
+        global = true,
+        env = "DEVENV_MAX_JOBS",
+        help = "Maximum number of Nix builds to run concurrently.",
         default_value_t = NixBuildDefaults::compute().max_jobs)]
     pub max_jobs: u8,
 
@@ -71,7 +73,8 @@ pub struct GlobalOptions {
         short = 'u',
         long,
         global = true,
-        help = "Maximum number CPU cores being used by a single build.",
+        env = "DEVENV_CORES",
+        help = "Number of CPU cores available to each build.",
         default_value_t = NixBuildDefaults::compute().cores
     )]
     pub cores: u8,
