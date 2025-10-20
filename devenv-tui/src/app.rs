@@ -21,29 +21,28 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         move |event| {
             if let TerminalEvent::Key(key_event) = event
                 && key_event.kind != KeyEventKind::Release
-                    && let Ok(mut model_guard) = model.lock() {
-                        match key_event.code {
-                            KeyCode::Char('c')
-                                if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
-                            {
-                                model_guard.app_state = AppState::Shutdown;
-                            }
-                            KeyCode::Down => {
-                                model_guard.select_next_build();
-                            }
-                            KeyCode::Up => {
-                                model_guard.select_previous_build();
-                            }
-                            KeyCode::Esc => {
-                                model_guard.ui.selected_activity = None;
-                            }
-                            KeyCode::Char('e') => {
-                                model_guard.ui.view_options.show_expanded_logs =
-                                    !model_guard.ui.view_options.show_expanded_logs;
-                            }
-                            _ => {}
-                        }
+                && let Ok(mut model_guard) = model.lock()
+            {
+                match key_event.code {
+                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        model_guard.app_state = AppState::Shutdown;
                     }
+                    KeyCode::Down => {
+                        model_guard.select_next_build();
+                    }
+                    KeyCode::Up => {
+                        model_guard.select_previous_build();
+                    }
+                    KeyCode::Esc => {
+                        model_guard.ui.selected_activity = None;
+                    }
+                    KeyCode::Char('e') => {
+                        model_guard.ui.view_options.show_expanded_logs =
+                            !model_guard.ui.view_options.show_expanded_logs;
+                    }
+                    _ => {}
+                }
+            }
         }
     });
 
@@ -83,7 +82,7 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
     // Render the view
     let model_clone = model.clone();
-    
+
     if let Ok(model_guard) = model_clone.lock() {
         element! {
             View(width: terminal_width) {

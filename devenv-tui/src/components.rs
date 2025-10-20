@@ -76,14 +76,15 @@ impl HierarchyPrefixComponent {
 
         // Show spinner for top-level items (depth == 0)
         if self.depth == 0
-            && let Some(ref spinner_char) = self.spinner {
-                prefix_children.push(
-                    element!(View(margin_right: 1) {
-                        Text(content: spinner_char, color: COLOR_ACTIVE)
-                    })
-                    .into_any(),
-                );
-            }
+            && let Some(ref spinner_char) = self.spinner
+        {
+            prefix_children.push(
+                element!(View(margin_right: 1) {
+                    Text(content: spinner_char, color: COLOR_ACTIVE)
+                })
+                .into_any(),
+            );
+        }
 
         prefix_children
     }
@@ -359,17 +360,18 @@ impl<'a> DownloadActivityComponent<'a> {
                         .with_speed(speed);
                 elements.push(progress_bar.render(terminal_width));
             } else if let Some(progress) = &self.activity.progress
-                && progress.total.unwrap_or(0) > 0 {
-                    let current = progress.current.unwrap_or(0);
-                    let total = progress.total.unwrap_or(1);
-                    let percent = (current as f64 / total as f64 * 100.0) as u8;
-                    let human_done = current.human_count_bytes().to_string();
-                    let human_expected = total.human_count_bytes().to_string();
+                && progress.total.unwrap_or(0) > 0
+            {
+                let current = progress.current.unwrap_or(0);
+                let total = progress.total.unwrap_or(1);
+                let percent = (current as f64 / total as f64 * 100.0) as u8;
+                let human_done = current.human_count_bytes().to_string();
+                let human_expected = total.human_count_bytes().to_string();
 
-                    let progress_bar =
-                        ProgressBarComponent::new(percent, human_done, human_expected, indent);
-                    elements.push(progress_bar.render(terminal_width));
-                }
+                let progress_bar =
+                    ProgressBarComponent::new(percent, human_done, human_expected, indent);
+                elements.push(progress_bar.render(terminal_width));
+            }
         }
 
         element! {
@@ -507,32 +509,33 @@ impl<'a> BuildLogsComponent<'a> {
         };
 
         if let Some(logs) = &self.logs
-            && !logs.is_empty() {
-                // Take the last N lines that fit in viewport
-                let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
+            && !logs.is_empty()
+        {
+            // Take the last N lines that fit in viewport
+            let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
 
-                if !log_lines.is_empty() {
-                    // Use actual number of log lines, not fixed viewport height
-                    let actual_height = log_lines.len();
+            if !log_lines.is_empty() {
+                // Use actual number of log lines, not fixed viewport height
+                let actual_height = log_lines.len();
 
-                    // Create elements for all log lines
-                    let mut log_elements = vec![];
-                    for line in log_lines {
-                        log_elements.push(element! {
+                // Create elements for all log lines
+                let mut log_elements = vec![];
+                for line in log_lines {
+                    log_elements.push(element! {
                             View(height: 1, flex_direction: FlexDirection::Row, padding_left: 2, padding_right: 1) {
                                 Text(content: line.clone(), color: Color::AnsiValue(245))
                             }
                         }.into_any());
-                    }
+                }
 
-                    // Return a single container with actual height of log lines
-                    return vec![element! {
+                // Return a single container with actual height of log lines
+                return vec![element! {
                         View(height: actual_height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
                             #(log_elements)
                         }
                     }.into_any()];
-                }
             }
+        }
 
         // Fallback: show "no logs" message with minimal height
         vec![element! {
@@ -551,12 +554,13 @@ impl<'a> BuildLogsComponent<'a> {
         };
 
         if let Some(logs) = &self.logs
-            && !logs.is_empty() {
-                let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
-                if !log_lines.is_empty() {
-                    return log_lines.len();
-                }
+            && !logs.is_empty()
+        {
+            let log_lines: Vec<_> = logs.iter().rev().take(max_viewport_height).rev().collect();
+            if !log_lines.is_empty() {
+                return log_lines.len();
             }
+        }
 
         // Fallback: minimal height for "no logs" message
         1

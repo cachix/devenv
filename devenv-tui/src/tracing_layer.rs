@@ -3,6 +3,7 @@ use crate::model::{
     Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, ProgressActivity,
     QueryActivity,
 };
+use crate::tracing_interface::{nix_fields, operation_fields, operation_types};
 use crate::{LogLevel, LogSource, NixActivityState, OperationId, OperationResult};
 use rand;
 use std::collections::HashMap;
@@ -112,23 +113,22 @@ where
             }
         }
 
-        // Handle spans with devenv.ui.message or devenv.user_message (backward compatibility)
-        let has_ui_message = visitor.fields.contains_key("devenv.ui.message")
-            || visitor.fields.contains_key("devenv.user_message");
-        if has_ui_message {
-            let operation_id = visitor
-                .fields
-                .get("devenv.ui.id")
-                .cloned()
-                .unwrap_or_else(|| format!("{}:{}", metadata.name(), id.into_u64()));
-            let operation_id = OperationId::new(operation_id);
+        // Handle spans with operation.type (standardized interface)
+        let operation_type = visitor.fields.get(operation_fields::TYPE);
+        if let Some(op_type) = operation_type {
+            let operation_id = OperationId::new(format!("{}:{}", metadata.name(), id.into_u64()));
 
-            let message = visitor
+            let operation_name = visitor
                 .fields
-                .get("devenv.ui.message")
-                .or_else(|| visitor.fields.get("devenv.user_message"))
-                .unwrap_or(&metadata.name().to_string())
-                .clone();
+                .get(operation_fields::NAME)
+                .cloned()
+                .unwrap_or_else(|| metadata.name().to_string());
+
+            let short_name = visitor
+                .fields
+                .get(operation_fields::SHORT_NAME)
+                .cloned()
+                .unwrap_or_else(|| operation_name.clone());
 
             // Find parent operation if any
             let parent = span
@@ -138,159 +138,126 @@ where
             // Store operation ID in span extensions for children to find
             span.extensions_mut().insert(operation_id.clone());
 
-            // Handle specific Nix event types
-            let target = metadata.target();
-            match target {
-                "devenv.nix.build" if metadata.name() == "nix_derivation_start" => {
-                    if let (Some(derivation_path), Some(derivation_name)) = (
-                        visitor.fields.get("derivation_path"),
-                        visitor.fields.get("derivation_name"),
-                    ) {
-                        let machine = visitor.fields.get("machine").cloned();
-                        let activity_id = visitor
-                            .fields
-                            .get("activity_id")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
-
-                        // Store activity_id in span extensions for later retrieval
-                        span.extensions_mut().insert(activity_id);
-
-                        let derivation_path_clone = derivation_path.clone();
-                        let derivation_name_clone = derivation_name.clone();
-                        let operation_id_clone = operation_id.clone();
-
-                        self.update_model(|model| {
-                            let activity = Activity {
-                                id: activity_id,
-                                operation_id: operation_id_clone,
-                                name: derivation_path_clone,
-                                short_name: derivation_name_clone,
-                                parent_operation: None, // Let model handle this complex lookup
-                                start_time: Instant::now(),
-                                state: NixActivityState::Active,
-                                detail: machine.map(|m| format!("machine: {}", m)),
-                                variant: ActivityVariant::Build(BuildActivity {
-                                    phase: None,
-                                    log_stdout_lines: Vec::new(),
-                                    log_stderr_lines: Vec::new(),
-                                }),
-                                progress: None,
-                            };
-                            model.add_activity(activity);
-                        });
-                    }
-                }
-                "devenv.nix.download" if metadata.name() == "nix_download_start" => {
-                    if let (Some(store_path), Some(package_name), Some(substituter)) = (
-                        visitor.fields.get("store_path"),
-                        visitor.fields.get("package_name"),
-                        visitor.fields.get("substituter"),
-                    ) {
-                        let activity_id = visitor
-                            .fields
-                            .get("activity_id")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
-
-                        // Store activity_id in span extensions for later retrieval
-                        span.extensions_mut().insert(activity_id);
-
-                        let store_path_clone = store_path.clone();
-                        let package_name_clone = package_name.clone();
-                        let substituter_clone = substituter.clone();
-                        let operation_id_clone = operation_id.clone();
-
-                        self.update_model(|model| {
-                            let activity = Activity {
-                                id: activity_id,
-                                operation_id: operation_id_clone.clone(),
-                                name: store_path_clone,
-                                short_name: package_name_clone,
-                                parent_operation: model
-                                    .operations
-                                    .get(&operation_id_clone)
-                                    .and_then(|op| op.parent.clone()),
-                                start_time: Instant::now(),
-                                state: NixActivityState::Active,
-                                detail: None,
-                                variant: ActivityVariant::Download(DownloadActivity {
-                                    size_current: Some(0),
-                                    size_total: None,
-                                    speed: Some(0),
-                                    substituter: Some(substituter_clone),
-                                }),
-                                progress: None,
-                            };
-                            model.activities.insert(activity_id, activity);
-                        });
-                    }
-                }
-                "devenv.nix.query" if metadata.name() == "nix_query_start" => {
-                    if let (Some(store_path), Some(package_name), Some(substituter)) = (
-                        visitor.fields.get("store_path"),
-                        visitor.fields.get("package_name"),
-                        visitor.fields.get("substituter"),
-                    ) {
-                        let activity_id = visitor
-                            .fields
-                            .get("activity_id")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
-
-                        // Store activity_id in span extensions for later retrieval
-                        span.extensions_mut().insert(activity_id);
-
-                        // Query events are treated similar to download events but with query activity type
-                        let store_path_clone = store_path.clone();
-                        let package_name_clone = package_name.clone();
-                        let substituter_clone = substituter.clone();
-                        let operation_id_clone = operation_id.clone();
-
-                        self.update_model(|model| {
-                            let activity = Activity {
-                                id: activity_id,
-                                operation_id: operation_id_clone.clone(),
-                                name: store_path_clone,
-                                short_name: package_name_clone,
-                                parent_operation: model
-                                    .operations
-                                    .get(&operation_id_clone)
-                                    .and_then(|op| op.parent.clone()),
-                                start_time: Instant::now(),
-                                state: NixActivityState::Active,
-                                detail: None,
-                                variant: ActivityVariant::Query(QueryActivity {
-                                    substituter: Some(substituter_clone),
-                                }),
-                                progress: None,
-                            };
-                            model.activities.insert(activity_id, activity);
-                        });
-                    }
-                }
-                "devenv.nix.fetch" if metadata.name() == "fetch_tree_start" => {
+            // Handle specific operation types based on standardized operation.type field
+            match op_type.as_str() {
+                op_type_str if op_type_str == operation_types::BUILD => {
+                    let derivation = visitor.fields.get(operation_fields::DERIVATION).cloned();
+                    let machine = visitor.fields.get(operation_fields::MACHINE).cloned();
                     let activity_id = visitor
                         .fields
-                        .get("activity_id")
+                        .get(nix_fields::ACTIVITY_ID)
                         .and_then(|s| s.parse::<u64>().ok())
                         .unwrap_or(0);
 
                     // Store activity_id in span extensions for later retrieval
                     span.extensions_mut().insert(activity_id);
 
-                    let message_clone = message.clone();
-                    let operation_id_clone = operation_id.clone();
+                    self.update_model(|model| {
+                        let activity = Activity {
+                            id: activity_id,
+                            operation_id: operation_id.clone(),
+                            name: derivation.clone().unwrap_or_else(|| operation_name.clone()),
+                            short_name: short_name.clone(),
+                            parent_operation: None, // Let model handle this complex lookup
+                            start_time: Instant::now(),
+                            state: NixActivityState::Active,
+                            detail: machine.as_ref().map(|m| format!("machine: {}", m)),
+                            variant: ActivityVariant::Build(BuildActivity {
+                                phase: None,
+                                log_stdout_lines: Vec::new(),
+                                log_stderr_lines: Vec::new(),
+                            }),
+                            progress: None,
+                        };
+                        model.add_activity(activity);
+                    });
+                }
+                op_type_str if op_type_str == operation_types::DOWNLOAD => {
+                    let store_path = visitor.fields.get(operation_fields::STORE_PATH).cloned();
+                    let substituter = visitor.fields.get(operation_fields::SUBSTITUTER).cloned();
+                    let activity_id = visitor
+                        .fields
+                        .get(nix_fields::ACTIVITY_ID)
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0);
+
+                    // Store activity_id in span extensions for later retrieval
+                    span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
                         let activity = Activity {
                             id: activity_id,
-                            operation_id: operation_id_clone.clone(),
-                            name: message_clone.clone(),
-                            short_name: message_clone,
+                            operation_id: operation_id.clone(),
+                            name: store_path.clone().unwrap_or_else(|| operation_name.clone()),
+                            short_name: short_name.clone(),
                             parent_operation: model
                                 .operations
-                                .get(&operation_id_clone)
+                                .get(&operation_id)
+                                .and_then(|op| op.parent.clone()),
+                            start_time: Instant::now(),
+                            state: NixActivityState::Active,
+                            detail: None,
+                            variant: ActivityVariant::Download(DownloadActivity {
+                                size_current: Some(0),
+                                size_total: None,
+                                speed: Some(0),
+                                substituter,
+                            }),
+                            progress: None,
+                        };
+                        model.activities.insert(activity_id, activity);
+                    });
+                }
+                op_type_str if op_type_str == operation_types::QUERY => {
+                    let store_path = visitor.fields.get(operation_fields::STORE_PATH).cloned();
+                    let substituter = visitor.fields.get(operation_fields::SUBSTITUTER).cloned();
+                    let activity_id = visitor
+                        .fields
+                        .get(nix_fields::ACTIVITY_ID)
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0);
+
+                    // Store activity_id in span extensions for later retrieval
+                    span.extensions_mut().insert(activity_id);
+
+                    self.update_model(|model| {
+                        let activity = Activity {
+                            id: activity_id,
+                            operation_id: operation_id.clone(),
+                            name: store_path.clone().unwrap_or_else(|| operation_name.clone()),
+                            short_name: short_name.clone(),
+                            parent_operation: model
+                                .operations
+                                .get(&operation_id)
+                                .and_then(|op| op.parent.clone()),
+                            start_time: Instant::now(),
+                            state: NixActivityState::Active,
+                            detail: None,
+                            variant: ActivityVariant::Query(QueryActivity { substituter }),
+                            progress: None,
+                        };
+                        model.activities.insert(activity_id, activity);
+                    });
+                }
+                op_type_str if op_type_str == operation_types::FETCH_TREE => {
+                    let activity_id = visitor
+                        .fields
+                        .get(nix_fields::ACTIVITY_ID)
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0);
+
+                    // Store activity_id in span extensions for later retrieval
+                    span.extensions_mut().insert(activity_id);
+
+                    self.update_model(|model| {
+                        let activity = Activity {
+                            id: activity_id,
+                            operation_id: operation_id.clone(),
+                            name: operation_name.clone(),
+                            short_name: short_name.clone(),
+                            parent_operation: model
+                                .operations
+                                .get(&operation_id)
                                 .and_then(|op| op.parent.clone()),
                             start_time: Instant::now(),
                             state: NixActivityState::Active,
@@ -301,89 +268,58 @@ where
                         model.activities.insert(activity_id, activity);
                     });
                 }
-                "devenv.nix.eval" if metadata.name() == "nix_evaluation_start" => {
-                    if let Some(file_path) = visitor.fields.get("file_path") {
-                        let activity_id = visitor
-                            .fields
-                            .get("activity_id")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or_else(rand::random); // Generate if not provided
+                op_type_str if op_type_str == operation_types::EVALUATE => {
+                    let activity_id = visitor
+                        .fields
+                        .get(nix_fields::ACTIVITY_ID)
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or_else(rand::random);
 
-                        let total_files_evaluated = visitor
-                            .fields
-                            .get("total_files_evaluated")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
-
-                        // Store activity_id in span extensions for later retrieval
-                        span.extensions_mut().insert(activity_id);
-
-                        let file_path_clone = file_path.clone();
-                        let operation_id_clone = operation_id.clone();
-
-                        // Create evaluation activity
-                        self.update_model(|model| {
-                            let activity = Activity {
-                                id: activity_id,
-                                operation_id: operation_id_clone.clone(),
-                                name: format!("Evaluating {}", file_path_clone),
-                                short_name: "Evaluation".to_string(),
-                                parent_operation: model
-                                    .operations
-                                    .get(&operation_id_clone)
-                                    .and_then(|op| op.parent.clone()),
-                                start_time: Instant::now(),
-                                state: NixActivityState::Active,
-                                detail: if total_files_evaluated > 0 {
-                                    Some(format!("{} files", total_files_evaluated))
-                                } else {
-                                    None
-                                },
-                                variant: ActivityVariant::Evaluating,
-                                progress: None,
-                            };
-                            model.activities.insert(activity_id, activity);
-                        });
-                        self.update_model(|model| {
-                            use crate::LogMessage;
-                            let log_msg = LogMessage::new(
-                                LogLevel::Info,
-                                format!("Starting Nix evaluation: {}", file_path),
-                                LogSource::Nix,
-                                HashMap::new(),
-                            );
-                            model.add_log_message(log_msg);
-                        });
-                    }
-                }
-                _ => {
-                    // Default operation start for other UI message spans
-                    let operation_id_clone = operation_id.clone();
-                    let message_clone = message.clone();
-                    let parent_clone = parent.clone();
-                    let data_clone = visitor.fields.clone();
+                    // Store activity_id in span extensions for later retrieval
+                    span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
+                        let activity = Activity {
+                            id: activity_id,
+                            operation_id: operation_id.clone(),
+                            name: operation_name.clone(),
+                            short_name: short_name.clone(),
+                            parent_operation: model
+                                .operations
+                                .get(&operation_id)
+                                .and_then(|op| op.parent.clone()),
+                            start_time: Instant::now(),
+                            state: NixActivityState::Active,
+                            detail: None,
+                            variant: ActivityVariant::Evaluating,
+                            progress: None,
+                        };
+                        model.activities.insert(activity_id, activity);
+                    });
+                }
+                _ => {
+                    // Default operation start for other operation types
+                    self.update_model(|model| {
                         let operation = Operation::new(
-                            operation_id_clone.clone(),
-                            message_clone,
-                            parent_clone.clone(),
-                            data_clone,
+                            operation_id.clone(),
+                            operation_name.clone(),
+                            parent.clone(),
+                            visitor.fields.clone(),
                         );
 
                         // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent_clone {
+                        if let Some(parent_id) = &parent {
                             if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id_clone.clone());
+                                parent_op.children.push(operation_id.clone());
                             }
                         } else {
                             // Root operation - check if already exists
-                            if !model.root_operations.contains(&operation_id_clone) {
-                                model.root_operations.push(operation_id_clone.clone());
+                            if !model.root_operations.contains(&operation_id) {
+                                model.root_operations.push(operation_id.clone());
                             }
                         }
 
-                        model.operations.insert(operation_id_clone, operation);
+                        model.operations.insert(operation_id, operation);
                     });
                 }
             }
@@ -484,114 +420,101 @@ where
 
         // Handle task events from devenv-tasks
         if event.metadata().target().starts_with("devenv_tasks")
-            && let Some(task_name) = visitor.fields.get("task_name") {
-                let task_name = task_name.trim_matches('"').to_string();
+            && let Some(task_name) = visitor.fields.get("task_name")
+        {
+            let task_name = task_name.trim_matches('"').to_string();
 
-                // Check for task status updates
-                if let Some(status) = visitor.fields.get("status") {
-                    let status = status.trim_matches('"').to_string();
-                    let result = visitor
-                        .fields
-                        .get("result")
-                        .map(|r| r.trim_matches('"').to_string());
+            // Check for task status updates
+            if let Some(status) = visitor.fields.get("status") {
+                let status = status.trim_matches('"').to_string();
+                let result = visitor
+                    .fields
+                    .get("result")
+                    .map(|r| r.trim_matches('"').to_string());
 
-                    // Update task status in the model
-                    let task_name_clone = task_name.clone();
-                    let status_clone = status.clone();
-                    let result_clone = result.clone();
+                // Update task status in the model
+                let task_name_clone = task_name.clone();
+                let status_clone = status.clone();
+                let result_clone = result.clone();
 
-                    self.update_model(|model| {
-                        use crate::LogMessage;
-                        let message = if let Some(result) = result_clone {
-                            format!(
-                                "Task '{}' status: {} (result: {})",
-                                task_name_clone, status_clone, result
-                            )
-                        } else {
-                            format!("Task '{}' status: {}", task_name_clone, status_clone)
-                        };
+                self.update_model(|model| {
+                    use crate::LogMessage;
+                    let message = if let Some(result) = result_clone {
+                        format!(
+                            "Task '{}' status: {} (result: {})",
+                            task_name_clone, status_clone, result
+                        )
+                    } else {
+                        format!("Task '{}' status: {}", task_name_clone, status_clone)
+                    };
 
-                        let log_msg = LogMessage::new(
-                            LogLevel::Info,
-                            message,
-                            LogSource::System,
-                            HashMap::new(),
-                        );
-                        model.add_log_message(log_msg);
-                    });
-                }
-
-                // Check for task completion events (with duration and success)
-                if let (Some(duration_secs), Some(success)) = (
-                    visitor.fields.get("duration_secs"),
-                    visitor.fields.get("success"),
-                ) {
-                    let duration_secs: f64 = duration_secs.trim_matches('"').parse().unwrap_or(0.0);
-                    let duration = std::time::Duration::from_secs_f64(duration_secs);
-                    let success = success.trim_matches('"') == "true";
-                    let error = visitor
-                        .fields
-                        .get("error")
-                        .map(|e| e.trim_matches('"').to_string());
-
-                    self.update_model(|model| {
-                        model.handle_task_end(task_name, Some(duration), success, error);
-                    });
-                }
+                    let log_msg =
+                        LogMessage::new(LogLevel::Info, message, LogSource::System, HashMap::new());
+                    model.add_log_message(log_msg);
+                });
             }
+
+            // Check for task completion events (with duration and success)
+            if let (Some(duration_secs), Some(success)) = (
+                visitor.fields.get("duration_secs"),
+                visitor.fields.get("success"),
+            ) {
+                let duration_secs: f64 = duration_secs.trim_matches('"').parse().unwrap_or(0.0);
+                let duration = std::time::Duration::from_secs_f64(duration_secs);
+                let success = success.trim_matches('"') == "true";
+                let error = visitor
+                    .fields
+                    .get("error")
+                    .map(|e| e.trim_matches('"').to_string());
+
+                self.update_model(|model| {
+                    model.handle_task_end(task_name, Some(duration), success, error);
+                });
+            }
+        }
 
         // Handle Nix progress and other events
         let target = event.metadata().target();
         if target.starts_with("devenv.nix.") {
             match target {
                 "devenv.nix.progress" => {
-                    if let (Some(operation_id_str), Some(activity_id_str)) = (
-                        visitor.fields.get("devenv.ui.id"),
-                        visitor.fields.get("activity_id"),
-                    ) {
-                        let _operation_id = OperationId::new(operation_id_str.clone());
+                    if let Some(activity_id_str) = visitor.fields.get("activity_id") {
                         if let Ok(activity_id) = activity_id_str.parse::<u64>()
                             && let (Some(done_str), Some(expected_str)) =
                                 (visitor.fields.get("done"), visitor.fields.get("expected"))
-                                && let (Ok(done), Ok(expected)) =
-                                    (done_str.parse::<u64>(), expected_str.parse::<u64>())
-                                {
-                                    let _running = visitor
-                                        .fields
-                                        .get("running")
-                                        .and_then(|s| s.parse::<u64>().ok())
-                                        .unwrap_or(0);
-                                    let _failed = visitor
-                                        .fields
-                                        .get("failed")
-                                        .and_then(|s| s.parse::<u64>().ok())
-                                        .unwrap_or(0);
+                            && let (Ok(done), Ok(expected)) =
+                                (done_str.parse::<u64>(), expected_str.parse::<u64>())
+                        {
+                            let _running = visitor
+                                .fields
+                                .get("running")
+                                .and_then(|s| s.parse::<u64>().ok())
+                                .unwrap_or(0);
+                            let _failed = visitor
+                                .fields
+                                .get("failed")
+                                .and_then(|s| s.parse::<u64>().ok())
+                                .unwrap_or(0);
 
-                                    self.update_model(|model| {
-                                        if let Some(activity) =
-                                            model.activities.get_mut(&activity_id)
-                                        {
-                                            activity.progress = Some(ProgressActivity {
-                                                current: Some(done),
-                                                total: Some(expected),
-                                                unit: None,
-                                                percent: if expected > 0 {
-                                                    Some((done as f32 / expected as f32) * 100.0)
-                                                } else {
-                                                    None
-                                                },
-                                            });
-                                        }
+                            self.update_model(|model| {
+                                if let Some(activity) = model.activities.get_mut(&activity_id) {
+                                    activity.progress = Some(ProgressActivity {
+                                        current: Some(done),
+                                        total: Some(expected),
+                                        unit: None,
+                                        percent: if expected > 0 {
+                                            Some((done as f32 / expected as f32) * 100.0)
+                                        } else {
+                                            None
+                                        },
                                     });
                                 }
+                            });
+                        }
                     }
                 }
                 "devenv.nix.download" if event.metadata().name() == "nix_download_progress" => {
-                    if let (Some(operation_id_str), Some(activity_id_str)) = (
-                        visitor.fields.get("devenv.ui.id"),
-                        visitor.fields.get("activity_id"),
-                    ) {
-                        let _operation_id = OperationId::new(operation_id_str.clone());
+                    if let Some(activity_id_str) = visitor.fields.get("activity_id") {
                         if let Ok(activity_id) = activity_id_str.parse::<u64>() {
                             let bytes_downloaded = visitor
                                 .fields
@@ -607,23 +530,23 @@ where
                                 if let Some(activity) = model.activities.get_mut(&activity_id)
                                     && let ActivityVariant::Download(ref mut download_activity) =
                                         activity.variant
-                                    {
-                                        // Calculate download speed from previous values
-                                        let speed =
-                                            if let Some(current) = download_activity.size_current {
-                                                let time_delta = 0.1; // Assume ~100ms between updates
-                                                let bytes_delta =
-                                                    bytes_downloaded.saturating_sub(current) as f64;
-                                                (bytes_delta / time_delta) as u64
-                                            } else {
-                                                0
-                                            };
+                                {
+                                    // Calculate download speed from previous values
+                                    let speed =
+                                        if let Some(current) = download_activity.size_current {
+                                            let time_delta = 0.1; // Assume ~100ms between updates
+                                            let bytes_delta =
+                                                bytes_downloaded.saturating_sub(current) as f64;
+                                            (bytes_delta / time_delta) as u64
+                                        } else {
+                                            0
+                                        };
 
-                                        // Update download progress
-                                        download_activity.size_current = Some(bytes_downloaded);
-                                        download_activity.size_total = total_bytes;
-                                        download_activity.speed = Some(speed);
-                                    }
+                                    // Update download progress
+                                    download_activity.size_current = Some(bytes_downloaded);
+                                    download_activity.size_total = total_bytes;
+                                    download_activity.speed = Some(speed);
+                                }
                             });
                         }
                     }
@@ -639,9 +562,9 @@ where
                                 if let Some(activity) = model.activities.get_mut(&activity_id)
                                     && let ActivityVariant::Build(ref mut build_activity) =
                                         activity.variant
-                                    {
-                                        build_activity.phase = Some(phase.clone());
-                                    }
+                                {
+                                    build_activity.phase = Some(phase.clone());
+                                }
                             });
                         }
                     }
@@ -658,41 +581,43 @@ where
                     }
                 }
                 "devenv.nix.eval" if event.metadata().name() == "nix_evaluation_progress" => {
-                    if let (Some(operation_id_str), Some(files_str)) = (
-                        visitor.fields.get("devenv.ui.id"),
+                    if let (Some(activity_id_str), Some(files_str)) = (
+                        visitor.fields.get(nix_fields::ACTIVITY_ID),
                         visitor.fields.get("files"),
                     ) {
-                        let operation_id = OperationId::new(operation_id_str.clone());
-                        let total_files_evaluated = visitor
-                            .fields
-                            .get("total_files_evaluated")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
+                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
+                            let total_files_evaluated = visitor
+                                .fields
+                                .get("total_files_evaluated")
+                                .and_then(|s| s.parse::<u64>().ok())
+                                .unwrap_or(0);
 
-                        // Parse the files array - this is a bit crude but should work
-                        let files: Vec<String> = files_str
-                            .trim_start_matches('[')
-                            .trim_end_matches(']')
-                            .split(", ")
-                            .map(|s| s.trim_matches('"').to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect();
+                            // Parse the files array - this is a bit crude but should work
+                            let files: Vec<String> = files_str
+                                .trim_start_matches('[')
+                                .trim_end_matches(']')
+                                .split(", ")
+                                .map(|s| s.trim_matches('"').to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
 
-                        self.update_model(|model| {
-                            if let Some(operation) = model.operations.get_mut(&operation_id) {
-                                // Since files are in evaluation order, the last one is the most recent
-                                if let Some(latest_file) = files.last() {
-                                    operation.message = latest_file.to_string();
-                                    operation
-                                        .data
-                                        .insert("evaluation_file".to_string(), latest_file.clone());
+                            self.update_model(|model| {
+                                if let Some(activity) = model.activities.get_mut(&activity_id) {
+                                    // Update progress with file count
+                                    activity.progress = Some(ProgressActivity {
+                                        current: Some(total_files_evaluated),
+                                        total: None,
+                                        unit: Some("files".to_string()),
+                                        percent: None,
+                                    });
+
+                                    // Store latest file being evaluated in detail
+                                    if let Some(latest_file) = files.last() {
+                                        activity.detail = Some(latest_file.clone());
+                                    }
                                 }
-                                operation.data.insert(
-                                    "evaluation_count".to_string(),
-                                    total_files_evaluated.to_string(),
-                                );
-                            }
-                        });
+                            });
+                        }
                     }
                 }
                 _ => {}

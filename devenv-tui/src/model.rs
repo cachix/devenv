@@ -304,10 +304,7 @@ impl Model {
 
     /// Add a build log line for an activity
     pub fn add_build_log(&mut self, activity_id: u64, line: String) {
-        let logs = self
-            .build_logs
-            .entry(activity_id)
-            .or_default();
+        let logs = self.build_logs.entry(activity_id).or_default();
 
         if logs.len() >= MAX_LOG_LINES_PER_BUILD {
             logs.pop_front();
