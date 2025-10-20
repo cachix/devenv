@@ -367,7 +367,7 @@ impl TaskState {
                     match result {
                         Ok(Some(line)) => {
                             if self.verbosity == VerbosityLevel::Verbose || is_process {
-                                eprintln!("[{}] {}", self.task.name, line);
+                                println!("[{}] {}", self.task.name, line);
                             }
                             stdout_lines.push((std::time::Instant::now(), line));
                         },
