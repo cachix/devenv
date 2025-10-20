@@ -1,4 +1,5 @@
 pub mod events;
+pub mod tracing_interface;
 pub mod tracing_layer;
 
 // UI modules

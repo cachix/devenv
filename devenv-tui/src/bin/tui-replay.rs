@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog};
+use devenv_tui::tracing_interface::{nix_fields, operation_fields, operation_types, status_events};
 use devenv_tui::{OperationId, init_tui};
 use std::collections::HashMap;
 use std::fs::File;
@@ -11,8 +12,8 @@ use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
-use tracing::{debug_span, info, warn};
 use tracing::span::EnteredSpan;
+use tracing::{info, info_span, warn};
 
 /// Simple replay processor that emits tracing events for Nix logs
 struct NixLogReplayProcessor {
@@ -68,7 +69,7 @@ impl NixLogReplayProcessor {
 
     fn handle_activity_start(
         &self,
-        operation_id: OperationId,
+        _operation_id: OperationId,
         activity_id: u64,
         activity_type: ActivityType,
         text: String,
@@ -91,16 +92,14 @@ impl NixLogReplayProcessor {
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
-                let span = debug_span!(
-                    target: "devenv.nix.build",
-                    "nix_derivation_start",
-                    devenv.ui.message = %derivation_name,
-                    devenv.ui.type = "build",
-                    devenv.ui.id = %operation_id,
-                    activity_id = activity_id,
-                    derivation_path = %derivation_path,
-                    derivation_name = %derivation_name,
-                    machine = ?machine
+                let span = info_span!(
+                    "nix_build",
+                    { operation_fields::TYPE } = operation_types::BUILD,
+                    { operation_fields::NAME } = %derivation_name,
+                    { operation_fields::SHORT_NAME } = %derivation_name,
+                    { operation_fields::DERIVATION } = %derivation_path,
+                    { operation_fields::MACHINE } = ?machine,
+                    { nix_fields::ACTIVITY_ID } = activity_id
                 );
 
                 let entered_span = span.entered();
@@ -114,16 +113,14 @@ impl NixLogReplayProcessor {
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let span = debug_span!(
-                        target: "devenv.nix.download",
-                        "nix_download_start",
-                        devenv.ui.message = %package_name,
-                        devenv.ui.type = "download",
-                        devenv.ui.id = %operation_id,
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
+                    let span = info_span!(
+                        "nix_download",
+                        { operation_fields::TYPE } = operation_types::DOWNLOAD,
+                        { operation_fields::NAME } = %package_name,
+                        { operation_fields::SHORT_NAME } = %package_name,
+                        { operation_fields::STORE_PATH } = %store_path,
+                        { operation_fields::SUBSTITUTER } = %substituter,
+                        { nix_fields::ACTIVITY_ID } = activity_id
                     );
 
                     let entered_span = span.entered();
@@ -138,17 +135,14 @@ impl NixLogReplayProcessor {
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let span = debug_span!(
-                        target: "devenv.nix.query",
-                        "nix_query_start",
-                        devenv.ui.message = %package_name,
-                        devenv.ui.type = "download",
-                        devenv.ui.detail = "query",
-                        devenv.ui.id = %operation_id,
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
+                    let span = info_span!(
+                        "nix_query",
+                        { operation_fields::TYPE } = operation_types::QUERY,
+                        { operation_fields::NAME } = %package_name,
+                        { operation_fields::SHORT_NAME } = %package_name,
+                        { operation_fields::STORE_PATH } = %store_path,
+                        { operation_fields::SUBSTITUTER } = %substituter,
+                        { nix_fields::ACTIVITY_ID } = activity_id
                     );
 
                     let entered_span = span.entered();
@@ -158,15 +152,12 @@ impl NixLogReplayProcessor {
                 }
             }
             ActivityType::FetchTree => {
-                let span = debug_span!(
-                    target: "devenv.nix.fetch",
-                    "fetch_tree_start",
-                    devenv.ui.message = %text,
-                    devenv.ui.type = "download",
-                    devenv.ui.detail = "fetch",
-                    devenv.ui.id = %operation_id,
-                    activity_id = activity_id,
-                    message = %text
+                let span = info_span!(
+                    "fetch_tree",
+                    { operation_fields::TYPE } = operation_types::FETCH_TREE,
+                    { operation_fields::NAME } = %text,
+                    { operation_fields::SHORT_NAME } = %text,
+                    { nix_fields::ACTIVITY_ID } = activity_id
                 );
 
                 let entered_span = span.entered();
@@ -210,9 +201,7 @@ impl NixLogReplayProcessor {
                     // Emit progress event (not a span)
                     tracing::event!(
                         target: "devenv.nix.download",
-                        tracing::Level::DEBUG,
-                        devenv.ui.message = "download progress",
-                        devenv.ui.id = "progress",
+                        tracing::Level::INFO,
                         activity_id = activity_id,
                         bytes_downloaded = *downloaded,
                         total_bytes = ?total_bytes,
@@ -227,11 +216,10 @@ impl NixLogReplayProcessor {
                     // Emit phase change event
                     tracing::event!(
                         target: "devenv.nix.build",
-                        tracing::Level::DEBUG,
-                        devenv.ui.message = "build phase",
-                        devenv.ui.id = "phase",
+                        tracing::Level::INFO,
+                        { operation_fields::PHASE } = phase.as_str(),
+                        { status_events::fields::STATUS } = status_events::ACTIVE,
                         activity_id = activity_id,
-                        phase = phase.as_str(),
                         "Build phase: {}", phase
                     );
                 }
@@ -242,7 +230,6 @@ impl NixLogReplayProcessor {
                     tracing::event!(
                         target: "devenv.nix.build",
                         tracing::Level::INFO,
-                        devenv.ui.message = "build log",
                         activity_id = activity_id,
                         line = %log_line,
                         "Build log: {}", log_line
@@ -394,10 +381,11 @@ async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
     let main_op_id = OperationId::new("replay");
 
     // Start replay operation via tracing - using a span so the TUI layer can capture it
-    let replay_span = debug_span!(
+    let replay_span = info_span!(
         "replay_operation",
-        devenv.ui.message = format!("Replaying {} log entries", entries.len()),
-        devenv.ui.id = %main_op_id,
+        { operation_fields::TYPE } = "replay",
+        { operation_fields::NAME } = format!("Replaying {} log entries", entries.len()),
+        { operation_fields::SHORT_NAME } = "Replay",
     );
     let _guard = replay_span.enter();
 

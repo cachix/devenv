@@ -85,23 +85,25 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         if matches!(
             display_activity.activity.variant,
             ActivityVariant::Download(_)
-        )
-            && let ActivityVariant::Download(ref download_data) = display_activity.activity.variant
+        ) && let ActivityVariant::Download(ref download_data) = display_activity.activity.variant
+        {
+            if download_data.size_current.is_some() && download_data.size_total.is_some() {
+                total_height += 1; // Extra line for progress bar
+            } else if let Some(progress) = &display_activity.activity.progress
+                && progress.total.unwrap_or(0) > 0
             {
-                if download_data.size_current.is_some() && download_data.size_total.is_some() {
-                    total_height += 1; // Extra line for progress bar
-                } else if let Some(progress) = &display_activity.activity.progress
-                    && progress.total.unwrap_or(0) > 0 {
-                        total_height += 1; // Extra line for progress bar
-                    }
+                total_height += 1; // Extra line for progress bar
             }
+        }
 
         // Build activities use early return with custom height - account for it
-        if is_selected && matches!(display_activity.activity.variant, ActivityVariant::Build(_))
-            && let Some(logs) = build_logs.as_ref() {
-                let build_logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
-                total_height += build_logs_component.calculate_height(); // Add actual log height
-            }
+        if is_selected
+            && matches!(display_activity.activity.variant, ActivityVariant::Build(_))
+            && let Some(logs) = build_logs.as_ref()
+        {
+            let build_logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);
+            total_height += build_logs_component.calculate_height(); // Add actual log height
+        }
     }
     let min_height = 3; // Minimum height to show at least a few items
     let dynamic_height = total_height.max(min_height) as u32;
