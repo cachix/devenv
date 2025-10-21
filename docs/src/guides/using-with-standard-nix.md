@@ -82,10 +82,9 @@ let
   flake-compat = import sources.flake-compat;
 in
 {
-  # Shell configs
   shell = devenv {
     inherit pkgs;
-    modules = [ ./nix/shell.nix ];
+    modules = [ ./devenv.nix ];
     inputs = {
       nixpkgs = pkgs;
       rust-overlay = (flake-compat { src = sources.rust-overlay; }).defaultNix;
