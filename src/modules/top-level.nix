@@ -371,10 +371,8 @@ in
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          inherit (config) name;
-          hardeningDisable = config.hardeningDisable;
+          inherit (config) hardeningDisable inputsFrom name;
           inherit buildInputs nativeBuildInputs;
-          inputsFrom = config.inputsFrom;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}
             ${config.enterShell}
