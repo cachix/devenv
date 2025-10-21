@@ -1,98 +1,133 @@
 use crate::error::{CacheError, CacheResult};
-use sqlx::migrate::{MigrateDatabase, Migrator};
-use sqlx::sqlite::{
-    SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
-};
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
 use tracing::{error, trace};
+use turso::Builder;
 
 /// Database connection manager
 #[derive(Debug, Clone)]
 pub struct Database {
-    pool: SqlitePool,
+    db: turso::Database,
     path: PathBuf,
+}
+
+/// Migration definition
+pub struct Migration {
+    pub version: &'static str,
+    pub sql: &'static str,
 }
 
 impl Database {
     /// Create a new database connection with the given path and run migrations
     ///
     /// * `path` - Path to the SQLite database file
-    /// * `migrator` - The migrator containing database migrations to apply
-    pub async fn new(path: PathBuf, migrator: &Migrator) -> CacheResult<Self> {
-        let db_url = format!("sqlite:{}", path.display());
-        let options = connection_options(&db_url)?;
+    /// * `migrations` - The migrations to apply (in order)
+    pub async fn new(path: PathBuf, migrations: &[Migration]) -> CacheResult<Self> {
+        let db = Builder::new_local(path.to_str().ok_or_else(|| {
+            CacheError::InvalidPath(path.clone())
+        })?)
+        .build()
+        .await
+        .map_err(|e| CacheError::Database(e.to_string()))?;
 
-        let pool = SqlitePoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await?;
-
-        let db = Self { pool, path };
+        let database = Self {
+            db: db.clone(),
+            path,
+        };
 
         // Run migrations
         trace!("Running migrations");
 
-        if let Err(err) = migrator.run(&db.pool).await {
+        if let Err(err) = database.run_migrations(migrations).await {
             error!(error = %err, "Failed to migrate the database. Attempting to recreate the database.");
 
-            // Close the existing connection
-            db.pool.close().await;
-
             // Delete and recreate the database
-            sqlx::Sqlite::drop_database(&db_url).await?;
+            if database.path.exists() {
+                std::fs::remove_file(&database.path)?;
+            }
 
-            // Recreate the database and connection pool
-            let options = connection_options(&db_url)?;
-            let new_pool = SqlitePoolOptions::new()
-                .max_connections(5)
-                .connect_with(options)
-                .await?;
+            // Recreate the database
+            let new_db = Builder::new_local(database.path.to_str().ok_or_else(|| {
+                CacheError::InvalidPath(database.path.clone())
+            })?)
+            .build()
+            .await
+            .map_err(|e| CacheError::Database(e.to_string()))?;
 
-            // Create a new database instance with the new pool
-            let new_db = Self {
-                pool: new_pool,
-                path: db.path,
+            let new_database = Self {
+                db: new_db,
+                path: database.path,
             };
 
             // Try migrations again
-            if let Err(e) = migrator.run(&new_db.pool).await {
+            if let Err(e) = new_database.run_migrations(migrations).await {
                 error!("Migration failed after recreating database: {}", e);
-                return Err(CacheError::Database(e.into()));
+                return Err(e);
             }
 
-            return Ok(new_db);
+            return Ok(new_database);
         }
 
-        Ok(db)
+        Ok(database)
     }
 
-    /// Get a reference to the connection pool
-    pub fn pool(&self) -> &SqlitePool {
-        &self.pool
+    /// Run database migrations
+    async fn run_migrations(&self, migrations: &[Migration]) -> CacheResult<()> {
+        // Create migrations table if it doesn't exist
+        let conn = self.db.connect().map_err(|e| CacheError::Database(e.to_string()))?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS _migrations (version TEXT PRIMARY KEY, applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')))",
+            ()
+        )
+        .await
+        .map_err(|e| CacheError::Database(e.to_string()))?;
+
+        // Apply each migration
+        for migration in migrations {
+            // Check if migration was already applied
+            let mut rows = conn
+                .query("SELECT version FROM _migrations WHERE version = ?1", (migration.version,))
+                .await
+                .map_err(|e| CacheError::Database(e.to_string()))?;
+
+            let already_applied = rows.next().await.map_err(|e| CacheError::Database(e.to_string()))?.is_some();
+
+            if !already_applied {
+                trace!("Applying migration: {}", migration.version);
+
+                // Execute migration SQL
+                conn.execute(migration.sql, ())
+                    .await
+                    .map_err(|e| CacheError::Database(format!("Migration {} failed: {}", migration.version, e)))?;
+
+                // Record migration
+                conn.execute(
+                    "INSERT INTO _migrations (version) VALUES (?1)",
+                    (migration.version,)
+                )
+                .await
+                .map_err(|e| CacheError::Database(e.to_string()))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get a reference to the database
+    pub fn db(&self) -> &turso::Database {
+        &self.db
+    }
+
+    /// Get a connection from the database
+    pub fn connect(&self) -> CacheResult<turso::Connection> {
+        self.db.connect().map_err(|e| CacheError::Database(e.to_string()))
     }
 
     /// Close the database connection
     pub async fn close(self) {
-        self.pool.close().await;
+        // Turso databases close automatically when dropped
+        drop(self.db);
     }
-}
-
-/// Create SQLite connection options
-fn connection_options(db_url: &str) -> CacheResult<SqliteConnectOptions> {
-    let options = SqliteConnectOptions::from_str(db_url)?
-        .journal_mode(SqliteJournalMode::Wal)
-        .synchronous(SqliteSynchronous::Normal)
-        .busy_timeout(Duration::from_secs(10))
-        .create_if_missing(true)
-        .foreign_keys(true)
-        .pragma("wal_autocheckpoint", "1000")
-        .pragma("journal_size_limit", (64 * 1024 * 1024).to_string()) // 64 MB
-        .pragma("mmap_size", "134217728") // 128 MB
-        .pragma("cache_size", "2000"); // 2000 pages
-
-    Ok(options)
 }
 
 #[cfg(test)]
@@ -106,41 +141,36 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
 
-        // Create a test schema directly for testing
-        let test_schema = "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)";
+        // Create a test migration
+        let migrations = vec![
+            Migration {
+                version: "20250507000001_test",
+                sql: "CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)",
+            },
+        ];
 
-        // Create a test migrator using the built-in migrations system
-        // We'll create a temporary directory and write a migration file to it
-        let migrations_dir = temp_dir.path().join("migrations");
-        std::fs::create_dir_all(&migrations_dir).unwrap();
-
-        // Write a migration file
-        let migration_file = migrations_dir.join("20250507000001_test.sql");
-        std::fs::write(&migration_file, test_schema).unwrap();
-
-        // Create a migrator from the directory
-        let migrator = sqlx::migrate::Migrator::new(migrations_dir).await.unwrap();
-
-        let db = Database::new(db_path.clone(), &migrator).await.unwrap();
+        let db = Database::new(db_path.clone(), &migrations).await.unwrap();
 
         // Test that the database file was created
         assert!(db_path.exists());
 
         // Test that we can execute queries
-        sqlx::query("INSERT INTO test (name) VALUES (?)")
-            .bind("test_value")
-            .execute(db.pool())
+        let conn = db.connect().unwrap();
+        conn.execute("INSERT INTO test (name) VALUES (?1)", ("test_value",))
             .await
             .unwrap();
 
         // Test query
-        let row: (i64, String) = sqlx::query_as("SELECT id, name FROM test WHERE name = ?")
-            .bind("test_value")
-            .fetch_one(db.pool())
+        let mut rows = conn.query("SELECT id, name FROM test WHERE name = ?1", ("test_value",))
             .await
             .unwrap();
 
-        assert_eq!(row.1, "test_value");
+        let row = rows.next().await.unwrap().unwrap();
+        let id: i64 = row.get(0).unwrap();
+        let name: String = row.get(1).unwrap();
+
+        assert_eq!(name, "test_value");
+        assert!(id > 0);
 
         // Close database
         db.close().await;

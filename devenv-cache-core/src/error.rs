@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Error, Diagnostic, Debug)]
 pub enum CacheError {
     #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(String),
 
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),

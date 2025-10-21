@@ -1,6 +1,5 @@
 use futures::future::join_all;
 use miette::Diagnostic;
-use sqlx::SqlitePool;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{self, Command, Stdio};
@@ -8,6 +7,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use tracing::{debug, trace};
+use turso::Database;
 
 use crate::{
     db,
@@ -20,14 +20,14 @@ use devenv_cache_core::{compute_file_hash, compute_string_hash};
 pub enum CommandError {
     #[error(transparent)]
     Io(#[from] io::Error),
-    #[error(transparent)]
-    Sqlx(#[from] sqlx::Error),
+    #[error("Database error: {0}")]
+    Database(String),
 }
 
 type OnStderr = Box<dyn Fn(&InternalLog) + Send>;
 
 pub struct NixCommand<'a> {
-    pool: &'a sqlx::SqlitePool,
+    db: &'a Database,
     enable_caching: bool,
     force_refresh: bool,
     extra_paths: Vec<PathBuf>,
@@ -36,9 +36,9 @@ pub struct NixCommand<'a> {
 }
 
 impl<'a> NixCommand<'a> {
-    pub fn new(pool: &'a SqlitePool) -> Self {
+    pub fn new(db: &'a Database) -> Self {
         Self {
-            pool,
+            db,
             enable_caching: true,
             force_refresh: false,
             extra_paths: Vec::new(),
@@ -95,7 +95,7 @@ impl<'a> NixCommand<'a> {
         if self.enable_caching
             && !self.force_refresh
             && let Ok(Some(output)) =
-                query_cached_output(self.pool, &cmd_hash, &self.extra_paths).await
+                query_cached_output(self.db, &cmd_hash, &self.extra_paths).await
         {
             return Ok(output);
         }
@@ -218,8 +218,9 @@ impl<'a> NixCommand<'a> {
 
         // Only store results in cache if caching is enabled
         if self.enable_caching {
+            let conn = self.db.connect().map_err(CommandError::Database)?;
             let _ = db::insert_command_with_inputs(
-                self.pool,
+                &conn,
                 &raw_cmd,
                 &cmd_hash,
                 &input_hash,
@@ -227,7 +228,7 @@ impl<'a> NixCommand<'a> {
                 &inputs,
             )
             .await
-            .map_err(CommandError::Sqlx)?;
+            .map_err(CommandError::Database)?;
         }
 
         Ok(Output {
@@ -438,26 +439,27 @@ impl From<db::EnvInputRow> for EnvInputDesc {
 /// Returns the cached output if the command has been cached and none of the file dependencies have
 /// been updated.
 async fn query_cached_output(
-    pool: &SqlitePool,
+    db: &Database,
     cmd_hash: &str,
     extra_paths: &[PathBuf],
 ) -> Result<Option<Output>, CommandError> {
-    let cached_cmd = db::get_command_by_hash(pool, cmd_hash)
+    let conn = db.connect().map_err(CommandError::Database)?;
+    let cached_cmd = db::get_command_by_hash(&conn, cmd_hash)
         .await
-        .map_err(CommandError::Sqlx)?;
+        .map_err(CommandError::Database)?;
 
     if let Some(cmd) = cached_cmd {
         trace!(
             command_hash = cmd_hash,
             "Found cached command, checking input states"
         );
-        let files = db::get_files_by_command_id(pool, cmd.id)
+        let files = db::get_files_by_command_id(db, cmd.id)
             .await
-            .map_err(CommandError::Sqlx)?;
+            .map_err(CommandError::Database)?;
 
-        let envs = db::get_envs_by_command_id(pool, cmd.id)
+        let envs = db::get_envs_by_command_id(db, cmd.id)
             .await
-            .map_err(CommandError::Sqlx)?;
+            .map_err(CommandError::Database)?;
 
         let mut inputs = files
             .into_iter()
@@ -523,9 +525,9 @@ async fn query_cached_output(
                                     "File metadata has been modified, updating modified_at"
                                 );
                                 // TODO: batch with query builder?
-                                db::update_file_modified_at(pool, &file.path, modified_at)
+                                db::update_file_modified_at(db, &file.path, modified_at)
                                     .await
-                                    .map_err(CommandError::Sqlx)?;
+                                    .map_err(CommandError::Database)?;
                             }
                         }
                         FileState::Modified {
@@ -558,9 +560,9 @@ async fn query_cached_output(
         } else {
             trace!("Command has not been modified, returning cached output");
 
-            db::update_command_updated_at(pool, cmd.id)
+            db::update_command_updated_at(&conn, cmd.id)
                 .await
-                .map_err(CommandError::Sqlx)?;
+                .map_err(CommandError::Database)?;
 
             // No files have been modified, returning cached output
             Ok(Some(Output {
