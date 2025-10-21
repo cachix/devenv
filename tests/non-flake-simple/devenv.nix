@@ -1,0 +1,3 @@
+{
+  languages.nix.enable = true;
+}
