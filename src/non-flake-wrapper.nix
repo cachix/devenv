@@ -1,14 +1,13 @@
-{ mkShell }:
-{ projectRoot }:
+mkShell: projectRoot:
 {
-  nixpkgs,
-  configuration,
+  pkgs,
+  inputs ? { nixpkgs = pkgs; },
+  modules,
 }:
 mkShell {
   inputs = {
-    inherit nixpkgs;
     self = projectRoot;
-  };
-  pkgs = nixpkgs;
-  modules = [ configuration ];
+  }
+  // inputs;
+  inherit pkgs modules;
 }
