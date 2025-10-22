@@ -301,6 +301,18 @@ in
             drv:
             (if isBuildEnv drv then drv else drv.buildEnv).override (args: {
               extraLibs = (args.extraLibs or [ ]) ++ libraries;
+              makeWrapperArgs = [
+                "--prefix"
+                "LD_LIBRARY_PATH"
+                ":"
+                (lib.makeLibraryPath libraries)
+              ]
+              ++ lib.optionals pkgs.stdenv.isDarwin [
+                "--prefix"
+                "DYLD_LIBRARY_PATH"
+                ":"
+                (lib.makeLibraryPath libraries)
+              ];
             });
         in
         # Apply the venv support wrapper if enabled.
@@ -308,13 +320,22 @@ in
           lib.pipe drv [
             (
               drv:
-              drv.overrideAttrs (_: {
-                buildEnv = pkgs.callPackage ../../python-wrapper.nix {
-                  inherit (drv.pkgs) requiredPythonModules;
-                  python = drv;
-                  extraLibs = libraries;
-                };
-              })
+              drv.overrideAttrs (
+                prevAttrs:
+                let
+                  buildEnv = pkgs.callPackage ../../python-wrapper.nix {
+                    inherit (drv.pkgs) requiredPythonModules;
+                    python = drv;
+                    extraLibs = libraries;
+                  };
+                in
+                {
+                  inherit buildEnv;
+                  passthru = prevAttrs.passthru // {
+                    inherit buildEnv;
+                  };
+                }
+              )
             )
             appendLibraries
           ]
