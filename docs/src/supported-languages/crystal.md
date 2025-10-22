@@ -26,3 +26,66 @@ boolean
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
+
+
+
+### languages\.crystal\.package
+
+
+
+The Crystal package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.crystal `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
+
+
+
+### languages\.crystal\.shards
+
+
+
+Configuration for shards
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
+
+
+
+### languages\.crystal\.shards\.package
+
+
+
+The Shards package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.shards `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/crystal\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/crystal.nix)
