@@ -9,16 +9,19 @@ async fn main() -> Result<(), command::CommandError> {
     // Extract database path from URL
     let path = std::path::PathBuf::from(database_url.trim_start_matches("sqlite:"));
 
-    // Connect to database and run migrations
-    let db = devenv_cache_core::db::Database::new(path, &db::MIGRATIONS)
+    // Get migrations directory and connect to database
+    let migrations_dir = db::migrations_dir();
+    let db = devenv_cache_core::db::Database::new(path, &migrations_dir)
         .await
         .map_err(|e| command::CommandError::Io(std::io::Error::other(e)))?;
-    let pool = db.pool().clone();
+    let conn = db
+        .connect()
+        .map_err(|e| command::CommandError::Io(std::io::Error::other(e)))?;
 
     let mut cmd = Command::new("nix");
     cmd.args(["eval", ".#devenv.processes"]);
 
-    let output = command::NixCommand::new(&pool).output(&mut cmd).await?;
+    let output = command::NixCommand::new(&conn).output(&mut cmd).await?;
     println!("{}", String::from_utf8_lossy(&output.stdout));
 
     Ok(())

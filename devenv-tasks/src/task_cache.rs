@@ -9,10 +9,10 @@ use devenv_cache_core::{
 };
 use glob::glob;
 use serde_json::Value;
-use sqlx::Row;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use tracing::{debug, warn};
+use turso::params;
 
 /// Expand glob patterns into actual file paths
 pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
@@ -29,8 +29,10 @@ pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
         .collect()
 }
 
-// Create a constant for embedded migrations
-pub const MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!();
+// Get the migrations directory path
+pub fn migrations_dir() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations")
+}
 
 /// Task cache manager
 #[derive(Clone, Debug)]
@@ -53,15 +55,11 @@ impl TaskCache {
 
     /// Create a new TaskCache with a specific database path.
     pub async fn with_db_path(db_path: PathBuf) -> CacheResult<Self> {
-        // Connect to database using the shared database library and run migrations
-        let db = Database::new(db_path, &MIGRATIONS).await?;
+        // Get migrations directory and connect to database
+        let migrations_dir = migrations_dir();
+        let db = Database::new(db_path, &migrations_dir).await?;
 
         Ok(Self { db })
-    }
-
-    /// Get the database connection pool
-    pub fn pool(&self) -> &sqlx::SqlitePool {
-        self.db.pool()
     }
 
     // Remove the generic execute_query method as it's causing type issues
@@ -107,19 +105,15 @@ impl TaskCache {
         let output_json = serde_json::to_string(output)?;
         let now = Self::now();
 
-        sqlx::query(
-            r#"
-            INSERT INTO task_run (task_name, last_run, output)
-            VALUES (?, ?, ?)
-            ON CONFLICT (task_name) DO UPDATE SET
-                last_run = excluded.last_run,
-                output = excluded.output
-            "#,
+        let conn = self.db.connect().await?;
+        conn.execute(
+            "INSERT INTO task_run (task_name, last_run, output) \
+             VALUES (?, ?, ?) \
+             ON CONFLICT (task_name) DO UPDATE SET \
+                 last_run = excluded.last_run, \
+                 output = excluded.output",
+            params![task_name, now, output_json],
         )
-        .bind(task_name)
-        .bind(now)
-        .bind(output_json)
-        .execute(self.pool())
         .await?;
 
         Ok(())
@@ -127,18 +121,18 @@ impl TaskCache {
 
     /// Get task output from the cache.
     pub async fn get_task_output(&self, task_name: &str) -> CacheResult<Option<Value>> {
-        let result: Option<String> = sqlx::query_scalar(
-            r#"
-            SELECT output FROM task_run WHERE task_name = ?
-            "#,
-        )
-        .bind(task_name)
-        .fetch_optional(self.pool())
-        .await?;
+        let conn = self.db.connect().await?;
+        let mut stmt = conn
+            .prepare("SELECT output FROM task_run WHERE task_name = ?")
+            .await?;
 
-        match result {
-            Some(json_str) => Ok(serde_json::from_str(&json_str)?),
-            None => Ok(None),
+        let mut rows = stmt.query(params![task_name]).await?;
+
+        if let Some(row) = rows.next().await? {
+            let json_str: String = row.get(0)?;
+            Ok(serde_json::from_str(&json_str)?)
+        } else {
+            Ok(None)
         }
     }
 
@@ -153,22 +147,22 @@ impl TaskCache {
         let content_hash = tracked_file.content_hash.clone();
         let modified_time = time::system_time_to_unix_seconds(tracked_file.modified_at);
 
-        sqlx::query(
-            r#"
-            INSERT INTO watched_file (task_name, path, modified_time, content_hash, is_directory)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT (task_name, path) DO UPDATE SET
-                modified_time = excluded.modified_time,
-                content_hash = excluded.content_hash,
-                is_directory = excluded.is_directory
-            "#,
+        let conn = self.db.connect().await?;
+        conn.execute(
+            "INSERT INTO watched_file (task_name, path, modified_time, content_hash, is_directory) \
+             VALUES (?, ?, ?, ?, ?) \
+             ON CONFLICT (task_name, path) DO UPDATE SET \
+                 modified_time = excluded.modified_time, \
+                 content_hash = excluded.content_hash, \
+                 is_directory = excluded.is_directory",
+            params![
+                task_name,
+                path_str,
+                modified_time,
+                content_hash,
+                is_directory
+            ],
         )
-        .bind(task_name)
-        .bind(path_str)
-        .bind(modified_time)
-        .bind(content_hash)
-        .bind(is_directory)
-        .execute(self.pool())
         .await?;
 
         Ok(())
@@ -191,19 +185,26 @@ impl TaskCache {
         &self,
         task_name: &str,
         path: &str,
-    ) -> CacheResult<Option<sqlx::sqlite::SqliteRow>> {
-        sqlx::query(
-            r#"
-            SELECT modified_time, content_hash, is_directory
-            FROM watched_file
-            WHERE task_name = ? AND path = ?
-            "#,
-        )
-        .bind(task_name)
-        .bind(path)
-        .fetch_optional(self.pool())
-        .await
-        .map_err(CacheError::from)
+    ) -> CacheResult<Option<(i64, Option<String>, bool)>> {
+        let conn = self.db.connect().await?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT modified_time, content_hash, is_directory \
+             FROM watched_file \
+             WHERE task_name = ? AND path = ?",
+            )
+            .await?;
+
+        let mut rows = stmt.query(params![task_name, path]).await?;
+
+        if let Some(row) = rows.next().await? {
+            let modified_time: i64 = row.get(0)?;
+            let content_hash: Option<String> = row.get(1)?;
+            let is_directory: bool = row.get(2)?;
+            Ok(Some((modified_time, content_hash, is_directory)))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Check if a file has been modified since the last time the task was run.
@@ -229,12 +230,7 @@ impl TaskCache {
         // Check if file exists and get its current state
         match TrackedFile::new(path) {
             Ok(current_file) => {
-                let row = file_info.unwrap();
-
-                // Extract values from the row
-                let stored_modified_time: i64 = row.get("modified_time");
-                let stored_hash: Option<String> = row.get("content_hash");
-                let is_directory: bool = row.get("is_directory");
+                let (stored_modified_time, stored_hash, is_directory) = file_info.unwrap();
 
                 // Get current values
                 let current_modified_time =
@@ -302,7 +298,7 @@ mod tests {
     use tokio::fs::File;
     use tokio::io::AsyncWriteExt;
 
-    #[sqlx::test]
+    #[tokio::test]
     async fn test_task_cache_initialization() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("tasks.db");
@@ -310,12 +306,14 @@ mod tests {
         // Use with_db_path directly instead of environment variable
         let cache = TaskCache::with_db_path(db_path).await.unwrap();
 
-        // Check if the database connection is valid using a simple query
-        let result = sqlx::query("SELECT 1").fetch_one(cache.db.pool()).await;
-        assert!(result.is_ok());
+        // Check if the database connection is valid
+        let conn = cache.db.connect().await.unwrap();
+        let mut stmt = conn.prepare("SELECT 1").await.unwrap();
+        let mut rows = stmt.query(params![]).await.unwrap();
+        assert!(rows.next().await.unwrap().is_some());
     }
 
-    #[sqlx::test]
+    #[tokio::test]
     async fn test_file_modification_detection() {
         let db_temp_dir = TempDir::new().unwrap();
         let db_path = db_temp_dir.path().join("tasks-file-mod.db");
@@ -385,7 +383,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test]
+    #[tokio::test]
     async fn test_glob_pattern_support() {
         let db_temp_dir = TempDir::new().unwrap();
         let db_path = db_temp_dir.path().join("tasks-glob.db");
@@ -488,7 +486,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test]
+    #[tokio::test]
     async fn test_directory_modification_detection() {
         let db_temp_dir = TempDir::new().unwrap();
         let db_path = db_temp_dir.path().join("tasks-dir-mod.db");

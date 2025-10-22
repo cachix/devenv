@@ -19,7 +19,8 @@ tokio = { workspace = true, features = ["signal"] }
 tokio-shutdown.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
-sqlx.workspace = true
+turso.workspace = true
+geni.workspace = true
 blake3.workspace = true
 walkdir.workspace = true
 shell-escape.workspace = true

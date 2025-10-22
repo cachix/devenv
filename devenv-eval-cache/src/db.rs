@@ -1,14 +1,15 @@
 use super::command::{EnvInputDesc, FileInputDesc, Input};
-use devenv_cache_core::{file::TrackedFile, time};
-use sqlx::sqlite::{Sqlite, SqliteRow};
-use sqlx::{Acquire, Row, SqlitePool};
+use devenv_cache_core::{error::CacheError, error::CacheResult, file::TrackedFile, time};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use turso::{Connection, Row as TursoRow, params};
 
-// Create a constant for embedded migrations
-pub const MIGRATIONS: sqlx::migrate::Migrator = sqlx::migrate!();
+// Get the migrations directory path
+pub fn migrations_dir() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations")
+}
 
 /// The row type for the `cached_cmd` table.
 #[derive(Clone, Debug)]
@@ -27,14 +28,15 @@ pub struct CommandRow {
     pub updated_at: SystemTime,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for CommandRow {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let id: i64 = row.get("id");
-        let raw: String = row.get("raw");
-        let cmd_hash: String = row.get("cmd_hash");
-        let input_hash: String = row.get("input_hash");
-        let output: Vec<u8> = row.get("output");
-        let updated_at: i64 = row.get("updated_at");
+impl CommandRow {
+    fn from_turso_row(row: &TursoRow) -> CacheResult<Self> {
+        let id: i64 = row.get(0)?;
+        let raw: String = row.get(1)?;
+        let cmd_hash: String = row.get(2)?;
+        let input_hash: String = row.get(3)?;
+        let output: Vec<u8> = row.get(4)?;
+        let updated_at: i64 = row.get(5)?;
+
         Ok(Self {
             id,
             raw,
@@ -46,151 +48,122 @@ impl sqlx::FromRow<'_, SqliteRow> for CommandRow {
     }
 }
 
-pub async fn get_command_by_hash<'a, A>(
-    conn: A,
+pub async fn get_command_by_hash(
+    conn: &Connection,
     cmd_hash: &str,
-) -> Result<Option<CommandRow>, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
+) -> CacheResult<Option<CommandRow>> {
+    let mut stmt = conn
+        .prepare("SELECT id, raw, cmd_hash, input_hash, output, updated_at FROM cached_cmd WHERE cmd_hash = ?")
+        .await?;
 
-    let record = sqlx::query_as(
-        r#"
-            SELECT *
-            FROM cached_cmd
-            WHERE cmd_hash = ?
-        "#,
-    )
-    .bind(cmd_hash)
-    .fetch_optional(&mut *conn)
-    .await?;
+    let mut rows = stmt.query(params![cmd_hash]).await?;
 
-    Ok(record)
+    if let Some(row) = rows.next().await? {
+        Ok(Some(CommandRow::from_turso_row(&row)?))
+    } else {
+        Ok(None)
+    }
 }
 
-pub async fn insert_command_with_inputs<'a, A>(
-    conn: A,
+pub async fn insert_command_with_inputs(
+    conn: &Connection,
     raw_cmd: &str,
     cmd_hash: &str,
     input_hash: &str,
     output: &[u8],
     inputs: &[Input],
-) -> Result<(i64, Vec<i64>, Vec<i64>), sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-    let mut tx = conn.begin().await?;
+) -> CacheResult<(i64, Vec<i64>, Vec<i64>)> {
+    // Begin transaction to ensure atomicity
+    conn.execute("BEGIN TRANSACTION", params![]).await?;
 
-    delete_command(&mut tx, cmd_hash).await?;
-    let command_id = insert_command(&mut tx, raw_cmd, cmd_hash, input_hash, output).await?;
+    // Use a closure to handle the transaction result
+    let result = async {
+        delete_command(conn, cmd_hash).await?;
+        let command_id = insert_command(conn, raw_cmd, cmd_hash, input_hash, output).await?;
 
-    // Partition and extract file and env inputs
-    let (file_inputs, env_inputs) = Input::partition_refs(inputs);
+        // Partition and extract file and env inputs
+        let (file_inputs, env_inputs) = Input::partition_refs(inputs);
 
-    let file_ids = insert_file_inputs(&mut tx, &file_inputs, command_id).await?;
-    let env_ids = insert_env_inputs(&mut tx, &env_inputs, command_id).await?;
+        let file_ids = insert_file_inputs(conn, &file_inputs, command_id).await?;
+        let env_ids = insert_env_inputs(conn, &env_inputs, command_id).await?;
 
-    tx.commit().await?;
+        Ok((command_id, file_ids, env_ids))
+    }
+    .await;
 
-    Ok((command_id, file_ids, env_ids))
+    // Commit or rollback based on result
+    match result {
+        Ok(data) => {
+            conn.execute("COMMIT", params![]).await?;
+            Ok(data)
+        }
+        Err(e) => {
+            conn.execute("ROLLBACK", params![]).await?;
+            Err(e)
+        }
+    }
 }
 
-async fn insert_command<'a, A>(
-    conn: A,
+async fn insert_command(
+    conn: &Connection,
     raw_cmd: &str,
     cmd_hash: &str,
     input_hash: &str,
     output: &[u8],
-) -> Result<i64, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
+) -> CacheResult<i64> {
+    let mut stmt = conn
+        .prepare("INSERT INTO cached_cmd (raw, cmd_hash, input_hash, output) VALUES (?, ?, ?, ?) RETURNING id")
+        .await?;
 
-    let record = sqlx::query(
-        r#"
-        INSERT INTO cached_cmd (raw, cmd_hash, input_hash, output)
-        VALUES (?, ?, ?, ?)
-        RETURNING id
-        "#,
-    )
-    .bind(raw_cmd)
-    .bind(cmd_hash)
-    .bind(input_hash)
-    .bind(output)
-    .fetch_one(&mut *conn)
-    .await?;
+    let mut rows = stmt
+        .query(params![raw_cmd, cmd_hash, input_hash, output])
+        .await?;
 
-    let id: i64 = record.get(0);
+    let row = rows
+        .next()
+        .await?
+        .ok_or_else(|| CacheError::Io(std::io::Error::other("No id returned from insert")))?;
+
+    let id: i64 = row.get(0)?;
     Ok(id)
 }
 
-async fn delete_command<'a, A>(conn: A, cmd_hash: &str) -> Result<(), sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
-    sqlx::query(
-        r#"
-        DELETE FROM cached_cmd
-        WHERE cmd_hash = ?
-        "#,
+async fn delete_command(conn: &Connection, cmd_hash: &str) -> CacheResult<()> {
+    conn.execute(
+        "DELETE FROM cached_cmd WHERE cmd_hash = ?",
+        params![cmd_hash],
     )
-    .bind(cmd_hash)
-    .execute(&mut *conn)
     .await?;
-
     Ok(())
 }
 
-pub async fn update_command_updated_at<'a, A>(conn: A, id: i64) -> Result<(), sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
+pub async fn update_command_updated_at(conn: &Connection, id: i64) -> CacheResult<()> {
     let now = time::system_time_to_unix_seconds(SystemTime::now());
-
-    sqlx::query(
-        r#"
-        UPDATE cached_cmd
-        SET updated_at = ?
-        WHERE id = ?
-        "#,
+    conn.execute(
+        "UPDATE cached_cmd SET updated_at = ? WHERE id = ?",
+        params![now, id],
     )
-    .bind(now)
-    .bind(id)
-    .execute(&mut *conn)
     .await?;
-
     Ok(())
 }
 
-async fn insert_file_inputs<'a, A>(
-    conn: A,
+async fn insert_file_inputs(
+    conn: &Connection,
     file_inputs: &[&FileInputDesc],
     command_id: i64,
-) -> Result<Vec<i64>, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
-    let insert_file_input = r#"
-        INSERT INTO file_input (path, is_directory, content_hash, modified_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT (path) DO UPDATE
-        SET content_hash = excluded.content_hash,
-            is_directory = excluded.is_directory,
-            modified_at = excluded.modified_at,
-            updated_at = ?
-        RETURNING id
-    "#;
+) -> CacheResult<Vec<i64>> {
+    let insert_file_input = "INSERT INTO file_input (path, is_directory, content_hash, modified_at) \
+                             VALUES (?, ?, ?, ?) \
+                             ON CONFLICT (path) DO UPDATE \
+                             SET content_hash = excluded.content_hash, \
+                                 is_directory = excluded.is_directory, \
+                                 modified_at = excluded.modified_at, \
+                                 updated_at = ? \
+                             RETURNING id";
 
     let now = time::system_time_to_unix_seconds(SystemTime::now());
     let mut file_ids = Vec::with_capacity(file_inputs.len());
+
     for FileInputDesc {
         path,
         is_directory,
@@ -198,65 +171,78 @@ where
         modified_at,
     } in file_inputs
     {
-        let modified_at = time::system_time_to_unix_seconds(*modified_at);
-        let id: i64 = sqlx::query(insert_file_input)
-            .bind(path.to_path_buf().into_os_string().as_bytes())
-            .bind(is_directory)
-            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
-            .bind(modified_at)
-            .bind(now)
-            .fetch_one(&mut *conn)
-            .await?
-            .get(0);
+        let modified_at_unix = time::system_time_to_unix_seconds(*modified_at);
+
+        // Note: turso requires preparing statement for each query execution
+        let mut stmt = conn.prepare(insert_file_input).await?;
+
+        let mut rows = stmt
+            .query(params![
+                path.to_path_buf().into_os_string().as_bytes(),
+                is_directory,
+                content_hash.as_deref().unwrap_or(""),
+                modified_at_unix,
+                now
+            ])
+            .await?;
+
+        let row = rows.next().await?.ok_or_else(|| {
+            CacheError::Io(std::io::Error::other(
+                "No id returned from file input insert",
+            ))
+        })?;
+
+        let id: i64 = row.get(0)?;
         file_ids.push(id);
     }
 
-    let cmd_input_path_query = r#"
-        INSERT INTO cmd_input_path (cached_cmd_id, file_input_id)
-        VALUES (?, ?)
-        ON CONFLICT (cached_cmd_id, file_input_id) DO NOTHING
-    "#;
+    let cmd_input_path_query = "INSERT INTO cmd_input_path (cached_cmd_id, file_input_id) \
+                                VALUES (?, ?) \
+                                ON CONFLICT (cached_cmd_id, file_input_id) DO NOTHING";
 
     for &file_id in &file_ids {
-        sqlx::query(cmd_input_path_query)
-            .bind(command_id)
-            .bind(file_id)
-            .execute(&mut *conn)
+        conn.execute(cmd_input_path_query, params![command_id, file_id])
             .await?;
     }
+
     Ok(file_ids)
 }
 
-async fn insert_env_inputs<'a, A>(
-    conn: A,
+async fn insert_env_inputs(
+    conn: &Connection,
     env_inputs: &[&EnvInputDesc],
     command_id: i64,
-) -> Result<Vec<i64>, sqlx::Error>
-where
-    A: Acquire<'a, Database = Sqlite>,
-{
-    let mut conn = conn.acquire().await?;
-
-    let insert_env_input = r#"
-        INSERT INTO env_input (cached_cmd_id, name, content_hash)
-        VALUES (?, ?, ?)
-        ON CONFLICT (cached_cmd_id, name) DO UPDATE
-        SET content_hash = excluded.content_hash,
-            updated_at = ?
-        RETURNING id
-    "#;
+) -> CacheResult<Vec<i64>> {
+    let insert_env_input = "INSERT INTO env_input (cached_cmd_id, name, content_hash) \
+                            VALUES (?, ?, ?) \
+                            ON CONFLICT (cached_cmd_id, name) DO UPDATE \
+                            SET content_hash = excluded.content_hash, \
+                                updated_at = ? \
+                            RETURNING id";
 
     let now = time::system_time_to_unix_seconds(SystemTime::now());
     let mut env_input_ids = Vec::with_capacity(env_inputs.len());
+
     for EnvInputDesc { name, content_hash } in env_inputs {
-        let id: i64 = sqlx::query(insert_env_input)
-            .bind(command_id)
-            .bind(name)
-            .bind(content_hash.as_ref().unwrap_or(&"".to_string()))
-            .bind(now)
-            .fetch_one(&mut *conn)
-            .await?
-            .get(0);
+        // Note: turso requires preparing statement for each query execution
+        let mut stmt = conn.prepare(insert_env_input).await?;
+
+        let mut rows = stmt
+            .query(params![
+                command_id,
+                name.as_str(),
+                content_hash.as_deref().unwrap_or(""),
+                now
+            ])
+            .await?;
+
+        let row = rows.next().await?.ok_or_else(|| {
+            CacheError::Io(std::io::Error::other(
+                "No id returned from env input insert",
+            ))
+        })?;
+
+        let id: i64 = row.get(0)?;
         env_input_ids.push(id);
     }
 
@@ -278,15 +264,16 @@ pub struct FileInputRow {
     pub updated_at: SystemTime,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for FileInputRow {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let path: &[u8] = row.get("path");
-        let is_directory: bool = row.get("is_directory");
-        let content_hash: String = row.get("content_hash");
-        let modified_at: i64 = row.get("modified_at");
-        let updated_at: i64 = row.get("updated_at");
+impl FileInputRow {
+    fn from_turso_row(row: &TursoRow) -> CacheResult<Self> {
+        let path: Vec<u8> = row.get(0)?;
+        let is_directory: bool = row.get(1)?;
+        let content_hash: String = row.get(2)?;
+        let modified_at: i64 = row.get(3)?;
+        let updated_at: i64 = row.get(4)?;
+
         Ok(Self {
-            path: PathBuf::from(OsStr::from_bytes(path)),
+            path: PathBuf::from(OsStr::from_bytes(&path)),
             is_directory,
             content_hash,
             modified_at: time::system_time_from_unix_seconds(modified_at),
@@ -314,140 +301,165 @@ pub struct EnvInputRow {
     pub content_hash: String,
 }
 
-impl sqlx::FromRow<'_, SqliteRow> for EnvInputRow {
-    fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
-        let name: String = row.get("name");
-        let content_hash: String = row.get("content_hash");
+impl EnvInputRow {
+    fn from_turso_row(row: &TursoRow) -> CacheResult<Self> {
+        let name: String = row.get(0)?;
+        let content_hash: String = row.get(1)?;
         Ok(Self { name, content_hash })
     }
 }
 
 pub async fn get_files_by_command_id(
-    pool: &SqlitePool,
+    conn: &Connection,
     command_id: i64,
-) -> Result<Vec<FileInputRow>, sqlx::Error> {
-    let files = sqlx::query_as(
-        r#"
-            SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at
-            FROM file_input f
-            JOIN cmd_input_path cip ON f.id = cip.file_input_id
-            WHERE cip.cached_cmd_id = ?
-        "#,
-    )
-    .bind(command_id)
-    .fetch_all(pool)
-    .await?;
+) -> CacheResult<Vec<FileInputRow>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at \
+         FROM file_input f \
+         JOIN cmd_input_path cip ON f.id = cip.file_input_id \
+         WHERE cip.cached_cmd_id = ?",
+        )
+        .await?;
+
+    let mut rows = stmt.query(params![command_id]).await?;
+
+    let mut files = Vec::new();
+    while let Some(row) = rows.next().await? {
+        files.push(FileInputRow::from_turso_row(&row)?);
+    }
 
     Ok(files)
 }
 
 pub async fn get_files_by_command_hash(
-    pool: &SqlitePool,
+    conn: &Connection,
     command_hash: &str,
-) -> Result<Vec<FileInputRow>, sqlx::Error> {
-    let files = sqlx::query_as(
-        r#"
-            SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at
-            FROM file_input f
-            JOIN cmd_input_path cip ON f.id = cip.file_input_id
-            JOIN cached_cmd cc ON cip.cached_cmd_id = cc.id
-            WHERE cc.cmd_hash = ?
-        "#,
-    )
-    .bind(command_hash)
-    .fetch_all(pool)
-    .await?;
+) -> CacheResult<Vec<FileInputRow>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT f.path, f.is_directory, f.content_hash, f.modified_at, f.updated_at \
+         FROM file_input f \
+         JOIN cmd_input_path cip ON f.id = cip.file_input_id \
+         JOIN cached_cmd cc ON cip.cached_cmd_id = cc.id \
+         WHERE cc.cmd_hash = ?",
+        )
+        .await?;
+
+    let mut rows = stmt.query(params![command_hash]).await?;
+
+    let mut files = Vec::new();
+    while let Some(row) = rows.next().await? {
+        files.push(FileInputRow::from_turso_row(&row)?);
+    }
 
     Ok(files)
 }
 
 pub async fn get_envs_by_command_id(
-    pool: &SqlitePool,
+    conn: &Connection,
     command_id: i64,
-) -> Result<Vec<EnvInputRow>, sqlx::Error> {
-    let files = sqlx::query_as(
-        r#"
-            SELECT e.name, e.content_hash, e.updated_at
-            FROM env_input e
-            WHERE e.cached_cmd_id = ?
-        "#,
-    )
-    .bind(command_id)
-    .fetch_all(pool)
-    .await?;
+) -> CacheResult<Vec<EnvInputRow>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT e.name, e.content_hash \
+         FROM env_input e \
+         WHERE e.cached_cmd_id = ?",
+        )
+        .await?;
 
-    Ok(files)
+    let mut rows = stmt.query(params![command_id]).await?;
+
+    let mut envs = Vec::new();
+    while let Some(row) = rows.next().await? {
+        envs.push(EnvInputRow::from_turso_row(&row)?);
+    }
+
+    Ok(envs)
 }
 
 pub async fn get_envs_by_command_hash(
-    pool: &SqlitePool,
+    conn: &Connection,
     command_hash: &str,
-) -> Result<Vec<EnvInputRow>, sqlx::Error> {
-    let files = sqlx::query_as(
-        r#"
-            SELECT e.name, e.content_hash, e.updated_at
-            FROM env_input e
-            JOIN cached_cmd cc ON e.cached_cmd_id = cc.id
-            WHERE cc.cmd_hash = ?
-        "#,
-    )
-    .bind(command_hash)
-    .fetch_all(pool)
-    .await?;
+) -> CacheResult<Vec<EnvInputRow>> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT e.name, e.content_hash \
+         FROM env_input e \
+         JOIN cached_cmd cc ON e.cached_cmd_id = cc.id \
+         WHERE cc.cmd_hash = ?",
+        )
+        .await?;
 
-    Ok(files)
+    let mut rows = stmt.query(params![command_hash]).await?;
+
+    let mut envs = Vec::new();
+    while let Some(row) = rows.next().await? {
+        envs.push(EnvInputRow::from_turso_row(&row)?);
+    }
+
+    Ok(envs)
 }
 
 pub async fn update_file_modified_at<P: AsRef<Path>>(
-    pool: &SqlitePool,
+    conn: &Connection,
     path: P,
     modified_at: SystemTime,
-) -> Result<(), sqlx::Error> {
-    let modified_at = time::system_time_to_unix_seconds(modified_at);
+) -> CacheResult<()> {
+    let modified_at_unix = time::system_time_to_unix_seconds(modified_at);
     let now = time::system_time_to_unix_seconds(SystemTime::now());
 
-    sqlx::query(
-        r#"
-        UPDATE file_input
-        SET modified_at = ?, updated_at = ?
-        WHERE path = ?
-        "#,
+    conn.execute(
+        "UPDATE file_input SET modified_at = ?, updated_at = ? WHERE path = ?",
+        params![
+            modified_at_unix,
+            now,
+            path.as_ref().to_path_buf().into_os_string().as_bytes()
+        ],
     )
-    .bind(modified_at)
-    .bind(now)
-    .bind(path.as_ref().to_path_buf().into_os_string().as_bytes())
-    .execute(pool)
     .await?;
 
     Ok(())
 }
 
-pub async fn delete_unreferenced_files(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
-        r#"
-        DELETE FROM file_input
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM cmd_input_path
-            WHERE cmd_input_path.file_input_id = file_input.id
+pub async fn delete_unreferenced_files(conn: &Connection) -> CacheResult<u64> {
+    let result = conn
+        .execute(
+            "DELETE FROM file_input \
+         WHERE NOT EXISTS ( \
+             SELECT 1 \
+             FROM cmd_input_path \
+             WHERE cmd_input_path.file_input_id = file_input.id \
+         )",
+            params![],
         )
-        "#,
-    )
-    .execute(pool)
-    .await?;
+        .await?;
 
-    Ok(result.rows_affected())
+    Ok(result as u64)
 }
 
 #[cfg(test)]
 mod tests {
-    use devenv_cache_core::compute_string_hash;
+    use devenv_cache_core::{compute_string_hash, db::Database};
+    use tempfile::TempDir;
 
     use super::*;
-    use sqlx::SqlitePool;
 
-    #[sqlx::test]
-    async fn test_insert_and_retrieve_command(pool: SqlitePool) {
+    async fn setup_test_db() -> (TempDir, Database, Connection) {
+        let temp_dir = TempDir::new().unwrap();
+        let db_path = temp_dir.path().join("test.db");
+        let migrations_dir = migrations_dir();
+
+        let db = Database::new(db_path, &migrations_dir).await.unwrap();
+        let conn = db.connect().await.unwrap();
+
+        (temp_dir, db, conn)
+    }
+
+    #[tokio::test]
+    async fn test_insert_and_retrieve_command() {
+        let (_temp_dir, _db, conn) = setup_test_db().await;
+
         let raw_cmd = "nix-build -A hello";
         let cmd_hash = compute_string_hash(raw_cmd);
         let output = b"Hello, world!";
@@ -474,13 +486,13 @@ mod tests {
         );
 
         let (command_id, file_ids, _) =
-            insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash, output, &inputs)
+            insert_command_with_inputs(&conn, raw_cmd, &cmd_hash, &input_hash, output, &inputs)
                 .await
                 .unwrap();
 
         assert_eq!(file_ids.len(), 2);
 
-        let retrieved_command = get_command_by_hash(&pool, &cmd_hash)
+        let retrieved_command = get_command_by_hash(&conn, &cmd_hash)
             .await
             .unwrap()
             .unwrap();
@@ -488,7 +500,7 @@ mod tests {
         assert_eq!(retrieved_command.cmd_hash, cmd_hash);
         assert_eq!(retrieved_command.output, output);
 
-        let files = get_files_by_command_id(&pool, command_id).await.unwrap();
+        let files = get_files_by_command_id(&conn, command_id).await.unwrap();
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].path, PathBuf::from("/path/to/file1"));
         assert_eq!(files[0].content_hash, "hash1");
@@ -496,8 +508,10 @@ mod tests {
         assert_eq!(files[1].content_hash, "hash2");
     }
 
-    #[sqlx::test]
-    async fn test_insert_multiple_commands(pool: SqlitePool) {
+    #[tokio::test]
+    async fn test_insert_multiple_commands() {
+        let (_temp_dir, _db, conn) = setup_test_db().await;
+
         // First command
         let raw_cmd1 = "nix-build -A hello";
         let cmd_hash1 = compute_string_hash(raw_cmd1);
@@ -525,7 +539,7 @@ mod tests {
         );
 
         let (command_id1, file_ids1, _) = insert_command_with_inputs(
-            &pool,
+            &conn,
             raw_cmd1,
             &cmd_hash1,
             &input_hash1,
@@ -562,7 +576,7 @@ mod tests {
         );
 
         let (command_id2, file_ids2, _) = insert_command_with_inputs(
-            &pool,
+            &conn,
             raw_cmd2,
             &cmd_hash2,
             &input_hash2,
@@ -573,29 +587,32 @@ mod tests {
         .unwrap();
 
         // Verify first command
-        let retrieved_command1 = get_command_by_hash(&pool, &cmd_hash1)
+        let retrieved_command1 = get_command_by_hash(&conn, &cmd_hash1)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(retrieved_command1.raw, raw_cmd1);
-        let files1 = get_files_by_command_id(&pool, command_id1).await.unwrap();
+        let files1 = get_files_by_command_id(&conn, command_id1).await.unwrap();
         assert_eq!(files1.len(), 2);
 
         // Verify second command
-        let retrieved_command2 = get_command_by_hash(&pool, &cmd_hash2)
+        let retrieved_command2 = get_command_by_hash(&conn, &cmd_hash2)
             .await
             .unwrap()
             .unwrap();
         assert_eq!(retrieved_command2.raw, raw_cmd2);
-        let files2 = get_files_by_command_id(&pool, command_id2).await.unwrap();
+        let files2 = get_files_by_command_id(&conn, command_id2).await.unwrap();
         assert_eq!(files2.len(), 2);
 
-        // Verify cmd_input_path rows
-        let all_files = sqlx::query("SELECT * FROM cmd_input_path")
-            .fetch_all(&pool)
+        // Verify cmd_input_path rows - count them manually
+        let mut stmt = conn
+            .prepare("SELECT COUNT(*) FROM cmd_input_path")
             .await
             .unwrap();
-        assert_eq!(all_files.len(), 4); // 2 files for each command
+        let mut rows = stmt.query(params![]).await.unwrap();
+        let row = rows.next().await.unwrap().unwrap();
+        let count: i64 = row.get(0).unwrap();
+        assert_eq!(count, 4); // 2 files for each command
 
         // Verify file reuse
         assert_eq!(file_ids1.len(), 2);
@@ -603,8 +620,10 @@ mod tests {
         assert!(file_ids1.contains(&file_ids2[0])); // file2 is shared between commands
     }
 
-    #[sqlx::test]
-    async fn test_insert_command_with_modified_files(pool: SqlitePool) {
+    #[tokio::test]
+    async fn test_insert_command_with_modified_files() {
+        let (_temp_dir, _db, conn) = setup_test_db().await;
+
         // First command
         let raw_cmd = "nix-build -A hello";
         let cmd_hash = compute_string_hash(raw_cmd);
@@ -632,7 +651,7 @@ mod tests {
         );
 
         let (_command_id1, file_ids1, _) =
-            insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash, output, &inputs1)
+            insert_command_with_inputs(&conn, raw_cmd, &cmd_hash, &input_hash, output, &inputs1)
                 .await
                 .unwrap();
 
@@ -659,12 +678,12 @@ mod tests {
         );
 
         let (command_id2, file_ids2, _) =
-            insert_command_with_inputs(&pool, raw_cmd, &cmd_hash, &input_hash2, output, &inputs2)
+            insert_command_with_inputs(&conn, raw_cmd, &cmd_hash, &input_hash2, output, &inputs2)
                 .await
                 .unwrap();
 
         // Investigate the files associated with the new command
-        let files = get_files_by_command_id(&pool, command_id2).await.unwrap();
+        let files = get_files_by_command_id(&conn, command_id2).await.unwrap();
         println!(
             "Number of files associated with the command: {}",
             files.len()
@@ -708,7 +727,7 @@ mod tests {
         );
 
         // Verify that the new command has the correct files
-        let files = get_files_by_command_id(&pool, command_id2).await.unwrap();
+        let files = get_files_by_command_id(&conn, command_id2).await.unwrap();
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].path, PathBuf::from("/path/to/file2"));
         assert_eq!(files[0].content_hash, "hash2");

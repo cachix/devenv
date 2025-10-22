@@ -70,7 +70,8 @@ serde_repr = "0.1.20"
 serde_yaml = "0.9.34"
 similar = "2.7.0"
 sha2 = "0.10.9"
-sqlx = { version = "0.8.6", features = ["time", "sqlite", "runtime-tokio"] }
+turso = "0.2.2"
+geni = { git = "https://github.com/cachix/geni", branch = "turso" }
 tempfile = "3.23.0"
 thiserror = "2.0.16"
 tracing = "0.1.41"
