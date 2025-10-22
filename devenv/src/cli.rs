@@ -63,15 +63,19 @@ pub struct GlobalOptions {
     pub log_format: LogFormat,
 
     #[arg(short = 'j', long,
-        global = true, help = "Maximum number of Nix builds at any time.",
-        default_value_t = max_jobs())]
+        global = true,
+        env = "DEVENV_MAX_JOBS",
+        help = "Maximum number of Nix builds to run concurrently.",
+        default_value_t = NixBuildDefaults::compute().max_jobs)]
     pub max_jobs: u8,
 
     #[arg(
         short = 'u',
         long,
-        help = "Maximum number CPU cores being used by a single build.",
-        default_value = "2"
+        global = true,
+        env = "DEVENV_CORES",
+        help = "Number of CPU cores available to each build.",
+        default_value_t = NixBuildDefaults::compute().cores
     )]
     pub cores: u8,
 
@@ -184,13 +188,14 @@ pub struct GlobalOptions {
 
 impl Default for GlobalOptions {
     fn default() -> Self {
+        let defaults = NixBuildDefaults::compute();
         Self {
             version: false,
             verbose: false,
             quiet: false,
             log_format: LogFormat::default(),
-            max_jobs: max_jobs(),
-            cores: 2,
+            max_jobs: defaults.max_jobs,
+            cores: defaults.cores,
             system: default_system(),
             impure: false,
             eval_cache: true,
@@ -444,21 +449,94 @@ pub fn default_system() -> String {
     format!("{arch}-{os}")
 }
 
-fn max_jobs() -> u8 {
-    let num_cpus = std::thread::available_parallelism().unwrap_or_else(|e| {
-        error!("Failed to get number of logical CPUs: {}", e);
-        std::num::NonZeroUsize::new(4).expect("4 is non-zero")
-    });
-    std::cmp::max(num_cpus.get().div_ceil(2), 2) as u8
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NixBuildDefaults {
+    pub max_jobs: u8,
+    pub cores: u8,
+}
+
+impl NixBuildDefaults {
+    pub fn compute() -> Self {
+        let total_cores = std::thread::available_parallelism()
+            .unwrap_or_else(|e| {
+                error!("Failed to get number of logical CPUs: {}", e);
+                4.try_into().unwrap()
+            })
+            .get();
+
+        let max_jobs = (total_cores / 4).max(1);
+        let cores = (total_cores / max_jobs).max(1);
+
+        Self {
+            max_jobs: max_jobs as u8,
+            cores: cores as u8,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Cli;
+    use super::{Cli, NixBuildDefaults};
 
     #[test]
     fn verify_cli() {
         use clap::CommandFactory;
         Cli::command().debug_assert()
+    }
+
+    #[test]
+    fn test_nix_build_defaults_low_cores() {
+        // 1 core: containers or minimal VMs
+        assert_eq!(compute_with_cores(1), NixBuildDefaults { max_jobs: 1, cores: 1 });
+        // 2 cores: small VMs or older machines
+        assert_eq!(compute_with_cores(2), NixBuildDefaults { max_jobs: 1, cores: 2 });
+        // 4 cores: older laptops or small VMs
+        assert_eq!(compute_with_cores(4), NixBuildDefaults { max_jobs: 1, cores: 4 });
+    }
+
+    #[test]
+    fn test_nix_build_defaults_medium_cores() {
+        // 8 cores: typical modern machines
+        assert_eq!(compute_with_cores(8), NixBuildDefaults { max_jobs: 2, cores: 4 });
+        // 10 cores: common on ARM-based laptops
+        assert_eq!(compute_with_cores(10), NixBuildDefaults { max_jobs: 2, cores: 5 });
+        // 12 cores: performance machines
+        assert_eq!(compute_with_cores(12), NixBuildDefaults { max_jobs: 3, cores: 4 });
+        // 16 cores: high-end machines and workstations
+        assert_eq!(compute_with_cores(16), NixBuildDefaults { max_jobs: 4, cores: 4 });
+    }
+
+    #[test]
+    fn test_nix_build_defaults_high_cores() {
+        // 32 cores: workstations and servers
+        assert_eq!(compute_with_cores(32), NixBuildDefaults { max_jobs: 8, cores: 4 });
+        // 64 cores: high-end workstations and servers
+        assert_eq!(compute_with_cores(64), NixBuildDefaults { max_jobs: 16, cores: 4 });
+        // 128 cores: servers and cloud instances
+        assert_eq!(compute_with_cores(128), NixBuildDefaults { max_jobs: 32, cores: 4 });
+    }
+
+    #[test]
+    fn test_nix_build_defaults_full_utilization() {
+        for cores in [1, 2, 4, 8, 10, 12, 16, 20, 32, 64, 128] {
+            let defaults = compute_with_cores(cores);
+            assert_eq!(
+                defaults.max_jobs as usize * defaults.cores as usize,
+                cores,
+                "Full utilization check failed for {} cores: got max_jobs={}, cores={}",
+                cores,
+                defaults.max_jobs,
+                defaults.cores
+            );
+        }
+    }
+
+    fn compute_with_cores(total_cores: usize) -> NixBuildDefaults {
+        let max_jobs = (total_cores / 4).max(1);
+        let cores = (total_cores / max_jobs).max(1);
+        NixBuildDefaults {
+            max_jobs: max_jobs as u8,
+            cores: cores as u8,
+        }
     }
 }
