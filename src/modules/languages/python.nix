@@ -1,36 +1,54 @@
-{ pkgs
-, config
-, lib
-, ...
+{
+  pkgs,
+  config,
+  lib,
+  inputs,
+  ...
 }:
 
 let
   cfg = config.languages.python;
-  libraries = lib.makeLibraryPath (
+
+  nixpkgsInput = inputs.nixpkgs or null;
+
+  # Determine if wrapper should be enabled by default
+  # Wrapper should be DISABLED for nixpkgs 25.11+ or unstable after Nov 1, 2025
+  defaultWrapperEnabled =
+    if nixpkgsInput != null then
+      let
+        # Check if we have version info (stable release)
+        version = nixpkgsInput.sourceInfo.version or null;
+        # Check lastModified timestamp (for unstable)
+        lastModified = nixpkgsInput.sourceInfo.lastModified or 0;
+        # November 1, 2025 at 00:00:00 UTC
+        cutoffTimestamp = 1761955200;
+      in
+      if version != null then
+        # For stable releases, enable if version < 25.11
+        lib.versionOlder version "25.11"
+      else
+        # For unstable, enable if lastModified <= November 1, 2025
+        lastModified <= cutoffTimestamp
+    else
+      # If no nixpkgs input, default to enabled
+      true;
+
+  libraries =
     cfg.libraries
     ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
     # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
-    ++ [ pkgs.stdenv.cc.cc.lib ]
-  );
+    ++ [ pkgs.stdenv.cc.cc.lib ];
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
-  package = pkgs.callPackage ../../python-wrapper.nix {
-    python = cfg.package;
-    requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
-    makeWrapperArgs =
-      [
-        "--prefix"
-        "LD_LIBRARY_PATH"
-        ":"
-        libraries
-      ]
-      ++ lib.optionals pkgs.stdenv.isDarwin [
-        "--prefix"
-        "DYLD_LIBRARY_PATH"
-        ":"
-        libraries
-      ];
-  };
+  package =
+    if cfg.wrapper.enable then
+      pkgs.callPackage ../../python-wrapper.nix {
+        python = cfg.package;
+        extraLibs = libraries;
+        requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
+      }
+    else
+      cfg.package;
 
   requirements = pkgs.writeText "requirements.txt" (
     toString (
@@ -343,6 +361,19 @@ in
         default = false;
         description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
       };
+      wrapper.enable = lib.mkOption {
+        type = lib.types.bool;
+        default = defaultWrapperEnabled;
+        description = ''
+          Whether to enable a wrapper that allows Python to import packages from the virtual environment.
+
+          Enabled by default for:
+            - Stable nixpkgs older than version 25.11
+            - Unstable nixpkgs with a last commit date before 01-11-2025.
+
+          Newer releases of nixpkgs ship with built-in patches that make this wrapper obsolete.
+        '';
+      };
     };
 
     uv = {
@@ -482,10 +513,9 @@ in
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
       lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root"
-      ++ lib.optional
-        (
-          !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
-        ) "--no-root"
+      ++ lib.optional (
+        !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
+      ) "--no-root"
       ++ lib.optional cfg.poetry.install.compile "--compile"
       ++ lib.optional cfg.poetry.install.quiet "--quiet"
       ++ lib.optionals (cfg.poetry.install.groups != [ ]) [
@@ -521,10 +551,11 @@ in
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
-    packages =
-      [ package ]
-      ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
-      ++ (lib.optional cfg.uv.enable cfg.uv.package);
+    packages = [
+      package
+    ]
+    ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
+    ++ (lib.optional cfg.uv.enable cfg.uv.package);
 
     env =
       (lib.optionalAttrs cfg.uv.enable {
@@ -532,7 +563,7 @@ in
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
         # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
         UV_PYTHON_DOWNLOADS = "never";
-        # Make uv choose the first python on PATH that is not uv provided. 
+        # Make uv choose the first python on PATH that is not uv provided.
         # The one it finds is then consistently the one from nix (which is what we want).
         UV_PYTHON_PREFERENCE = "only-system";
       })
