@@ -39,10 +39,14 @@ let
                 if config.binary != null
                 then "${pkgs.lib.getBin config.package}/bin/${config.binary}"
                 else pkgs.lib.getExe config.package;
+              isBash =
+                if config.binary != null
+                then config.binary == "bash"
+                else config.package.meta.mainProgram or null == "bash";
             in
             pkgs.writeScript name ''
               #!${binary}
-              ${lib.optionalString (!isStatus) "set -e"}
+              ${lib.optionalString (!isStatus && isBash) "set -e"}
               ${command}
               ${lib.optionalString (config.exports != [] && !isStatus) "${inputs.config.task.package}/bin/devenv-tasks export ${lib.concatStringsSep " " config.exports}"}
             '';
