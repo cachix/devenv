@@ -14,11 +14,17 @@ in
       description = "The Crystal package to use.";
     };
 
-    shards_package = lib.mkOption {
-      type = lib.types.package;
-      default = pkgs.shards;
-      defaultText = lib.literalExpression "pkgs.shards";
-      description = "The Shards package to use.";
+    shards = lib.mkOption {
+      type = lib.types.submodule {
+        options.package = lib.mkOption {
+          type = lib.types.package;
+          default = pkgs.shards;
+          defaultText = lib.literalExpression "pkgs.shards";
+          description = "The Shards package to use.";
+        };
+      };
+      description = "Configuration for shards";
+      default = { };
     };
   };
 
@@ -28,7 +34,7 @@ in
 
     packages = [
       cfg.package
-      cfg.shards_package
+      cfg.shards.package
     ];
   };
 }
