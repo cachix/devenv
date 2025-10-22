@@ -9,19 +9,22 @@
 let
   cfg = config.languages.python;
 
-  nixpkgsInput = inputs.nixpkgs or null;
-
-  # Determine if wrapper should be enabled by default
-  # Wrapper should be DISABLED for nixpkgs 25.11+ or unstable after Nov 1, 2025
-  defaultWrapperEnabled =
+  # Determine whether the legacy venv wrapper should be enabled
+  # Enabled for:
+  #   nixpkgs < 25.11
+  #   nixpkgs-unstable < 2025-11-01
+  legacyWrapperEnabled =
+    let
+      nixpkgsInput = inputs.nixpkgs or null;
+    in
     if nixpkgsInput != null then
       let
         # Check if we have version info (stable release)
         version = nixpkgsInput.sourceInfo.version or null;
         # Check lastModified timestamp (for unstable)
         lastModified = nixpkgsInput.sourceInfo.lastModified or 0;
-        # November 1, 2025 at 00:00:00 UTC
-        cutoffTimestamp = 1761955200;
+        # FIXME: update date to actual nixpkgs-unstable release (-ish)
+        cutoffTimestamp = 1761091200;
       in
       if version != null then
         # For stable releases, enable if version < 25.11
@@ -40,15 +43,6 @@ let
     ++ [ pkgs.stdenv.cc.cc.lib ];
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
-  package =
-    if cfg.wrapper.enable then
-      pkgs.callPackage ../../python-wrapper.nix {
-        python = cfg.package;
-        extraLibs = libraries;
-        requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
-      }
-    else
-      cfg.package;
 
   requirements = pkgs.writeText "requirements.txt" (
     toString (
@@ -75,7 +69,7 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    profile_python="$(${readlink} ${package.interpreter})"
+    profile_python="$(${readlink} ${cfg.package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
 
@@ -92,20 +86,20 @@ let
       ${
         if cfg.uv.enable then
           ''
-            echo uv venv -p ${package.interpreter} "$VENV_PATH"
-            uv venv -p ${package.interpreter} "$VENV_PATH"
+            echo uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
+            uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
           ''
         else
           ''
-            echo ${package.interpreter} -m venv ${
+            echo ${cfg.package.interpreter} -m venv ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
-            ${package.interpreter} -m venv ${
+            ${cfg.package.interpreter} -m venv ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
           ''
       }
-      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+      echo "${cfg.package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
 
     source "$VENV_PATH"/bin/activate
@@ -192,7 +186,7 @@ let
 
       # Avoid running "uv sync" for every shell.
       # Only run it when the "pyproject.toml" file or Python interpreter has changed.
-      local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
+      local ACTUAL_UV_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
       local UV_CHECKSUM_FILE="$VENV_PATH/uv.sync.checksum"
       if [ -f "$UV_CHECKSUM_FILE" ]
       then
@@ -242,7 +236,7 @@ let
       unset VIRTUAL_ENV
 
       # Make sure poetry's venv uses the configured Python executable.
-      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
     }
 
     function _devenv_poetry_install
@@ -251,7 +245,7 @@ let
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or Python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
       local POETRY_CHECKSUM_FILE=".venv/poetry.lock.checksum"
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
@@ -298,6 +292,35 @@ in
       default = pkgs.python3;
       defaultText = lib.literalExpression "pkgs.python3";
       description = "The Python package to use.";
+      apply =
+        drv:
+        let
+          isBuildEnv = drv: lib.hasAttr "extraLibs" (lib.functionArgs drv.override);
+          # Add extra libraries to the Python `buildEnv`.
+          appendLibraries =
+            drv:
+            (if isBuildEnv drv then drv else drv.buildEnv).override (args: {
+              extraLibs = (args.extraLibs or [ ]) ++ libraries;
+            });
+        in
+        # Apply the venv support wrapper if enabled.
+        if cfg.venv.wrapper.enable then
+          lib.pipe drv [
+            (
+              drv:
+              drv.overrideAttrs (_: {
+                buildEnv = pkgs.callPackage ../../python-wrapper.nix {
+                  inherit (drv.pkgs) requiredPythonModules;
+                  python = drv;
+                  extraLibs = libraries;
+                };
+              })
+            )
+            appendLibraries
+          ]
+        else
+          appendLibraries drv;
+
     };
 
     manylinux.enable = lib.mkOption {
@@ -363,7 +386,7 @@ in
       };
       wrapper.enable = lib.mkOption {
         type = lib.types.bool;
-        default = defaultWrapperEnabled;
+        default = legacyWrapperEnabled;
         description = ''
           Whether to enable a wrapper that allows Python to import packages from the virtual environment.
 
@@ -552,7 +575,7 @@ in
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
     packages = [
-      package
+      cfg.package
     ]
     ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
     ++ (lib.optional cfg.uv.enable cfg.uv.package);
@@ -613,7 +636,7 @@ in
     };
 
     enterShell = ''
-      export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+      export PYTHONPATH="$DEVENV_PROFILE/${cfg.package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
     '';
   };
 }
