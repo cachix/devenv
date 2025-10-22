@@ -16653,6 +16653,34 @@ null or strings concatenated with “\\n” or absolute path
 
 
 
+## languages.python.venv.wrapper.enable
+
+
+
+Whether to enable a wrapper that allows Python to import packages from the virtual environment.
+
+Enabled by default for:
+
+ - Stable nixpkgs older than version 25.11
+ - Unstable nixpkgs with a last commit date before 01-11-2025.
+
+Newer releases of nixpkgs ship with built-in patches that make this wrapper obsolete.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/python.nix)
+
+
+
 ## languages.python.version
 
 
