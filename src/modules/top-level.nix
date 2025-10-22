@@ -78,6 +78,18 @@ in
       default = [ ];
     };
 
+    inputsFrom = lib.mkOption {
+      type = types.listOf types.package;
+      description = "A list of derivations whose build inputs will be merged into the shell environment.";
+      default = [ ];
+      example = lib.literalExpression ''
+        [
+          pkgs.hello
+          (pkgs.python3.withPackages (ps: [ ps.numpy ps.pandas ]))
+        ]
+      '';
+    };
+
     stdenv = lib.mkOption {
       type = types.package;
       description = "The stdenv to use for the developer environment.";
@@ -359,8 +371,7 @@ in
       in
       performAssertions (
         (pkgs.mkShell.override { stdenv = config.stdenv; }) ({
-          inherit (config) name;
-          hardeningDisable = config.hardeningDisable;
+          inherit (config) hardeningDisable inputsFrom name;
           inherit buildInputs nativeBuildInputs;
           shellHook = ''
             ${lib.optionalString config.devenv.debug "set -x"}

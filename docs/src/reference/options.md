@@ -13241,6 +13241,39 @@ attribute set of list of string
 
 
 
+## inputsFrom
+
+
+
+A list of derivations whose build inputs will be merged into the shell environment.
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  pkgs.hello
+  (pkgs.python3.withPackages (ps: [ ps.numpy ps.pandas ]))
+]
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix](https://github.com/cachix/devenv/blob/main/src/modules/top-level.nix)
+
+
+
 ## languages.ansible.enable
 
 
