@@ -9,11 +9,11 @@
 let
   cfg = config.languages.python;
 
-  # Determine whether the legacy venv wrapper should be enabled
+  # Determine whether to patch Python's `buildEnv`
   # Enabled for:
   #   nixpkgs < 25.11
   #   nixpkgs-unstable < 2025-11-01
-  legacyWrapperEnabled =
+  legacyBuildEnvPatchEnabled =
     let
       nixpkgsInput = inputs.nixpkgs or null;
     in
@@ -296,11 +296,29 @@ in
         drv:
         let
           isBuildEnv = drv: lib.hasAttr "extraLibs" (lib.functionArgs drv.override);
+
+          patchBuildEnv =
+            drv:
+            drv.overrideAttrs (
+              prevAttrs:
+              let
+                buildEnv = pkgs.callPackage ../../python-build-env-legacy.nix {
+                  inherit (drv.pkgs) requiredPythonModules;
+                  python = drv;
+                };
+              in
+              {
+                inherit buildEnv;
+                passthru = prevAttrs.passthru // {
+                  inherit buildEnv;
+                };
+              }
+            );
+
           # Add extra libraries to the Python `buildEnv`.
           appendLibraries =
             drv:
             (if isBuildEnv drv then drv else drv.buildEnv).override (args: {
-              extraLibs = (args.extraLibs or [ ]) ++ libraries;
               makeWrapperArgs = [
                 "--prefix"
                 "LD_LIBRARY_PATH"
@@ -315,28 +333,10 @@ in
               ];
             });
         in
-        # Apply the venv support wrapper if enabled.
-        if cfg.venv.wrapper.enable then
+        # Apply the buildEnv patch if enabled.
+        if cfg.patches.buildEnv.enable then
           lib.pipe drv [
-            (
-              drv:
-              drv.overrideAttrs (
-                prevAttrs:
-                let
-                  buildEnv = pkgs.callPackage ../../python-wrapper.nix {
-                    inherit (drv.pkgs) requiredPythonModules;
-                    python = drv;
-                    extraLibs = libraries;
-                  };
-                in
-                {
-                  inherit buildEnv;
-                  passthru = prevAttrs.passthru // {
-                    inherit buildEnv;
-                  };
-                }
-              )
-            )
+            patchBuildEnv
             appendLibraries
           ]
         else
@@ -390,6 +390,21 @@ in
       example = "./directory";
     };
 
+    patches.buildEnv.enable = lib.mkOption {
+      type = lib.types.bool;
+      default = legacyBuildEnvPatchEnabled;
+      description = ''
+        Whether to apply fixes to Python's `buildEnv` for correct runtime initialization:
+        - Executables use `--inherit-argv0` to ensure Python initializes with correct `sys.prefix` and `sys.base_prefix`
+        - Python package scripts are unwrapped to invoke the environment's interpreter directly
+
+        Without these fixes, venvs cannot access environment packages via `--system-site-packages`.
+
+        Enabled by default for nixpkgs versions prior to 25.11.
+        Newer nixpkgs releases include upstream fixes that make this patch obsolete.
+      '';
+    };
+
     venv = {
       enable = lib.mkEnableOption "Python virtual environment";
       requirements = lib.mkOption {
@@ -404,19 +419,6 @@ in
         type = lib.types.bool;
         default = false;
         description = "Whether `pip install` should avoid outputting messages during devenv initialisation.";
-      };
-      wrapper.enable = lib.mkOption {
-        type = lib.types.bool;
-        default = legacyWrapperEnabled;
-        description = ''
-          Whether to enable a wrapper that allows Python to import packages from the virtual environment.
-
-          Enabled by default for:
-            - Stable nixpkgs older than version 25.11
-            - Unstable nixpkgs with a last commit date before 01-11-2025.
-
-          Newer releases of nixpkgs ship with built-in patches that make this wrapper obsolete.
-        '';
       };
     };
 

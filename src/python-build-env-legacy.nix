@@ -1,21 +1,21 @@
-{ lib
-, stdenv
-, buildEnv
-, makeBinaryWrapper
+{
+  lib,
+  stdenv,
+  buildEnv,
+  makeBinaryWrapper,
 
   # manually pased
-, python
-, requiredPythonModules
+  python,
+  requiredPythonModules,
 
   # extra opts
-, extraLibs ? [ ]
-, extraOutputsToInstall ? [ ]
-, postBuild ? ""
-, ignoreCollisions ? false
-, permitUserSite ? false
+  extraLibs ? [ ],
+  extraOutputsToInstall ? [ ],
+  postBuild ? "",
+  ignoreCollisions ? false,
+  permitUserSite ? false,
   # Wrap executables with the given argument.
-, makeWrapperArgs ? [ ]
-,
+  makeWrapperArgs ? [ ],
 }:
 
 # Create a python executable that knows about additional packages.
@@ -55,14 +55,17 @@ let
                     sed -e '1d' -e '3d' ".$prg-wrapped" >> "$out/bin/$prg"
                     chmod +x "$out/bin/$prg"
                   else
-                    makeWrapper "$path/bin/$prg" "$out/bin/$prg" --inherit-argv0 --resolve-argv0 ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true"''} ${lib.concatStringsSep " " makeWrapperArgs}
+                    makeWrapper "$path/bin/$prg" "$out/bin/$prg" --inherit-argv0 --resolve-argv0 ${
+                      lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true"''
+                    } ${lib.concatStringsSep " " makeWrapperArgs}
                   fi
                 fi
               fi
             done
           fi
         done
-      '' + postBuild;
+      ''
+      + postBuild;
 
       inherit (python) meta;
 
