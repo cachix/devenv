@@ -9,7 +9,7 @@ let
   treefmt-nix = config.lib.getInput {
     name = "treefmt-nix";
     url = "github:numtide/treefmt-nix";
-    attribute = "treefmt.module";
+    attribute = "formatting.treefmt";
     follows = [ "nixpkgs" ];
   };
 in
