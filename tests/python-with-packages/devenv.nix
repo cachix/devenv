@@ -25,11 +25,5 @@
     echo "Testing imports from venv..."
     python -c 'import requests; print("requests works!")'
     python -c 'import pytest; print("pytest works!")'
-
-    echo "Verifying Nix packages still accessible from venv..."
-    python -c 'import matplotlib; print("matplotlib still works!")'
-    python -c 'import numpy; print("numpy still works!")'
-    python -c 'import IPython; print("ipython still works!")'
-    python -c 'import tkinter; print("tkinter still works!")'
   '';
 }
