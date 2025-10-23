@@ -1,7 +1,9 @@
 use console::style;
 use std::collections::HashSet;
 use std::fmt;
+use std::fs::File;
 use std::io::{self, IsTerminal};
+use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
@@ -13,7 +15,10 @@ use tracing::{
 use tracing_indicatif::IndicatifLayer;
 use tracing_subscriber::{
     EnvFilter, Layer,
-    fmt::{FmtContext, FormatEvent, FormatFields, format::Writer},
+    fmt::{
+        FmtContext, FormatEvent, FormatFields,
+        format::{FmtSpan, Writer},
+    },
     layer,
     prelude::*,
     registry::LookupSpan,
@@ -51,14 +56,32 @@ pub enum LogFormat {
     TracingFull,
     /// A pretty human-readable log format used for debugging.
     TracingPretty,
+    /// A JSON log format used for machine consumption.
+    TracingJson,
+}
+
+macro_rules! json_export_layer {
+    ($export_file:expr) => {
+        $export_file.map(|file| {
+            tracing_subscriber::fmt::layer()
+                .with_writer(file)
+                .json()
+                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        })
+    };
 }
 
 pub fn init_tracing_default() {
     let shutdown = tokio_shutdown::Shutdown::new();
-    init_tracing(Level::default(), LogFormat::default(), shutdown);
+    init_tracing(Level::default(), LogFormat::default(), None, shutdown);
 }
 
-pub fn init_tracing(level: Level, log_format: LogFormat, _shutdown: Arc<tokio_shutdown::Shutdown>) {
+pub fn init_tracing(
+    level: Level,
+    log_format: LogFormat,
+    trace_export_file: Option<&Path>,
+    _shutdown: Arc<tokio_shutdown::Shutdown>,
+) {
     let devenv_layer = DevenvLayer::new();
 
     let filter = EnvFilter::builder()
@@ -68,28 +91,32 @@ pub fn init_tracing(level: Level, log_format: LogFormat, _shutdown: Arc<tokio_sh
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();
 
+    let export_file = trace_export_file.and_then(|path| File::create(path).ok());
+
     match log_format {
         LogFormat::TracingFull => {
             let stderr_layer = tracing_subscriber::fmt::layer()
                 .with_writer(stderr)
-                .with_ansi(ansi)
-                .boxed();
+                .with_ansi(ansi);
+            let file_layer = json_export_layer!(export_file);
             tracing_subscriber::registry()
                 .with(filter)
                 .with(stderr_layer)
                 .with(devenv_layer)
+                .with(file_layer)
                 .init();
         }
         LogFormat::TracingPretty => {
             let stderr_layer = tracing_subscriber::fmt::layer()
                 .with_writer(stderr)
                 .with_ansi(ansi)
-                .pretty()
-                .boxed();
+                .pretty();
+            let file_layer = json_export_layer!(export_file);
             tracing_subscriber::registry()
                 .with(filter)
                 .with(stderr_layer)
                 .with(devenv_layer)
+                .with(file_layer)
                 .init();
         }
         LogFormat::Cli => {
@@ -111,14 +138,28 @@ pub fn init_tracing(level: Level, log_format: LogFormat, _shutdown: Arc<tokio_sh
             let stderr_layer = tracing_subscriber::fmt::layer()
                 .event_format(DevenvFormat::default())
                 .with_writer(indicatif_writer)
-                .with_ansi(ansi)
-                .boxed();
+                .with_ansi(ansi);
+
+            let file_layer = json_export_layer!(export_file);
 
             tracing_subscriber::registry()
                 .with(filter)
                 .with(stderr_layer)
                 .with(devenv_layer)
                 .with(filtered_layer)
+                .with(file_layer)
+                .init();
+        }
+        LogFormat::TracingJson => {
+            let stderr_layer = tracing_subscriber::fmt::layer()
+                .with_writer(stderr)
+                .json()
+                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
+            let file_layer = json_export_layer!(export_file);
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stderr_layer)
+                .with(file_layer)
                 .init();
         }
     }

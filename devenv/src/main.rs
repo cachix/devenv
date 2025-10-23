@@ -50,7 +50,12 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
         log::Level::default()
     };
 
-    log::init_tracing(level, cli.global_options.log_format, shutdown.clone());
+    log::init_tracing(
+        level,
+        cli.global_options.log_format,
+        cli.global_options.trace_export_file.as_deref(),
+        shutdown.clone(),
+    );
 
     let mut config = config::Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
