@@ -77,5 +77,19 @@
       '';
       package = pkgs.python3;
     };
+
+    "test:with-output" = {
+      exec = ''
+        echo "VISIBLE_OUTPUT_MARKER"
+      '';
+      showOutput = true;
+    };
+
+    "test:without-output" = {
+      exec = ''
+        echo "HIDDEN_OUTPUT_MARKER"
+      '';
+      showOutput = false;
+    };
   };
 }

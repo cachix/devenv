@@ -399,6 +399,12 @@ pub enum TasksCommand {
             default_value_t = RunMode::Single
         )]
         mode: RunMode,
+
+        #[arg(
+            long,
+            help = "Show task output for all tasks (equivalent to --verbose for tasks)"
+        )]
+        show_output: bool,
     },
     #[command(about = "List all available tasks.")]
     List {},

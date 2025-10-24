@@ -787,6 +787,7 @@ impl Devenv {
         &self,
         roots: Vec<String>,
         run_mode: devenv_tasks::RunMode,
+        show_output: bool,
     ) -> Result<()> {
         self.assemble(false).await?;
         if roots.is_empty() {
@@ -804,7 +805,14 @@ impl Devenv {
             }
         }
 
-        let tasks = self.load_tasks().await?;
+        let mut tasks = self.load_tasks().await?;
+
+        // If --show-output flag is present, enable output for all tasks
+        if show_output {
+            for task in &mut tasks {
+                task.show_output = true;
+            }
+        }
 
         // Convert global options to verbosity level
         let verbosity = if self.global_options.quiet {

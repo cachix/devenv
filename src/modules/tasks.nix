@@ -114,6 +114,7 @@ let
               input = config.input;
               exec_if_modified = config.execIfModified;
               cwd = config.cwd;
+              show_output = config.showOutput;
             };
             description = "Internal configuration for the task.";
           };
@@ -126,6 +127,11 @@ let
             type = types.str;
             default = "";
             description = "Description of the task.";
+          };
+          showOutput = lib.mkOption {
+            type = types.bool;
+            default = false;
+            description = "Always show task output (stdout and stderr), regardless of whether the task succeeds or fails.";
           };
           after = lib.mkOption {
             type = types.listOf types.str;

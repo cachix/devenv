@@ -135,7 +135,17 @@ async fn run_tasks(shutdown: Arc<Shutdown>) -> Result<()> {
             mode,
             task_file,
         } => {
-            let tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
+            let mut tasks: Vec<TaskConfig> = fetch_tasks(&task_file)?;
+
+            // If --show-output flag is present, enable output for all tasks
+            if let Ok(cmdline) = env::var("DEVENV_CMDLINE") {
+                let cmdline = cmdline.to_lowercase();
+                if cmdline.contains("--show-output") {
+                    for task in &mut tasks {
+                        task.show_output = true;
+                    }
+                }
+            }
 
             let config = Config {
                 tasks,

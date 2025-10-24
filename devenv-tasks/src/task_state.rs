@@ -366,7 +366,7 @@ impl TaskState {
                 result = stdout_reader.next_line(), if !stdout_closed => {
                     match result {
                         Ok(Some(line)) => {
-                            if self.verbosity == VerbosityLevel::Verbose {
+                            if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
                                 println!("[{}] {}", self.task.name, line);
                             } else if is_process {
                                 println!("{}", line);
@@ -386,7 +386,7 @@ impl TaskState {
                 result = stderr_reader.next_line(), if !stderr_closed => {
                     match result {
                         Ok(Some(line)) => {
-                            if self.verbosity == VerbosityLevel::Verbose || is_process {
+                            if self.verbosity == VerbosityLevel::Verbose || self.task.show_output || is_process {
                                 eprintln!("[{}] {}", self.task.name, line);
                             }
                             stderr_lines.push((std::time::Instant::now(), line));
