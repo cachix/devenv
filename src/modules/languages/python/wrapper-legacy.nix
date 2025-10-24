@@ -5,7 +5,7 @@
   runCommand,
   makeBinaryWrapper,
 
-  # manually pased
+  # manually passed
   python,
   requiredPythonModules,
 
@@ -21,6 +21,8 @@
 
 # Create a python executable that knows about additional packages.
 let
+  makePostBuildWrapper = import ./postbuild-wrapper.nix { inherit lib; };
+
   env =
     let
       paths = requiredPythonModules (extraLibs ++ [ python ]) ++ [
@@ -40,34 +42,17 @@ let
 
       nativeBuildInputs = [ makeBinaryWrapper ];
 
-      postBuild = ''
-        for path in ${lib.concatStringsSep " " paths}; do
-          if [ -d "$path/bin" ]; then
-            cd "$path/bin"
-            for prg in *; do
-              if [ -f "$prg" ] && [ -x "$prg" ]; then
-                rm -f "$out/bin/$prg"
-                if [ "$prg" = "${python.executable}" ]; then
-                  makeWrapper "${python.interpreter}" "$out/bin/$prg" \
-                    --inherit-argv0 \
-                    ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true"''} \
-                    ${lib.concatStringsSep " " makeWrapperArgs}
-                elif [ "$(readlink "$prg")" = "${python.executable}" ]; then
-                  ln -s "${python.executable}" "$out/bin/$prg"
-                else
-                  makeWrapper "$path/bin/$prg" "$out/bin/$prg" \
-                    --set NIX_PYTHONPREFIX "$out" \
-                    --set NIX_PYTHONEXECUTABLE ${pythonExecutable} \
-                    --set NIX_PYTHONPATH ${pythonPath} \
-                    ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true"''} \
-                    ${lib.concatStringsSep " " makeWrapperArgs}
-                fi
-              fi
-            done
-          fi
-        done
-      ''
-      + postBuild;
+      postBuild =
+        makePostBuildWrapper {
+          inherit
+            python
+            pythonPath
+            pythonExecutable
+            permitUserSite
+            makeWrapperArgs
+            ;
+        }
+        + postBuild;
 
       inherit (python) meta;
 
