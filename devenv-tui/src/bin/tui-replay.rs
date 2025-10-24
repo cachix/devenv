@@ -1,456 +1,253 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog};
-use devenv_tui::tracing_interface::{nix_fields, operation_fields, operation_types, status_events};
-use devenv_tui::{OperationId, init_tui};
+use devenv_tui::init_tui;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
-
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
 use tracing::span::EnteredSpan;
 use tracing::{info, info_span, warn};
 
-/// Simple replay processor that emits tracing events for Nix logs
-struct NixLogReplayProcessor {
-    current_operation_id: Arc<Mutex<Option<OperationId>>>,
-    active_spans: Arc<Mutex<HashMap<u64, EnteredSpan>>>,
+/// JSON trace event from tracing-subscriber's JSON formatter
+#[derive(Debug, Deserialize, Clone)]
+struct TraceEvent {
+    timestamp: DateTime<Utc>,
+    #[serde(default)]
+    fields: HashMap<String, serde_json::Value>,
+    #[serde(default)]
+    span: Option<SpanInfo>,
 }
 
-impl NixLogReplayProcessor {
+#[derive(Debug, Deserialize, Clone)]
+struct SpanInfo {
+    #[serde(default)]
+    name: String,
+    id: Option<u64>,
+}
+
+/// Helper to extract typed values from JSON fields
+struct FieldExtractor<'a>(&'a HashMap<String, serde_json::Value>);
+
+impl<'a> FieldExtractor<'a> {
+    fn str_field(&self, key: &str) -> &str {
+        self.0.get(key).and_then(|v| v.as_str()).unwrap_or("")
+    }
+
+    fn u64_field(&self, key: &str) -> u64 {
+        self.0.get(key).and_then(|v| v.as_u64()).unwrap_or(0)
+    }
+
+    fn event_type(&self) -> Option<&str> {
+        self.0.get("event").and_then(|v| v.as_str())
+    }
+}
+
+/// Replays JSON trace events by recreating spans and events
+struct TraceReplayer {
+    active_spans: Mutex<HashMap<u64, EnteredSpan>>,
+}
+
+impl TraceReplayer {
     fn new() -> Self {
         Self {
-            current_operation_id: Arc::new(Mutex::new(None)),
-            active_spans: Arc::new(Mutex::new(HashMap::new())),
+            active_spans: Mutex::new(HashMap::new()),
         }
     }
 
-    fn set_current_operation(&self, operation_id: OperationId) {
-        if let Ok(mut current) = self.current_operation_id.lock() {
-            *current = Some(operation_id);
+    fn replay(&self, event: &TraceEvent) {
+        let fields = FieldExtractor(&event.fields);
+
+        match (event.span.as_ref(), fields.event_type()) {
+            (Some(span_info), Some("new")) => self.start_span(span_info, &fields),
+            (Some(span_info), Some("close")) => self.end_span(span_info),
+            _ => self.emit_event(&fields),
         }
     }
 
-    fn process_internal_log(&self, log: InternalLog) {
-        let current_op_id = self
-            .current_operation_id
-            .lock()
-            .ok()
-            .and_then(|guard| guard.clone());
+    fn start_span(&self, span_info: &SpanInfo, fields: &FieldExtractor) {
+        let Some(span_id) = span_info.id else { return };
 
-        if let Some(operation_id) = current_op_id {
-            match log {
-                InternalLog::Start {
-                    id,
-                    typ,
-                    text,
-                    fields,
-                    ..
-                } => {
-                    self.handle_activity_start(operation_id, id, typ, text, fields);
-                }
-                InternalLog::Stop { id } => {
-                    self.handle_activity_stop(id, true);
-                }
-                InternalLog::Result { id, typ, fields } => {
-                    self.handle_activity_result(id, typ, fields);
-                }
-                _ => {
-                    // For other log types, emit a basic tracing event
-                    info!(devenv.log = true, "Nix: {:?}", log);
-                }
-            }
-        }
-    }
+        let span = match fields.str_field("operation.type") {
+            "build" => info_span!(
+                "nix_build",
+                operation.type = "build",
+                operation.name = fields.str_field("operation.name"),
+                operation.short_name = fields.str_field("operation.short_name"),
+                operation.derivation = fields.str_field("operation.derivation"),
+                nix.activity_id = fields.u64_field("nix.activity_id"),
+            ),
+            "download" => info_span!(
+                "nix_download",
+                operation.type = "download",
+                operation.name = fields.str_field("operation.name"),
+                operation.short_name = fields.str_field("operation.short_name"),
+                operation.store_path = fields.str_field("operation.store_path"),
+                operation.substituter = fields.str_field("operation.substituter"),
+                nix.activity_id = fields.u64_field("nix.activity_id"),
+            ),
+            "query" => info_span!(
+                "nix_query",
+                operation.type = "query",
+                operation.name = fields.str_field("operation.name"),
+                operation.short_name = fields.str_field("operation.short_name"),
+                operation.store_path = fields.str_field("operation.store_path"),
+                operation.substituter = fields.str_field("operation.substituter"),
+                nix.activity_id = fields.u64_field("nix.activity_id"),
+            ),
+            "fetch_tree" => info_span!(
+                "fetch_tree",
+                operation.type = "fetch_tree",
+                operation.name = fields.str_field("operation.name"),
+                operation.short_name = fields.str_field("operation.short_name"),
+                nix.activity_id = fields.u64_field("nix.activity_id"),
+            ),
+            "evaluate" => info_span!(
+                "nix_evaluate",
+                operation.type = "evaluate",
+                operation.name = fields.str_field("operation.name"),
+                operation.short_name = fields.str_field("operation.short_name"),
+                nix.activity_id = fields.u64_field("nix.activity_id"),
+            ),
+            _ => info_span!(
+                "generic_operation",
+                operation.type = fields.str_field("operation.type"),
+                operation.name = fields.str_field("operation.name"),
+                operation.short_name = fields.str_field("operation.short_name"),
+            ),
+        };
 
-    fn handle_activity_start(
-        &self,
-        _operation_id: OperationId,
-        activity_id: u64,
-        activity_type: ActivityType,
-        text: String,
-        fields: Vec<Field>,
-    ) {
-        match activity_type {
-            ActivityType::Build => {
-                let derivation_path = fields
-                    .first()
-                    .and_then(|f| match f {
-                        Field::String(s) => Some(s.clone()),
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| text.clone());
-
-                let machine = fields.get(1).and_then(|f| match f {
-                    Field::String(s) => Some(s.clone()),
-                    _ => None,
-                });
-
-                let derivation_name = extract_derivation_name(&derivation_path);
-
-                let span = info_span!(
-                    "nix_build",
-                    { operation_fields::TYPE } = operation_types::BUILD,
-                    { operation_fields::NAME } = %derivation_name,
-                    { operation_fields::SHORT_NAME } = %derivation_name,
-                    { operation_fields::DERIVATION } = %derivation_path,
-                    { operation_fields::MACHINE } = ?machine,
-                    { nix_fields::ACTIVITY_ID } = activity_id
-                );
-
-                let entered_span = span.entered();
-                if let Ok(mut spans) = self.active_spans.lock() {
-                    spans.insert(activity_id, entered_span);
-                }
-            }
-            ActivityType::CopyPath => {
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
-
-                    let span = info_span!(
-                        "nix_download",
-                        { operation_fields::TYPE } = operation_types::DOWNLOAD,
-                        { operation_fields::NAME } = %package_name,
-                        { operation_fields::SHORT_NAME } = %package_name,
-                        { operation_fields::STORE_PATH } = %store_path,
-                        { operation_fields::SUBSTITUTER } = %substituter,
-                        { nix_fields::ACTIVITY_ID } = activity_id
-                    );
-
-                    let entered_span = span.entered();
-                    if let Ok(mut spans) = self.active_spans.lock() {
-                        spans.insert(activity_id, entered_span);
-                    }
-                }
-            }
-            ActivityType::QueryPathInfo => {
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
-
-                    let span = info_span!(
-                        "nix_query",
-                        { operation_fields::TYPE } = operation_types::QUERY,
-                        { operation_fields::NAME } = %package_name,
-                        { operation_fields::SHORT_NAME } = %package_name,
-                        { operation_fields::STORE_PATH } = %store_path,
-                        { operation_fields::SUBSTITUTER } = %substituter,
-                        { nix_fields::ACTIVITY_ID } = activity_id
-                    );
-
-                    let entered_span = span.entered();
-                    if let Ok(mut spans) = self.active_spans.lock() {
-                        spans.insert(activity_id, entered_span);
-                    }
-                }
-            }
-            ActivityType::FetchTree => {
-                let span = info_span!(
-                    "fetch_tree",
-                    { operation_fields::TYPE } = operation_types::FETCH_TREE,
-                    { operation_fields::NAME } = %text,
-                    { operation_fields::SHORT_NAME } = %text,
-                    { nix_fields::ACTIVITY_ID } = activity_id
-                );
-
-                let entered_span = span.entered();
-                if let Ok(mut spans) = self.active_spans.lock() {
-                    spans.insert(activity_id, entered_span);
-                }
-            }
-            _ => {
-                // For other activity types, emit a debug event
-                tracing::debug!("Unhandled Nix activity type: {:?}", activity_type);
-            }
-        }
-    }
-
-    fn handle_activity_stop(&self, activity_id: u64, _success: bool) {
-        // Remove the span from active spans - dropping it will close the span
         if let Ok(mut spans) = self.active_spans.lock() {
-            spans.remove(&activity_id);
+            spans.insert(span_id, span.entered());
         }
     }
 
-    fn handle_activity_result(
-        &self,
-        activity_id: u64,
-        result_type: devenv_eval_cache::internal_log::ResultType,
-        fields: Vec<Field>,
-    ) {
-        use devenv_eval_cache::internal_log::{Field, ResultType};
-
-        match result_type {
-            ResultType::Progress => {
-                if fields.len() >= 2
-                    && let (Some(Field::Int(downloaded)), total_opt) =
-                        (fields.first(), fields.get(1))
-                {
-                    let total_bytes = match total_opt {
-                        Some(Field::Int(total)) => Some(*total),
-                        _ => None,
-                    };
-
-                    // Emit progress event (not a span)
-                    tracing::event!(
-                        target: "devenv.nix.download",
-                        tracing::Level::INFO,
-                        activity_id = activity_id,
-                        bytes_downloaded = *downloaded,
-                        total_bytes = ?total_bytes,
-                        "Download progress: {} / {:?} bytes",
-                        downloaded,
-                        total_bytes
-                    );
-                }
-            }
-            ResultType::SetPhase => {
-                if let Some(Field::String(phase)) = fields.first() {
-                    // Emit phase change event
-                    tracing::event!(
-                        target: "devenv.nix.build",
-                        tracing::Level::INFO,
-                        { operation_fields::PHASE } = phase.as_str(),
-                        { status_events::fields::STATUS } = status_events::ACTIVE,
-                        activity_id = activity_id,
-                        "Build phase: {}", phase
-                    );
-                }
-            }
-            ResultType::BuildLogLine => {
-                if let Some(Field::String(log_line)) = fields.first() {
-                    // Emit build log event (not a span)
-                    tracing::event!(
-                        target: "devenv.nix.build",
-                        tracing::Level::INFO,
-                        activity_id = activity_id,
-                        line = %log_line,
-                        "Build log: {}", log_line
-                    );
-                }
-            }
-            _ => {
-                tracing::debug!("Unhandled Nix result type: {:?}", result_type);
-            }
+    fn end_span(&self, span_info: &SpanInfo) {
+        if let (Some(span_id), Ok(mut spans)) = (span_info.id, self.active_spans.lock()) {
+            spans.remove(&span_id);
         }
     }
-}
 
-/// Extract a human-readable derivation name from a derivation path
-fn extract_derivation_name(derivation_path: &str) -> String {
-    // Remove .drv suffix if present
-    let path = derivation_path
-        .strip_suffix(".drv")
-        .unwrap_or(derivation_path);
-
-    // Extract the name part after the hash
-    if let Some(dash_pos) = path.rfind('-')
-        && let Some(slash_pos) = path[..dash_pos].rfind('/')
-    {
-        return path[slash_pos + 1..].to_string();
+    fn emit_event(&self, fields: &FieldExtractor) {
+        let message = fields.str_field("message");
+        if !message.is_empty() {
+            info!("{}", message);
+        }
     }
-
-    // Fallback: just take the filename
-    path.split('/').next_back().unwrap_or(path).to_string()
-}
-
-/// Extract a human-readable package name from a store path
-fn extract_package_name(store_path: &str) -> String {
-    // Extract the name part after the hash (format: /nix/store/hash-name)
-    if let Some(dash_pos) = store_path.rfind('-')
-        && let Some(slash_pos) = store_path[..dash_pos].rfind('/')
-    {
-        return store_path[slash_pos + 1..].to_string();
-    }
-
-    // Fallback: just take the filename
-    store_path
-        .split('/')
-        .next_back()
-        .unwrap_or(store_path)
-        .to_string()
-}
-
-#[derive(Debug)]
-struct LogEntry {
-    timestamp: DateTime<Utc>,
-    source: String,
-    content: String,
-}
-
-fn parse_log_line(line: &str) -> Result<LogEntry> {
-    // Find the first space after the timestamp
-    let space_pos = line.find(' ').context("No space found after timestamp")?;
-
-    let (timestamp_str, rest) = line.split_at(space_pos);
-    let rest = rest.trim_start();
-
-    // Parse ISO8601 timestamp
-    let timestamp = DateTime::parse_from_rfc3339(timestamp_str)
-        .context("Failed to parse ISO8601 timestamp")?
-        .with_timezone(&Utc);
-
-    // Find the source tag (e.g., @nix)
-    let source_end = rest.find(' ').unwrap_or(rest.len());
-    let (source, content) = rest.split_at(source_end);
-    let content = content.trim_start();
-
-    Ok(LogEntry {
-        timestamp,
-        source: source.to_string(),
-        content: content.to_string(),
-    })
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let shutdown = Shutdown::new();
-
-    // Run replay and then wait for shutdown
     run_replay(shutdown.clone()).await?;
 
-    // Keep running until Ctrl+C
     eprintln!("Replay complete. Press Ctrl+C to exit.");
     shutdown.wait_for_shutdown().await;
-
     Ok(())
 }
 
 async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
-        eprintln!("Usage: {} <log-file>", args[0]);
+        eprintln!("Usage: {} <trace-file.json>", args[0]);
+        eprintln!();
+        eprintln!("Generate a trace file using:");
+        eprintln!("  devenv --trace-export-file=trace.json <command>");
+        eprintln!();
+        eprintln!("Or with JSON log format:");
+        eprintln!("  devenv --log-format=tracing-json <command> > trace.json");
         std::process::exit(1);
     }
 
-    let log_path = PathBuf::from(&args[1]);
-    let file = File::open(&log_path)
-        .with_context(|| format!("Failed to open log file: {}", log_path.display()))?;
+    let trace_path = PathBuf::from(&args[1]);
+    let file = File::open(&trace_path)
+        .with_context(|| format!("Failed to open trace file: {}", trace_path.display()))?;
 
     let reader = BufReader::new(file);
     let mut entries = Vec::new();
 
-    // Parse all log entries
+    // Parse all trace entries
     for (line_num, line) in reader.lines().enumerate() {
         let line = line.with_context(|| format!("Failed to read line {}", line_num + 1))?;
         if line.trim().is_empty() {
             continue;
         }
 
-        match parse_log_line(&line) {
-            Ok(entry) => entries.push(entry),
-            Err(e) => eprintln!("Failed to parse line {}: {} - {}", line_num + 1, e, line),
+        match serde_json::from_str::<TraceEvent>(&line) {
+            Ok(event) => entries.push(event),
+            Err(e) => {
+                eprintln!("Failed to parse JSON on line {}: {}", line_num + 1, e);
+                eprintln!("Line: {}", line);
+            }
         }
     }
 
     if entries.is_empty() {
-        eprintln!("No valid log entries found");
+        eprintln!("No valid trace entries found");
         return Ok(());
     }
 
-    // Initialize TUI with proper shutdown coordination
-    let tui_handle = init_tui();
+    eprintln!("Loaded {} trace events", entries.len());
 
-    // Get model before moving the layer
+    // Initialize TUI
+    let tui_handle = init_tui();
     let model = tui_handle.model();
 
-    // Initialize basic tracing to support the new architecture
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry().with(tui_handle.layer).init();
 
-    // Create a Nix log replay processor that emits tracing events
-    let nix_processor = NixLogReplayProcessor::new();
+    let replayer = TraceReplayer::new();
 
     // Start TUI in background
-    let tui_shutdown = shutdown.clone();
-    let tui_handle = tokio::spawn(async move {
-        match devenv_tui::app::run_app(model, tui_shutdown).await {
-            Ok(_) => eprintln!("TUI exited normally"),
-            Err(e) => eprintln!("TUI error: {}", e),
+    let tui_task = tokio::spawn({
+        let shutdown = shutdown.clone();
+        async move {
+            match devenv_tui::app::run_app(model, shutdown).await {
+                Ok(_) => eprintln!("TUI exited normally"),
+                Err(e) => eprintln!("TUI error: {}", e),
+            }
         }
     });
 
-    // Create main operation
-    let main_op_id = OperationId::new("replay");
-
-    // Start replay operation via tracing - using a span so the TUI layer can capture it
-    let replay_span = info_span!(
-        "replay_operation",
-        { operation_fields::TYPE } = "replay",
-        { operation_fields::NAME } = format!("Replaying {} log entries", entries.len()),
-        { operation_fields::SHORT_NAME } = "Replay",
-    );
-    let _guard = replay_span.enter();
-
-    // Set current operation for Nix processor
-    nix_processor.set_current_operation(main_op_id.clone());
-
-    // Replay log entries with timing
+    // Replay trace entries with timing
     let start_time = Instant::now();
     let first_timestamp = entries[0].timestamp;
 
-    for (idx, entry) in entries.iter().enumerate() {
+    for (idx, event) in entries.iter().enumerate() {
         // Calculate delay from first entry
-        let time_offset = entry.timestamp.signed_duration_since(first_timestamp);
-        let target_elapsed = Duration::from_millis(time_offset.num_milliseconds() as u64);
+        let time_offset = event.timestamp.signed_duration_since(first_timestamp);
+        let target_elapsed = Duration::from_millis(time_offset.num_milliseconds().max(0) as u64);
 
-        // Wait until we reach the target time, with shutdown support
+        // Wait until we reach the target time
         let current_elapsed = start_time.elapsed();
         if target_elapsed > current_elapsed {
             let sleep_duration = target_elapsed - current_elapsed;
             tokio::select! {
-                _ = sleep(sleep_duration) => {
-                    // Continue with replay
-                }
+                _ = sleep(sleep_duration) => {}
                 _ = shutdown.wait_for_shutdown() => {
-                    // Shutdown requested, cleanup and exit
                     warn!("Replay interrupted by shutdown");
-
-                    // Give TUI a moment to display the message
                     sleep(Duration::from_millis(100)).await;
-
                     return Ok(());
                 }
             }
         }
 
-        // Process the log entry based on source
-        match entry.source.as_str() {
-            "@nix" => {
-                // Try to parse as Nix internal log
-                if let Ok(internal_log) = serde_json::from_str::<InternalLog>(&entry.content) {
-                    nix_processor.process_internal_log(internal_log);
-                } else {
-                    // Log as regular message
-                    info!(target: "devenv.nix", "{}", entry.content);
-                }
-            }
-            _ => {
-                // Log as regular message
-                info!(target: "devenv.system", "{} {}", entry.source, entry.content);
-            }
-        }
+        replayer.replay(event);
 
-        // Show progress
-        if idx % 100 == 0 {
+        // Show progress periodically
+        if idx % 100 == 0 && idx > 0 {
             let progress = ((idx + 1) as f64 / entries.len() as f64) * 100.0;
-            info!("Replay progress: {:.1}%", progress);
+            eprintln!("Replay progress: {:.1}%", progress);
         }
     }
 
-    // Keep the span open and let activities continue to be displayed
-    // Don't drop _guard here - keep the replay operation active
-    info!("Replay finished. Activities are still visible in the TUI.");
+    eprintln!("Replay finished. Activities are still visible in the TUI.");
 
-    // Check if TUI is still running
-    if tui_handle.is_finished() {
+    if tui_task.is_finished() {
         eprintln!("Warning: TUI task has already exited!");
     }
 
