@@ -1,4 +1,4 @@
-{ lib }:
+{ lib, jq }:
 
 {
   # Python derivation info
@@ -14,8 +14,13 @@ let
   pythonPath = "${placeholder "out"}/${python.sitePackages}";
 in
 ''
-  echo "PATHS: $paths"
-  exit 1
+  # Extract paths from the pkgs JSON (buildEnv provides $pkgs or $pkgsPath)
+  if [ -n "''${pkgsPath:-}" ]; then
+    paths=$(${jq}/bin/jq -r '.[].paths[]' "$pkgsPath")
+  else
+    paths=$(echo "$pkgs" | ${jq}/bin/jq -r '.[].paths[]')
+  fi
+
   for path in $paths; do
     if [ -d "$path/bin" ]; then
       cd "$path/bin"

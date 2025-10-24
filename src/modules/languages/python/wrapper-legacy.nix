@@ -3,6 +3,7 @@
 , buildEnv
 , runCommand
 , makeBinaryWrapper
+, callPackage
 , # manually passed
   python
 , requiredPythonModules
@@ -19,7 +20,7 @@
 
 # Create a python executable that knows about additional packages.
 let
-  makePostBuildWrapper = import ./postbuild-wrapper.nix { inherit lib; };
+  makePostBuildWrapper = callPackage ./postbuild-wrapper.nix { };
 
   env =
     let
