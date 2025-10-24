@@ -1,0 +1,69 @@
+[package]
+name = "devenv-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Core async runtime
+tokio = { workspace = true, features = [
+  "macros",
+  "rt-multi-thread",
+  "sync",
+  "time",
+  "signal",
+] }
+tokio-shutdown = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# TUI library
+iocraft = { version = "0.7.10" }
+
+# Tracing integration
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Data structures
+indexmap = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+miette = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Nix log parsing
+devenv-eval-cache = { path = "../devenv-eval-cache" }
+
+# Shared task types
+devenv-cache-core = { path = "../devenv-cache-core" }
+
+# Task execution engine
+devenv-tasks = { path = "../devenv-tasks" }
+
+# Time handling
+once_cell = { workspace = true }
+chrono = { workspace = true }
+
+# Human-readable formatting
+human-repr = "1.1"
+
+# Random number generation
+rand = { workspace = true }
+
+
+# Terminal UI components
+console = { workspace = true }
+[[bin]]
+name = "tui-replay"
+path = "src/bin/tui-replay.rs"
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }

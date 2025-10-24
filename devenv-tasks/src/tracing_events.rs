@@ -2,31 +2,45 @@
 //!
 //! This module provides helper functions to emit consistent tracing events
 //! that can be captured by devenv-tui's tracing layer for real-time display.
+//!
+//! Uses the standardized tracing interface defined in devenv_tui::tracing_interface
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, info_span, warn};
+
+// Import the standardized tracing interface constants
+// Note: We use string literals directly to avoid the devenv-tui dependency in devenv-tasks
+const OPERATION_TYPE: &str = "operation.type";
+const OPERATION_NAME: &str = "operation.name";
+const OPERATION_SHORT_NAME: &str = "operation.short_name";
+const STATUS: &str = "status";
+const PROGRESS_TYPE: &str = "progress.type";
+#[allow(dead_code)]
+const PROGRESS_CURRENT: &str = "progress.current";
+#[allow(dead_code)]
+const PROGRESS_TOTAL: &str = "progress.total";
 
 /// Emit a structured tracing event when a task starts
 pub fn emit_task_start(task_name: &str) {
-    info!(
-        target: "devenv.ui",
-        task_name,
-        devenv.ui.message = task_name,
-        devenv.ui.type = "task",
-        devenv.ui.detail = "starting",
-        devenv.ui.id = format!("task-{}", task_name),
-        "Task starting"
-    );
+    let _span = info_span!(
+        "task_start",
+        { OPERATION_TYPE } = "task",
+        { OPERATION_NAME } = task_name,
+        { OPERATION_SHORT_NAME } = task_name,
+        task_name = task_name,
+    )
+    .entered();
+
+    info!({ STATUS } = "starting", "Task starting");
 }
 
 /// Emit a structured tracing event for task status changes
 pub fn emit_task_status_change(task_name: &str, status: &str, result: Option<&str>) {
     info!(
-        target: "devenv.ui.progress",
+        target: "devenv_tasks",
         task_name,
         status,
         ?result,
-        devenv.ui.id = format!("task-{}", task_name),
-        devenv.ui.detail = status,
+        { STATUS } = status,
         "Task status updated"
     );
 }
@@ -73,8 +87,7 @@ pub fn emit_task_completed(
     duration_secs: Option<f64>,
     reason: Option<&str>,
 ) {
-    let target = "devenv.ui.progress";
-    let id = format!("task-{task_name}");
+    let target = "devenv_tasks";
     match result {
         "success" => {
             info!(
@@ -84,8 +97,7 @@ pub fn emit_task_completed(
                 result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = id,
-                devenv.ui.detail = "completed successfully",
+                { STATUS } = "completed",
                 "Task completed successfully"
             );
         }
@@ -97,8 +109,7 @@ pub fn emit_task_completed(
                 result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = id,
-                devenv.ui.detail = "failed",
+                { STATUS } = "failed",
                 "Task failed"
             );
         }
@@ -110,8 +121,8 @@ pub fn emit_task_completed(
                 result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = id,
-                devenv.ui.detail = "skipped (cached)",
+                { STATUS } = "completed",
+                { PROGRESS_TYPE } = "indeterminate",
                 "Task skipped (cached)"
             );
         }
@@ -123,8 +134,7 @@ pub fn emit_task_completed(
                 result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = id,
-                devenv.ui.detail = "skipped",
+                { STATUS } = "completed",
                 "Task skipped"
             );
         }
@@ -136,8 +146,7 @@ pub fn emit_task_completed(
                 result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = id,
-                devenv.ui.detail = "skipped due to dependency failure",
+                { STATUS } = "failed",
                 "Task skipped due to dependency failure"
             );
         }
@@ -149,8 +158,7 @@ pub fn emit_task_completed(
                 result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = %id,
-                devenv.ui.detail = "cancelled",
+                { STATUS } = "cancelled",
                 "Task cancelled"
             );
         }
@@ -162,8 +170,7 @@ pub fn emit_task_completed(
                 result,
                 ?duration_secs,
                 ?reason,
-                devenv.ui.id = %id,
-                devenv.ui.detail = "completed",
+                { STATUS } = "completed",
                 "Task completed"
             );
         }

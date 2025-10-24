@@ -1,9 +1,12 @@
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
+use devenv_tui::tracing_interface::{
+    nix_fields, operation_fields, operation_types, progress_events, status_events,
+};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{Span, debug, debug_span, error, info, trace, warn};
+use tracing::{Span, debug, error, info, info_span, trace, warn};
 
 /// Simple operation ID type for correlating Nix activities
 pub type OperationId = String;
@@ -106,9 +109,10 @@ impl NixLogBridge {
         if let Some(ref span) = state.span {
             span.in_scope(|| {
                 trace!(
-                    devenv.user_message = format!("Evaluated {} files", files.len()),
-                    files = ?files,
-                    "Evaluated {} files", files.len()
+                    { progress_events::fields::TYPE } = progress_events::FILES,
+                    { progress_events::fields::CURRENT } = files.len(),
+                    "Evaluated {} files",
+                    files.len()
                 );
             });
         }
@@ -191,8 +195,8 @@ impl NixLogBridge {
                     {
                         activity_info.span.in_scope(|| {
                             info!(
-                                devenv.user_message = format!("Build phase: {}", phase),
-                                phase = %phase,
+                                { operation_fields::PHASE } = %phase,
+                                { status_events::fields::STATUS } = status_events::ACTIVE,
                                 "Build phase: {}", phase
                             );
                         });
@@ -252,16 +256,20 @@ impl NixLogBridge {
                     format!("Building {}", derivation_name)
                 };
 
-                let span = debug_span!(
-                    "nix_derivation",
-                    devenv.user_message = %message,
-                    activity_id = activity_id,
-                    derivation_path = %derivation_path,
-                    derivation_name = %derivation_name,
-                    machine = ?machine
+                let span = info_span!(
+                    "nix_build",
+                    { operation_fields::TYPE } = operation_types::BUILD,
+                    { operation_fields::NAME } = %derivation_name,
+                    { operation_fields::SHORT_NAME } = %derivation_name,
+                    { operation_fields::DERIVATION } = %derivation_path,
+                    { operation_fields::MACHINE } = ?machine,
+                    { nix_fields::ACTIVITY_ID } = activity_id
                 );
                 span.in_scope(|| {
-                    info!("{}", message);
+                    info!(
+                        { status_events::fields::STATUS } = status_events::STARTING,
+                        "{}", message
+                    );
                 });
 
                 if let Ok(mut activities) = self.active_activities.lock() {
@@ -281,16 +289,20 @@ impl NixLogBridge {
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let span = debug_span!(
+                    let span = info_span!(
                         "nix_query",
-                        devenv.user_message = format!("Querying {}", package_name),
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
+                        { operation_fields::TYPE } = operation_types::QUERY,
+                        { operation_fields::NAME } = %package_name,
+                        { operation_fields::SHORT_NAME } = %package_name,
+                        { operation_fields::STORE_PATH } = %store_path,
+                        { operation_fields::SUBSTITUTER } = %substituter,
+                        { nix_fields::ACTIVITY_ID } = activity_id
                     );
                     span.in_scope(|| {
-                        info!("Querying {}", package_name);
+                        info!(
+                            { status_events::fields::STATUS } = status_events::STARTING,
+                            "Querying {}", package_name
+                        );
                     });
 
                     if let Ok(mut activities) = self.active_activities.lock() {
@@ -312,16 +324,20 @@ impl NixLogBridge {
                 {
                     let package_name = extract_package_name(store_path);
 
-                    let span = debug_span!(
+                    let span = info_span!(
                         "nix_download",
-                        devenv.user_message = format!("Downloading {}", package_name),
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
+                        { operation_fields::TYPE } = operation_types::DOWNLOAD,
+                        { operation_fields::NAME } = %package_name,
+                        { operation_fields::SHORT_NAME } = %package_name,
+                        { operation_fields::STORE_PATH } = %store_path,
+                        { operation_fields::SUBSTITUTER } = %substituter,
+                        { nix_fields::ACTIVITY_ID } = activity_id
                     );
                     span.in_scope(|| {
-                        info!("Downloading {}", package_name);
+                        info!(
+                            { status_events::fields::STATUS } = status_events::STARTING,
+                            "Downloading {}", package_name
+                        );
                     });
 
                     if let Ok(mut activities) = self.active_activities.lock() {
@@ -338,14 +354,18 @@ impl NixLogBridge {
             }
             ActivityType::FetchTree => {
                 // FetchTree activities show when fetching Git repos, tarballs, etc.
-                let span = debug_span!(
-                    "fetch_tree",
-                    devenv.user_message = format!("Fetching {}", text),
-                    activity_id = activity_id,
-                    message = %text
+                let span = info_span!(
+                    "nix_fetch_tree",
+                    { operation_fields::TYPE } = operation_types::FETCH_TREE,
+                    { operation_fields::NAME } = %text,
+                    { operation_fields::SHORT_NAME } = %text,
+                    { nix_fields::ACTIVITY_ID } = activity_id
                 );
                 span.in_scope(|| {
-                    info!("Fetching {}", text);
+                    info!(
+                        { status_events::fields::STATUS } = status_events::STARTING,
+                        "Fetching {}", text
+                    );
                 });
 
                 if let Ok(mut activities) = self.active_activities.lock() {
@@ -378,53 +398,62 @@ impl NixLogBridge {
 
             match activity_info.activity_type {
                 ActivityType::Build => {
-                    let message = if success {
-                        "Build completed"
-                    } else {
-                        "Build failed"
-                    };
                     activity_info.span.in_scope(|| {
                         if success {
-                            info!("{}", message);
+                            info!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Build completed"
+                            );
                         } else {
-                            warn!("{}", message);
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Build failed"
+                            );
                         }
                     });
                 }
                 ActivityType::CopyPath => {
-                    let message = if success {
-                        "Download completed"
-                    } else {
-                        "Download failed"
-                    };
                     activity_info.span.in_scope(|| {
                         if success {
-                            info!("{}", message);
+                            info!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Download completed"
+                            );
                         } else {
-                            warn!("{}", message);
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Download failed"
+                            );
                         }
                     });
                 }
                 ActivityType::QueryPathInfo => {
                     activity_info.span.in_scope(|| {
                         if success {
-                            debug!("Query completed");
+                            debug!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Query completed"
+                            );
                         } else {
-                            warn!("Query failed");
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Query failed"
+                            );
                         }
                     });
                 }
                 ActivityType::FetchTree => {
-                    let message = if success {
-                        "Fetch completed"
-                    } else {
-                        "Fetch failed"
-                    };
                     activity_info.span.in_scope(|| {
                         if success {
-                            info!("{}", message);
+                            info!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Fetch completed"
+                            );
                         } else {
-                            warn!("{}", message);
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Fetch failed"
+                            );
                         }
                     });
                 }
@@ -455,12 +484,9 @@ impl NixLogBridge {
                     {
                         activity_info.span.in_scope(|| {
                             debug!(
-                                devenv.user_message =
-                                    format!("Progress: {}/{} done", done, expected),
-                                done = done,
-                                expected = expected,
-                                running = running,
-                                failed = failed,
+                                { progress_events::fields::TYPE } = progress_events::GENERIC,
+                                { progress_events::fields::CURRENT } = done,
+                                { progress_events::fields::TOTAL } = expected,
                                 "Progress: {}/{} done, {} running, {} failed",
                                 done,
                                 expected,
@@ -484,20 +510,28 @@ impl NixLogBridge {
                         {
                             // Only CopyPath activities have byte-based download progress
                             if activity_info.activity_type == ActivityType::CopyPath {
-                                let message = if let Some(total) = total_bytes {
-                                    let percent = (*downloaded as f64 / total as f64) * 100.0;
-                                    format!("Download progress: {:.1}%", percent)
+                                let percent = if let Some(total) = total_bytes {
+                                    Some((*downloaded as f64 / total as f64) * 100.0)
                                 } else {
-                                    format!("Downloaded {} bytes", downloaded)
+                                    None
                                 };
 
                                 activity_info.span.in_scope(|| {
-                                    debug!(
-                                        devenv.user_message = %message,
-                                        bytes_downloaded = downloaded,
-                                        total_bytes = ?total_bytes,
-                                        "{}", message
-                                    );
+                                    if let Some(pct) = percent {
+                                        debug!(
+                                            { progress_events::fields::TYPE } = progress_events::BYTES,
+                                            { progress_events::fields::CURRENT } = downloaded,
+                                            { progress_events::fields::TOTAL } = ?total_bytes,
+                                            { progress_events::fields::PERCENTAGE } = pct,
+                                            "Download progress: {:.1}%", pct
+                                        );
+                                    } else {
+                                        debug!(
+                                            { progress_events::fields::TYPE } = progress_events::BYTES,
+                                            { progress_events::fields::CURRENT } = downloaded,
+                                            "Downloaded {} bytes", downloaded
+                                        );
+                                    }
                                 });
                             }
                         }
@@ -513,8 +547,8 @@ impl NixLogBridge {
                 {
                     activity_info.span.in_scope(|| {
                         info!(
-                            devenv.user_message = format!("Build phase: {}", phase),
-                            phase = %phase,
+                            { operation_fields::PHASE } = %phase,
+                            { status_events::fields::STATUS } = status_events::ACTIVE,
                             "Build phase: {}", phase
                         );
                     });
@@ -551,13 +585,17 @@ impl NixLogBridge {
 
             // If this is the first file, create and store the evaluation span
             if state.total_files_evaluated == 0 && state.pending_files.is_empty() {
-                let span = debug_span!(
+                let span = info_span!(
                     "nix_evaluation",
-                    devenv.user_message = "Evaluating Nix files",
-                    first_file = %file_path_str
+                    { operation_fields::TYPE } = operation_types::EVALUATE,
+                    { operation_fields::NAME } = "Nix evaluation",
+                    { operation_fields::SHORT_NAME } = "Eval"
                 );
                 span.in_scope(|| {
-                    info!("Starting Nix evaluation: {}", file_path_str);
+                    info!(
+                        { status_events::fields::STATUS } = status_events::STARTING,
+                        "Starting Nix evaluation: {}", file_path_str
+                    );
                 });
                 state.span = Some(span);
             }
@@ -581,9 +619,9 @@ impl NixLogBridge {
                 if let Some(ref span) = state.span {
                     span.in_scope(|| {
                         info!(
-                            devenv.user_message = format!("Evaluating Nix files ({} total)", state.total_files_evaluated),
-                            files = ?files,
-                            total_files_evaluated = state.total_files_evaluated,
+                            { progress_events::fields::TYPE } = progress_events::FILES,
+                            { progress_events::fields::CURRENT } = state.total_files_evaluated,
+                            { status_events::fields::STATUS } = status_events::ACTIVE,
                             "Evaluated {} files (total: {})",
                             files.len(),
                             state.total_files_evaluated

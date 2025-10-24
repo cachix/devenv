@@ -497,33 +497,93 @@ mod tests {
     #[test]
     fn test_nix_build_defaults_low_cores() {
         // 1 core: containers or minimal VMs
-        assert_eq!(compute_with_cores(1), NixBuildDefaults { max_jobs: 1, cores: 1 });
+        assert_eq!(
+            compute_with_cores(1),
+            NixBuildDefaults {
+                max_jobs: 1,
+                cores: 1
+            }
+        );
         // 2 cores: small VMs or older machines
-        assert_eq!(compute_with_cores(2), NixBuildDefaults { max_jobs: 1, cores: 2 });
+        assert_eq!(
+            compute_with_cores(2),
+            NixBuildDefaults {
+                max_jobs: 1,
+                cores: 2
+            }
+        );
         // 4 cores: older laptops or small VMs
-        assert_eq!(compute_with_cores(4), NixBuildDefaults { max_jobs: 1, cores: 4 });
+        assert_eq!(
+            compute_with_cores(4),
+            NixBuildDefaults {
+                max_jobs: 1,
+                cores: 4
+            }
+        );
     }
 
     #[test]
     fn test_nix_build_defaults_medium_cores() {
         // 8 cores: typical modern machines
-        assert_eq!(compute_with_cores(8), NixBuildDefaults { max_jobs: 2, cores: 4 });
+        assert_eq!(
+            compute_with_cores(8),
+            NixBuildDefaults {
+                max_jobs: 2,
+                cores: 4
+            }
+        );
         // 10 cores: common on ARM-based laptops
-        assert_eq!(compute_with_cores(10), NixBuildDefaults { max_jobs: 2, cores: 5 });
+        assert_eq!(
+            compute_with_cores(10),
+            NixBuildDefaults {
+                max_jobs: 2,
+                cores: 5
+            }
+        );
         // 12 cores: performance machines
-        assert_eq!(compute_with_cores(12), NixBuildDefaults { max_jobs: 3, cores: 4 });
+        assert_eq!(
+            compute_with_cores(12),
+            NixBuildDefaults {
+                max_jobs: 3,
+                cores: 4
+            }
+        );
         // 16 cores: high-end machines and workstations
-        assert_eq!(compute_with_cores(16), NixBuildDefaults { max_jobs: 4, cores: 4 });
+        assert_eq!(
+            compute_with_cores(16),
+            NixBuildDefaults {
+                max_jobs: 4,
+                cores: 4
+            }
+        );
     }
 
     #[test]
     fn test_nix_build_defaults_high_cores() {
         // 32 cores: workstations and servers
-        assert_eq!(compute_with_cores(32), NixBuildDefaults { max_jobs: 8, cores: 4 });
+        assert_eq!(
+            compute_with_cores(32),
+            NixBuildDefaults {
+                max_jobs: 8,
+                cores: 4
+            }
+        );
         // 64 cores: high-end workstations and servers
-        assert_eq!(compute_with_cores(64), NixBuildDefaults { max_jobs: 16, cores: 4 });
+        assert_eq!(
+            compute_with_cores(64),
+            NixBuildDefaults {
+                max_jobs: 16,
+                cores: 4
+            }
+        );
         // 128 cores: servers and cloud instances
-        assert_eq!(compute_with_cores(128), NixBuildDefaults { max_jobs: 32, cores: 4 });
+        assert_eq!(
+            compute_with_cores(128),
+            NixBuildDefaults {
+                max_jobs: 32,
+                cores: 4
+            }
+        );
     }
 
     #[test]
