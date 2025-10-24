@@ -22,6 +22,7 @@
     # For developing the mkdocs-based documentation
     python = {
       enable = true;
+      package = pkgs.python3.withPackages (ps: [ ps.matplotlib ]);
       # Use a faster package manager
       uv.enable = true;
       venv = {
