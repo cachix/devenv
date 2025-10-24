@@ -33,15 +33,15 @@ treefmt # This would run treefmt on all files.
 
 ## Additional Devenv Integrations
 
-### Pre-commit Hooks
+### Git Hooks
 
-If you would like to enable `treefmt` in your pre-commit hooks, simply add:
+If you would like to enable `treefmt` in your git-hooks hooks, simply add:
 
 ```nix
 { inputs, ... }:
 
 {
-  pre-commit.hooks = {
+  git-hooks.hooks = {
     treefmt.enable = true;
   };
 }
