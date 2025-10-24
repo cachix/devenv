@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
     };
 
     let shutdown = tokio_shutdown::Shutdown::new();
-    log::init_tracing(level, cli.log_format, shutdown);
+    log::init_tracing(level, cli.log_format, None, shutdown);
 
     let description = if !cli.description.is_empty() {
         Some(cli.description.join(" "))
