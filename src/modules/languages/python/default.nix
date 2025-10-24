@@ -1,9 +1,8 @@
-{
-  pkgs,
-  config,
-  lib,
-  inputs,
-  ...
+{ pkgs
+, config
+, lib
+, inputs
+, ...
 }:
 
 let
@@ -27,13 +26,13 @@ let
         cutoffTimestamp = 1761091200;
       in
       if version != null then
-        # For stable releases, enable if version < 25.11
+      # For stable releases, enable if version < 25.11
         lib.versionOlder version "25.11"
       else
-        # For unstable, enable if lastModified <= November 1, 2025
+      # For unstable, enable if lastModified <= November 1, 2025
         lastModified <= cutoffTimestamp
     else
-      # If no nixpkgs input, default to enabled
+    # If no nixpkgs input, default to enabled
       true;
 
   libraries =
@@ -300,138 +299,121 @@ in
           patchBuildEnv =
             drv:
             # If we got a buildEnv from withPackages, modify its postBuild to use our wrapper logic
-            # First add runCommand to create bin directory to extraLibs
             let
-              patchedEnv = (drv.override (args: {
-                extraLibs = (args.extraLibs or []) ++ [
-                  (pkgs.runCommand "bin" {} ''
-                    mkdir -p $out/bin
-                  '')
-                ];
-              })).overrideAttrs (
-                prevAttrs:
-              let
-                pythonExecutable = "$out/bin/${drv.python.executable}";
-                pythonPath = "$out/${drv.python.sitePackages}";
-                permitUserSite = false;
-                makeWrapperArgs = lib.concatStringsSep " " (
-                  [
-                    "--prefix"
-                    "LD_LIBRARY_PATH"
-                    ":"
-                    (lib.makeLibraryPath libraries)
-                  ]
-                  ++ lib.optionals pkgs.stdenv.isDarwin [
-                    "--prefix"
-                    "DYLD_LIBRARY_PATH"
-                    ":"
-                    (lib.makeLibraryPath libraries)
-                  ]
-                );
+              makePostBuildWrapper = pkgs.callPackage ./postbuild-wrapper.nix { };
+              patchedEnv =
+                (drv.override (args: {
+                  extraLibs = (args.extraLibs or [ ]) ++ [
+                    (pkgs.runCommand "bin" { } ''
+                      mkdir -p $out/bin
+                    '')
+                  ];
+                })).overrideAttrs
+                  (
+                    prevAttrs:
+                    let
+                      makeWrapperArgs = [
+                        "--prefix"
+                        "LD_LIBRARY_PATH"
+                        ":"
+                        (lib.makeLibraryPath libraries)
+                      ]
+                      ++ lib.optionals pkgs.stdenv.isDarwin [
+                        "--prefix"
+                        "DYLD_LIBRARY_PATH"
+                        ":"
+                        (lib.makeLibraryPath libraries)
+                      ];
 
-                # Split postBuild by lines
-                lines = lib.splitString "\n" prevAttrs.postBuild;
+                      # Generate the patched wrapper script using the shared function
+                      patchedWrapperScript = makePostBuildWrapper {
+                        inherit (drv) python;
+                        inherit makeWrapperArgs;
+                      };
 
-                # Use fold to track state (skip counter) and build new lines
-                result =
-                  lib.foldl
-                    (
-                      acc: line:
-                      if acc.skip > 0 then
-                        # Skip this line
-                        {
-                          lines = acc.lines;
-                          skip = acc.skip - 1;
-                        }
-                      else if lib.hasInfix ''if [ -L "$out/bin" ]; then'' line then
-                        # Found the start of the postBuild block - replace entire block with our patched version
-                        {
-                          lines = acc.lines ++ [
-                            ''for path in $paths; do''
-                            ''  if [ -d "$path/bin" ]; then''
-                            ''    cd "$path/bin"''
-                            ''    for prg in *; do''
-                            ''      if [ -f "$prg" ] && [ -x "$prg" ]; then''
-                            ''        rm -f "$out/bin/$prg"''
-                            ''        if [ "$prg" = "${drv.python.executable}" ]; then''
-                            ''          makeWrapper "${drv.python.interpreter}" "$out/bin/$prg" \''
-                            ''            --inherit-argv0 \''
-                            ''            ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true" \''}''
-                            ''            ${makeWrapperArgs}''
-                            ''        elif [ "$(readlink "$prg")" = "${drv.python.executable}" ]; then''
-                            ''          ln -s "${drv.python.executable}" "$out/bin/$prg"''
-                            ''        else''
-                            ''          makeWrapper "$path/bin/$prg" "$out/bin/$prg" \''
-                            ''            --set NIX_PYTHONPREFIX "$out" \''
-                            ''            --set NIX_PYTHONEXECUTABLE ${pythonExecutable} \''
-                            ''            --set NIX_PYTHONPATH ${pythonPath} \''
-                            ''            ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true" \''}''
-                            ''            ${makeWrapperArgs}''
-                            ''        fi''
-                            ''      fi''
-                            ''    done''
-                            ''  fi''
-                            ''done''
-                          ];
-                          skip = 17;  # Skip the next 17 lines of the original block (18 total)
-                        }
-                      else
-                        # Keep this line
-                        {
-                          lines = acc.lines ++ [ line ];
-                          skip = 0;
-                        }
-                    )
+                      # Split postBuild by lines
+                      lines = lib.splitString "\n" prevAttrs.postBuild;
+
+                      # Use fold to track state (skip counter) and build new lines
+                      result =
+                        lib.foldl
+                          (
+                            acc: line:
+                              if acc.skip > 0 then
+                              # Skip this line
+                                {
+                                  lines = acc.lines;
+                                  skip = acc.skip - 1;
+                                }
+                              else if lib.hasInfix ''if [ -L "$out/bin" ]; then'' line then
+                              # Found the start of the postBuild block - replace entire block with our patched version
+                                {
+                                  lines = acc.lines ++ [ patchedWrapperScript ];
+                                  skip = 17; # Skip the next 17 lines of the original block (18 total)
+                                }
+                              else
+                              # Keep this line
+                                {
+                                  lines = acc.lines ++ [ line ];
+                                  skip = 0;
+                                }
+                          )
+                          {
+                            lines = [ ];
+                            skip = 0;
+                          }
+                          lines;
+
+                      filteredLines = result.lines;
+                    in
                     {
-                      lines = [ ];
-                      skip = 0;
+                      postBuild = lib.concatStringsSep "\n" filteredLines;
+                      passthru = prevAttrs.passthru // {
+                        interpreter = "${patchedEnv}/bin/${drv.python.executable}";
+                      };
                     }
-                    lines;
-
-                filteredLines = result.lines;
-                in
-                {
-                  postBuild = lib.concatStringsSep "\n" filteredLines;
-                  passthru = prevAttrs.passthru // {
-                    interpreter = "${patchedEnv}/bin/${drv.python.executable}";
-                  };
-                }
-              );
+                  );
             in
-              patchedEnv;
+            if isBuildEnv drv then patchedEnv else drv;
+
+          overrideBuildEnv =
+            drv:
+            drv.overrideAttrs (prevAttrs: rec {
+              buildEnv = pkgs.callPackage ./wrapper-legacy.nix {
+                python = drv;
+                requiredPythonModules = drv.pkgs.requiredPythonModules;
+              };
+              passthru = prevAttrs.passthru // {
+                inherit buildEnv;
+              };
+            });
 
           # Add extra libraries to the Python `buildEnv`.
           appendLibraries =
             drv:
-            if isBuildEnv drv then
-              # Already a buildEnv, just return it (libraries already added in patchBuildEnv)
-              drv
-            else
-              # Use the patched buildEnv
-              (drv.buildEnv).override (args: {
-                makeWrapperArgs = [
-                  "--prefix"
-                  "LD_LIBRARY_PATH"
-                  ":"
-                  (lib.makeLibraryPath libraries)
-                ]
-                ++ lib.optionals pkgs.stdenv.isDarwin [
-                  "--prefix"
-                  "DYLD_LIBRARY_PATH"
-                  ":"
-                  (lib.makeLibraryPath libraries)
-                ];
-              });
+            (if isBuildEnv drv then drv else drv.buildEnv).override (args: {
+              makeWrapperArgs = [
+                "--prefix"
+                "LD_LIBRARY_PATH"
+                ":"
+                (lib.makeLibraryPath libraries)
+              ]
+              ++ lib.optionals pkgs.stdenv.isDarwin [
+                "--prefix"
+                "DYLD_LIBRARY_PATH"
+                ":"
+                (lib.makeLibraryPath libraries)
+              ];
+            });
         in
-        # Apply the buildEnv patch if enabled.
         # if cfg.patches.buildEnv.enable then
         lib.pipe drv [
           patchBuildEnv
+          overrideBuildEnv
           appendLibraries
         ];
       # else
       #   appendLibraries drv;
-
     };
 
     manylinux.enable = lib.mkOption {
@@ -649,9 +631,10 @@ in
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
       lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root"
-      ++ lib.optional (
-        !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
-      ) "--no-root"
+      ++ lib.optional
+        (
+          !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
+        ) "--no-root"
       ++ lib.optional cfg.poetry.install.compile "--compile"
       ++ lib.optional cfg.poetry.install.quiet "--quiet"
       ++ lib.optionals (cfg.poetry.install.groups != [ ]) [
