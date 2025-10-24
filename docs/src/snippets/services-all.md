@@ -20,6 +20,7 @@
   services.minio.enable = true;
   services.mongodb.enable = true;
   services.mysql.enable = true;
+  services.nats.enable = true;
   services.nginx.enable = true;
   services.opensearch.enable = true;
   services.opentelemetry-collector.enable = true;
