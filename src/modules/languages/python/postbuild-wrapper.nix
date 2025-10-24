@@ -2,18 +2,20 @@
 
 {
   # Python derivation info
-  python,
-
-  # Wrapper configuration
-  permitUserSite,
-  makeWrapperArgs,
+  python
+, # Wrapper configuration
+  permitUserSite ? false
+, makeWrapperArgs ? [ ]
+,
 }:
 
 let
-  pythonExecutable = "$out/bin/${python.executable}";
-  pythonPath = "$out/${python.sitePackages}";
+  pythonExecutable = "${placeholder "out"}/bin/${python.executable}";
+  pythonPath = "${placeholder "out"}/${python.sitePackages}";
 in
 ''
+  echo "PATHS: $paths"
+  exit 1
   for path in $paths; do
     if [ -d "$path/bin" ]; then
       cd "$path/bin"

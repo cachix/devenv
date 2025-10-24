@@ -1,22 +1,20 @@
-{
-  lib,
-  stdenv,
-  buildEnv,
-  runCommand,
-  makeBinaryWrapper,
-
-  # manually passed
-  python,
-  requiredPythonModules,
-
-  # extra opts
-  extraLibs ? [ ],
-  extraOutputsToInstall ? [ ],
-  postBuild ? "",
-  ignoreCollisions ? false,
-  permitUserSite ? false,
-  # Wrap executables with the given argument.
-  makeWrapperArgs ? [ ],
+{ lib
+, stdenv
+, buildEnv
+, runCommand
+, makeBinaryWrapper
+, # manually passed
+  python
+, requiredPythonModules
+, # extra opts
+  extraLibs ? [ ]
+, extraOutputsToInstall ? [ ]
+, postBuild ? ""
+, ignoreCollisions ? false
+, permitUserSite ? false
+, # Wrap executables with the given argument.
+  makeWrapperArgs ? [ ]
+,
 }:
 
 # Create a python executable that knows about additional packages.
@@ -30,11 +28,9 @@ let
           mkdir -p $out/bin
         '')
       ];
-      pythonPath = "${placeholder "out"}/${python.sitePackages}";
-      pythonExecutable = "${placeholder "out"}/bin/${python.executable}";
     in
     buildEnv {
-      name = "${python.name}-env";
+      name = builtins.trace (toString paths) "${python.name}-env";
 
       inherit paths;
       inherit ignoreCollisions;
@@ -43,15 +39,14 @@ let
       nativeBuildInputs = [ makeBinaryWrapper ];
 
       postBuild =
-        makePostBuildWrapper {
-          inherit
-            python
-            pythonPath
-            pythonExecutable
-            permitUserSite
-            makeWrapperArgs
-            ;
-        }
+        makePostBuildWrapper
+          {
+            inherit
+              python
+              permitUserSite
+              makeWrapperArgs
+              ;
+          }
         + postBuild;
 
       inherit (python) meta;

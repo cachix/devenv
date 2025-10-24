@@ -1,9 +1,8 @@
-{
-  pkgs,
-  config,
-  lib,
-  inputs,
-  ...
+{ pkgs
+, config
+, lib
+, inputs
+, ...
 }:
 
 let
@@ -27,13 +26,13 @@ let
         cutoffTimestamp = 1761091200;
       in
       if version != null then
-        # For stable releases, enable if version < 25.11
+      # For stable releases, enable if version < 25.11
         lib.versionOlder version "25.11"
       else
-        # For unstable, enable if lastModified <= November 1, 2025
+      # For unstable, enable if lastModified <= November 1, 2025
         lastModified <= cutoffTimestamp
     else
-      # If no nixpkgs input, default to enabled
+    # If no nixpkgs input, default to enabled
       true;
 
   libraries =
@@ -340,24 +339,24 @@ in
                         lib.foldl
                           (
                             acc: line:
-                            if acc.skip > 0 then
+                              if acc.skip > 0 then
                               # Skip this line
-                              {
-                                lines = acc.lines;
-                                skip = acc.skip - 1;
-                              }
-                            else if lib.hasInfix ''if [ -L "$out/bin" ]; then'' line then
+                                {
+                                  lines = acc.lines;
+                                  skip = acc.skip - 1;
+                                }
+                              else if lib.hasInfix ''if [ -L "$out/bin" ]; then'' line then
                               # Found the start of the postBuild block - replace entire block with our patched version
-                              {
-                                lines = acc.lines ++ [ patchedWrapperScript ];
-                                skip = 17; # Skip the next 17 lines of the original block (18 total)
-                              }
-                            else
+                                {
+                                  lines = acc.lines ++ [ patchedWrapperScript ];
+                                  skip = 17; # Skip the next 17 lines of the original block (18 total)
+                                }
+                              else
                               # Keep this line
-                              {
-                                lines = acc.lines ++ [ line ];
-                                skip = 0;
-                              }
+                                {
+                                  lines = acc.lines ++ [ line ];
+                                  skip = 0;
+                                }
                           )
                           {
                             lines = [ ];
@@ -375,7 +374,16 @@ in
                     }
                   );
             in
-            patchedEnv;
+            if isBuildEnv drv then patchedEnv else drv;
+
+          overrideBuildEnv = drv:
+            drv.overrideAttrs (_: rec {
+              buildEnv = pkgs.callPackage ./wrapper-legacy.nix {
+                python = drv;
+                requiredPythonModules = drv.pkgs.requiredPythonModules;
+              };
+              passthru.buildEnv = buildEnv;
+            });
 
           # Add extra libraries to the Python `buildEnv`.
           appendLibraries =
@@ -395,13 +403,14 @@ in
               ];
             });
         in
-        if cfg.patches.buildEnv.enable then
-          lib.pipe drv [
-            patchBuildEnv
-            appendLibraries
-          ]
-        else
-          appendLibraries drv;
+        # if cfg.patches.buildEnv.enable then
+        lib.pipe drv [
+          patchBuildEnv
+          overrideBuildEnv
+          appendLibraries
+        ];
+      # else
+      #   appendLibraries drv;
     };
 
     manylinux.enable = lib.mkOption {
@@ -619,9 +628,10 @@ in
     languages.python.poetry.install.enable = lib.mkIf cfg.poetry.enable (lib.mkDefault true);
     languages.python.poetry.install.arguments =
       lib.optional cfg.poetry.install.onlyInstallRootPackage "--only-root"
-      ++ lib.optional (
-        !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
-      ) "--no-root"
+      ++ lib.optional
+        (
+          !cfg.poetry.install.installRootPackage && !cfg.poetry.install.onlyInstallRootPackage
+        ) "--no-root"
       ++ lib.optional cfg.poetry.install.compile "--compile"
       ++ lib.optional cfg.poetry.install.quiet "--quiet"
       ++ lib.optionals (cfg.poetry.install.groups != [ ]) [
