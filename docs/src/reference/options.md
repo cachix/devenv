@@ -28013,6 +28013,27 @@ attribute set of anything
 
 
 
+## tasks.\<name>.showOutput
+
+
+
+Always show task output (stdout and stderr), regardless of whether the task succeeds or fails.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
 ## tasks.\<name>.status
 
 
