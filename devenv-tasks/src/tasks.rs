@@ -359,6 +359,14 @@ impl Tasks {
 
     #[instrument(skip(self))]
     pub async fn run(&self) -> Outputs {
+        // Create an orchestration-level span to track the overall task execution
+        let orchestration_span = tracing::info_span!(
+            "devenv_tasks_orchestration",
+            total_tasks = self.tasks_order.len(),
+            root_tasks = ?self.root_names,
+        );
+        let _orchestration_guard = orchestration_span.enter();
+
         let outputs = Arc::new(Mutex::new(BTreeMap::new()));
         let mut running_tasks = self.shutdown.join_set();
 
@@ -618,6 +626,14 @@ impl Tasks {
 
         // Wait for all tasks to complete
         running_tasks.wait_all().await;
+
+        // Emit final progress event showing all tasks completed
+        tracing::info!(
+            progress.type = "generic",
+            progress.current = self.tasks_order.len(),
+            progress.total = self.tasks_order.len(),
+            "All tasks completed"
+        );
 
         self.notify_finished.notify_one();
         self.notify_ui.notify_one();

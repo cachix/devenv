@@ -5,19 +5,17 @@
 //!
 //! Uses the standardized tracing interface defined in devenv_tui::tracing_interface
 
+use devenv_tui::tracing_interface::{operation_fields, progress_events, status_events};
 use tracing::{debug, error, info, info_span, warn};
 
-// Import the standardized tracing interface constants
-// Note: We use string literals directly to avoid the devenv-tui dependency in devenv-tasks
-const OPERATION_TYPE: &str = "operation.type";
-const OPERATION_NAME: &str = "operation.name";
-const OPERATION_SHORT_NAME: &str = "operation.short_name";
-const STATUS: &str = "status";
-const PROGRESS_TYPE: &str = "progress.type";
-#[allow(dead_code)]
-const PROGRESS_CURRENT: &str = "progress.current";
-#[allow(dead_code)]
-const PROGRESS_TOTAL: &str = "progress.total";
+// Re-export commonly used constants for convenience
+use operation_fields::{
+    NAME as OPERATION_NAME, SHORT_NAME as OPERATION_SHORT_NAME, TYPE as OPERATION_TYPE,
+};
+use progress_events::fields::{
+    CURRENT as PROGRESS_CURRENT, TOTAL as PROGRESS_TOTAL, TYPE as PROGRESS_TYPE,
+};
+use status_events::fields::STATUS;
 
 /// Emit a structured tracing event when a task starts
 pub fn emit_task_start(task_name: &str) {
@@ -173,6 +171,64 @@ pub fn emit_task_completed(
                 { STATUS } = "completed",
                 "Task completed"
             );
+        }
+    }
+}
+
+// Note: Task spans should be created using devenv_tui::tracing_interface::create_task_span
+// Note: stdout/stderr events should be emitted directly in task_state.rs
+// where the parent task span is available. This allows proper parent-child
+// association using `parent: &span` in the event macro.
+//
+// Example usage:
+// ```
+// event!(
+//     target: build_log_events::STDOUT_TARGET,
+//     parent: &task_span,
+//     Level::INFO,
+//     {build_log_events::fields::STREAM} = "stdout",
+//     {build_log_events::fields::MESSAGE} = %line,
+// );
+// ```
+
+/// Emit a progress event
+///
+/// This allows tasks to report progress for display in the TUI.
+/// Progress can be based on counts, bytes, percentages, or be indeterminate.
+#[allow(dead_code)]
+pub fn emit_progress(
+    progress_type: &str,
+    current: Option<u64>,
+    total: Option<u64>,
+    rate: Option<f64>,
+) {
+    match (current, total, rate) {
+        (Some(c), Some(t), Some(r)) => {
+            info!(
+                { PROGRESS_TYPE } = progress_type,
+                { PROGRESS_CURRENT } = c,
+                { PROGRESS_TOTAL } = t,
+                { progress_events::fields::RATE } = r,
+                "Progress update"
+            );
+        }
+        (Some(c), Some(t), None) => {
+            info!(
+                { PROGRESS_TYPE } = progress_type,
+                { PROGRESS_CURRENT } = c,
+                { PROGRESS_TOTAL } = t,
+                "Progress update"
+            );
+        }
+        (Some(c), None, _) => {
+            info!(
+                { PROGRESS_TYPE } = progress_type,
+                { PROGRESS_CURRENT } = c,
+                "Progress update"
+            );
+        }
+        (None, _, _) => {
+            info!({ PROGRESS_TYPE } = progress_type, "Progress update");
         }
     }
 }

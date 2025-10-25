@@ -15,7 +15,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, instrument};
+use tracing::{Level, error, event, instrument};
 
 impl std::fmt::Debug for TaskState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -173,6 +173,11 @@ impl TaskState {
         cache: &TaskCache,
         cancellation: CancellationToken,
     ) -> Result<TaskCompleted> {
+        // Create a long-lived span for this task execution that will be kept alive
+        // throughout the entire task run, allowing the TUI to track the task's lifecycle
+        let task_span = devenv_tui::tracing_interface::create_task_span(&self.task.name, "normal");
+        let _span_guard = task_span.enter();
+
         tracing::debug!(
             "Running task '{}' with exec_if_modified: {:?}, status: {}",
             self.task.name,
@@ -372,6 +377,16 @@ impl TaskState {
                 result = stdout_reader.next_line(), if !stdout_closed => {
                     match result {
                         Ok(Some(line)) => {
+                            // Emit structured tracing event for stdout streaming to TUI
+                            // Uses short-lived event with explicit target and parent span
+                            event!(
+                                target: "stdout",
+                                parent: &task_span,
+                                Level::INFO,
+                                nix_stream = "stdout",
+                                message = %line,
+                            );
+
                             if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
                                 println!("[{}] {}", self.task.name, line);
                             } else if is_process {
@@ -392,6 +407,16 @@ impl TaskState {
                 result = stderr_reader.next_line(), if !stderr_closed => {
                     match result {
                         Ok(Some(line)) => {
+                            // Emit structured tracing event for stderr streaming to TUI
+                            // Uses short-lived event with explicit target and parent span
+                            event!(
+                                target: "stderr",
+                                parent: &task_span,
+                                Level::WARN,
+                                nix_stream = "stderr",
+                                message = %line,
+                            );
+
                             if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
                                 eprintln!("[{}] {}", self.task.name, line);
                             } else if is_process {
