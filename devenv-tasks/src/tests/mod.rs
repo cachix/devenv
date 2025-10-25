@@ -5,7 +5,6 @@ use crate::types::{Skipped, TaskCompleted, TaskStatus, VerbosityLevel};
 
 use pretty_assertions::assert_matches;
 use serde_json::json;
-use sqlx::Row;
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -1101,10 +1100,9 @@ echo "Task completed and modified the file"
         file_info.is_some(),
         "File info should be stored in database"
     );
-    if let Some(row) = file_info {
-        let stored_hash: Option<String> = row.get("content_hash");
+    if let Some((_, content_hash, _)) = file_info {
         assert_eq!(
-            stored_hash.unwrap_or_default(),
+            content_hash.unwrap_or_default(),
             current_hash.clone().unwrap_or_default(),
             "Database should have the updated hash after task execution"
         );
@@ -1249,10 +1247,9 @@ exit 1
         file_info.is_some(),
         "File info should be stored in database even for failed tasks"
     );
-    if let Some(row) = file_info {
-        let stored_hash: Option<String> = row.get("content_hash");
+    if let Some((_, content_hash, _)) = file_info {
         assert_eq!(
-            stored_hash.unwrap_or_default(),
+            content_hash.unwrap_or_default(),
             current_hash.clone().unwrap_or_default(),
             "Database should have the updated hash after task execution, even for failed tasks"
         );

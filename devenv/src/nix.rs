@@ -8,7 +8,6 @@ use futures::future;
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_conf_parser::NixConf;
 use serde::Deserialize;
-use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::os::unix::fs::symlink;
@@ -23,7 +22,7 @@ use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
 
 pub struct Nix {
     pub options: nix_backend::Options,
-    pool: Arc<OnceCell<SqlitePool>>,
+    db: Arc<OnceCell<devenv_cache_core::db::Database>>,
     database_url: String,
     // TODO: all these shouldn't be here
     config: config::Config,
@@ -50,7 +49,7 @@ impl Nix {
 
         Ok(Self {
             options,
-            pool: Arc::new(OnceCell::new()),
+            db: Arc::new(OnceCell::new()),
             database_url,
             config,
             global_options,
@@ -63,18 +62,20 @@ impl Nix {
 
     // Defer creating local project state
     pub async fn assemble(&self) -> Result<()> {
-        self.pool
+        self.db
             .get_or_try_init(|| async {
                 // Extract database path from URL
                 let path = PathBuf::from(self.database_url.trim_start_matches("sqlite:"));
 
-                // Connect to database and run migrations in one step
-                let db =
-                    devenv_cache_core::db::Database::new(path, &devenv_eval_cache::db::MIGRATIONS)
-                        .await
-                        .map_err(|e| miette::miette!("Failed to initialize database: {}", e))?;
+                // Get migrations directory and connect to database
+                let migrations_dir = devenv_eval_cache::db::migrations_dir();
 
-                Ok::<_, miette::Report>(db.pool().clone())
+                // Connect to database and run migrations in one step
+                let db = devenv_cache_core::db::Database::new(path, &migrations_dir)
+                    .await
+                    .map_err(|e| miette::miette!("Failed to initialize database: {}", e))?;
+
+                Ok::<_, miette::Report>(db)
             })
             .await?;
 
@@ -354,9 +355,13 @@ impl Nix {
             }
         }
 
-        let result = if supports_eval_caching(&cmd) && self.pool.get().is_some() {
-            let pool = self.pool.get().unwrap();
-            let mut cached_cmd = NixCommand::new(pool);
+        let result = if supports_eval_caching(&cmd) && self.db.get().is_some() {
+            let db = self.db.get().unwrap();
+            let conn = db
+                .connect()
+                .await
+                .map_err(|e| miette::miette!("Failed to connect to database: {}", e))?;
+            let mut cached_cmd = NixCommand::new(&conn);
 
             if self.global_options.eval_cache && options.cache_output {
                 cached_cmd.watch_path(self.paths.root.join(devenv::DEVENV_FLAKE));
