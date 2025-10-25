@@ -1,10 +1,10 @@
 { pkgs, lib, ... }:
 
 {
-  formatting = {
+  treefmt = {
     enable = true;
 
-    treefmt.programs = {
+    config.programs = {
       nixpkgs-fmt.enable = true;
       nixfmt.enable = true;
     };

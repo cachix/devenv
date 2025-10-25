@@ -1,12 +1,16 @@
 { pkgs, lib, ... }:
 
 {
-  formatting = {
+  packages = [
+    pkgs.diffutils
+  ];
+
+  treefmt = {
     enable = true;
 
-    treefmt.projectRootFile = "projectRootFile";
+    config.projectRootFile = "projectRootFile";
 
-    treefmt.programs = {
+    config.programs = {
       nixpkgs-fmt.enable = true;
       nixfmt.enable = true;
       rustfmt.enable = true;
@@ -17,7 +21,7 @@
     treefmt.enable = true;
   };
 
-  formatting.treefmt.settings.formatter = {
+  treefmt.config.settings.formatter = {
     "yq-json" = {
       command = "${pkgs.bash}/bin/bash";
       options = [

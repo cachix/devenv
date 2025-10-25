@@ -10,10 +10,10 @@ Add your desired integration to your `devenv.nix` file. For example, the followi
 { inputs, ... }:
 
 {
-  formatting.enable = true;
-  formatting.treefmt = {
-    projectRootFile = "devenv.nix";
-    programs = {
+  treefmt = {
+    enable = true;
+    config.projectRootFile = "devenv.nix";
+    config.programs = {
         nixpkgs-fmt.enable = true;
         rustfmt.enable = true;
     };
@@ -55,7 +55,7 @@ It is also possible to use custom formatters with `treefmt-nix`. For example, th
 
 ```nix
 {
-  formatting.treefmt.settings.formatter = {
+  treefmt.config.settings.formatter = {
     "yq-json" = {
       command = "${pkgs.bash}/bin/bash";
       options = [
