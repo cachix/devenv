@@ -1,4 +1,9 @@
-use super::{log::HumanReadableDuration, tasks, util};
+ use super::{
+     cli, config,
+     log::{HumanReadableDuration, LogFormat},
+     nix_args::{NixArgs, SecretspecData},
+     nix_backend, tasks, util,
+ };
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
@@ -13,6 +18,7 @@ use devenv_core::{
 };
 #[cfg(feature = "snix")]
 use devenv_snix_backend;
++use devenv_tui::tracing_interface::{operation_fields, operation_types};
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use once_cell::sync::Lazy;
@@ -444,7 +450,10 @@ impl Devenv {
     /// On successful exec, this function never returns.
     pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
         let shell_cmd = self.prepare_shell(&cmd, args).await?;
-        info!(devenv.is_user_message = true, "Entering shell");
+        info!(
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = "Entering shell",
+        );
         let err = shell_cmd.into_std().exec();
 
         let cmd_context = match &cmd {
@@ -600,7 +609,10 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        info!(devenv.is_user_message = true, "Running container {name}",);
+        info!(
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = format!("Running container {name}"),
+        );
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
@@ -847,7 +859,17 @@ impl Devenv {
             .build()
             .await?;
 
-        let (status, outputs) = TasksUi::new(tasks, verbosity).run().await?;
+        // In TUI mode, skip TasksUi to avoid corrupting the TUI display
+        // TUI captures tracing events directly, so TasksUi output is redundant
+        let (status, outputs) = if self.global_options.log_format == LogFormat::Tui {
+            // TUI mode: run tasks directly without TasksUi wrapper
+            let outputs = tasks.run().await;
+            let status = tasks.get_completion_status().await;
+            (status, outputs)
+        } else {
+            // Non-TUI mode: use TasksUi for display
+            TasksUi::new(tasks, verbosity).run().await?
+        };
 
         if status.has_failures() {
             miette::bail!("Some tasks failed");
