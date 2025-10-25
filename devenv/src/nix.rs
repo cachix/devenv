@@ -1054,6 +1054,46 @@ impl Nix {
     fn name(&self) -> &'static str {
         "nix"
     }
+
+    /// Get the bash shell executable path for this system
+    ///
+    /// This builds `nixpkgs#legacyPackages.{system}.bashInteractive.out` and returns
+    /// the path to the bash executable. The result is cached unless refresh_cached_output is true.
+    async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
+        let options = nix_backend::Options {
+            cache_output: true,
+            refresh_cached_output,
+            ..self.options
+        };
+        let bash_attr = format!(
+            "nixpkgs#legacyPackages.{}.bashInteractive.out",
+            self.global_options.system
+        );
+        String::from_utf8(
+            self.run_nix(
+                "nix",
+                &[
+                    "build",
+                    "--inputs-from",
+                    ".",
+                    "--print-out-paths",
+                    "--out-link",
+                    &self.paths.dotfile.join("bash").to_string_lossy(),
+                    &bash_attr,
+                ],
+                &options,
+            )
+            .await?
+            .stdout,
+        )
+        .map(|mut s| {
+            let trimmed_len = s.trim_end_matches('\n').len();
+            s.truncate(trimmed_len);
+            s.push_str("/bin/bash");
+            s
+        })
+        .into_diagnostic()
+    }
 }
 
 impl Drop for Nix {
@@ -1117,22 +1157,8 @@ impl NixBackend for Nix {
         self.name()
     }
 
-    async fn run_nix(
-        &self,
-        command: &str,
-        args: &[&str],
-        options: &nix_backend::Options,
-    ) -> Result<devenv_eval_cache::Output> {
-        self.run_nix(command, args, options).await
-    }
-
-    async fn run_nix_with_substituters(
-        &self,
-        command: &str,
-        args: &[&str],
-        options: &nix_backend::Options,
-    ) -> Result<devenv_eval_cache::Output> {
-        self.run_nix_with_substituters(command, args, options).await
+    async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
+        self.get_bash(refresh_cached_output).await
     }
 }
 

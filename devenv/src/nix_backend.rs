@@ -113,14 +113,6 @@ pub trait NixBackend: Send + Sync {
     /// Get the backend name (for debugging/logging)
     fn name(&self) -> &'static str;
 
-    /// Run a nix command
-    async fn run_nix(&self, command: &str, args: &[&str], options: &Options) -> Result<Output>;
-
-    /// Run a nix command with substituters
-    async fn run_nix_with_substituters(
-        &self,
-        command: &str,
-        args: &[&str],
-        options: &Options,
-    ) -> Result<Output>;
+    /// Get the bash shell executable path
+    async fn get_bash(&self, refresh_cached_output: bool) -> Result<String>;
 }
