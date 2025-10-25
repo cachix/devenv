@@ -21,31 +21,47 @@
 /// ```
 pub mod operation_fields {
     /// The type of operation being performed
-    pub const TYPE: &str = "operation.type";
+    pub const TYPE: &str = "devenv.ui.operation.type";
 
     /// Full descriptive name of the operation
-    pub const NAME: &str = "operation.name";
+    pub const NAME: &str = "devenv.ui.operation.name";
 
     /// Short name for compact display
-    pub const SHORT_NAME: &str = "operation.short_name";
+    pub const SHORT_NAME: &str = "devenv.ui.operation.short_name";
+}
 
-    /// Nix derivation path (for builds)
-    pub const DERIVATION: &str = "operation.derivation";
-
-    /// Download URL (for fetches)
-    pub const URL: &str = "operation.url";
-
-    /// Substituter source (for downloads)
-    pub const SUBSTITUTER: &str = "operation.substituter";
-
+/// Standard detail fields for supplementary operation metadata
+///
+/// These fields provide additional context shown as suffixes or secondary
+/// information in the UI (e.g., build phase, machine, derivation path).
+///
+/// Usage:
+/// ```rust
+/// use tracing::info;
+/// info!(
+///     devenv.ui.details.phase = "configure",
+///     devenv.ui.details.machine = "build-host",
+///     "Building package"
+/// );
+/// ```
+pub mod details_fields {
     /// Build phase (configure, build, install, etc.)
-    pub const PHASE: &str = "operation.phase";
+    pub const PHASE: &str = "devenv.ui.details.phase";
 
     /// Build machine (for distributed builds)
-    pub const MACHINE: &str = "operation.machine";
+    pub const MACHINE: &str = "devenv.ui.details.machine";
+
+    /// Nix derivation path (for builds)
+    pub const DERIVATION: &str = "devenv.ui.details.derivation";
 
     /// Nix store path
-    pub const STORE_PATH: &str = "operation.store_path";
+    pub const STORE_PATH: &str = "devenv.ui.details.store_path";
+
+    /// Substituter source (for downloads)
+    pub const SUBSTITUTER: &str = "devenv.ui.details.substituter";
+
+    /// Download URL (for fetches)
+    pub const URL: &str = "devenv.ui.details.url";
 }
 
 /// Standard span fields for high-level tasks
@@ -61,13 +77,13 @@ pub mod operation_fields {
 /// ```
 pub mod task_fields {
     /// Task name for display
-    pub const NAME: &str = "task.name";
+    pub const NAME: &str = "devenv.ui.task.name";
 
     /// Task priority (low, normal, high, critical)
-    pub const PRIORITY: &str = "task.priority";
+    pub const PRIORITY: &str = "devenv.ui.task.priority";
 
     /// Expected number of subtasks/operations
-    pub const EXPECTED_SUBTASKS: &str = "task.expected_subtasks";
+    pub const EXPECTED_SUBTASKS: &str = "devenv.ui.task.expected_subtasks";
 }
 
 /// Standard event types for progress updates
@@ -101,52 +117,51 @@ pub mod progress_events {
 
     /// Progress event fields
     pub mod fields {
-        pub const TYPE: &str = "progress.type";
-        pub const CURRENT: &str = "progress.current";
-        pub const TOTAL: &str = "progress.total";
-        pub const PERCENTAGE: &str = "progress.percentage";
-        pub const RATE: &str = "progress.rate"; // bytes/sec for transfers
-        pub const PHASE: &str = "progress.phase"; // current build phase, etc.
+        pub const TYPE: &str = "devenv.ui.progress.type";
+        pub const CURRENT: &str = "devenv.ui.progress.current";
+        pub const TOTAL: &str = "devenv.ui.progress.total";
+        pub const PERCENTAGE: &str = "devenv.ui.progress.percentage";
+        pub const RATE: &str = "devenv.ui.progress.rate"; // bytes/sec for transfers
+        pub const PHASE: &str = "devenv.ui.progress.phase"; // current build phase, etc.
     }
 }
 
-/// Standard event targets for build output streaming
+/// Standard log output streaming fields and targets
+///
+/// Used for streaming stdout/stderr from operations (builds, etc.) to the TUI.
 ///
 /// Usage:
 /// ```rust
 /// use tracing::{event, Level};
-/// use devenv_tui::tracing_interface::build_log_events::{STDOUT_TARGET, fields};
-/// # let build_span = tracing::info_span!("test");
-/// # let line = "test";
-/// // Stream stdout from build process
+/// use devenv_tui::tracing_interface::log_fields;
+/// // Stream stdout
 /// event!(
+///     target: "stdout",
 ///     Level::INFO,
-///     {fields::STREAM} = "stdout",
-///     {fields::MESSAGE} = %line
+///     { log_fields::STREAM } = "stdout",
+///     { log_fields::MESSAGE } = "output line"
 /// );
 ///
-/// // Stream stderr from build process
+/// // Stream stderr
 /// event!(
+///     target: "stderr",
 ///     Level::ERROR,
-///     {fields::STREAM} = "stderr",
-///     {fields::MESSAGE} = %line
+///     { log_fields::STREAM } = "stderr",
+///     { log_fields::MESSAGE } = "error line"
 /// );
 /// ```
-pub mod build_log_events {
+pub mod log_fields {
     /// Target for stdout events
     pub const STDOUT_TARGET: &str = "stdout";
 
-    /// Target for stderr events  
+    /// Target for stderr events
     pub const STDERR_TARGET: &str = "stderr";
 
-    /// Build log event fields
-    pub mod fields {
-        /// Stream type identifier
-        pub const STREAM: &str = "nix_stream";
+    /// Stream type identifier (stdout/stderr)
+    pub const STREAM: &str = "devenv.ui.log.stream";
 
-        /// Log line content
-        pub const MESSAGE: &str = "message";
-    }
+    /// Log line content
+    pub const MESSAGE: &str = "devenv.ui.log.message";
 }
 
 /// Standard event types for status updates
@@ -175,21 +190,51 @@ pub mod status_events {
     pub const CANCELLED: &str = "cancelled";
 
     pub mod fields {
-        pub const STATUS: &str = "status";
-        pub const REASON: &str = "status.reason"; // why waiting/failed
-        pub const ERROR: &str = "status.error"; // error details
+        pub const STATUS: &str = "devenv.ui.status";
+        pub const REASON: &str = "devenv.ui.status.reason"; // why waiting/failed
+        pub const ERROR: &str = "devenv.ui.status.error"; // error details
+        pub const RESULT: &str = "devenv.ui.status.result"; // task result (success/failed/cached/skipped/etc)
     }
 }
 
-/// Standard operation types (matches NixActivityType enum)
+/// Standard operation types (matches ActivityVariant enum in TUI model)
+///
+/// These define the types of operations that can be displayed in the TUI.
+/// Each type may render differently with type-specific details and formatting.
 pub mod operation_types {
+    /// Build operation (compiling, linking)
     pub const BUILD: &str = "build";
+
+    /// Download operation (fetching from cache/substituter)
     pub const DOWNLOAD: &str = "download";
+
+    /// Evaluation operation (Nix expression evaluation)
     pub const EVALUATE: &str = "evaluate";
+
+    /// Query operation (checking cache for paths)
     pub const QUERY: &str = "query";
+
+    /// Copy operation (copying paths between stores)
     pub const COPY: &str = "copy";
+
+    /// Substitute operation (substituting from binary cache)
     pub const SUBSTITUTE: &str = "substitute";
+
+    /// Fetch tree operation (fetching Git repos, tarballs, etc.)
     pub const FETCH_TREE: &str = "fetch_tree";
+
+    /// Devenv operation (user-facing devenv messages)
+    ///
+    /// Usage:
+    /// ```rust
+    /// use tracing::info;
+    /// use devenv_tui::tracing_interface::{operation_fields, operation_types};
+    /// info!(
+    ///     { operation_fields::TYPE } = operation_types::DEVENV,
+    ///     { operation_fields::NAME } = "Entering shell"
+    /// );
+    /// ```
+    pub const DEVENV: &str = "devenv";
 }
 
 /// Nix-specific fields for internal tracking
@@ -215,10 +260,10 @@ macro_rules! build_span {
     ($name:expr, $drv:expr, $short:expr) => {
         tracing::info_span!(
             "nix_build",
-            operation.type = "build",
-            operation.name = $name,
-            operation.short_name = $short,
-            operation.derivation = $drv
+            { $crate::tracing_interface::operation_fields::TYPE } = "build",
+            { $crate::tracing_interface::operation_fields::NAME } = $name,
+            { $crate::tracing_interface::operation_fields::SHORT_NAME } = $short,
+            { $crate::tracing_interface::details_fields::DERIVATION } = $drv
         )
     };
 }
@@ -228,10 +273,10 @@ macro_rules! download_span {
     ($name:expr, $short:expr, $url:expr) => {
         tracing::info_span!(
             "nix_download",
-            operation.type = "download",
-            operation.name = $name,
-            operation.short_name = $short,
-            operation.url = $url
+            { $crate::tracing_interface::operation_fields::TYPE } = "download",
+            { $crate::tracing_interface::operation_fields::NAME } = $name,
+            { $crate::tracing_interface::operation_fields::SHORT_NAME } = $short,
+            { $crate::tracing_interface::details_fields::URL } = $url
         )
     };
 }
@@ -239,8 +284,38 @@ macro_rules! download_span {
 #[macro_export]
 macro_rules! task_span {
     ($name:expr, $priority:expr) => {
-        tracing::info_span!("devenv_task", task.name = $name, task.priority = $priority)
+        tracing::info_span!(
+            "devenv_task",
+            { $crate::tracing_interface::task_fields::NAME } = $name,
+            { $crate::tracing_interface::task_fields::PRIORITY } = $priority
+        )
     };
+}
+
+/// Create a task span with proper operation fields for TUI tracking
+///
+/// This is the recommended way to create task spans that will be properly tracked
+/// by the TUI. It includes both task-specific fields and operation fields for
+/// comprehensive tracking.
+///
+/// # Example
+/// ```
+/// use devenv_tui::tracing_interface::create_task_span;
+/// let span = create_task_span("myns:mytask", "normal");
+/// let _guard = span.enter();
+/// // ... perform task operations ...
+/// // span is automatically closed when _guard is dropped
+/// ```
+pub fn create_task_span(task_name: &str, priority: &str) -> tracing::Span {
+    use tracing::info_span;
+    info_span!(
+        "devenv_task",
+        { task_fields::NAME } = task_name,
+        { task_fields::PRIORITY } = priority,
+        { operation_fields::TYPE } = "task",
+        { operation_fields::NAME } = task_name,
+        { operation_fields::SHORT_NAME } = task_name,
+    )
 }
 
 /// Example usage patterns for common scenarios
@@ -251,8 +326,9 @@ pub mod examples {
     /// Example: Nix build with streaming logs
     #[allow(unused)]
     pub fn nix_build_with_logs_example() {
-        use super::build_log_events::{STDOUT_TARGET, fields};
-        use super::operation_fields::{PHASE, TYPE};
+        use super::details_fields::PHASE;
+        use super::log_fields::STDOUT_TARGET;
+        use super::operation_fields::TYPE;
         use super::progress_events::fields::{CURRENT, TOTAL};
         use super::status_events::fields::STATUS;
         use tracing::{error, event, info, info_span};
@@ -281,14 +357,14 @@ pub mod examples {
         event!(
             target: STDOUT_TARGET,
             parent: &span,
-            {fields::STREAM} = "stdout",
-            {fields::MESSAGE} = "checking for gcc... gcc"
+            {log_fields::STREAM} = "stdout",
+            {log_fields::MESSAGE} = "checking for gcc... gcc"
         );
         event!(
             target: STDOUT_TARGET,
             parent: &span,
-            {fields::STREAM} = "stdout",
-            {fields::MESSAGE} = "checking whether the C compiler works... yes"
+            {log_fields::STREAM} = "stdout",
+            {log_fields::MESSAGE} = "checking whether the C compiler works... yes"
         );
 
         info!({ PHASE } = "build", "Building package");
@@ -303,8 +379,8 @@ pub mod examples {
         event!(
             target: STDOUT_TARGET,
             parent: &span,
-            {fields::STREAM} = "stdout",
-            {fields::MESSAGE} = "gcc -DHAVE_CONFIG_H -I. hello.c -o hello"
+            {log_fields::STREAM} = "stdout",
+            {log_fields::MESSAGE} = "gcc -DHAVE_CONFIG_H -I. hello.c -o hello"
         );
 
         info!({ STATUS } = "completed", "Build finished successfully");
@@ -312,7 +388,8 @@ pub mod examples {
 
     /// Example: Download with progress
     pub fn download_example() {
-        use super::operation_fields::{NAME, SHORT_NAME, SUBSTITUTER, TYPE, URL};
+        use super::details_fields::{SUBSTITUTER, URL};
+        use super::operation_fields::{NAME, SHORT_NAME, TYPE};
         use super::progress_events::fields::{CURRENT, RATE, TOTAL};
         use super::status_events::fields::STATUS;
         use tracing::{info, info_span};

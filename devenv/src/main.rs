@@ -4,6 +4,7 @@ use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     config, log,
 };
+use devenv_tui::tracing_interface::{operation_fields, operation_types};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{env, os::unix::process::CommandExt, process::Command, sync::Arc};
 use tempfile::TempDir;
@@ -128,20 +129,21 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
             let command = if let Some(name) = name {
                 if copy {
                     warn!(
-                        devenv.is_user_message = true,
-                        "The --copy flag is deprecated. Use `devenv container copy` instead."
+                        { operation_fields::TYPE } = operation_types::DEVENV,
+                        { operation_fields::NAME } =
+                            "The --copy flag is deprecated. Use `devenv container copy` instead.",
                     );
                     ContainerCommand::Copy { name }
                 } else if docker_run {
                     warn!(
-                        devenv.is_user_message = true,
-                        "The --docker-run flag is deprecated. Use `devenv container run` instead."
+                        { operation_fields::TYPE } = operation_types::DEVENV,
+                        { operation_fields::NAME } = "The --docker-run flag is deprecated. Use `devenv container run` instead.",
                     );
                     ContainerCommand::Run { name }
                 } else {
                     warn!(
-                        devenv.is_user_message = true,
-                        "Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead."
+                        { operation_fields::TYPE } = operation_types::DEVENV,
+                        { operation_fields::NAME } = "Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead.",
                     );
                     ContainerCommand::Build { name }
                 }

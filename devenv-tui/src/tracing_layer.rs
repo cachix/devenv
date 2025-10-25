@@ -3,7 +3,10 @@ use crate::model::{
     Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, ProgressActivity,
     QueryActivity,
 };
-use crate::tracing_interface::{nix_fields, operation_fields, operation_types};
+use crate::tracing_interface::{
+    details_fields, log_fields, nix_fields, operation_fields, operation_types, status_events,
+    task_fields,
+};
 use crate::{LogLevel, LogSource, NixActivityState, OperationId, OperationResult};
 use rand;
 use std::collections::HashMap;
@@ -100,9 +103,9 @@ where
         attrs.record(&mut visitor);
 
         // Handle task-related spans from devenv-tasks
-        if metadata.target().starts_with("devenv_tasks") {
-            // Check if this is a task execution span
-            if let Some(task_name) = visitor.fields.get("task_name") {
+        if metadata.target().starts_with("devenv_tasks") || metadata.name() == "devenv_task" {
+            // Check if this is a task execution span using formal interface constant
+            if let Some(task_name) = visitor.fields.get(task_fields::NAME) {
                 let task_name = task_name.trim_matches('"').to_string();
                 let operation_id = OperationId::new(format!("task:{}", task_name));
                 let activity_id = id.into_u64();
@@ -141,8 +144,8 @@ where
             // Handle specific operation types based on standardized operation.type field
             match op_type.as_str() {
                 op_type_str if op_type_str == operation_types::BUILD => {
-                    let derivation = visitor.fields.get(operation_fields::DERIVATION).cloned();
-                    let machine = visitor.fields.get(operation_fields::MACHINE).cloned();
+                    let derivation = visitor.fields.get(details_fields::DERIVATION).cloned();
+                    let machine = visitor.fields.get(details_fields::MACHINE).cloned();
                     let activity_id = visitor
                         .fields
                         .get(nix_fields::ACTIVITY_ID)
@@ -173,8 +176,8 @@ where
                     });
                 }
                 op_type_str if op_type_str == operation_types::DOWNLOAD => {
-                    let store_path = visitor.fields.get(operation_fields::STORE_PATH).cloned();
-                    let substituter = visitor.fields.get(operation_fields::SUBSTITUTER).cloned();
+                    let store_path = visitor.fields.get(details_fields::STORE_PATH).cloned();
+                    let substituter = visitor.fields.get(details_fields::SUBSTITUTER).cloned();
                     let activity_id = visitor
                         .fields
                         .get(nix_fields::ACTIVITY_ID)
@@ -209,8 +212,8 @@ where
                     });
                 }
                 op_type_str if op_type_str == operation_types::QUERY => {
-                    let store_path = visitor.fields.get(operation_fields::STORE_PATH).cloned();
-                    let substituter = visitor.fields.get(operation_fields::SUBSTITUTER).cloned();
+                    let store_path = visitor.fields.get(details_fields::STORE_PATH).cloned();
+                    let substituter = visitor.fields.get(details_fields::SUBSTITUTER).cloned();
                     let activity_id = visitor
                         .fields
                         .get(nix_fields::ACTIVITY_ID)
@@ -292,6 +295,32 @@ where
                             state: NixActivityState::Active,
                             detail: None,
                             variant: ActivityVariant::Evaluating,
+                            progress: None,
+                        };
+                        model.activities.insert(activity_id, activity);
+                    });
+                }
+                op_type_str if op_type_str == operation_types::DEVENV => {
+                    // User-facing devenv messages - create UserOperation activity
+                    let activity_id = rand::random();
+
+                    // Store activity_id in span extensions for later retrieval
+                    span.extensions_mut().insert(activity_id);
+
+                    self.update_model(|model| {
+                        let activity = Activity {
+                            id: activity_id,
+                            operation_id: operation_id.clone(),
+                            name: operation_name.clone(),
+                            short_name: short_name.clone(),
+                            parent_operation: model
+                                .operations
+                                .get(&operation_id)
+                                .and_then(|op| op.parent.clone()),
+                            start_time: Instant::now(),
+                            state: NixActivityState::Active,
+                            detail: None,
+                            variant: ActivityVariant::UserOperation,
                             progress: None,
                         };
                         model.activities.insert(activity_id, activity);
@@ -418,18 +447,18 @@ where
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
 
-        // Handle task events from devenv-tasks
+        // Handle task events from devenv-tasks (using formal interface constants)
         if event.metadata().target().starts_with("devenv_tasks")
-            && let Some(task_name) = visitor.fields.get("task_name")
+            && let Some(task_name) = visitor.fields.get(task_fields::NAME)
         {
             let task_name = task_name.trim_matches('"').to_string();
 
             // Check for task status updates
-            if let Some(status) = visitor.fields.get("status") {
+            if let Some(status) = visitor.fields.get(status_events::fields::STATUS) {
                 let status = status.trim_matches('"').to_string();
                 let result = visitor
                     .fields
-                    .get("result")
+                    .get(status_events::fields::RESULT)
                     .map(|r| r.trim_matches('"').to_string());
 
                 // Update task status in the model
@@ -621,6 +650,34 @@ where
                     }
                 }
                 _ => {}
+            }
+        }
+
+        // Handle log output events (stdout/stderr streaming)
+        let target = event.metadata().target();
+        if target == log_fields::STDOUT_TARGET || target == log_fields::STDERR_TARGET {
+            if let (Some(stream), Some(message)) = (
+                visitor.fields.get(log_fields::STREAM),
+                visitor.fields.get(log_fields::MESSAGE),
+            ) {
+                // TODO: Associate with the correct task activity
+                // For now, add to message log
+                let log_level = if stream.contains("stderr") {
+                    LogLevel::Warn
+                } else {
+                    LogLevel::Info
+                };
+
+                let log_msg = crate::LogMessage::new(
+                    log_level,
+                    message.clone(),
+                    LogSource::Nix,
+                    HashMap::new(),
+                );
+
+                self.update_model(|model| {
+                    model.add_log_message(log_msg);
+                });
             }
         }
 

@@ -44,9 +44,6 @@ devenv-eval-cache = { path = "../devenv-eval-cache" }
 # Shared task types
 devenv-cache-core = { path = "../devenv-cache-core" }
 
-# Task execution engine
-devenv-tasks = { path = "../devenv-tasks" }
-
 # Time handling
 once_cell = { workspace = true }
 chrono = { workspace = true }

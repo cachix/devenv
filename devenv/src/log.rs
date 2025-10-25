@@ -495,7 +495,7 @@ where
                     id,
                     span,
                     "message" = msg,
-                    "devenv.is_user_message" = true,
+                    "devenv.ui.message" = true,
                     "devenv.span_event_kind" = SpanKind::Start as u8,
                     "devenv.span_has_error" = false,
                     |event| {
@@ -544,7 +544,7 @@ where
                 id,
                 span,
                 "message" = msg,
-                "devenv.is_user_message" = true,
+                "devenv.ui.message" = true,
                 "devenv.span_event_kind" = SpanKind::End as u8,
                 "devenv.span_has_error" = has_error,
                 "devenv.time_total" = time_total,
@@ -602,7 +602,7 @@ where
             }
 
             fn record_bool(&mut self, field: &Field, value: bool) {
-                if field.name() == "devenv.is_user_message" {
+                if field.name() == "devenv.ui.message" {
                     self.is_user_message = value;
                 }
             }
