@@ -9501,6 +9501,8 @@ boolean
 
 ## git-hooks.hooks.prettier.settings.config-precedence
 
+
+
 Defines how config file should be evaluated in combination of CLI options.
 
 
@@ -11589,6 +11591,8 @@ boolean
 
 
 ## git-hooks.hooks.statix.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -16325,6 +16329,8 @@ boolean
 
 ## languages.python.poetry.install.allGroups
 
+
+
 Whether to install all groups. See ` --all-groups `.
 
 
@@ -18599,6 +18605,8 @@ package
 
 
 ## process.managers.mprocs.package
+
+
 
 The mprocs package to use.
 
@@ -26103,6 +26111,8 @@ boolean
 
 ## services.tailscale.funnel.target
 
+
+
 Target host or host:port for Tailscale funnel
 
 
@@ -28519,6 +28529,8 @@ null or signed integer
 
 
 ## treefmt.config.programs.aiken.enable
+
+
 
 Whether to enable aiken.
 
