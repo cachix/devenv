@@ -305,44 +305,6 @@ impl Devenv {
         Ok(())
     }
 
-    // TODO: fetch bash from the module system
-    async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
-        let options = nix_backend::Options {
-            cache_output: true,
-            refresh_cached_output,
-            ..Default::default()
-        };
-        let bash_attr = format!(
-            "nixpkgs#legacyPackages.{}.bashInteractive.out",
-            self.global_options.system
-        );
-        String::from_utf8(
-            self.nix
-                .run_nix(
-                    "nix",
-                    &[
-                        "build",
-                        "--inputs-from",
-                        ".",
-                        "--print-out-paths",
-                        "--out-link",
-                        &self.devenv_dotfile.join("bash").to_string_lossy(),
-                        &bash_attr,
-                    ],
-                    &options,
-                )
-                .await?
-                .stdout,
-        )
-        .map(|mut s| {
-            let trimmed_len = s.trim_end_matches('\n').len();
-            s.truncate(trimmed_len);
-            s.push_str("/bin/bash");
-            s
-        })
-        .into_diagnostic()
-    }
-
     #[instrument(skip(self))]
     pub async fn prepare_shell(
         &self,
@@ -351,10 +313,10 @@ impl Devenv {
     ) -> Result<process::Command> {
         let DevEnv { output, .. } = self.get_dev_environment(false).await?;
 
-        let bash = match self.get_bash(false).await {
+        let bash = match self.nix.get_bash(false).await {
             Err(e) => {
                 trace!("Failed to get bash: {}. Rebuilding.", e);
-                self.get_bash(true).await?
+                self.nix.get_bash(true).await?
             }
             Ok(bash) => bash,
         };
