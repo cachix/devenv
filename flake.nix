@@ -177,7 +177,7 @@
           };
         in
         {
-          inherit (workspace) devenv devenv-tasks devenv-tasks-fast-build;
+          inherit (workspace.crates) devenv devenv-tasks devenv-tasks-fast-build;
           default = self.packages.${system}.devenv;
           devenv-docs-options = options.optionsCommonMark;
           devenv-docs-options-json = options.optionsJSON;
