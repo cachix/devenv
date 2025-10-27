@@ -214,14 +214,6 @@ in
     exec = ./scripts/verify-individual-docs.sh;
   };
 
-  scripts."devenv-generate-languages-example" = {
-    description = "Generate an example enabling every supported language";
-    exec = import ./scripts/generate-languages-example.nix {
-      inherit lib;
-      languages = options.languages;
-    };
-  };
-
   scripts."devenv-generate-docs" = {
     description = "Generate lists of all languages and services";
     exec = import ./scripts/generate-docs.nix {
