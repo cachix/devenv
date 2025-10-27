@@ -471,7 +471,11 @@ impl Devenv {
     /// to return control to the caller with the command's output.
     pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let span = info_span!("running_in_shell", devenv.user_message = "Running in shell");
+        let span = info_span!(
+            "running_in_shell",
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = "Running in shell"
+        );
         // Note that tokio's `output()` always configures stdout/stderr as pipes.
         // Use `spawn` + `wait_with_output` instead.
         let proc = shell_cmd
@@ -493,7 +497,11 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let span = info_span!("update", devenv.user_message = msg);
+        let span = info_span!(
+            "update",
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = msg.as_str()
+        );
         self.nix.update(input_name).instrument(span).await?;
 
         // Show new changelogs (if any)
@@ -554,7 +562,11 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        let span = info_span!("copying_container");
+        let span = info_span!(
+            "copying_container",
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = "Copying container"
+        );
         async move {
             let sanitized_name = sanitize_container_name(name);
             let gc_root = self
@@ -645,7 +657,8 @@ impl Devenv {
             // TODO: No newline
             let span = info_span!(
                 "cleanup_symlinks",
-                devenv.user_message = format!(
+                { operation_fields::TYPE } = operation_types::DEVENV,
+                { operation_fields::NAME } = format!(
                     "Removing non-existing symlinks in {}",
                     &self.devenv_home_gc.display()
                 )
@@ -663,8 +676,8 @@ impl Devenv {
         {
             let span = info_span!(
                 "nix_gc",
-                devenv.user_message =
-                    "Running garbage collection (this process will take some time)"
+                { operation_fields::TYPE } = operation_types::DEVENV,
+                { operation_fields::NAME } = "Running garbage collection"
             );
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
@@ -788,7 +801,11 @@ impl Devenv {
 
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
-            let span = info_span!("load_tasks", devenv.user_message = "Evaluating tasks");
+            let span = info_span!(
+                "load_tasks",
+                { operation_fields::TYPE } = operation_types::DEVENV,
+                { operation_fields::NAME } = "Evaluating tasks"
+            );
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
                 .build(&["devenv.config.task.config"], None, Some(&gc_root))
@@ -982,7 +999,11 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let span = info_span!("test", devenv.user_message = "Building tests");
+            let span = info_span!(
+                "test",
+                { operation_fields::TYPE } = operation_types::DEVENV,
+                { operation_fields::NAME } = "Building tests"
+            );
             let gc_root = self.devenv_dot_gc.join("test");
             let test_script = self
                 .nix
@@ -1008,7 +1029,8 @@ impl Devenv {
         // Until that is changed, the spinner must be disabled.
         let span = info_span!(
             "test",
-            devenv.user_message = "Running tests",
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = "Running tests",
             devenv.no_spinner = true,
             test_script = %test_script
         );
@@ -1048,7 +1070,11 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<()> {
-        let span = info_span!("build", devenv.user_message = "Building");
+        let span = info_span!(
+            "build",
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = "Building"
+        );
         async move {
             self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
@@ -1108,7 +1134,8 @@ impl Devenv {
 
         let span = info_span!(
             "build_processes",
-            devenv.user_message = "Building processes"
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = "Building processes"
         );
         let proc_script_string = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
@@ -1122,7 +1149,11 @@ impl Devenv {
         .instrument(span)
         .await?;
 
-        let span = info_span!("up", devenv.user_message = "Starting processes");
+        let span = info_span!(
+            "up",
+            { operation_fields::TYPE } = operation_types::DEVENV,
+            { operation_fields::NAME } = "Starting processes"
+        );
         async {
             let processes = processes.join(" ");
 

@@ -463,17 +463,14 @@ impl Nix {
             });
 
             // Set current operation for Nix log correlation
-            if self.global_options.verbose {
-                // In verbose mode: create bridge operation that will be child of the debug span
-                let cmd_string = display_command(&cmd);
-                // Use a simple hash of the command for the operation ID
-                use std::hash::{Hash, Hasher};
-                let mut cmd_hash = std::collections::hash_map::DefaultHasher::new();
-                cmd_string.hash(&mut cmd_hash);
-                let command_operation_id = format!("nix-cmd-{:x}", cmd_hash.finish());
-                nix_bridge.set_current_operation(command_operation_id);
-            }
-            // In non-verbose mode: don't set bridge operation, logs will attach via fallback
+            // This allows Nix operations to be nested under the parent DEVENV operation
+            let cmd_string = display_command(&cmd);
+            // Use a simple hash of the command for the operation ID
+            use std::hash::{Hash, Hasher};
+            let mut cmd_hash = std::collections::hash_map::DefaultHasher::new();
+            cmd_string.hash(&mut cmd_hash);
+            let command_operation_id = format!("nix-cmd-{:x}", cmd_hash.finish());
+            nix_bridge.set_current_operation(command_operation_id);
 
             let pretty_cmd = display_command(&cmd);
             let span = debug_span!(
