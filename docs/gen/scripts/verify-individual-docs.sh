@@ -32,7 +32,7 @@ process_directory() {
       missing_files+=("$item")
       cat <<EOF >"$md_dir/$item.md"
 
-[comment]: # (Please add your documentation on top of this line)
+[comment]: # (Please add your documentation above this line)
 
 @AUTOGEN_OPTIONS@
 EOF
