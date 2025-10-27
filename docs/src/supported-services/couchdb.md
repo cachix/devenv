@@ -84,7 +84,7 @@ xlink:href=“https://docs\.couchdb\.org/en/stable/config/couchdb\.html”
 
 
 *Type:*
-attribute set of section of an INI file (attrs of INI atom (null, bool, int, float or string))
+open submodule of attribute set of section of an INI file (attrs of INI atom (null, bool, int, float or string))
 
 
 

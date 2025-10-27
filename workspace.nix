@@ -1,27 +1,32 @@
 # Tooling to build the workspace crates
-{ lib, callPackage, cargoProfile ? "release" }:
+{
+  lib,
+  callPackage,
+  cargoProfile ? "release",
+}:
 
 let
   src = lib.fileset.toSource {
     root = ./.;
-    fileset = lib.fileset.difference
-      (lib.fileset.unions [
-        ./.cargo
-        ./Cargo.toml
-        ./Cargo.lock
-        ./devenv
-        ./devenv-generate
-        ./devenv-eval-cache
-        ./devenv-cache-core
-        ./devenv-run-tests
-        ./devenv-tasks
-        ./http-client-tls
-        ./nix-conf-parser
-        ./tokio-shutdown
-        ./xtask
-      ])
-      # Ignore local builds
-      (lib.fileset.fileFilter (file: file.name == "target") ./.);
+    fileset =
+      lib.fileset.difference
+        (lib.fileset.unions [
+          ./.cargo
+          ./Cargo.toml
+          ./Cargo.lock
+          ./devenv
+          ./devenv-generate
+          ./devenv-eval-cache
+          ./devenv-cache-core
+          ./devenv-run-tests
+          ./devenv-tasks
+          ./http-client-tls
+          ./nix-conf-parser
+          ./tokio-shutdown
+          ./xtask
+        ])
+        # Ignore local builds
+        (lib.fileset.fileFilter (file: file.name == "target") ./.);
   };
 
   cargoToml = builtins.fromTOML (builtins.readFile "${src}/Cargo.toml");
@@ -36,15 +41,33 @@ let
   };
 in
 {
-  devenv = callPackage ./devenv/package.nix { inherit src version cargoLock cargoProfile; };
+  inherit version;
 
-  devenv-tasks = callPackage ./devenv-tasks/package.nix { inherit src version cargoLock cargoProfile; };
+  crates = {
+    devenv = callPackage ./devenv/package.nix {
+      inherit
+        src
+        version
+        cargoLock
+        cargoProfile
+        ;
+    };
 
-  # A custom tasks build for the module system.
-  # Use a faster release profile and skip tests.
-  devenv-tasks-fast-build = callPackage ./devenv-tasks/package.nix {
-    inherit src version cargoLock;
-    cargoProfile = "release_fast";
-    doCheck = false;
+    devenv-tasks = callPackage ./devenv-tasks/package.nix {
+      inherit
+        src
+        version
+        cargoLock
+        cargoProfile
+        ;
+    };
+
+    # A custom tasks build for the module system.
+    # Use a faster release profile and skip tests.
+    devenv-tasks-fast-build = callPackage ./devenv-tasks/package.nix {
+      inherit src version cargoLock;
+      cargoProfile = "release_fast";
+      doCheck = false;
+    };
   };
 }

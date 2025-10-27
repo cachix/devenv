@@ -319,7 +319,7 @@ Rust component packages\. May optionally define additional components, for examp
 
 
 *Type:*
-attribute set of package
+open submodule of attribute set of package
 
 
 

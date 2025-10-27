@@ -95,7 +95,7 @@ for more information on how to configure the Collector\.
 
 
 *Type:*
-YAML 1\.1 value
+open submodule of (YAML 1\.1 value)
 
 
 

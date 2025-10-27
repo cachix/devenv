@@ -1,7 +1,5 @@
 set -ex
 
-# WARN: to only be run from the root of the repo!
-
 process_directory() {
   local nix_dir=$1
   local md_dir=$2
@@ -34,7 +32,7 @@ process_directory() {
       missing_files+=("$item")
       cat <<EOF >"$md_dir/$item.md"
 
-[comment]: # (Please add your documentation on top of this line)
+[comment]: # (Please add your documentation above this line)
 
 @AUTOGEN_OPTIONS@
 EOF
@@ -47,6 +45,6 @@ EOF
   fi
 }
 
-process_directory "src/modules/languages" "docs/src/individual-docs/languages" "language"
-process_directory "src/modules/services" "docs/src/individual-docs/services" "service"
-process_directory "src/modules/process-managers" "docs/src/individual-docs/process-managers" "process manager"
+process_directory "../../src/modules/languages" "../src/individual-docs/languages" "language"
+process_directory "../../src/modules/services" "../src/individual-docs/services" "service"
+process_directory "../../src/modules/process-managers" "../src/individual-docs/process-managers" "process manager"

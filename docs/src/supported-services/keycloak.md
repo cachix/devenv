@@ -310,7 +310,7 @@ to the contents of the
 
 
 *Type:*
-attribute set of (null or string or signed integer or boolean or attribute set of absolute path)
+open submodule of attribute set of (null or string or signed integer or boolean or attribute set of absolute path)
 
 
 

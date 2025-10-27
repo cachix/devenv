@@ -25,7 +25,7 @@ let
           pkgs;
       workspace = devenvPkgs.callPackage ./../../workspace.nix { };
     in
-    workspace.devenv-tasks-fast-build;
+    workspace.crates.devenv-tasks-fast-build;
 
   taskType = types.submodule
     ({ name, config, ... }:

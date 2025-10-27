@@ -144,7 +144,7 @@ OpenSearch configuration\.
 
 
 *Type:*
-YAML 1\.1 value
+open submodule of (YAML 1\.1 value)
 
 
 

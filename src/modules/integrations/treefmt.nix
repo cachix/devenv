@@ -1,12 +1,11 @@
-{ pkgs
-, lib
-, config
-, ...
+{
+  pkgs,
+  lib,
+  config,
+  ...
 }:
 let
   cfg = config.treefmt;
-
-  inherit (lib) types;
 
   treefmt-nix = config.lib.getInput {
     name = "treefmt-nix";
@@ -28,6 +27,7 @@ in
     enable = lib.mkEnableOption "treefmt integration (through treefmt-nix)";
 
     config = lib.mkOption {
+      description = "treefmt configuration.";
       type = treefmt-nix.lib.submoduleWith lib {
         specialArgs = { inherit pkgs; };
       };
@@ -40,7 +40,7 @@ in
       treefmtWrapper
     ];
 
-    #automatically add treefmt-nix to git-hooks if the user enables it.
+    # Automatically add treefmt-nix to git-hooks if the user enables it.
     git-hooks.hooks.treefmt.package = treefmtWrapper;
   };
 }

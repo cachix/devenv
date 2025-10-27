@@ -123,7 +123,7 @@ List of Kafka Connect connectors to set up initially
 
 
 *Type:*
-list of (lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string)))
+list of (open submodule of lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string)))
 
 
 
@@ -181,7 +181,7 @@ but instead as quoted strings (ie\. ` settings."broker.id" `, NOT
 
 
 *Type:*
-lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
+open submodule of lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
 
 
 
@@ -569,7 +569,7 @@ but instead as quoted strings (ie\. ` settings."broker.id" `, NOT
 
 
 *Type:*
-lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
+open submodule of lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
 
 
 

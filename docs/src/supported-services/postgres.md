@@ -110,6 +110,7 @@ The available extensions are:
  - pg_csv
  - pg_ed25519
  - pg_embedding
+ - pg_graphql
  - pg_hint_plan
  - pg_hll
  - pg_ivm
