@@ -123,35 +123,6 @@ impl Nix {
         Ok(env)
     }
 
-    /// Add a GC root for the given path.
-    ///
-    /// SAFETY
-    ///
-    /// You should prefer protecting build outputs with options like `--out-link` to avoid race conditions.
-    /// A untimely GC run -- the usual culprit is auto-gc with min-free -- could delete the store
-    /// path you're trying to protect.
-    ///
-    /// The `build` command supports an optional `gc_root` argument.
-    pub async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
-        self.run_nix(
-            "nix-store",
-            &[
-                "--add-root",
-                self.paths.dot_gc.join(name).to_str().unwrap(),
-                "-r",
-                path.to_str().unwrap(),
-            ],
-            &self.options,
-        )
-        .await?;
-        let link_path = self
-            .paths
-            .dot_gc
-            .join(format!("{}-{}", name, get_now_with_nanoseconds()));
-        symlink_force(path, &link_path).await?;
-        Ok(())
-    }
-
     pub async fn repl(&self) -> Result<()> {
         let mut cmd = self.prepare_command("nix", &["repl", "."], &self.options)?;
         let _ = cmd.exec();
@@ -1110,10 +1081,6 @@ impl NixBackend for Nix {
 
     async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<devenv_eval_cache::Output> {
         self.dev_env(json, gc_root).await
-    }
-
-    async fn add_gc(&self, name: &str, path: &Path) -> Result<()> {
-        self.add_gc(name, path).await
     }
 
     async fn repl(&self) -> Result<()> {

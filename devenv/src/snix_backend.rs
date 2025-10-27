@@ -128,12 +128,6 @@ impl NixBackend for SnixBackend {
         )
     }
 
-    async fn add_gc(&self, _name: &str, _path: &Path) -> Result<()> {
-        // TODO: Implement GC root management for Snix
-        warn!("GC root management not yet implemented for Snix backend");
-        Ok(())
-    }
-
     async fn repl(&self) -> Result<()> {
         // TODO: Implement REPL functionality
         bail!("REPL is not yet implemented for Snix backend")
