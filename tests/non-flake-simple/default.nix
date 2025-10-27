@@ -1,7 +1,7 @@
 let
   sources = import ./npins;
   pkgs = import sources.nixpkgs { };
-  devenv = (import ../..).lib.nonFlakeMkShell ./.;
+  devenv = (import sources.devenv).lib.nonFlakeMkShell ./.;
 in
 {
   shell = devenv {
