@@ -14,6 +14,14 @@ let
     attribute = "treefmt";
     follows = [ "nixpkgs" ];
   };
+
+  # Determine tree root: prefer git.root, fallback to devenv.root
+  treeRoot = if config.git.root != null then config.git.root else config.devenv.root;
+
+  # Custom wrapper that uses git.root with fallback to devenv.root
+  treefmtWrapper = pkgs.writeShellScriptBin "treefmt" ''
+    exec ${cfg.config.build.wrapper}/bin/treefmt --config-file ${cfg.config.build.configFile} "$@" --tree-root ${lib.escapeShellArg treeRoot}
+  '';
 in
 {
   options.treefmt = {
@@ -29,10 +37,10 @@ in
 
   config = lib.mkIf cfg.enable {
     packages = [
-      cfg.config.build.wrapper
+      treefmtWrapper
     ];
 
     #automatically add treefmt-nix to git-hooks if the user enables it.
-    git-hooks.hooks.treefmt.package = cfg.config.build.wrapper;
+    git-hooks.hooks.treefmt.package = treefmtWrapper;
   };
 }

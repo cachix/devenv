@@ -12,7 +12,6 @@ Add your desired integration to your `devenv.nix` file. For example, the followi
 {
   treefmt = {
     enable = true;
-    config.projectRootFile = "devenv.nix";
     config.programs = {
         nixpkgs-fmt.enable = true;
         rustfmt.enable = true;

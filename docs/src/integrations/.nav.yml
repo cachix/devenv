@@ -9,3 +9,4 @@ nav:
   - Codespaces / devcontainer: codespaces-devcontainer.md
   - Difftastic: difftastic.md
   - Delta: delta.md
+  - treefmt: treefmt.md
