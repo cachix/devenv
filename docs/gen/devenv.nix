@@ -14,19 +14,13 @@ let
   filterGitHooks =
     path: opt:
     if lib.lists.hasPrefix [ "git-hooks" "hooks" ] path then
-      if builtins.elemAt path 2 == "_freeformOptions" then
-        true
-      else if
-        builtins.elem (builtins.elemAt path 3) [
-          "enable"
-          "description"
-          "packageOverrides"
-          "settings"
-        ]
-      then
-        true
-      else
-        false
+      builtins.elemAt path 2 == "_freeformOptions"
+      || builtins.elem (builtins.elemAt path 3) [
+        "enable"
+        "description"
+        "packageOverrides"
+        "settings"
+      ]
     else
       true;
 
