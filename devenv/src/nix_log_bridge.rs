@@ -17,6 +17,8 @@ pub struct NixLogBridge {
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// Current parent operation ID for correlating Nix activities
     current_operation_id: Arc<Mutex<Option<OperationId>>>,
+    /// Current parent span for nesting Nix activities (uses Span::none() when not set)
+    current_parent_span: Arc<Mutex<Span>>,
     /// Evaluation tracking state
     evaluation_state: Arc<Mutex<EvaluationState>>,
 }
@@ -48,14 +50,20 @@ impl NixLogBridge {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             current_operation_id: Arc::new(Mutex::new(None)),
+            current_parent_span: Arc::new(Mutex::new(Span::none())),
             evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
         })
     }
 
     /// Set the current operation ID for correlating Nix activities
+    /// Also captures the current span context for proper span nesting
     pub fn set_current_operation(&self, operation_id: OperationId) {
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = Some(operation_id);
+        }
+        // Capture the current span so Nix activities can be nested under it
+        if let Ok(mut span) = self.current_parent_span.lock() {
+            *span = Span::current();
         }
     }
 
@@ -67,6 +75,11 @@ impl NixLogBridge {
 
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = None;
+        }
+
+        // Reset the parent span to none
+        if let Ok(mut span) = self.current_parent_span.lock() {
+            *span = Span::none();
         }
 
         // Also reset the evaluation state for the next operation
@@ -237,7 +250,7 @@ impl NixLogBridge {
                     if let Some(op) = Op::from_internal_log(&log)
                         && let Op::EvaluatedFile { source } = op
                     {
-                        self.handle_file_evaluation(operation_id.clone(), source);
+                        self.handle_file_evaluation(source);
                         return;
                     }
 
@@ -254,6 +267,34 @@ impl NixLogBridge {
         }
     }
 
+    /// Insert an activity into the active activities map
+    fn insert_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        activity_type: ActivityType,
+        span: Span,
+    ) {
+        if let Ok(mut activities) = self.active_activities.lock() {
+            activities.insert(
+                activity_id,
+                NixActivityInfo {
+                    operation_id,
+                    activity_type,
+                    span,
+                },
+            );
+        }
+    }
+
+    /// Extract a string value from a Field
+    fn extract_string_field(field: &Field) -> Option<String> {
+        match field {
+            Field::String(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
     /// Handle the start of a Nix activity
     fn handle_activity_start(
         &self,
@@ -267,16 +308,10 @@ impl NixLogBridge {
             ActivityType::Build => {
                 let derivation_path = fields
                     .first()
-                    .and_then(|f| match f {
-                        Field::String(s) => Some(s.clone()),
-                        _ => None,
-                    })
+                    .and_then(Self::extract_string_field)
                     .unwrap_or_else(|| text.clone());
 
-                let machine = fields.get(1).and_then(|f| match f {
-                    Field::String(s) => Some(s.clone()),
-                    _ => None,
-                });
+                let machine = fields.get(1).and_then(Self::extract_string_field);
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
@@ -286,7 +321,9 @@ impl NixLogBridge {
                     format!("Building {}", derivation_name)
                 };
 
+                let parent = self.current_parent_span.lock().expect("Lock poisoned");
                 let span = info_span!(
+                    parent: &*parent,
                     "nix_build",
                     { operation_fields::TYPE } = operation_types::BUILD,
                     { operation_fields::NAME } = %derivation_name,
@@ -302,24 +339,18 @@ impl NixLogBridge {
                     );
                 });
 
-                if let Ok(mut activities) = self.active_activities.lock() {
-                    activities.insert(
-                        activity_id,
-                        NixActivityInfo {
-                            operation_id,
-                            activity_type,
-                            span,
-                        },
-                    );
-                }
+                self.insert_activity(activity_id, operation_id, activity_type, span);
             }
             ActivityType::QueryPathInfo => {
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
+                if let (Some(store_path), Some(substituter)) = (
+                    fields.first().and_then(Self::extract_string_field),
+                    fields.get(1).and_then(Self::extract_string_field),
+                ) {
+                    let package_name = extract_package_name(&store_path);
 
+                    let parent = self.current_parent_span.lock().expect("Lock poisoned");
                     let span = info_span!(
+                        parent: &*parent,
                         "nix_query",
                         { operation_fields::TYPE } = operation_types::QUERY,
                         { operation_fields::NAME } = %package_name,
@@ -335,26 +366,20 @@ impl NixLogBridge {
                         );
                     });
 
-                    if let Ok(mut activities) = self.active_activities.lock() {
-                        activities.insert(
-                            activity_id,
-                            NixActivityInfo {
-                                operation_id,
-                                activity_type,
-                                span,
-                            },
-                        );
-                    }
+                    self.insert_activity(activity_id, operation_id, activity_type, span);
                 }
             }
             ActivityType::CopyPath => {
                 // CopyPath is the actual download activity that shows byte progress
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
+                if let (Some(store_path), Some(substituter)) = (
+                    fields.first().and_then(Self::extract_string_field),
+                    fields.get(1).and_then(Self::extract_string_field),
+                ) {
+                    let package_name = extract_package_name(&store_path);
 
+                    let parent = self.current_parent_span.lock().expect("Lock poisoned");
                     let span = info_span!(
+                        parent: &*parent,
                         "nix_download",
                         { operation_fields::TYPE } = operation_types::DOWNLOAD,
                         { operation_fields::NAME } = %package_name,
@@ -370,21 +395,14 @@ impl NixLogBridge {
                         );
                     });
 
-                    if let Ok(mut activities) = self.active_activities.lock() {
-                        activities.insert(
-                            activity_id,
-                            NixActivityInfo {
-                                operation_id,
-                                activity_type,
-                                span,
-                            },
-                        );
-                    }
+                    self.insert_activity(activity_id, operation_id, activity_type, span);
                 }
             }
             ActivityType::FetchTree => {
                 // FetchTree activities show when fetching Git repos, tarballs, etc.
+                let parent = self.current_parent_span.lock().expect("Lock poisoned");
                 let span = info_span!(
+                    parent: &*parent,
                     "nix_fetch_tree",
                     { operation_fields::TYPE } = operation_types::FETCH_TREE,
                     { operation_fields::NAME } = %text,
@@ -398,16 +416,7 @@ impl NixLogBridge {
                     );
                 });
 
-                if let Ok(mut activities) = self.active_activities.lock() {
-                    activities.insert(
-                        activity_id,
-                        NixActivityInfo {
-                            operation_id,
-                            activity_type,
-                            span,
-                        },
-                    );
-                }
+                self.insert_activity(activity_id, operation_id, activity_type, span);
             }
             _ => {
                 // For other activity types, we can add support as needed
@@ -606,7 +615,7 @@ impl NixLogBridge {
     }
 
     /// Handle file evaluation events
-    fn handle_file_evaluation(&self, _operation_id: OperationId, file_path: std::path::PathBuf) {
+    fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
         const BATCH_SIZE: usize = 5; // Reduced from 10 for more responsive updates
         const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100); // Reduced from 200ms
 
@@ -615,7 +624,9 @@ impl NixLogBridge {
 
             // If this is the first file, create and store the evaluation span
             if state.total_files_evaluated == 0 && state.pending_files.is_empty() {
+                let parent = self.current_parent_span.lock().expect("Lock poisoned");
                 let span = info_span!(
+                    parent: &*parent,
                     "nix_evaluation",
                     { operation_fields::TYPE } = operation_types::EVALUATE,
                     { operation_fields::NAME } = "Nix evaluation",
@@ -667,12 +678,17 @@ impl NixLogBridge {
     }
 }
 
-/// Extract a human-readable derivation name from a derivation path
-fn extract_derivation_name(derivation_path: &str) -> String {
-    // Remove .drv suffix if present
-    let path = derivation_path
-        .strip_suffix(".drv")
-        .unwrap_or(derivation_path);
+/// Extract a human-readable name from a Nix path
+///
+/// For derivations, strips .drv suffix if present.
+/// Extracts the name part after the hash (format: /nix/store/hash-name)
+fn extract_nix_name(path: &str, strip_drv: bool) -> String {
+    // Remove .drv suffix if requested
+    let path = if strip_drv {
+        path.strip_suffix(".drv").unwrap_or(path)
+    } else {
+        path
+    };
 
     // Extract the name part after the hash
     if let Some(dash_pos) = path.rfind('-')
@@ -685,21 +701,14 @@ fn extract_derivation_name(derivation_path: &str) -> String {
     path.split('/').next_back().unwrap_or(path).to_string()
 }
 
+/// Extract a human-readable derivation name from a derivation path
+fn extract_derivation_name(derivation_path: &str) -> String {
+    extract_nix_name(derivation_path, true)
+}
+
 /// Extract a human-readable package name from a store path
 fn extract_package_name(store_path: &str) -> String {
-    // Extract the name part after the hash (format: /nix/store/hash-name)
-    if let Some(dash_pos) = store_path.rfind('-')
-        && let Some(slash_pos) = store_path[..dash_pos].rfind('/')
-    {
-        return store_path[slash_pos + 1..].to_string();
-    }
-
-    // Fallback: just take the filename
-    store_path
-        .split('/')
-        .next_back()
-        .unwrap_or(store_path)
-        .to_string()
+    extract_nix_name(store_path, false)
 }
 
 #[cfg(test)]
