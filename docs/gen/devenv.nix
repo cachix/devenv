@@ -41,15 +41,15 @@ let
   # Rewrite source declarations to GitHub URLs
   sources = [
     {
-      name = getStorePath (toString inputs.devenv);
+      name = getStorePath inputs.devenv.outPath;
       url = "https://github.com/cachix/devenv/blob/main";
     }
     {
-      name = "${inputs.git-hooks}";
+      name = inputs.git-hooks.outPath;
       url = "https://github.com/cachix/git-hooks.nix/blob/master";
     }
     {
-      name = "${inputs.treefmt-nix}";
+      name = inputs.treefmt-nix.outPath;
       url = "https://github.com/numtide/treefmt-nix/blob/main";
     }
   ];
@@ -68,7 +68,7 @@ let
       url = url;
     };
 
-  # Build option documentation without requiring substitutes
+  # Speed up doc builds by skipping narinfo queries
   disableSubstitutes =
     drv:
     drv.overrideAttrs (_: {

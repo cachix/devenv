@@ -45,6 +45,6 @@ EOF
   fi
 }
 
-process_directory "src/modules/languages" "../src/individual-docs/languages" "language"
-process_directory "src/modules/services" "../src/individual-docs/services" "service"
-process_directory "src/modules/process-managers" "../src/individual-docs/process-managers" "process manager"
+process_directory "../../src/modules/languages" "../src/individual-docs/languages" "language"
+process_directory "../../src/modules/services" "../src/individual-docs/services" "service"
+process_directory "../../src/modules/process-managers" "../src/individual-docs/process-managers" "process manager"
