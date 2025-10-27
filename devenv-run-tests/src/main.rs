@@ -534,6 +534,8 @@ exec '{bin_dir}/devenv' \
     let mut env = vec![
         ("DEVENV_RUN_TESTS", "1".to_string()),
         ("DEVENV_NIX", env::var("DEVENV_NIX").unwrap_or_default()),
+        // Support running tests that use npins using the local modules
+        ("NPINS_OVERRIDE_devenv", cwd.display().to_string()),
         (
             "PATH",
             format!(
