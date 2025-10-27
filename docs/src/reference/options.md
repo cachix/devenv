@@ -2535,7 +2535,7 @@ Devcontainer settings.
 
 
 *Type:*
-JSON value
+open submodule of (JSON value)
 
 
 
@@ -2881,7 +2881,7 @@ Environment variables to be exposed inside the developer environment.
 
 
 *Type:*
-lazy attribute set of anything
+open submodule of lazy attribute set of anything
 
 
 
@@ -3142,11 +3142,12 @@ package
 
 
 *Default:*
+` pkgs.pre-commit `
 
-```
-pkgs.pre-commit
 
-```
+
+*Example:*
+` pkgs.prek `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3284,11 +3285,7 @@ package
 
 
 *Default:*
-
-```
-pkgs.gitMinimal
-
-```
+` pkgs.gitMinimal `
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -3378,6 +3375,10 @@ Run ` cabal2nix ` on all ` *.cabal ` files to generate corresponding ` .nix ` fi
 **` cargo-check `**
 
 Check the cargo package for errors
+
+**` chart-testing `**
+
+CLI tool for linting and testing Helm charts
 
 **` check-added-large-files `**
 
@@ -3637,6 +3638,10 @@ Lightweight tool for managing headers in source code files.
 
 Haskell code prettifier.
 
+**` hledger-fmt `**
+
+Opinionated hledger’s journal files formatter.
+
 **` hlint `**
 
 HLint gives suggestions on how to improve your source code.
@@ -3660,6 +3665,10 @@ A Python utility / library to sort imports.
 **` juliaformatter `**
 
 Run JuliaFormatter.jl against Julia source files
+
+**` keep-sorted `**
+
+Language-agnostic formatter that sorts lines between two markers in a larger file.
 
 **` lacheck `**
 
@@ -3731,7 +3740,7 @@ Incremental analysis assistant for writing in Nix.
 
 **` nixfmt `**
 
-Deprecated Nix code prettifier. Use nixfmt-classic.
+Official Nix code formatter.
 
 **` nixfmt-classic `**
 
@@ -3988,7 +3997,7 @@ Beautifully format Clojure and Clojurescript source code and s-expressions.
 
 
 *Type:*
-attribute set of (submodule)
+open submodule of attribute set of (submodule)
 
 
 
@@ -4347,7 +4356,7 @@ string
 
 
 *Default:*
-the attribute name the hook submodule is bound to, same as ` id `
+`` the attribute name the hook submodule is bound to, same as `id` ``
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
@@ -7143,6 +7152,85 @@ string
 
 
 
+## git-hooks.hooks.hledger-fmt
+
+
+
+hledger-fmt hook
+
+
+
+*Type:*
+submodule
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
+## git-hooks.hooks.hledger-fmt.enable
+
+
+
+Whether to enable this pre-commit hook.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.hledger-fmt.description
+
+
+
+Description of the hook. Used for metadata purposes only.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hook.nix)
+
+
+
+## git-hooks.hooks.hledger-fmt.settings.fix
+
+
+
+Fix the files in place.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/hooks.nix)
+
+
+
 ## git-hooks.hooks.hlint
 
 
@@ -7319,8 +7407,6 @@ submodule
 
 ## git-hooks.hooks.isort.enable
 
-
-
 Whether to enable this pre-commit hook.
 
 
@@ -7439,6 +7525,8 @@ boolean
 
 
 ## git-hooks.hooks.lacheck.description
+
+
 
 Description of the hook. Used for metadata purposes only.
 
@@ -9412,8 +9500,6 @@ boolean
 
 
 ## git-hooks.hooks.prettier.settings.config-precedence
-
-
 
 Defines how config file should be evaluated in combination of CLI options.
 
@@ -11504,8 +11590,6 @@ boolean
 
 ## git-hooks.hooks.statix.description
 
-
-
 Description of the hook. Used for metadata purposes only.
 
 
@@ -13014,7 +13098,7 @@ list of (string or anything) *(read only)*
 
 
 
-A bash snippet that installs nix-pre-commit-hooks in the current directory
+A bash snippet that installs the git hooks in the current repository.
 
 
 
@@ -13121,6 +13205,24 @@ null or (attribute set)
 
 
 
+## git-hooks.shellHook
+
+
+
+A shell hook that sets up the git hooks in a development shell.
+
+Pass to ` mkShell ` as ` shellHook ` to use.
+
+
+
+*Type:*
+string *(read only)*
+
+*Declared by:*
+ - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
+
+
+
 ## git-hooks.src
 
 
@@ -13157,7 +13259,11 @@ lazy attribute set of (null or package)
 
 
 *Default:*
-` git-hooks.nix-pkgs.callPackage tools-dot-nix { inherit (pkgs) system; } `
+
+```
+git-hooks.nix-pkgs.callPackage tools-dot-nix { inherit (pkgs) system; }
+
+```
 
 *Declared by:*
  - [https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix](https://github.com/cachix/git-hooks.nix/blob/master/modules/pre-commit.nix)
@@ -16219,8 +16325,6 @@ boolean
 
 ## languages.python.poetry.install.allGroups
 
-
-
 Whether to install all groups. See ` --all-groups `.
 
 
@@ -17289,7 +17393,7 @@ Rust component packages. May optionally define additional components, for exampl
 
 
 *Type:*
-attribute set of package
+open submodule of attribute set of package
 
 
 
@@ -18496,8 +18600,6 @@ package
 
 ## process.managers.mprocs.package
 
-
-
 The mprocs package to use.
 
 
@@ -18830,7 +18932,7 @@ Profile definitions that can be activated manually or automatically.
 
 
 *Type:*
-lazy attribute set of (submodule)
+open submodule of lazy attribute set of (submodule)
 
 
 
@@ -20328,7 +20430,7 @@ xlink:href=“https://docs.couchdb.org/en/stable/config/couchdb.html”
 
 
 *Type:*
-attribute set of section of an INI file (attrs of INI atom (null, bool, int, float or string))
+open submodule of attribute set of section of an INI file (attrs of INI atom (null, bool, int, float or string))
 
 
 
@@ -21210,7 +21312,7 @@ List of Kafka Connect connectors to set up initially
 
 
 *Type:*
-list of (lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string)))
+list of (open submodule of lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string)))
 
 
 
@@ -21268,7 +21370,7 @@ but instead as quoted strings (ie. ` settings."broker.id" `, NOT
 
 
 *Type:*
-lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
+open submodule of lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
 
 
 
@@ -21656,7 +21758,7 @@ but instead as quoted strings (ie. ` settings."broker.id" `, NOT
 
 
 *Type:*
-lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
+open submodule of lazy attribute set of (null or boolean or signed integer or string or list of (boolean or signed integer or string))
 
 
 
@@ -22045,7 +22147,7 @@ to the contents of the
 
 
 *Type:*
-attribute set of (null or string or signed integer or boolean or attribute set of absolute path)
+open submodule of attribute set of (null or string or signed integer or boolean or attribute set of absolute path)
 
 
 
@@ -24354,7 +24456,7 @@ OpenSearch configuration.
 
 
 *Type:*
-YAML 1.1 value
+open submodule of (YAML 1.1 value)
 
 
 
@@ -24587,7 +24689,7 @@ for more information on how to configure the Collector.
 
 
 *Type:*
-YAML 1.1 value
+open submodule of (YAML 1.1 value)
 
 
 
@@ -24706,6 +24808,7 @@ The available extensions are:
  - pg_csv
  - pg_ed25519
  - pg_embedding
+ - pg_graphql
  - pg_hint_plan
  - pg_hll
  - pg_ivm
@@ -25999,8 +26102,6 @@ boolean
 
 
 ## services.tailscale.funnel.target
-
-
 
 Target host or host:port for Tailscale funnel
 
@@ -28076,6 +28177,20702 @@ one of “oneshot”, “process”
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix](https://github.com/cachix/devenv/blob/main/src/modules/tasks.nix)
+
+
+
+## treefmt.enable
+
+
+
+Whether to enable treefmt integration (through treefmt-nix).
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix)
+
+
+
+## treefmt.config
+
+
+
+treefmt configuration.
+
+
+
+*Type:*
+submodule
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix)
+
+
+
+## treefmt.config.enableDefaultExcludes
+
+
+
+Enable the default excludes in the treefmt configuration.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.package
+
+
+
+The treefmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.treefmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.build.check
+
+
+
+Create a flake check to test that the given project tree is already
+formatted.
+
+Input argument is the path to the project tree (usually ‘self’).
+
+
+
+*Type:*
+function that evaluates to a(n) package
+
+
+
+*Default:*
+Default check implementation
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.build.configFile
+
+
+
+Contains the generated config file derived from the settings.
+
+
+
+*Type:*
+absolute path
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.build.devShell
+
+
+
+The development shell with treefmt and its underlying programs
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.build.programs
+
+
+
+Attrset of formatter programs enabled in treefmt configuration.
+
+The key of the attrset is the formatter name, with the value being the
+package used to do the formatting.
+
+
+
+*Type:*
+attribute set of package
+
+
+
+*Default:*
+Programs used in configuration
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.build.wrapper
+
+
+
+The treefmt package, wrapped with the config file.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+wrapped ` treefmt ` command
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.pkgs
+
+
+
+Nixpkgs to use in ` treefmt `.
+
+
+
+*Type:*
+lazy attribute set of raw value
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/treefmt.nix)
+
+
+
+## treefmt.config.programs.actionlint.enable
+
+
+
+Whether to enable actionlint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
+
+
+
+## treefmt.config.programs.actionlint.package
+
+
+
+The actionlint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.actionlint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
+
+
+
+## treefmt.config.programs.actionlint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
+
+
+
+## treefmt.config.programs.actionlint.finalPackage
+
+
+
+Resulting ` actionlint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
+
+
+
+## treefmt.config.programs.actionlint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  ".github/workflows/*.yml"
+  ".github/workflows/*.yaml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
+
+
+
+## treefmt.config.programs.actionlint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/actionlint.nix)
+
+
+
+## treefmt.config.programs.aiken.enable
+
+Whether to enable aiken.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
+
+
+
+## treefmt.config.programs.aiken.package
+
+
+
+The aiken package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.aiken `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
+
+
+
+## treefmt.config.programs.aiken.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
+
+
+
+## treefmt.config.programs.aiken.finalPackage
+
+
+
+Resulting ` aiken ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
+
+
+
+## treefmt.config.programs.aiken.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.ak"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
+
+
+
+## treefmt.config.programs.aiken.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/aiken.nix)
+
+
+
+## treefmt.config.programs.alejandra.enable
+
+
+
+Whether to enable alejandra.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
+
+
+
+## treefmt.config.programs.alejandra.package
+
+
+
+The alejandra package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.alejandra `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
+
+
+
+## treefmt.config.programs.alejandra.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
+
+
+
+## treefmt.config.programs.alejandra.finalPackage
+
+
+
+Resulting ` alejandra ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
+
+
+
+## treefmt.config.programs.alejandra.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
+
+
+
+## treefmt.config.programs.alejandra.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/alejandra.nix)
+
+
+
+## treefmt.config.programs.asmfmt.enable
+
+
+
+Whether to enable asmfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
+
+
+
+## treefmt.config.programs.asmfmt.package
+
+
+
+The asmfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.asmfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
+
+
+
+## treefmt.config.programs.asmfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
+
+
+
+## treefmt.config.programs.asmfmt.finalPackage
+
+
+
+Resulting ` asmfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
+
+
+
+## treefmt.config.programs.asmfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.s"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
+
+
+
+## treefmt.config.programs.asmfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/asmfmt.nix)
+
+
+
+## treefmt.config.programs.autocorrect.enable
+
+
+
+Whether to enable autocorrect.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.package
+
+
+
+The autocorrect package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.autocorrect `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.finalPackage
+
+
+
+Resulting ` autocorrect ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.context
+
+
+
+Enable or disable in a specific context.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.context.codeblock
+
+
+
+Enable or disable to format codeblock in Markdown or AsciiDoc etc.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.fileTypes
+
+
+
+Configure the files associations, you config is higher priority than default.
+
+
+
+*Type:*
+null or (attribute set of string)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  "*.js" = "javascript";
+  ".mdx" = "markdown";
+  Rakefile = "ruby";
+  rb = "ruby";
+}
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules
+
+
+
+Configure rules for autocorrect formatting.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.fullwidth
+
+
+
+Convert to fullwidth.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.halfwidth-punctuation
+
+
+
+Fullwidth punctuations to halfwidth in english.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.halfwidth-word
+
+
+
+Fullwidth alphanumeric characters to halfwidth.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.no-space-fullwidth
+
+
+
+Remove space near the fullwidth.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.space-backticks
+
+
+
+Add space between \`\`, when near the CJK.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.space-bracket
+
+
+
+Add space between brackets (), \[] when near the CJK.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.space-dash
+
+
+
+Add space between dash ` - `.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "off" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.space-dollar
+
+
+
+Add space between dollar $ when near the CJK.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "off" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.space-punctuation
+
+
+
+Add space between some punctuations.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "error" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.space-word
+
+
+
+Auto add spacing between CJK (Chinese, Japanese, Korean) and English words.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "off" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.rules.spellcheck
+
+
+
+Spellcheck.
+
+
+
+*Type:*
+null or one of “off”, “error”, “warning”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "warning" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.spellcheck
+
+
+
+Spellcheck configuration.
+
+
+
+*Type:*
+null or (submodule)
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.spellcheck.words
+
+
+
+Correct Words (Case insensitive) for by Spellcheck.
+
+
+
+*Type:*
+null or (list of string)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+[
+  "GitHub"
+  "App Store"
+  "AppStore = App Store"
+  "Git"
+  "Node.js"
+  "nodejs = Node.js"
+  "VIM"
+  "DNS"
+  "HTTP"
+  "SSL"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.settings.textRules
+
+
+
+Configure special rules for some texts.
+
+
+
+*Type:*
+null or (attribute set of (null or one of “off”, “error”, “warning”))
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  "Hello你好" = "warning";
+  "Hi你好" = "off";
+}
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.autocorrect.threads
+
+
+
+Number of threads, 0 - use number of CPU. \[default: 0]
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 2 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/autocorrect.nix)
+
+
+
+## treefmt.config.programs.beautysh.enable
+
+
+
+Whether to enable beautysh.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
+
+
+
+## treefmt.config.programs.beautysh.package
+
+
+
+The beautysh package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.beautysh `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
+
+
+
+## treefmt.config.programs.beautysh.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
+
+
+
+## treefmt.config.programs.beautysh.finalPackage
+
+
+
+Resulting ` beautysh ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
+
+
+
+## treefmt.config.programs.beautysh.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sh"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
+
+
+
+## treefmt.config.programs.beautysh.indent_size
+
+
+
+Sets the number of spaces to be used in indentation.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 2 `
+
+
+
+*Example:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
+
+
+
+## treefmt.config.programs.beautysh.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/beautysh.nix)
+
+
+
+## treefmt.config.programs.biome.enable
+
+
+
+Whether to enable biome.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.package
+
+
+
+The biome package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.biome `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.finalPackage
+
+
+
+Resulting ` biome ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.formatCommand
+
+
+
+The command to run Biome with.
+
+
+
+*Type:*
+one of “format”, “lint”, “check”
+
+
+
+*Default:*
+` "check" `
+
+
+
+*Example:*
+` "format" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.formatUnsafe
+
+
+
+Allows to format a document that has unsafe fixes.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.js"
+  "*.ts"
+  "*.mjs"
+  "*.mts"
+  "*.cjs"
+  "*.cts"
+  "*.jsx"
+  "*.tsx"
+  "*.d.ts"
+  "*.d.cts"
+  "*.d.mts"
+  "*.json"
+  "*.jsonc"
+  "*.css"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.biome.settings
+
+
+
+Raw Biome configuration (must conform to Biome JSON schema)
+
+
+
+*Type:*
+attribute set of anything
+
+
+
+*Default:*
+` { } `
+
+
+
+*Example:*
+
+```
+{
+  formatter = {
+    indentStyle = "space";
+    lineWidth = 100;
+  };
+  javascript = {
+    formatter = {
+      lineWidth = 120;
+      quoteStyle = "single";
+    };
+  };
+  json = {
+    formatter = {
+      enabled = false;
+    };
+  };
+}
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/biome.nix)
+
+
+
+## treefmt.config.programs.black.enable
+
+
+
+Whether to enable black.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
+
+
+
+## treefmt.config.programs.black.package
+
+
+
+The black package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.black `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
+
+
+
+## treefmt.config.programs.black.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
+
+
+
+## treefmt.config.programs.black.finalPackage
+
+
+
+Resulting ` black ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
+
+
+
+## treefmt.config.programs.black.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.py"
+  "*.pyi"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
+
+
+
+## treefmt.config.programs.black.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/black.nix)
+
+
+
+## treefmt.config.programs.buf.enable
+
+
+
+Whether to enable buf.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
+
+
+
+## treefmt.config.programs.buf.package
+
+
+
+The buf package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.buf `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
+
+
+
+## treefmt.config.programs.buf.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
+
+
+
+## treefmt.config.programs.buf.finalPackage
+
+
+
+Resulting ` buf ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
+
+
+
+## treefmt.config.programs.buf.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.proto"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
+
+
+
+## treefmt.config.programs.buf.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buf.nix)
+
+
+
+## treefmt.config.programs.buildifier.enable
+
+
+
+Whether to enable buildifier.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
+
+
+
+## treefmt.config.programs.buildifier.package
+
+
+
+The buildifier package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.buildifier `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
+
+
+
+## treefmt.config.programs.buildifier.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
+
+
+
+## treefmt.config.programs.buildifier.finalPackage
+
+
+
+Resulting ` buildifier ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
+
+
+
+## treefmt.config.programs.buildifier.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.bazel"
+  "*.bzl"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
+
+
+
+## treefmt.config.programs.buildifier.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/buildifier.nix)
+
+
+
+## treefmt.config.programs.cabal-fmt.enable
+
+
+
+Whether to enable cabal-fmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
+
+
+
+## treefmt.config.programs.cabal-fmt.package
+
+
+
+The cabal-fmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.haskellPackages.cabal-fmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
+
+
+
+## treefmt.config.programs.cabal-fmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
+
+
+
+## treefmt.config.programs.cabal-fmt.finalPackage
+
+
+
+Resulting ` cabal-fmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
+
+
+
+## treefmt.config.programs.cabal-fmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.cabal"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
+
+
+
+## treefmt.config.programs.cabal-fmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-fmt.nix)
+
+
+
+## treefmt.config.programs.cabal-gild.enable
+
+
+
+Whether to enable cabal-gild.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
+
+
+
+## treefmt.config.programs.cabal-gild.package
+
+
+
+The cabal-gild package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.haskellPackages.cabal-gild `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
+
+
+
+## treefmt.config.programs.cabal-gild.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
+
+
+
+## treefmt.config.programs.cabal-gild.finalPackage
+
+
+
+Resulting ` cabal-gild ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
+
+
+
+## treefmt.config.programs.cabal-gild.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.cabal"
+  "cabal.project"
+  "cabal.project.local"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
+
+
+
+## treefmt.config.programs.cabal-gild.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cabal-gild.nix)
+
+
+
+## treefmt.config.programs.clang-format.enable
+
+
+
+Whether to enable clang-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
+
+
+
+## treefmt.config.programs.clang-format.package
+
+
+
+The clang-tools package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clang-tools `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
+
+
+
+## treefmt.config.programs.clang-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
+
+
+
+## treefmt.config.programs.clang-format.finalPackage
+
+
+
+Resulting ` clang-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
+
+
+
+## treefmt.config.programs.clang-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.c"
+  "*.cc"
+  "*.cpp"
+  "*.h"
+  "*.hh"
+  "*.hpp"
+  "*.glsl"
+  "*.vert"
+  ".tesc"
+  ".tese"
+  ".geom"
+  ".frag"
+  ".comp"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
+
+
+
+## treefmt.config.programs.clang-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-format.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.enable
+
+
+
+Whether to enable clang-tidy.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.package
+
+
+
+The clang-tools package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.clang-tools `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.compileCommandsPath
+
+
+
+used to read a compile command database
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "/my/cmake/build/directory" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.configFile
+
+
+
+Specify the path of .clang-tidy or custom config file
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "/some/path/myTidyConfigFile" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.finalPackage
+
+
+
+Resulting ` clang-tidy ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.c"
+  "*.cc"
+  "*.cpp"
+  "*.h"
+  "*.hh"
+  "*.hpp"
+  "*.glsl"
+  "*.vert"
+  ".tesc"
+  ".tese"
+  ".geom"
+  ".frag"
+  ".comp"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.clang-tidy.quiet
+
+
+
+Run clang-tidy in quiet mode
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/clang-tidy.nix)
+
+
+
+## treefmt.config.programs.cljfmt.enable
+
+
+
+Whether to enable cljfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
+
+
+
+## treefmt.config.programs.cljfmt.package
+
+
+
+The cljfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cljfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
+
+
+
+## treefmt.config.programs.cljfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
+
+
+
+## treefmt.config.programs.cljfmt.finalPackage
+
+
+
+Resulting ` cljfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
+
+
+
+## treefmt.config.programs.cljfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.clj"
+  "*.cljc"
+  "*.cljs"
+  "*.cljx"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
+
+
+
+## treefmt.config.programs.cljfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cljfmt.nix)
+
+
+
+## treefmt.config.programs.cmake-format.enable
+
+
+
+Whether to enable cmake-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
+
+
+
+## treefmt.config.programs.cmake-format.package
+
+
+
+The cmake-format package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cmake-format `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
+
+
+
+## treefmt.config.programs.cmake-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
+
+
+
+## treefmt.config.programs.cmake-format.finalPackage
+
+
+
+Resulting ` cmake-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
+
+
+
+## treefmt.config.programs.cmake-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.cmake"
+  "CMakeLists.txt"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
+
+
+
+## treefmt.config.programs.cmake-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cmake-format.nix)
+
+
+
+## treefmt.config.programs.csharpier.enable
+
+
+
+Whether to enable csharpier.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
+
+
+
+## treefmt.config.programs.csharpier.package
+
+
+
+The csharpier package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.csharpier `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
+
+
+
+## treefmt.config.programs.csharpier.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
+
+
+
+## treefmt.config.programs.csharpier.finalPackage
+
+
+
+Resulting ` csharpier ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
+
+
+
+## treefmt.config.programs.csharpier.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.cs"
+  "*.csproj"
+  "*.slnx"
+  "*.xaml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
+
+
+
+## treefmt.config.programs.csharpier.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/csharpier.nix)
+
+
+
+## treefmt.config.programs.cue.enable
+
+
+
+Whether to enable cue.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
+
+
+
+## treefmt.config.programs.cue.package
+
+
+
+The cue package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cue `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
+
+
+
+## treefmt.config.programs.cue.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
+
+
+
+## treefmt.config.programs.cue.finalPackage
+
+
+
+Resulting ` cue ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
+
+
+
+## treefmt.config.programs.cue.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.cue"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
+
+
+
+## treefmt.config.programs.cue.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/cue.nix)
+
+
+
+## treefmt.config.programs.d2.enable
+
+
+
+Whether to enable d2.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
+
+
+
+## treefmt.config.programs.d2.package
+
+
+
+The d2 package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.d2 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
+
+
+
+## treefmt.config.programs.d2.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
+
+
+
+## treefmt.config.programs.d2.finalPackage
+
+
+
+Resulting ` d2 ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
+
+
+
+## treefmt.config.programs.d2.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.d2"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
+
+
+
+## treefmt.config.programs.d2.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/d2.nix)
+
+
+
+## treefmt.config.programs.dart-format.enable
+
+
+
+Whether to enable dart-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
+
+
+
+## treefmt.config.programs.dart-format.package
+
+
+
+The dart package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dart `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
+
+
+
+## treefmt.config.programs.dart-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
+
+
+
+## treefmt.config.programs.dart-format.finalPackage
+
+
+
+Resulting ` dart-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
+
+
+
+## treefmt.config.programs.dart-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.dart"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
+
+
+
+## treefmt.config.programs.dart-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dart-format.nix)
+
+
+
+## treefmt.config.programs.deadnix.enable
+
+
+
+Whether to enable deadnix.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.package
+
+
+
+The deadnix package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.deadnix `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.finalPackage
+
+
+
+Resulting ` deadnix ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.no-lambda-arg
+
+
+
+Whether to enable Don’t check lambda parameter arguments.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.no-lambda-pattern-names
+
+
+
+Whether to enable Don’t check lambda attrset pattern names (don’t break nixpkgs callPackage).
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.no-underscore
+
+
+
+Whether to enable Don’t check any bindings that start with a _.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deadnix.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deadnix.nix)
+
+
+
+## treefmt.config.programs.deno.enable
+
+
+
+Whether to enable deno.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
+
+
+
+## treefmt.config.programs.deno.package
+
+
+
+The deno package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.deno `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
+
+
+
+## treefmt.config.programs.deno.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
+
+
+
+## treefmt.config.programs.deno.finalPackage
+
+
+
+Resulting ` deno ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
+
+
+
+## treefmt.config.programs.deno.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.css"
+  "*.html"
+  "*.js"
+  "*.json"
+  "*.jsonc"
+  "*.jsx"
+  "*.less"
+  "*.markdown"
+  "*.md"
+  "*.sass"
+  "*.scss"
+  "*.ts"
+  "*.tsx"
+  "*.yaml"
+  "*.yml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
+
+
+
+## treefmt.config.programs.deno.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/deno.nix)
+
+
+
+## treefmt.config.programs.dfmt.enable
+
+
+
+Whether to enable dfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
+
+
+
+## treefmt.config.programs.dfmt.package
+
+
+
+The dformat package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dformat `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
+
+
+
+## treefmt.config.programs.dfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
+
+
+
+## treefmt.config.programs.dfmt.finalPackage
+
+
+
+Resulting ` dfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
+
+
+
+## treefmt.config.programs.dfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.d"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
+
+
+
+## treefmt.config.programs.dfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dfmt.nix)
+
+
+
+## treefmt.config.programs.dhall.enable
+
+
+
+Whether to enable dhall.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
+
+
+
+## treefmt.config.programs.dhall.package
+
+
+
+The dhall package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dhall `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
+
+
+
+## treefmt.config.programs.dhall.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
+
+
+
+## treefmt.config.programs.dhall.finalPackage
+
+
+
+Resulting ` dhall ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
+
+
+
+## treefmt.config.programs.dhall.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.dhall"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
+
+
+
+## treefmt.config.programs.dhall.lint
+
+
+
+Whether to lint in addition to formatting.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
+
+
+
+## treefmt.config.programs.dhall.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dhall.nix)
+
+
+
+## treefmt.config.programs.djlint.enable
+
+
+
+Whether to enable djlint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.package
+
+
+
+The djlint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.djlint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.finalPackage
+
+
+
+Resulting ` djlint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.ignoreRules
+
+
+
+Which H-rules to ignore
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.html"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.indent
+
+
+
+Default indentation depth in spaces
+
+
+
+*Type:*
+unsigned integer, meaning >=0
+
+
+
+*Default:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.lint
+
+
+
+Whether to lint in addition to formatting.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.djlint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/djlint.nix)
+
+
+
+## treefmt.config.programs.dnscontrol.enable
+
+
+
+Whether to enable dnscontrol.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
+
+
+
+## treefmt.config.programs.dnscontrol.package
+
+
+
+The dnscontrol package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dnscontrol `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
+
+
+
+## treefmt.config.programs.dnscontrol.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
+
+
+
+## treefmt.config.programs.dnscontrol.finalPackage
+
+
+
+Resulting ` dnscontrol ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
+
+
+
+## treefmt.config.programs.dnscontrol.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "dnsconfig.js"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
+
+
+
+## treefmt.config.programs.dnscontrol.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dnscontrol.nix)
+
+
+
+## treefmt.config.programs.dockerfmt.enable
+
+
+
+Whether to enable dockerfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
+
+
+
+## treefmt.config.programs.dockerfmt.package
+
+
+
+The dockerfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dockerfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
+
+
+
+## treefmt.config.programs.dockerfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
+
+
+
+## treefmt.config.programs.dockerfmt.finalPackage
+
+
+
+Resulting ` dockerfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
+
+
+
+## treefmt.config.programs.dockerfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*/Dockerfile"
+  "*.dockerfile"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
+
+
+
+## treefmt.config.programs.dockerfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockerfmt.nix)
+
+
+
+## treefmt.config.programs.dockfmt.enable
+
+
+
+Whether to enable dockfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
+
+
+
+## treefmt.config.programs.dockfmt.package
+
+
+
+The dockfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dockfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
+
+
+
+## treefmt.config.programs.dockfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
+
+
+
+## treefmt.config.programs.dockfmt.finalPackage
+
+
+
+Resulting ` dockfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
+
+
+
+## treefmt.config.programs.dockfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "Dockerfile"
+  "*.Dockerfile"
+  "Dockerfile.*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
+
+
+
+## treefmt.config.programs.dockfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dockfmt.nix)
+
+
+
+## treefmt.config.programs.dos2unix.enable
+
+
+
+Whether to enable dos2unix.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
+
+
+
+## treefmt.config.programs.dos2unix.package
+
+
+
+The dos2unix package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dos2unix `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
+
+
+
+## treefmt.config.programs.dos2unix.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
+
+
+
+## treefmt.config.programs.dos2unix.finalPackage
+
+
+
+Resulting ` dos2unix ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
+
+
+
+## treefmt.config.programs.dos2unix.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
+
+
+
+## treefmt.config.programs.dos2unix.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dos2unix.nix)
+
+
+
+## treefmt.config.programs.dprint.enable
+
+
+
+Whether to enable dprint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.package
+
+
+
+The dprint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dprint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.finalPackage
+
+
+
+Resulting ` dprint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  ".*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings
+
+
+
+Configuration to generate dprint.json with
+
+
+
+*Type:*
+open submodule of (JSON value)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings.extends
+
+
+
+Configurations to extend.
+
+
+
+*Type:*
+null or string or list of string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "https://dprint.dev/path/to/config/file.v1.json" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings.incremental
+
+
+
+Whether to format files only when they change.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings.indentWidth
+
+
+
+The number of characters for an indent
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 2 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings.lineWidth
+
+
+
+The width of a line the printer will try to stay under. Note that the
+printer may exceed this width in certain cases.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 80 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings.newLineKind
+
+
+
+The kind of newline to use (one of: auto, crlf, lf, system).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "auto" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings.plugins
+
+
+
+Array of plugin URLs to format files.
+
+
+
+*Type:*
+null or (list of string)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+# (recommended) using plugins from nixpkgs
+# plugins is the list of all available dprint plugins in nixpkgs
+(pkgs.dprint-plugins.getPluginList (
+  plugins: with plugins; [
+    dprint-plugin-toml
+    dprint-plugin-dockerfile
+    g-plane-pretty_yaml
+    # (pkgs.callPackage ./dprint/plugins/sample.nix {})
+  ]
+))
+# (not recommended) using url plugins
+# treefmt then only works outside the nix sandbox, so treefmt nix flake check will fail
+++ [
+  "https://plugins.dprint.dev/json-0.17.2.wasm"
+  "https://plugins.dprint.dev/markdown-0.15.2.wasm"
+  "https://plugins.dprint.dev/typescript-0.84.4.wasm"
+]
+
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dprint.settings.useTabs
+
+
+
+Whether to use tabs (true) or spaces (false) for indentation.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dprint.nix)
+
+
+
+## treefmt.config.programs.dscanner.enable
+
+
+
+Whether to enable dscanner.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
+
+
+
+## treefmt.config.programs.dscanner.package
+
+
+
+The dscanner package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dscanner `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
+
+
+
+## treefmt.config.programs.dscanner.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
+
+
+
+## treefmt.config.programs.dscanner.finalPackage
+
+
+
+Resulting ` dscanner ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
+
+
+
+## treefmt.config.programs.dscanner.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.d"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
+
+
+
+## treefmt.config.programs.dscanner.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/dscanner.nix)
+
+
+
+## treefmt.config.programs.efmt.enable
+
+
+
+Whether to enable efmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
+
+
+
+## treefmt.config.programs.efmt.package
+
+
+
+The efmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.efmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
+
+
+
+## treefmt.config.programs.efmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
+
+
+
+## treefmt.config.programs.efmt.finalPackage
+
+
+
+Resulting ` efmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
+
+
+
+## treefmt.config.programs.efmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.erl"
+  "*.hrl"
+  "*.app"
+  "*.app.src"
+  "*.config"
+  "*.script"
+  "*.escript"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
+
+
+
+## treefmt.config.programs.efmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/efmt.nix)
+
+
+
+## treefmt.config.programs.elm-format.enable
+
+
+
+Whether to enable elm-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
+
+
+
+## treefmt.config.programs.elm-format.package
+
+
+
+The elm-format package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elmPackages.elm-format `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
+
+
+
+## treefmt.config.programs.elm-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
+
+
+
+## treefmt.config.programs.elm-format.finalPackage
+
+
+
+Resulting ` elm-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
+
+
+
+## treefmt.config.programs.elm-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.elm"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
+
+
+
+## treefmt.config.programs.elm-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/elm-format.nix)
+
+
+
+## treefmt.config.programs.erlfmt.enable
+
+
+
+Whether to enable erlfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
+
+
+
+## treefmt.config.programs.erlfmt.package
+
+
+
+The erlfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.erlfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
+
+
+
+## treefmt.config.programs.erlfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
+
+
+
+## treefmt.config.programs.erlfmt.finalPackage
+
+
+
+Resulting ` erlfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
+
+
+
+## treefmt.config.programs.erlfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.erl"
+  "*.hrl"
+  "*.app"
+  "*.app.src"
+  "*.config"
+  "*.script"
+  "*.escript"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
+
+
+
+## treefmt.config.programs.erlfmt.print-width
+
+
+
+The line length that formatter would wrap on
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 100 `
+
+
+
+*Example:*
+` 80 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
+
+
+
+## treefmt.config.programs.erlfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/erlfmt.nix)
+
+
+
+## treefmt.config.programs.fantomas.enable
+
+
+
+Whether to enable fantomas.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
+
+
+
+## treefmt.config.programs.fantomas.package
+
+
+
+The fantomas package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.fantomas `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
+
+
+
+## treefmt.config.programs.fantomas.dotnet-sdk
+
+
+
+The dotnet-sdk package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.dotnet-sdk `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
+
+
+
+## treefmt.config.programs.fantomas.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
+
+
+
+## treefmt.config.programs.fantomas.finalPackage
+
+
+
+Resulting ` fantomas ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
+
+
+
+## treefmt.config.programs.fantomas.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.fs"
+  "*.fsx"
+  "*.fsi"
+  "*.ml"
+  "*.mli"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
+
+
+
+## treefmt.config.programs.fantomas.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fantomas.nix)
+
+
+
+## treefmt.config.programs.fish_indent.enable
+
+
+
+Whether to enable fish_indent.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
+
+
+
+## treefmt.config.programs.fish_indent.package
+
+
+
+The fish package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.fish `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
+
+
+
+## treefmt.config.programs.fish_indent.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
+
+
+
+## treefmt.config.programs.fish_indent.finalPackage
+
+
+
+Resulting ` fish_indent ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
+
+
+
+## treefmt.config.programs.fish_indent.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.fish"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
+
+
+
+## treefmt.config.programs.fish_indent.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fish_indent.nix)
+
+
+
+## treefmt.config.programs.fnlfmt.enable
+
+
+
+Whether to enable fnlfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
+
+
+
+## treefmt.config.programs.fnlfmt.package
+
+
+
+The fnlfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.fnlfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
+
+
+
+## treefmt.config.programs.fnlfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
+
+
+
+## treefmt.config.programs.fnlfmt.finalPackage
+
+
+
+Resulting ` fnlfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
+
+
+
+## treefmt.config.programs.fnlfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.fnl"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
+
+
+
+## treefmt.config.programs.fnlfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fnlfmt.nix)
+
+
+
+## treefmt.config.programs.formatjson5.enable
+
+
+
+Whether to enable formatjson5.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.package
+
+
+
+The formatjson5 package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.formatjson5 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.finalPackage
+
+
+
+Resulting ` formatjson5 ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.json5"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.indent
+
+
+
+Indent by the given number of spaces
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.noTrailingCommas
+
+
+
+Suppress trailing commas (otherwise added by default)
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.oneElementLines
+
+
+
+Objects or arrays with a single child should collapse to a single line
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.formatjson5.sortArrays
+
+
+
+Sort arrays of primitive values (string, number, boolean, or null) lexicographically
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/formatjson5.nix)
+
+
+
+## treefmt.config.programs.fourmolu.enable
+
+
+
+Whether to enable fourmolu.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
+
+
+
+## treefmt.config.programs.fourmolu.package
+
+
+
+The fourmolu package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.haskellPackages.fourmolu `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
+
+
+
+## treefmt.config.programs.fourmolu.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
+
+
+
+## treefmt.config.programs.fourmolu.finalPackage
+
+
+
+Resulting ` fourmolu ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
+
+
+
+## treefmt.config.programs.fourmolu.ghcOpts
+
+
+
+Which GHC language extensions to enable
+
+
+
+*Type:*
+unspecified value
+
+
+
+*Default:*
+
+```
+[
+  "BangPatterns"
+  "PatternSynonyms"
+  "TypeApplications"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
+
+
+
+## treefmt.config.programs.fourmolu.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.hs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
+
+
+
+## treefmt.config.programs.fourmolu.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fourmolu.nix)
+
+
+
+## treefmt.config.programs.fprettify.enable
+
+
+
+Whether to enable fprettify.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
+
+
+
+## treefmt.config.programs.fprettify.package
+
+
+
+The fprettify package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.fprettify `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
+
+
+
+## treefmt.config.programs.fprettify.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
+
+
+
+## treefmt.config.programs.fprettify.finalPackage
+
+
+
+Resulting ` fprettify ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
+
+
+
+## treefmt.config.programs.fprettify.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.f90"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
+
+
+
+## treefmt.config.programs.fprettify.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/fprettify.nix)
+
+
+
+## treefmt.config.programs.gdformat.enable
+
+
+
+Whether to enable gdformat.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
+
+
+
+## treefmt.config.programs.gdformat.package
+
+
+
+The gdtoolkit_4 package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gdtoolkit_4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
+
+
+
+## treefmt.config.programs.gdformat.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
+
+
+
+## treefmt.config.programs.gdformat.finalPackage
+
+
+
+Resulting ` gdformat ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
+
+
+
+## treefmt.config.programs.gdformat.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.gd"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
+
+
+
+## treefmt.config.programs.gdformat.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gdformat.nix)
+
+
+
+## treefmt.config.programs.genemichaels.enable
+
+
+
+Whether to enable [` genemichaels `](https://github.com/andrewbaxter/genemichaels/blob/master/readme_genemichaels.md), a Rust code formatter.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.package
+
+
+
+The genemichaels package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.genemichaels `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.excludes
+
+
+
+Path / file patterns to exclude for genemichaels.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.includes
+
+
+
+Path / file patterns to include for genemichaels.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.rs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.comment_errors_fatal
+
+
+
+If reformatting comments results in an error, abort formatting the
+document.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.comment_width
+
+
+
+Maximum relative line length for comments (past the comment
+indentation level). Can be ` null ` to disable relative wrapping. If
+disabled, still wraps at ` max_width `.
+
+
+
+*Type:*
+null or (positive integer, meaning >0)
+
+
+
+*Default:*
+` 80 `
+
+
+
+*Example:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.keep_max_blank_lines
+
+
+
+Genemichaels will replace line breaks with it’s own deterministic
+line breaks. You can use this to keep extra line breaks (1 will keep
+up to 1 extra line break) during comment extraction. This is unused
+during formatting.
+
+
+
+*Type:*
+unsigned integer, meaning >=0
+
+
+
+*Default:*
+` 0 `
+
+
+
+*Example:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.max_width
+
+
+
+Ideal maximum line width. If there’s an unbreakable element the line
+won’t be split.
+
+
+
+*Type:*
+positive integer, meaning >0
+
+
+
+*Default:*
+` 120 `
+
+
+
+*Example:*
+` 80 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.root_splits
+
+
+
+When breaking a child element, also break all parent elements.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.split_attributes
+
+
+
+Break a ` #[] ` on a separate line before the element it’s associated
+with.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.split_brace_threshold
+
+
+
+Break a ` () ` or ` {} ` if it has greater than this number of children.
+Set to ` null ` to disable breaking due to high child counts.
+
+
+
+*Type:*
+null or (positive integer, meaning >0)
+
+
+
+*Default:*
+` 1 `
+
+
+
+*Example:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settings.split_where
+
+
+
+Put the ` where ` clause on a new line.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.settingsFile
+
+
+
+The configuration file used by ` genemichaels `.
+
+
+
+*Type:*
+absolute path
+
+
+
+*Default:*
+Generated JSON file from ` treefmt.config.programs.genemichaels.settings `
+
+
+
+*Example:*
+` ./.genemichaels.json `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.genemichaels.threadCount
+
+
+
+How many threads to use for formatting multiple files. Set to ` null ` to
+default to the number of cores on the system.
+
+
+
+*Type:*
+null or (unsigned integer, meaning >=0)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 1 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/genemichaels.nix)
+
+
+
+## treefmt.config.programs.gleam.enable
+
+
+
+Whether to enable gleam.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
+
+
+
+## treefmt.config.programs.gleam.package
+
+
+
+The gleam package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gleam `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
+
+
+
+## treefmt.config.programs.gleam.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
+
+
+
+## treefmt.config.programs.gleam.finalPackage
+
+
+
+Resulting ` gleam ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
+
+
+
+## treefmt.config.programs.gleam.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.gleam"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
+
+
+
+## treefmt.config.programs.gleam.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gleam.nix)
+
+
+
+## treefmt.config.programs.gofmt.enable
+
+
+
+Whether to enable gofmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
+
+
+
+## treefmt.config.programs.gofmt.package
+
+
+
+The go package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.go `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
+
+
+
+## treefmt.config.programs.gofmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "vendor/*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
+
+
+
+## treefmt.config.programs.gofmt.finalPackage
+
+
+
+Resulting ` gofmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
+
+
+
+## treefmt.config.programs.gofmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.go"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
+
+
+
+## treefmt.config.programs.gofmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofmt.nix)
+
+
+
+## treefmt.config.programs.gofumpt.enable
+
+
+
+Whether to enable gofumpt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
+
+
+
+## treefmt.config.programs.gofumpt.package
+
+
+
+The gofumpt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gofumpt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
+
+
+
+## treefmt.config.programs.gofumpt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "vendor/*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
+
+
+
+## treefmt.config.programs.gofumpt.extra
+
+
+
+Whether to enable extra rules.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
+
+
+
+## treefmt.config.programs.gofumpt.finalPackage
+
+
+
+Resulting ` gofumpt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
+
+
+
+## treefmt.config.programs.gofumpt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.go"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
+
+
+
+## treefmt.config.programs.gofumpt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/gofumpt.nix)
+
+
+
+## treefmt.config.programs.goimports.enable
+
+
+
+Whether to enable goimports.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
+
+
+
+## treefmt.config.programs.goimports.package
+
+
+
+The gotools package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.gotools `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
+
+
+
+## treefmt.config.programs.goimports.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "vendor/*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
+
+
+
+## treefmt.config.programs.goimports.finalPackage
+
+
+
+Resulting ` goimports ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
+
+
+
+## treefmt.config.programs.goimports.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.go"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
+
+
+
+## treefmt.config.programs.goimports.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/goimports.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.enable
+
+
+
+Whether to enable golangci-lint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.enableLinters
+
+
+
+Enable specific linters
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "govet"
+  "errcheck"
+  "staticcheck"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.enableOnly
+
+
+
+Override configuration to run only specific linter(s)
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "govet"
+  "gofmt"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.package
+
+
+
+The golangci-lint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.golangci-lint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.buildTags
+
+
+
+Build tags to use during analysis
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "integration"
+  "e2e"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.concurrency
+
+
+
+Number of CPUs to use (auto-configured by default)
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.configFile
+
+
+
+Path to golangci-lint configuration file
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` ".golangci.yml" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.disableLinters
+
+
+
+Disable specific linters
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "typecheck"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "vendor/*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.fastOnly
+
+
+
+Run only fast linters from enabled linters set
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.finalPackage
+
+
+
+Resulting ` golangci-lint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.go"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.maxIssuesPerLinter
+
+
+
+Maximum issues per linter (default: 50)
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 50 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.maxSameIssues
+
+
+
+Maximum count of same issues (default: 3)
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 3 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.newFromRev
+
+
+
+Show only new issues created after git revision REV
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "HEAD~1" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.noConfig
+
+
+
+Don’t read any configuration file
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.tests
+
+
+
+Analyze test files
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.timeout
+
+
+
+Timeout for total work (e.g., ‘5m’, ‘1h’, ‘10s’)
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "5m" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golangci-lint.verbose
+
+
+
+Enable verbose output
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golangci-lint.nix)
+
+
+
+## treefmt.config.programs.golines.enable
+
+
+
+Whether to enable golines.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.golines.package
+
+
+
+The golines package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.golines `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.golines.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "vendor/*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.golines.finalPackage
+
+
+
+Resulting ` golines ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.golines.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.go"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.golines.maxLength
+
+
+
+Target maximum line length (default: 100)
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 100 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.golines.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.golines.tabLength
+
+
+
+Length of a tab (default: 4)
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/golines.nix)
+
+
+
+## treefmt.config.programs.google-java-format.enable
+
+
+
+Whether to enable google-java-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
+
+
+
+## treefmt.config.programs.google-java-format.package
+
+
+
+The google-java-format package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.google-java-format `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
+
+
+
+## treefmt.config.programs.google-java-format.aospStyle
+
+
+
+Whether to use AOSP (Android Open Source Project) indentation.
+In a few words, use 4-space indentation rather than the conventional
+2-space indentation width that Google uses.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
+
+
+
+## treefmt.config.programs.google-java-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
+
+
+
+## treefmt.config.programs.google-java-format.finalPackage
+
+
+
+Resulting ` google-java-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
+
+
+
+## treefmt.config.programs.google-java-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.java"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
+
+
+
+## treefmt.config.programs.google-java-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/google-java-format.nix)
+
+
+
+## treefmt.config.programs.hclfmt.enable
+
+
+
+Whether to enable hclfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
+
+
+
+## treefmt.config.programs.hclfmt.package
+
+
+
+The hclfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.hclfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
+
+
+
+## treefmt.config.programs.hclfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
+
+
+
+## treefmt.config.programs.hclfmt.finalPackage
+
+
+
+Resulting ` hclfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
+
+
+
+## treefmt.config.programs.hclfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.hcl"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
+
+
+
+## treefmt.config.programs.hclfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hclfmt.nix)
+
+
+
+## treefmt.config.programs.hlint.enable
+
+
+
+Whether to enable hlint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
+
+
+
+## treefmt.config.programs.hlint.package
+
+
+
+The hlint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.hlint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
+
+
+
+## treefmt.config.programs.hlint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
+
+
+
+## treefmt.config.programs.hlint.finalPackage
+
+
+
+Resulting ` hlint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
+
+
+
+## treefmt.config.programs.hlint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.hs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
+
+
+
+## treefmt.config.programs.hlint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hlint.nix)
+
+
+
+## treefmt.config.programs.hujsonfmt.enable
+
+
+
+Whether to enable hujsonfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
+
+
+
+## treefmt.config.programs.hujsonfmt.package
+
+
+
+The hujsonfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.hujsonfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
+
+
+
+## treefmt.config.programs.hujsonfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
+
+
+
+## treefmt.config.programs.hujsonfmt.finalPackage
+
+
+
+Resulting ` hujsonfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
+
+
+
+## treefmt.config.programs.hujsonfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.hujson"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
+
+
+
+## treefmt.config.programs.hujsonfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/hujsonfmt.nix)
+
+
+
+## treefmt.config.programs.isort.enable
+
+
+
+Whether to enable isort.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.isort.package
+
+
+
+The isort package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.isort `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.isort.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.isort.finalPackage
+
+
+
+Resulting ` isort ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.isort.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.py"
+  "*.pyi"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.isort.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.isort.profile
+
+
+
+The profile to use for isort.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/isort.nix)
+
+
+
+## treefmt.config.programs.jsonfmt.enable
+
+
+
+Whether to enable jsonfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
+
+
+
+## treefmt.config.programs.jsonfmt.package
+
+
+
+The jsonfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.jsonfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
+
+
+
+## treefmt.config.programs.jsonfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
+
+
+
+## treefmt.config.programs.jsonfmt.finalPackage
+
+
+
+Resulting ` jsonfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
+
+
+
+## treefmt.config.programs.jsonfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.json"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
+
+
+
+## treefmt.config.programs.jsonfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonfmt.nix)
+
+
+
+## treefmt.config.programs.jsonnet-lint.enable
+
+
+
+Whether to enable jsonnet-lint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
+
+
+
+## treefmt.config.programs.jsonnet-lint.package
+
+
+
+The go-jsonnet package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.go-jsonnet `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
+
+
+
+## treefmt.config.programs.jsonnet-lint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
+
+
+
+## treefmt.config.programs.jsonnet-lint.finalPackage
+
+
+
+Resulting ` jsonnet-lint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
+
+
+
+## treefmt.config.programs.jsonnet-lint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.jsonnet"
+  "*.libsonnet"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
+
+
+
+## treefmt.config.programs.jsonnet-lint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnet-lint.nix)
+
+
+
+## treefmt.config.programs.jsonnetfmt.enable
+
+
+
+Whether to enable jsonnetfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
+
+
+
+## treefmt.config.programs.jsonnetfmt.package
+
+
+
+The go-jsonnet package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.go-jsonnet `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
+
+
+
+## treefmt.config.programs.jsonnetfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
+
+
+
+## treefmt.config.programs.jsonnetfmt.finalPackage
+
+
+
+Resulting ` jsonnetfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
+
+
+
+## treefmt.config.programs.jsonnetfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.jsonnet"
+  "*.libsonnet"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
+
+
+
+## treefmt.config.programs.jsonnetfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/jsonnetfmt.nix)
+
+
+
+## treefmt.config.programs.just.enable
+
+
+
+Whether to enable just.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
+
+
+
+## treefmt.config.programs.just.package
+
+
+
+The just package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.just `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
+
+
+
+## treefmt.config.programs.just.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
+
+
+
+## treefmt.config.programs.just.finalPackage
+
+
+
+Resulting ` just ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
+
+
+
+## treefmt.config.programs.just.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "[Jj][Uu][Ss][Tt][Ff][Ii][Ll][Ee]"
+  "*/[Jj][Uu][Ss][Tt][Ff][Ii][Ll][Ee]"
+  ".[Jj][Uu][Ss][Tt][Ff][Ii][Ll][Ee]"
+  "*/.[Jj][Uu][Ss][Tt][Ff][Ii][Ll][Ee]"
+  "*.[Jj][Uu][Ss][Tt]"
+  "*.[Jj][Uu][Ss][Tt][Ff][Ii][Ll][Ee]"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
+
+
+
+## treefmt.config.programs.just.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/just.nix)
+
+
+
+## treefmt.config.programs.kdlfmt.enable
+
+
+
+Whether to enable kdlfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
+
+
+
+## treefmt.config.programs.kdlfmt.package
+
+
+
+The kdlfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.kdlfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
+
+
+
+## treefmt.config.programs.kdlfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
+
+
+
+## treefmt.config.programs.kdlfmt.finalPackage
+
+
+
+Resulting ` kdlfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
+
+
+
+## treefmt.config.programs.kdlfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.kdl"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
+
+
+
+## treefmt.config.programs.kdlfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/kdlfmt.nix)
+
+
+
+## treefmt.config.programs.keep-sorted.enable
+
+
+
+Whether to enable keep-sorted.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
+
+
+
+## treefmt.config.programs.keep-sorted.package
+
+
+
+The keep-sorted package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.keep-sorted `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
+
+
+
+## treefmt.config.programs.keep-sorted.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
+
+
+
+## treefmt.config.programs.keep-sorted.finalPackage
+
+
+
+Resulting ` keep-sorted ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
+
+
+
+## treefmt.config.programs.keep-sorted.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
+
+
+
+## treefmt.config.programs.keep-sorted.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/keep-sorted.nix)
+
+
+
+## treefmt.config.programs.ktfmt.enable
+
+
+
+Whether to enable ktfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
+
+
+
+## treefmt.config.programs.ktfmt.package
+
+
+
+The ktfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ktfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
+
+
+
+## treefmt.config.programs.ktfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
+
+
+
+## treefmt.config.programs.ktfmt.finalPackage
+
+
+
+Resulting ` ktfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
+
+
+
+## treefmt.config.programs.ktfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.kt"
+  "*.kts"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
+
+
+
+## treefmt.config.programs.ktfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktfmt.nix)
+
+
+
+## treefmt.config.programs.ktlint.enable
+
+
+
+Whether to enable ktlint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
+
+
+
+## treefmt.config.programs.ktlint.package
+
+
+
+The ktlint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ktlint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
+
+
+
+## treefmt.config.programs.ktlint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
+
+
+
+## treefmt.config.programs.ktlint.finalPackage
+
+
+
+Resulting ` ktlint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
+
+
+
+## treefmt.config.programs.ktlint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.kt"
+  "*.kts"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
+
+
+
+## treefmt.config.programs.ktlint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ktlint.nix)
+
+
+
+## treefmt.config.programs.latexindent.enable
+
+
+
+Whether to enable latexindent.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
+
+
+
+## treefmt.config.programs.latexindent.package
+
+
+
+The texliveMedium package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.texliveMedium `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
+
+
+
+## treefmt.config.programs.latexindent.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
+
+
+
+## treefmt.config.programs.latexindent.finalPackage
+
+
+
+Resulting ` latexindent ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
+
+
+
+## treefmt.config.programs.latexindent.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.tex"
+  "*.sty"
+  "*.cls"
+  "*.bib"
+  "*.cmh"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
+
+
+
+## treefmt.config.programs.latexindent.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/latexindent.nix)
+
+
+
+## treefmt.config.programs.leptosfmt.enable
+
+
+
+Whether to enable leptosfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
+
+
+
+## treefmt.config.programs.leptosfmt.package
+
+
+
+The leptosfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.leptosfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
+
+
+
+## treefmt.config.programs.leptosfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
+
+
+
+## treefmt.config.programs.leptosfmt.finalPackage
+
+
+
+Resulting ` leptosfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
+
+
+
+## treefmt.config.programs.leptosfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.rs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
+
+
+
+## treefmt.config.programs.leptosfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/leptosfmt.nix)
+
+
+
+## treefmt.config.programs.mdformat.enable
+
+
+
+Whether to enable mdformat.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.package
+
+
+
+The mdformat package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.mdformat `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.finalPackage
+
+
+
+Resulting ` mdformat ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.md"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.plugins
+
+
+
+Plugins for mdformat that extend its functionality (for Markdown
+extensions, formatting code blocks, etc).
+
+See [mdformat docs](https://mdformat.readthedocs.io/en/stable/users/plugins.html)
+for a (non-exhaustive) list of plugins.
+
+
+
+*Type:*
+function that evaluates to a(n) list of package
+
+
+
+*Default:*
+
+```
+ps: [ ];
+
+```
+
+
+
+*Example:*
+
+```
+ps: [
+  ps.mdformat-footnote
+  ps.mdformat-gfm
+];
+
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.settings.end-of-line
+
+
+
+Output file line ending mode.
+
+
+
+*Type:*
+null or one of “crlf”, “lf”, “keep”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "lf" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.settings.number
+
+
+
+Apply consecutive numbering to ordered lists.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdformat.settings.wrap
+
+
+
+Paragraph word wrap mode.
+Set to an INTEGER to wrap at that length.
+
+
+
+*Type:*
+null or signed integer or one of “keep”, “no”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "keep" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdformat.nix)
+
+
+
+## treefmt.config.programs.mdsh.enable
+
+
+
+Whether to enable mdsh.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
+
+
+
+## treefmt.config.programs.mdsh.package
+
+
+
+The mdsh package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.mdsh `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
+
+
+
+## treefmt.config.programs.mdsh.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
+
+
+
+## treefmt.config.programs.mdsh.finalPackage
+
+
+
+Resulting ` mdsh ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
+
+
+
+## treefmt.config.programs.mdsh.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "README.md"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
+
+
+
+## treefmt.config.programs.mdsh.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mdsh.nix)
+
+
+
+## treefmt.config.programs.meson.enable
+
+
+
+Whether to enable meson.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
+
+
+
+## treefmt.config.programs.meson.package
+
+
+
+The meson package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.meson `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
+
+
+
+## treefmt.config.programs.meson.editorconfig
+
+
+
+Try to read configuration from .editorconfig
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
+
+
+
+## treefmt.config.programs.meson.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
+
+
+
+## treefmt.config.programs.meson.finalPackage
+
+
+
+Resulting ` meson ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
+
+
+
+## treefmt.config.programs.meson.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "meson.build"
+  "meson.options"
+  "meson_options.txt"
+  "*/meson.build"
+  "*/meson.options"
+  "*/meson_options.txt"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
+
+
+
+## treefmt.config.programs.meson.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/meson.nix)
+
+
+
+## treefmt.config.programs.mix-format.enable
+
+
+
+Whether to enable mix-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
+
+
+
+## treefmt.config.programs.mix-format.package
+
+
+
+The elixir package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.elixir `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
+
+
+
+## treefmt.config.programs.mix-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
+
+
+
+## treefmt.config.programs.mix-format.finalPackage
+
+
+
+Resulting ` mix-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
+
+
+
+## treefmt.config.programs.mix-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.ex"
+  "*.exs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
+
+
+
+## treefmt.config.programs.mix-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mix-format.nix)
+
+
+
+## treefmt.config.programs.muon.enable
+
+
+
+Whether to enable muon.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
+
+
+
+## treefmt.config.programs.muon.package
+
+
+
+The muon package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.muon `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
+
+
+
+## treefmt.config.programs.muon.editorconfig
+
+
+
+Try to read configuration from .editorconfig
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
+
+
+
+## treefmt.config.programs.muon.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
+
+
+
+## treefmt.config.programs.muon.finalPackage
+
+
+
+Resulting ` muon ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
+
+
+
+## treefmt.config.programs.muon.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "meson.build"
+  "meson.options"
+  "meson_options.txt"
+  "*/meson.build"
+  "*/meson.options"
+  "*/meson_options.txt"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
+
+
+
+## treefmt.config.programs.muon.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/muon.nix)
+
+
+
+## treefmt.config.programs.mypy.enable
+
+
+
+Whether to enable mypy.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.mypy.package
+
+
+
+The mypy package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.mypy `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.mypy.directories
+
+
+
+Directories to run mypy in
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+
+```
+{
+  "" = { };
+}
+```
+
+
+
+*Example:*
+
+```
+{
+  "" = {
+    modules = [
+      "mymodule"
+      "tests"
+    ];
+  };
+  subdir = { };
+}
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.mypy.directories.\<name>.directory
+
+
+
+Directory to run mypy in
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "‹name›" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.mypy.directories.\<name>.extraPythonPackages
+
+
+
+Extra packages to add to PYTHONPATH
+
+
+
+*Type:*
+list of package
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+\[ pkgs.python3.pkgs.requests ]
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.mypy.directories.\<name>.extraPythonPaths
+
+
+
+Extra paths to add to PYTHONPATH.
+Paths are interpreted relative to the directory options and are added before extraPythonPackages.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "path/to/my/module"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.mypy.directories.\<name>.modules
+
+
+
+Modules to check
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  ""
+]
+```
+
+
+
+*Example:*
+
+```
+[
+  "mymodule"
+  "tests"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.mypy.directories.\<name>.options
+
+
+
+Options to pass to mypy
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "--ignore-missing-imports"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/mypy.nix)
+
+
+
+## treefmt.config.programs.nickel.enable
+
+
+
+Whether to enable nickel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
+
+
+
+## treefmt.config.programs.nickel.package
+
+
+
+The nickel package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nickel `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
+
+
+
+## treefmt.config.programs.nickel.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
+
+
+
+## treefmt.config.programs.nickel.finalPackage
+
+
+
+Resulting ` nickel ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
+
+
+
+## treefmt.config.programs.nickel.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.ncl"
+  "*.nickel"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
+
+
+
+## treefmt.config.programs.nickel.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nickel.nix)
+
+
+
+## treefmt.config.programs.nimpretty.enable
+
+
+
+Whether to enable nimpretty.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
+
+
+
+## treefmt.config.programs.nimpretty.package
+
+
+
+The nim package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nim `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
+
+
+
+## treefmt.config.programs.nimpretty.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
+
+
+
+## treefmt.config.programs.nimpretty.finalPackage
+
+
+
+Resulting ` nimpretty ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
+
+
+
+## treefmt.config.programs.nimpretty.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nim"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
+
+
+
+## treefmt.config.programs.nimpretty.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nimpretty.nix)
+
+
+
+## treefmt.config.programs.nixf-diagnose.enable
+
+
+
+Whether to enable nixf-diagnose.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
+
+
+
+## treefmt.config.programs.nixf-diagnose.package
+
+
+
+The nixf-diagnose package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nixf-diagnose `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
+
+
+
+## treefmt.config.programs.nixf-diagnose.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
+
+
+
+## treefmt.config.programs.nixf-diagnose.finalPackage
+
+
+
+Resulting ` nixf-diagnose ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
+
+
+
+## treefmt.config.programs.nixf-diagnose.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
+
+
+
+## treefmt.config.programs.nixf-diagnose.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixf-diagnose.nix)
+
+
+
+## treefmt.config.programs.nixfmt.enable
+
+
+
+Whether to enable nixfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.package
+
+
+
+The nixfmt-rfc-style package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nixfmt-rfc-style `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.finalPackage
+
+
+
+Resulting ` nixfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.indent
+
+
+
+Number of spaces to use for indentation \[default: 2]
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.strict
+
+
+
+Enable a stricter formatting mode that isn’t influenced
+as much by how the input is formatted.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt.width
+
+
+
+Maximum width in characters \[default: 100]
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 120 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt.nix)
+
+
+
+## treefmt.config.programs.nixfmt-classic.enable
+
+
+
+Whether to enable nixfmt-classic.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix)
+
+
+
+## treefmt.config.programs.nixfmt-classic.package
+
+
+
+The nixfmt-classic package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nixfmt-classic `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix)
+
+
+
+## treefmt.config.programs.nixfmt-classic.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix)
+
+
+
+## treefmt.config.programs.nixfmt-classic.finalPackage
+
+
+
+Resulting ` nixfmt-classic ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix)
+
+
+
+## treefmt.config.programs.nixfmt-classic.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix)
+
+
+
+## treefmt.config.programs.nixfmt-classic.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-classic.nix)
+
+
+
+## treefmt.config.programs.nixfmt-rfc-style.enable
+
+
+
+Whether to enable nixfmt-rfc-style.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix)
+
+
+
+## treefmt.config.programs.nixfmt-rfc-style.package
+
+
+
+The nixfmt-rfc-style package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nixfmt-rfc-style `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix)
+
+
+
+## treefmt.config.programs.nixfmt-rfc-style.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix)
+
+
+
+## treefmt.config.programs.nixfmt-rfc-style.finalPackage
+
+
+
+Resulting ` nixfmt-rfc-style ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix)
+
+
+
+## treefmt.config.programs.nixfmt-rfc-style.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix)
+
+
+
+## treefmt.config.programs.nixfmt-rfc-style.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixfmt-rfc-style.nix)
+
+
+
+## treefmt.config.programs.nixpkgs-fmt.enable
+
+
+
+Whether to enable nixpkgs-fmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
+
+
+
+## treefmt.config.programs.nixpkgs-fmt.package
+
+
+
+The nixpkgs-fmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nixpkgs-fmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
+
+
+
+## treefmt.config.programs.nixpkgs-fmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
+
+
+
+## treefmt.config.programs.nixpkgs-fmt.finalPackage
+
+
+
+Resulting ` nixpkgs-fmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
+
+
+
+## treefmt.config.programs.nixpkgs-fmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
+
+
+
+## treefmt.config.programs.nixpkgs-fmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/nixpkgs-fmt.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.enable
+
+
+
+Whether to enable ocamlformat.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.package
+
+
+
+The ocamlformat package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ocamlformat `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.configFile
+
+
+
+Path to the .ocamlformat file. Used to pick the right version of ocamlformat if passed.
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.finalPackage
+
+
+
+Resulting ` ocamlformat ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.ml"
+  "*.mli"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.pkgs
+
+
+
+The package set used to get the ocamlformat package at a specific version.
+
+
+
+*Type:*
+lazy attribute set of raw value
+
+
+
+*Default:*
+Nixpkgs from context
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.ocamlformat.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ocamlformat.nix)
+
+
+
+## treefmt.config.programs.odinfmt.enable
+
+
+
+Whether to enable odinfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
+
+
+
+## treefmt.config.programs.odinfmt.package
+
+
+
+The ols package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ols `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
+
+
+
+## treefmt.config.programs.odinfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
+
+
+
+## treefmt.config.programs.odinfmt.finalPackage
+
+
+
+Resulting ` odinfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
+
+
+
+## treefmt.config.programs.odinfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.odin"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
+
+
+
+## treefmt.config.programs.odinfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/odinfmt.nix)
+
+
+
+## treefmt.config.programs.opa.enable
+
+
+
+Whether to enable opa.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
+
+
+
+## treefmt.config.programs.opa.package
+
+
+
+The open-policy-agent package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.open-policy-agent `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
+
+
+
+## treefmt.config.programs.opa.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
+
+
+
+## treefmt.config.programs.opa.finalPackage
+
+
+
+Resulting ` opa ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
+
+
+
+## treefmt.config.programs.opa.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.rego"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
+
+
+
+## treefmt.config.programs.opa.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/opa.nix)
+
+
+
+## treefmt.config.programs.ormolu.enable
+
+
+
+Whether to enable ormolu.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
+
+
+
+## treefmt.config.programs.ormolu.package
+
+
+
+The ormolu package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ormolu `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
+
+
+
+## treefmt.config.programs.ormolu.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
+
+
+
+## treefmt.config.programs.ormolu.finalPackage
+
+
+
+Resulting ` ormolu ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
+
+
+
+## treefmt.config.programs.ormolu.ghcOpts
+
+
+
+Which GHC language extensions to enable
+
+
+
+*Type:*
+unspecified value
+
+
+
+*Default:*
+
+```
+[
+  "BangPatterns"
+  "PatternSynonyms"
+  "TypeApplications"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
+
+
+
+## treefmt.config.programs.ormolu.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.hs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
+
+
+
+## treefmt.config.programs.ormolu.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ormolu.nix)
+
+
+
+## treefmt.config.programs.oxipng.enable
+
+
+
+Whether to enable oxipng.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.package
+
+
+
+The oxipng package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.oxipng `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.alpha
+
+
+
+Whether to enable Perform additional optimization on images with an alpha channel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.finalPackage
+
+
+
+Resulting ` oxipng ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.png"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.opt
+
+
+
+Set the optimization level preset
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "2" `
+
+
+
+*Example:*
+` "max" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.scale16
+
+
+
+Whether to enable Forcibly reduce images with 16 bits per channel to 8 bits per channel.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.oxipng.strip
+
+
+
+Strip metadata chunks
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "safe" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/oxipng.nix)
+
+
+
+## treefmt.config.programs.packer.enable
+
+
+
+Whether to enable packer.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
+
+
+
+## treefmt.config.programs.packer.package
+
+
+
+The packer package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.packer `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
+
+
+
+## treefmt.config.programs.packer.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
+
+
+
+## treefmt.config.programs.packer.finalPackage
+
+
+
+Resulting ` packer ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
+
+
+
+## treefmt.config.programs.packer.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.pkr.hcl"
+  "*.pkrvars.hcl"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
+
+
+
+## treefmt.config.programs.packer.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/packer.nix)
+
+
+
+## treefmt.config.programs.perltidy.enable
+
+
+
+Whether to enable perltidy.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
+
+
+
+## treefmt.config.programs.perltidy.package
+
+
+
+The PerlTidy package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.perlPackages.PerlTidy `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
+
+
+
+## treefmt.config.programs.perltidy.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
+
+
+
+## treefmt.config.programs.perltidy.finalPackage
+
+
+
+Resulting ` perltidy ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
+
+
+
+## treefmt.config.programs.perltidy.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.pl"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
+
+
+
+## treefmt.config.programs.perltidy.perltidyrc
+
+
+
+A path for perltidy’s configuration file, usually named .perltidyrc
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
+
+
+
+## treefmt.config.programs.perltidy.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/perltidy.nix)
+
+
+
+## treefmt.config.programs.php-cs-fixer.enable
+
+
+
+Whether to enable php-cs-fixer.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
+
+
+
+## treefmt.config.programs.php-cs-fixer.package
+
+
+
+The php-cs-fixer package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.php83Packages.php-cs-fixer `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
+
+
+
+## treefmt.config.programs.php-cs-fixer.configFile
+
+
+
+Path to php-cs-fixer config file.
+
+
+
+*Type:*
+string or absolute path
+
+
+
+*Default:*
+` "./.php-cs-fixer.php" `
+
+
+
+*Example:*
+` "./.php-cs-fixer.dist.php" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
+
+
+
+## treefmt.config.programs.php-cs-fixer.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
+
+
+
+## treefmt.config.programs.php-cs-fixer.finalPackage
+
+
+
+Resulting ` php-cs-fixer ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
+
+
+
+## treefmt.config.programs.php-cs-fixer.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.php"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
+
+
+
+## treefmt.config.programs.php-cs-fixer.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/php-cs-fixer.nix)
+
+
+
+## treefmt.config.programs.pinact.enable
+
+
+
+Whether to enable pinact.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.package
+
+
+
+The pinact package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.pinact `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.finalPackage
+
+
+
+Resulting ` pinact ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  ".github/workflows/*.yml"
+  ".github/workflows/*.yaml"
+  "**/action.yml"
+  "**/action.yaml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.settings
+
+
+
+Configuration for pinact, see
+\<link xlink:href=“https://github.com/suzuki-shunsuke/pinact?tab=readme-ov-file\#configuration”/>
+for supported values.
+
+
+
+*Type:*
+open submodule of (YAML 1.1 value)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.update
+
+
+
+Update actions to latest versions.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.pinact.verify
+
+
+
+Verify if pairs of commit SHA and version are correct.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/pinact.nix)
+
+
+
+## treefmt.config.programs.prettier.enable
+
+
+
+Whether to enable prettier.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.package
+
+
+
+The prettier package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.prettier `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.finalPackage
+
+
+
+Resulting ` prettier ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.cjs"
+  "*.css"
+  "*.html"
+  "*.js"
+  "*.json"
+  "*.json5"
+  "*.jsx"
+  "*.md"
+  "*.mdx"
+  "*.mjs"
+  "*.scss"
+  "*.ts"
+  "*.tsx"
+  "*.vue"
+  "*.yaml"
+  "*.yml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.arrowParens
+
+
+
+Include parentheses around a sole arrow function parameter.
+
+
+
+*Type:*
+null or one of “always”, “avoid”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "always" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.bracketSameLine
+
+
+
+Put > of opening tags on the last line instead of on a new line.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.bracketSpacing
+
+
+
+Print spaces between brackets
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.cursorOffset
+
+
+
+Print (to stderr) where a cursor at the given position would move to
+after formatting. This option cannot be used with --range-start and
+–range-end.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` -1 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.editorconfig
+
+
+
+Whether parse the .editorconfig file in your project and convert its
+properties to the corresponding Prettier configuration. This
+configuration will be overridden by .prettierrc, etc.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.embeddedLanguageFormatting
+
+
+
+Control how Prettier formats quoted code embedded in the file.
+
+
+
+*Type:*
+null or one of “auto”, “off”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "auto" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.endOfLine
+
+
+
+Which end of line characters to apply.
+
+
+
+*Type:*
+null or one of “lf”, “crlf”, “cr”, “auto”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "lf" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.filepath
+
+
+
+Specify the input filepath. This will be used to do parser inference.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "example.js" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.htmlWhitespaceSensitivity
+
+
+
+How to handle whitespaces in HTML.
+
+
+
+*Type:*
+null or one of “css”, “strict”, “ignore”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "css" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.insertPragma
+
+
+
+Insert @format pragma into file’s first docblock commentypes.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.jsxSingleQuote
+
+
+
+Use single quotes in JSX
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.overrides
+
+
+
+Provide a list of patterns to override prettier configuration.
+
+
+
+*Type:*
+null or (list of (attribute set))
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  files = [
+    "*.html"
+    "legacy/**/*.js"
+  ];
+  options = {
+    tabwidth = 4;
+  };
+}
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.parser
+
+
+
+Which parser to use.
+
+
+
+*Type:*
+null or one of “flow”, “babel”, “babel-flow”, “babel-ts”, “typescript”, “acorn”, “espree”, “meriyah”, “css”, “less”, “scss”, “json”, “json5”, “json-stringify”, “graphql”, “markdown”, “mdx”, “vue”, “yaml”, “glimmer”, “html”, “angular”, “lwc” or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "typescript" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.pluginSearchDirs
+
+
+
+Custom directory that contains prettier plugins in node_modules
+subdirectory. Overrides default behavior when plugins are searched
+relatively to the location of Prettier.\\nMultiple values are accepted.
+
+
+
+*Type:*
+null or (list of string) or value false (singular enum)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.plugins
+
+
+
+Add a plugin. Multiple plugins can be passed as separate ` --plugin `s.
+
+
+
+*Type:*
+null or (list of string)
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+[
+  "@prettier/plugin-xml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.printWidth
+
+
+
+The line length where Prettier will try wrap.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 80 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.proseWrap
+
+
+
+How to wrap prose.
+
+
+
+*Type:*
+null or one of “always”, “never”, “preserve”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "preserve" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.quoteProps
+
+
+
+Change when properties in objects are quoted
+
+
+
+*Type:*
+null or one of “as-needed”, “consistent”, “preserve”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "as-needed" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.rangeEnd
+
+
+
+Format code ending at a given character offset (exclusive). The range
+will extend forwards to the end of the selected statementypes. This
+option cannot be used with --cursor-offsetypes.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 0 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.rangeStart
+
+
+
+Format code starting at a given character offsetypes. The range will
+extend backwards to the start of the first line containing the selected
+statementypes. his option cannot be used with --cursor-offsetypes.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 0 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.requirePragma
+
+
+
+Require either ‘@prettier’ or ‘@format’ to be present in the file’s
+first docblock comment\\nin order for it to be formatted.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.semi
+
+
+
+Print semicolons.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.singleAttributePerLine
+
+
+
+Enforce single attribute per line in HTML, Vue and JSX.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.singleQuote
+
+
+
+Use single quotes instead of double quotes.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.tabWidth
+
+
+
+Number of spaces per indentation level.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 2 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.trailingComma
+
+
+
+Print trailing commas wherever possible when multi-line.
+
+
+
+*Type:*
+null or one of “es5”, “none”, “all”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "es5" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.useTabs
+
+
+
+Indent with tabs instead of spaces
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.prettier.settings.vueIndentScriptAndStyle
+
+
+
+Indent script and style tags in Vue files.
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/prettier.nix)
+
+
+
+## treefmt.config.programs.protolint.enable
+
+
+
+Whether to enable protolint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
+
+
+
+## treefmt.config.programs.protolint.package
+
+
+
+The protolint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.protolint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
+
+
+
+## treefmt.config.programs.protolint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
+
+
+
+## treefmt.config.programs.protolint.finalPackage
+
+
+
+Resulting ` protolint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
+
+
+
+## treefmt.config.programs.protolint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.proto"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
+
+
+
+## treefmt.config.programs.protolint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/protolint.nix)
+
+
+
+## treefmt.config.programs.purs-tidy.enable
+
+
+
+Whether to enable purs-tidy.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix)
+
+
+
+## treefmt.config.programs.purs-tidy.package
+
+
+
+The purs-tidy package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.nodePackages.purs-tidy `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix)
+
+
+
+## treefmt.config.programs.purs-tidy.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix)
+
+
+
+## treefmt.config.programs.purs-tidy.finalPackage
+
+
+
+Resulting ` purs-tidy ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix)
+
+
+
+## treefmt.config.programs.purs-tidy.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "src/**/*.purs"
+  "test/**/*.purs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix)
+
+
+
+## treefmt.config.programs.purs-tidy.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/purs-tidy.nix)
+
+
+
+## treefmt.config.programs.rstfmt.enable
+
+
+
+Whether to enable rstfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
+
+
+
+## treefmt.config.programs.rstfmt.package
+
+
+
+The rstfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rstfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
+
+
+
+## treefmt.config.programs.rstfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
+
+
+
+## treefmt.config.programs.rstfmt.finalPackage
+
+
+
+Resulting ` rstfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
+
+
+
+## treefmt.config.programs.rstfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.rst"
+  "*.txt"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
+
+
+
+## treefmt.config.programs.rstfmt.line_length
+
+
+
+Sets the line length.
+
+
+
+*Type:*
+signed integer
+
+
+
+*Default:*
+` 72 `
+
+
+
+*Example:*
+` 80 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
+
+
+
+## treefmt.config.programs.rstfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rstfmt.nix)
+
+
+
+## treefmt.config.programs.rubocop.enable
+
+
+
+Whether to enable rubocop.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
+
+
+
+## treefmt.config.programs.rubocop.package
+
+
+
+The rubocop package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rubocop `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
+
+
+
+## treefmt.config.programs.rubocop.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
+
+
+
+## treefmt.config.programs.rubocop.finalPackage
+
+
+
+Resulting ` rubocop ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
+
+
+
+## treefmt.config.programs.rubocop.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.rb"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
+
+
+
+## treefmt.config.programs.rubocop.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rubocop.nix)
+
+
+
+## treefmt.config.programs.ruff-check.enable
+
+
+
+Whether to enable ruff-check.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
+
+
+
+## treefmt.config.programs.ruff-check.package
+
+
+
+The ruff package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ruff `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
+
+
+
+## treefmt.config.programs.ruff-check.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
+
+
+
+## treefmt.config.programs.ruff-check.extendSelect
+
+
+
+–extend-select options
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "I"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
+
+
+
+## treefmt.config.programs.ruff-check.finalPackage
+
+
+
+Resulting ` ruff-check ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
+
+
+
+## treefmt.config.programs.ruff-check.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.py"
+  "*.pyi"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
+
+
+
+## treefmt.config.programs.ruff-check.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-check.nix)
+
+
+
+## treefmt.config.programs.ruff-format.enable
+
+
+
+Whether to enable ruff-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
+
+
+
+## treefmt.config.programs.ruff-format.package
+
+
+
+The ruff package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.ruff `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
+
+
+
+## treefmt.config.programs.ruff-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
+
+
+
+## treefmt.config.programs.ruff-format.finalPackage
+
+
+
+Resulting ` ruff-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
+
+
+
+## treefmt.config.programs.ruff-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.py"
+  "*.pyi"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
+
+
+
+## treefmt.config.programs.ruff-format.lineLength
+
+
+
+Set the line-length.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 79 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
+
+
+
+## treefmt.config.programs.ruff-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/ruff-format.nix)
+
+
+
+## treefmt.config.programs.rufo.enable
+
+
+
+Whether to enable rufo.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
+
+
+
+## treefmt.config.programs.rufo.package
+
+
+
+The rufo package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rufo `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
+
+
+
+## treefmt.config.programs.rufo.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
+
+
+
+## treefmt.config.programs.rufo.finalPackage
+
+
+
+Resulting ` rufo ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
+
+
+
+## treefmt.config.programs.rufo.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.rb"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
+
+
+
+## treefmt.config.programs.rufo.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rufo.nix)
+
+
+
+## treefmt.config.programs.rustfmt.enable
+
+
+
+Whether to enable rustfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
+
+
+
+## treefmt.config.programs.rustfmt.package
+
+
+
+The rustfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.rustfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
+
+
+
+## treefmt.config.programs.rustfmt.edition
+
+
+
+Rust edition to target when formatting
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "2024" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
+
+
+
+## treefmt.config.programs.rustfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
+
+
+
+## treefmt.config.programs.rustfmt.finalPackage
+
+
+
+Resulting ` rustfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
+
+
+
+## treefmt.config.programs.rustfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.rs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
+
+
+
+## treefmt.config.programs.rustfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/rustfmt.nix)
+
+
+
+## treefmt.config.programs.scalafmt.enable
+
+
+
+Whether to enable scalafmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
+
+
+
+## treefmt.config.programs.scalafmt.package
+
+
+
+The scalafmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.scalafmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
+
+
+
+## treefmt.config.programs.scalafmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
+
+
+
+## treefmt.config.programs.scalafmt.finalPackage
+
+
+
+Resulting ` scalafmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
+
+
+
+## treefmt.config.programs.scalafmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sbt"
+  "*.scala"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
+
+
+
+## treefmt.config.programs.scalafmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/scalafmt.nix)
+
+
+
+## treefmt.config.programs.shellcheck.enable
+
+
+
+Whether to enable shellcheck.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
+
+
+
+## treefmt.config.programs.shellcheck.package
+
+
+
+The shellcheck package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.shellcheck `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
+
+
+
+## treefmt.config.programs.shellcheck.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
+
+
+
+## treefmt.config.programs.shellcheck.finalPackage
+
+
+
+Resulting ` shellcheck ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
+
+
+
+## treefmt.config.programs.shellcheck.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sh"
+  "*.bash"
+  "*.envrc"
+  "*.envrc.*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
+
+
+
+## treefmt.config.programs.shellcheck.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shellcheck.nix)
+
+
+
+## treefmt.config.programs.shfmt.enable
+
+
+
+Whether to enable shfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.shfmt.package
+
+
+
+The shfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.shfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.shfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.shfmt.finalPackage
+
+
+
+Resulting ` shfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.shfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sh"
+  "*.bash"
+  "*.envrc"
+  "*.envrc.*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.shfmt.indent_size
+
+
+
+Sets the number of spaces to be used in indentation. Uses tabs if set to
+zero. If this is null, then [.editorconfig will be used to configure
+shfmt](https://github.com/patrickvane/shfmt\#description).
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` 2 `
+
+
+
+*Example:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.shfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.shfmt.simplify
+
+
+
+Enables the ` -s ` (` --simplify `) flag, which simplifies code where possible.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/shfmt.nix)
+
+
+
+## treefmt.config.programs.sizelint.enable
+
+
+
+Whether to enable sizelint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sizelint.package
+
+
+
+The sizelint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.sizelint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sizelint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sizelint.failOnWarn
+
+
+
+Whether to enable fail-on-warn.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sizelint.finalPackage
+
+
+
+Resulting ` sizelint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sizelint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sizelint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sizelint.settings
+
+
+
+Configuration to generate sizelint.toml with
+
+
+
+*Type:*
+open submodule of (TOML value)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sizelint.nix)
+
+
+
+## treefmt.config.programs.sql-formatter.enable
+
+
+
+Whether to enable sql-formatter.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
+
+
+
+## treefmt.config.programs.sql-formatter.package
+
+
+
+The sql-formatter package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.sql-formatter `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
+
+
+
+## treefmt.config.programs.sql-formatter.dialect
+
+
+
+The sql dialect to use for formatting
+
+
+
+*Type:*
+null or one of “bigquery”, “db2”, “db2i”, “hive”, “mariadb”, “mysql”, “n1ql”, “plsql”, “postgresql”, “redshift”, “spark”, “sqlite”, “sql”, “tidb”, “trino”, “transactsql”, “tsql”, “singlestoredb”, “snowflake”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "postgresql" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
+
+
+
+## treefmt.config.programs.sql-formatter.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
+
+
+
+## treefmt.config.programs.sql-formatter.finalPackage
+
+
+
+Resulting ` sql-formatter ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
+
+
+
+## treefmt.config.programs.sql-formatter.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sql"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
+
+
+
+## treefmt.config.programs.sql-formatter.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sql-formatter.nix)
+
+
+
+## treefmt.config.programs.sqlfluff.enable
+
+
+
+Whether to enable sqlfluff.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
+
+
+
+## treefmt.config.programs.sqlfluff.package
+
+
+
+The sqlfluff package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.sqlfluff `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
+
+
+
+## treefmt.config.programs.sqlfluff.dialect
+
+
+
+The sql dialect to use for formatting
+
+
+
+*Type:*
+null or one of “db2”, “ansi”, “soql”, “tsql”, “hive”, “trino”, “mysql”, “oracle”, “sqlite”, “duckdb”, “exasol”, “athena”, “mariadb”, “vertica”, “teradata”, “redshift”, “sparksql”, “bigquery”, “postgres”, “greenplum”, “snowflake”, “materializ”, “clickhouse”, “databricks”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "sqlite" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
+
+
+
+## treefmt.config.programs.sqlfluff.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
+
+
+
+## treefmt.config.programs.sqlfluff.finalPackage
+
+
+
+Resulting ` sqlfluff ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
+
+
+
+## treefmt.config.programs.sqlfluff.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sql"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
+
+
+
+## treefmt.config.programs.sqlfluff.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff.nix)
+
+
+
+## treefmt.config.programs.sqlfluff-lint.enable
+
+
+
+Whether to enable sqlfluff-lint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
+
+
+
+## treefmt.config.programs.sqlfluff-lint.package
+
+
+
+The sqlfluff package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.sqlfluff `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
+
+
+
+## treefmt.config.programs.sqlfluff-lint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
+
+
+
+## treefmt.config.programs.sqlfluff-lint.finalPackage
+
+
+
+Resulting ` sqlfluff-lint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
+
+
+
+## treefmt.config.programs.sqlfluff-lint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sql"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
+
+
+
+## treefmt.config.programs.sqlfluff-lint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqlfluff-lint.nix)
+
+
+
+## treefmt.config.programs.sqruff.enable
+
+
+
+Whether to enable sqruff.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
+
+
+
+## treefmt.config.programs.sqruff.package
+
+
+
+The sqruff package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.sqruff `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
+
+
+
+## treefmt.config.programs.sqruff.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
+
+
+
+## treefmt.config.programs.sqruff.finalPackage
+
+
+
+Resulting ` sqruff ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
+
+
+
+## treefmt.config.programs.sqruff.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.sql"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
+
+
+
+## treefmt.config.programs.sqruff.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/sqruff.nix)
+
+
+
+## treefmt.config.programs.statix.enable
+
+
+
+Whether to enable statix.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
+
+
+
+## treefmt.config.programs.statix.package
+
+
+
+The statix package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.statix `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
+
+
+
+## treefmt.config.programs.statix.disabled-lints
+
+
+
+List of ignored lints. Run ` statix list ` to see all available lints.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "empty_pattern"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
+
+
+
+## treefmt.config.programs.statix.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
+
+
+
+## treefmt.config.programs.statix.finalPackage
+
+
+
+Resulting ` statix ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
+
+
+
+## treefmt.config.programs.statix.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.nix"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
+
+
+
+## treefmt.config.programs.statix.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/statix.nix)
+
+
+
+## treefmt.config.programs.stylish-haskell.enable
+
+
+
+Whether to enable stylish-haskell.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
+
+
+
+## treefmt.config.programs.stylish-haskell.package
+
+
+
+The stylish-haskell package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.stylish-haskell `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
+
+
+
+## treefmt.config.programs.stylish-haskell.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
+
+
+
+## treefmt.config.programs.stylish-haskell.finalPackage
+
+
+
+Resulting ` stylish-haskell ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
+
+
+
+## treefmt.config.programs.stylish-haskell.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.hs"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
+
+
+
+## treefmt.config.programs.stylish-haskell.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylish-haskell.nix)
+
+
+
+## treefmt.config.programs.stylua.enable
+
+
+
+Whether to enable stylua.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.package
+
+
+
+The stylua package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.stylua `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.finalPackage
+
+
+
+Resulting ` stylua ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.lua"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.call_parentheses
+
+
+
+Whether parentheses should be applied on
+function calls with a single string/table
+argument.  ` Always ` applies parentheses in
+all cases. ` NoSingleString ` omits
+parentheses on calls with a single string
+argument. Similarly, ` NoSingleTable ` omits
+parentheses on calls with a single table
+argument. ` None ` omits parentheses in both
+cases.
+
+Note: parentheses are still kept in situations
+where removal can lead to obscurity
+(e.g. ` foo "bar".setup -> foo("bar").setup `,
+since the index is on the call result, not the string).
+
+` Input ` removes all automation and preserves
+parentheses only if they were present in input code:
+consistency is not enforced.
+
+
+
+*Type:*
+null or one of “Always”, “NoSingleString”, “NoSingleTable”, “None”, “Input”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "Always" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.collapse_simple_statement
+
+
+
+Specify whether to collapse simple statements.
+
+
+
+*Type:*
+null or one of “Never”, “FunctionOnly”, “ConditionalOnly”, “Always”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "Never" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.column_width
+
+
+
+Approximate line length for printing.
+
+Used as a guide for line wrapping -
+this is not a hard requirement:
+lines may fall under or over the limit.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 120 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.indent_type
+
+
+
+Indent type.
+
+
+
+*Type:*
+null or one of “Tabs”, “Spaces”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "Tabs" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.indent_width
+
+
+
+Character size of single indentation.
+
+If ` indent_type ` is set to ` Tabs `,
+this option is used as a heuristic to
+determine column width only.
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.line_endings
+
+
+
+Line endings type.
+
+
+
+*Type:*
+null or one of “Unix”, “Windows”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "Unix" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.quote_style
+
+
+
+Quote style for string literals.
+
+` AutoPrefer ` styles will prefer the
+specified quote style, but fall back to
+the alternative if it has fewer string
+escapes. ` Force ` styles always use the
+specified style regardless of escapes.
+
+
+
+*Type:*
+null or one of “AutoPreferDouble”, “AutoPreferSingle”, “ForceDouble”, “ForceSingle”
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "AutoPreferDouble" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.stylua.settings.sort_requires.enabled
+
+
+
+StyLua has built-in support for sorting
+require statements. We group consecutive
+require statements into a single “block”,
+and then requires are sorted only within
+that block. Blocks of requires do not
+move around the file.
+
+We only include requires of the form
+` local NAME = require(EXPR) `, and sort
+lexicographically based on ` NAME `.
+(We also sort Roblox services of the form
+` local NAME = game:GetService(EXPR) `)
+
+
+
+*Type:*
+null or boolean
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/stylua.nix)
+
+
+
+## treefmt.config.programs.swift-format.enable
+
+
+
+Whether to enable swift-format.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
+
+
+
+## treefmt.config.programs.swift-format.package
+
+
+
+The swift-format package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.swift-format `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
+
+
+
+## treefmt.config.programs.swift-format.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
+
+
+
+## treefmt.config.programs.swift-format.finalPackage
+
+
+
+Resulting ` swift-format ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
+
+
+
+## treefmt.config.programs.swift-format.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.swift"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
+
+
+
+## treefmt.config.programs.swift-format.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/swift-format.nix)
+
+
+
+## treefmt.config.programs.taplo.enable
+
+
+
+Whether to enable taplo.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+
+
+## treefmt.config.programs.taplo.package
+
+
+
+The taplo package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.taplo `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+
+
+## treefmt.config.programs.taplo.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+
+
+## treefmt.config.programs.taplo.finalPackage
+
+
+
+Resulting ` taplo ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+
+
+## treefmt.config.programs.taplo.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.toml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+
+
+## treefmt.config.programs.taplo.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+
+
+## treefmt.config.programs.taplo.settings
+
+
+
+Configuration to generate taplo.toml with
+
+
+
+*Type:*
+open submodule of (TOML value)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/taplo.nix)
+
+
+
+## treefmt.config.programs.templ.enable
+
+
+
+Whether to enable templ.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
+
+
+
+## treefmt.config.programs.templ.package
+
+
+
+The templ package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.templ `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
+
+
+
+## treefmt.config.programs.templ.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
+
+
+
+## treefmt.config.programs.templ.finalPackage
+
+
+
+Resulting ` templ ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
+
+
+
+## treefmt.config.programs.templ.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.templ"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
+
+
+
+## treefmt.config.programs.templ.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/templ.nix)
+
+
+
+## treefmt.config.programs.terraform.enable
+
+
+
+Whether to enable terraform.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
+
+
+
+## treefmt.config.programs.terraform.package
+
+
+
+The opentofu package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.opentofu `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
+
+
+
+## treefmt.config.programs.terraform.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
+
+
+
+## treefmt.config.programs.terraform.finalPackage
+
+
+
+Resulting ` terraform ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
+
+
+
+## treefmt.config.programs.terraform.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.tf"
+  "*.tfvars"
+  "*.tftest.hcl"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
+
+
+
+## treefmt.config.programs.terraform.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/terraform.nix)
+
+
+
+## treefmt.config.programs.texfmt.enable
+
+
+
+Whether to enable texfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
+
+
+
+## treefmt.config.programs.texfmt.package
+
+
+
+The tex-fmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.tex-fmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
+
+
+
+## treefmt.config.programs.texfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
+
+
+
+## treefmt.config.programs.texfmt.finalPackage
+
+
+
+Resulting ` texfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
+
+
+
+## treefmt.config.programs.texfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.tex"
+  "*.sty"
+  "*.cls"
+  "*.bib"
+  "*.cmh"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
+
+
+
+## treefmt.config.programs.texfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/texfmt.nix)
+
+
+
+## treefmt.config.programs.toml-sort.enable
+
+
+
+Whether to enable toml-sort.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
+
+
+
+## treefmt.config.programs.toml-sort.package
+
+
+
+The toml-sort package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.toml-sort `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
+
+
+
+## treefmt.config.programs.toml-sort.all
+
+
+
+Whether to enable sort ALL keys.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
+
+
+
+## treefmt.config.programs.toml-sort.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
+
+
+
+## treefmt.config.programs.toml-sort.finalPackage
+
+
+
+Resulting ` toml-sort ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
+
+
+
+## treefmt.config.programs.toml-sort.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.toml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
+
+
+
+## treefmt.config.programs.toml-sort.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/toml-sort.nix)
+
+
+
+## treefmt.config.programs.typos.enable
+
+
+
+Whether to enable typos.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.package
+
+
+
+The typos package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typos `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.binary
+
+
+
+Search binary files
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.configFile
+
+
+
+Custom config file
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "typos.toml" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.finalPackage
+
+
+
+Resulting ` typos ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.hidden
+
+
+
+Search hidden files and directories
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.isolated
+
+
+
+Ignore implicit configuration files
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.locale
+
+
+
+Language locale to suggest corrections for \[possible values: en, en-us, en-gb, en-ca, en-au]
+
+
+
+*Type:*
+null or one of “en”, “en-us”, “en-gb”, “en-ca”, “en-au”
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noCheckFilenames
+
+
+
+Skip verifying spelling in file names
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noCheckFiles
+
+
+
+Skip verifying spelling in files
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noIgnore
+
+
+
+Don’t respect ignore files
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noIgnoreDot
+
+
+
+Don’t respect .ignore files
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noIgnoreGlobal
+
+
+
+Don’t respect global ignore files
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noIgnoreParent
+
+
+
+Don’t respect ignore files in parent directories
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noIgnoreVCS
+
+
+
+Don’t respect ignore files in vsc directories
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.noUnicode
+
+
+
+Only allow ASCII characters in identifiers
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.sort
+
+
+
+Sort results
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typos.threads
+
+
+
+The approximate number of threads to use \[default: 0]
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 2 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typos.nix)
+
+
+
+## treefmt.config.programs.typstfmt.enable
+
+
+
+Whether to enable typstfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix)
+
+
+
+## treefmt.config.programs.typstfmt.package
+
+
+
+The typstfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typstfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix)
+
+
+
+## treefmt.config.programs.typstfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix)
+
+
+
+## treefmt.config.programs.typstfmt.finalPackage
+
+
+
+Resulting ` typstfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix)
+
+
+
+## treefmt.config.programs.typstfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.typ"
+  "*.typst"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix)
+
+
+
+## treefmt.config.programs.typstfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstfmt.nix)
+
+
+
+## treefmt.config.programs.typstyle.enable
+
+
+
+Whether to enable typstyle.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.package
+
+
+
+The typstyle package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.typstyle `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.finalPackage
+
+
+
+Resulting ` typstyle ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.typ"
+  "*.typst"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.indentWidth
+
+
+
+Number of spaces per indent level (default: 2).
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 4 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.lineWidth
+
+
+
+Maximum line width in characters (default: 80).
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` 100 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.typstyle.wrapText
+
+
+
+Whether to enable line wrapping of markup text.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/typstyle.nix)
+
+
+
+## treefmt.config.programs.xmllint.enable
+
+
+
+Whether to enable xmllint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
+
+
+
+## treefmt.config.programs.xmllint.package
+
+
+
+The libxml2 package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.libxml2 `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
+
+
+
+## treefmt.config.programs.xmllint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
+
+
+
+## treefmt.config.programs.xmllint.finalPackage
+
+
+
+Resulting ` xmllint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
+
+
+
+## treefmt.config.programs.xmllint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.xml"
+  "*.svg"
+  "*.xhtml"
+  "*.xsl"
+  "*.xslt"
+  "*.dtd"
+  "*.xsd"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
+
+
+
+## treefmt.config.programs.xmllint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/xmllint.nix)
+
+
+
+## treefmt.config.programs.yamlfmt.enable
+
+
+
+Whether to enable yamlfmt.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
+
+
+
+## treefmt.config.programs.yamlfmt.package
+
+
+
+The yamlfmt package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.yamlfmt `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
+
+
+
+## treefmt.config.programs.yamlfmt.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
+
+
+
+## treefmt.config.programs.yamlfmt.finalPackage
+
+
+
+Resulting ` yamlfmt ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
+
+
+
+## treefmt.config.programs.yamlfmt.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.yaml"
+  "*.yml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
+
+
+
+## treefmt.config.programs.yamlfmt.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
+
+
+
+## treefmt.config.programs.yamlfmt.settings
+
+
+
+Configuration for yamlfmt, see
+\<link xlink:href=“https://github.com/google/yamlfmt/blob/main/docs/config-file.md”/>
+for supported values.
+
+
+
+*Type:*
+open submodule of (YAML 1.1 value)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yamlfmt.nix)
+
+
+
+## treefmt.config.programs.yapf.enable
+
+
+
+Whether to enable yapf.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
+
+
+
+## treefmt.config.programs.yapf.package
+
+
+
+The yapf package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.yapf `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
+
+
+
+## treefmt.config.programs.yapf.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
+
+
+
+## treefmt.config.programs.yapf.finalPackage
+
+
+
+Resulting ` yapf ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
+
+
+
+## treefmt.config.programs.yapf.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.py"
+  "*.pyi"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
+
+
+
+## treefmt.config.programs.yapf.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/yapf.nix)
+
+
+
+## treefmt.config.programs.zig.enable
+
+
+
+Whether to enable zig.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
+
+
+
+## treefmt.config.programs.zig.package
+
+
+
+The zig package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.zig `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
+
+
+
+## treefmt.config.programs.zig.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
+
+
+
+## treefmt.config.programs.zig.finalPackage
+
+
+
+Resulting ` zig ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
+
+
+
+## treefmt.config.programs.zig.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.zig"
+  "*.zon"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
+
+
+
+## treefmt.config.programs.zig.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zig.nix)
+
+
+
+## treefmt.config.programs.zizmor.enable
+
+
+
+Whether to enable zizmor.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
+
+
+
+## treefmt.config.programs.zizmor.package
+
+
+
+The zizmor package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.zizmor `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
+
+
+
+## treefmt.config.programs.zizmor.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
+
+
+
+## treefmt.config.programs.zizmor.finalPackage
+
+
+
+Resulting ` zizmor ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
+
+
+
+## treefmt.config.programs.zizmor.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  ".github/workflows/*.yml"
+  ".github/workflows/*.yaml"
+  ".github/actions/**/*.yml"
+  ".github/actions/**/*.yaml"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
+
+
+
+## treefmt.config.programs.zizmor.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zizmor.nix)
+
+
+
+## treefmt.config.programs.zprint.enable
+
+
+
+Whether to enable zprint.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
+
+
+
+## treefmt.config.programs.zprint.package
+
+
+
+The zprint package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.zprint `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
+
+
+
+## treefmt.config.programs.zprint.excludes
+
+
+
+Path / file patterns to exclude
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
+
+
+
+## treefmt.config.programs.zprint.finalPackage
+
+
+
+Resulting ` zprint ` package bundled with plugins, if any.
+
+
+
+*Type:*
+package *(read only)*
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
+
+
+
+## treefmt.config.programs.zprint.includes
+
+
+
+Path / file patterns to include
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "*.clj"
+  "*.cljc"
+  "*.cljs"
+  "*.edn"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
+
+
+
+## treefmt.config.programs.zprint.priority
+
+
+
+Priority
+
+
+
+*Type:*
+null or signed integer
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
+
+
+
+## treefmt.config.programs.zprint.zprintOpts
+
+
+
+Clojure map containing zprint options.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "{:width 90}" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix](https://github.com/numtide/treefmt-nix/blob/main/programs/zprint.nix)
+
+
+
+## treefmt.config.projectRootFile
+
+
+
+File to look for to determine the root of the project in the
+build.wrapper.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` ".git/config" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings
+
+
+
+The contents of treefmt.toml
+
+
+
+*Type:*
+open submodule of (TOML value)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings.formatter
+
+
+
+Set of formatters to use
+
+
+
+*Type:*
+attribute set of (open submodule of (TOML value))
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings.formatter.\<name>.command
+
+
+
+Executable obeying the treefmt formatter spec
+
+
+
+*Type:*
+Path to executable
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings.formatter.\<name>.excludes
+
+
+
+List of files to exclude for formatting. Supports globbing. Takes precedence over the includes.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings.formatter.\<name>.includes
+
+
+
+List of files to include for formatting. Supports globbing.
+
+
+
+*Type:*
+list of string
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings.formatter.\<name>.options
+
+
+
+List of arguments to pass to the command
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings.global.excludes
+
+
+
+A global list of paths to exclude. Supports glob.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+` [ ] `
+
+
+
+*Example:*
+
+```
+[
+  "node_modules/*"
+]
+```
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
+
+
+
+## treefmt.config.settings.global.on-unmatched
+
+
+
+Log paths that did not match any formatters at the specified log level.
+
+
+
+*Type:*
+one of “debug”, “info”, “warn”, “error”, “fatal”
+
+
+
+*Default:*
+` "warn" `
+
+*Declared by:*
+ - [https://github.com/numtide/treefmt-nix/blob/main/module-options.nix](https://github.com/numtide/treefmt-nix/blob/main/module-options.nix)
 
 
 
