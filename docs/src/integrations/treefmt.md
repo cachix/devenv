@@ -2,7 +2,7 @@
 
 ## Set up
 
-Check the available integrations in [the list of all available integrations](reference/options.md#treefmt).
+Check the available integrations in [the list of all available integrations](../reference/options.md#treefmt).
 
 Add your desired integration to your `devenv.nix` file. For example, the following code would enable `treefmt` with the `nixpkgs-fmt` and `rustfmt` integrations:
 
