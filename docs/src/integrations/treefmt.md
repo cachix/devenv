@@ -2,7 +2,7 @@
 
 ## Set up
 
-Check the available integrations in [the list of all available integrations](../reference/options.md#treefmt).
+Check the available integrations in [the list of all available integrations](/reference/options.md#treefmt).
 
 Add your desired integration to your `devenv.nix` file. For example, the following code would enable `treefmt` with the `nixpkgs-fmt` and `rustfmt` integrations:
 
@@ -13,8 +13,8 @@ Add your desired integration to your `devenv.nix` file. For example, the followi
   treefmt = {
     enable = true;
     config.programs = {
-        nixpkgs-fmt.enable = true;
-        rustfmt.enable = true;
+      nixfmt.enable = true;
+      rustfmt.enable = true;
     };
   };
 }
@@ -53,10 +53,12 @@ This will enable `treefmt` hooks and automatically change the default package to
 It is also possible to use custom formatters with `treefmt-nix`. For example, the following custom formatter formats JSON files using `yq-go`:
 
 ```nix
+{ pkgs, lib, ... }
+
 {
   treefmt.config.settings.formatter = {
     "yq-json" = {
-      command = "${pkgs.bash}/bin/bash";
+      command = "${lib.getExe pkgs.bash}";
       options = [
         "-euc"
         ''
