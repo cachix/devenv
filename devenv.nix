@@ -1,10 +1,9 @@
-{
-  inputs,
-  pkgs,
-  lib,
-  config,
-  options,
-  ...
+{ inputs
+, pkgs
+, lib
+, config
+, options
+, ...
 }:
 {
   env = {
@@ -57,6 +56,11 @@
     pkgs.cargo-edit # Adds the set-version command
     pkgs.protobuf # snix
     pkgs.dbus # secretspec
+    # Force compilation from source instead of binary cache
+    (pkgs.hello.overrideAttrs (old: {
+      preferLocalBuild = true;
+      allowSubstitutes = false;
+    }))
   ];
 
   languages = {

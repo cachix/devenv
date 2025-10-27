@@ -133,10 +133,23 @@ where
                 .cloned()
                 .unwrap_or_else(|| operation_name.clone());
 
-            // Find parent operation if any
-            let parent = span
-                .parent()
-                .and_then(|parent_span| parent_span.extensions().get::<OperationId>().cloned());
+            // Find parent operation by traversing up the span hierarchy
+            // We need to check all ancestors, not just the immediate parent,
+            // because there might be intermediate spans (like "Running command") without operation_ids
+            let parent = {
+                let mut current = span.parent();
+                let mut found_parent = None;
+
+                while let Some(parent_span) = current {
+                    if let Some(op_id) = parent_span.extensions().get::<OperationId>().cloned() {
+                        found_parent = Some(op_id);
+                        break;
+                    }
+                    current = parent_span.parent();
+                }
+
+                found_parent
+            };
 
             // Store operation ID in span extensions for children to find
             span.extensions_mut().insert(operation_id.clone());
@@ -156,12 +169,35 @@ where
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
+                        // Create Operation for the build
+                        let operation = Operation::new(
+                            operation_id.clone(),
+                            operation_name.clone(),
+                            parent.clone(),
+                            visitor.fields.clone(),
+                        );
+
+                        // Add to parent's children if parent exists
+                        if let Some(parent_id) = &parent {
+                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                                parent_op.children.push(operation_id.clone());
+                            }
+                        } else {
+                            // Root operation
+                            if !model.root_operations.contains(&operation_id) {
+                                model.root_operations.push(operation_id.clone());
+                            }
+                        }
+
+                        model.operations.insert(operation_id.clone(), operation);
+
+                        // Create Activity
                         let activity = Activity {
                             id: activity_id,
                             operation_id: operation_id.clone(),
                             name: derivation.clone().unwrap_or_else(|| operation_name.clone()),
                             short_name: short_name.clone(),
-                            parent_operation: None, // Let model handle this complex lookup
+                            parent_operation: parent.clone(),
                             start_time: Instant::now(),
                             state: NixActivityState::Active,
                             detail: machine.as_ref().map(|m| format!("machine: {}", m)),
@@ -188,15 +224,35 @@ where
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
+                        // Create Operation for the download
+                        let operation = Operation::new(
+                            operation_id.clone(),
+                            operation_name.clone(),
+                            parent.clone(),
+                            visitor.fields.clone(),
+                        );
+
+                        // Add to parent's children if parent exists
+                        if let Some(parent_id) = &parent {
+                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                                parent_op.children.push(operation_id.clone());
+                            }
+                        } else {
+                            // Root operation
+                            if !model.root_operations.contains(&operation_id) {
+                                model.root_operations.push(operation_id.clone());
+                            }
+                        }
+
+                        model.operations.insert(operation_id.clone(), operation);
+
+                        // Create Activity
                         let activity = Activity {
                             id: activity_id,
                             operation_id: operation_id.clone(),
                             name: store_path.clone().unwrap_or_else(|| operation_name.clone()),
                             short_name: short_name.clone(),
-                            parent_operation: model
-                                .operations
-                                .get(&operation_id)
-                                .and_then(|op| op.parent.clone()),
+                            parent_operation: parent.clone(),
                             start_time: Instant::now(),
                             state: NixActivityState::Active,
                             detail: None,
@@ -208,7 +264,7 @@ where
                             }),
                             progress: None,
                         };
-                        model.activities.insert(activity_id, activity);
+                        model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::QUERY => {
@@ -224,22 +280,42 @@ where
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
+                        // Create Operation for the query
+                        let operation = Operation::new(
+                            operation_id.clone(),
+                            operation_name.clone(),
+                            parent.clone(),
+                            visitor.fields.clone(),
+                        );
+
+                        // Add to parent's children if parent exists
+                        if let Some(parent_id) = &parent {
+                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                                parent_op.children.push(operation_id.clone());
+                            }
+                        } else {
+                            // Root operation
+                            if !model.root_operations.contains(&operation_id) {
+                                model.root_operations.push(operation_id.clone());
+                            }
+                        }
+
+                        model.operations.insert(operation_id.clone(), operation);
+
+                        // Create Activity
                         let activity = Activity {
                             id: activity_id,
                             operation_id: operation_id.clone(),
                             name: store_path.clone().unwrap_or_else(|| operation_name.clone()),
                             short_name: short_name.clone(),
-                            parent_operation: model
-                                .operations
-                                .get(&operation_id)
-                                .and_then(|op| op.parent.clone()),
+                            parent_operation: parent.clone(),
                             start_time: Instant::now(),
                             state: NixActivityState::Active,
                             detail: None,
                             variant: ActivityVariant::Query(QueryActivity { substituter }),
                             progress: None,
                         };
-                        model.activities.insert(activity_id, activity);
+                        model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::FETCH_TREE => {
@@ -253,22 +329,42 @@ where
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
+                        // Create Operation for the fetch
+                        let operation = Operation::new(
+                            operation_id.clone(),
+                            operation_name.clone(),
+                            parent.clone(),
+                            visitor.fields.clone(),
+                        );
+
+                        // Add to parent's children if parent exists
+                        if let Some(parent_id) = &parent {
+                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                                parent_op.children.push(operation_id.clone());
+                            }
+                        } else {
+                            // Root operation
+                            if !model.root_operations.contains(&operation_id) {
+                                model.root_operations.push(operation_id.clone());
+                            }
+                        }
+
+                        model.operations.insert(operation_id.clone(), operation);
+
+                        // Create Activity
                         let activity = Activity {
                             id: activity_id,
                             operation_id: operation_id.clone(),
                             name: operation_name.clone(),
                             short_name: short_name.clone(),
-                            parent_operation: model
-                                .operations
-                                .get(&operation_id)
-                                .and_then(|op| op.parent.clone()),
+                            parent_operation: parent.clone(),
                             start_time: Instant::now(),
                             state: NixActivityState::Active,
                             detail: None,
                             variant: ActivityVariant::FetchTree,
                             progress: None,
                         };
-                        model.activities.insert(activity_id, activity);
+                        model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::EVALUATE => {
@@ -282,41 +378,81 @@ where
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
+                        // Create Operation for the evaluation
+                        let operation = Operation::new(
+                            operation_id.clone(),
+                            operation_name.clone(),
+                            parent.clone(),
+                            visitor.fields.clone(),
+                        );
+
+                        // Add to parent's children if parent exists
+                        if let Some(parent_id) = &parent {
+                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                                parent_op.children.push(operation_id.clone());
+                            }
+                        } else {
+                            // Root operation
+                            if !model.root_operations.contains(&operation_id) {
+                                model.root_operations.push(operation_id.clone());
+                            }
+                        }
+
+                        model.operations.insert(operation_id.clone(), operation);
+
+                        // Create Activity
                         let activity = Activity {
                             id: activity_id,
                             operation_id: operation_id.clone(),
                             name: operation_name.clone(),
                             short_name: short_name.clone(),
-                            parent_operation: model
-                                .operations
-                                .get(&operation_id)
-                                .and_then(|op| op.parent.clone()),
+                            parent_operation: parent.clone(),
                             start_time: Instant::now(),
                             state: NixActivityState::Active,
                             detail: None,
                             variant: ActivityVariant::Evaluating,
                             progress: None,
                         };
-                        model.activities.insert(activity_id, activity);
+                        model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::DEVENV => {
-                    // User-facing devenv messages - create UserOperation activity
+                    // User-facing devenv messages - create both Operation and Activity for proper display
                     let activity_id = rand::random();
 
                     // Store activity_id in span extensions for later retrieval
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
+                        // Create Operation for proper hierarchy
+                        let operation = Operation::new(
+                            operation_id.clone(),
+                            operation_name.clone(),
+                            parent.clone(),
+                            visitor.fields.clone(),
+                        );
+
+                        // Add to parent's children if parent exists
+                        if let Some(parent_id) = &parent {
+                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                                parent_op.children.push(operation_id.clone());
+                            }
+                        } else {
+                            // Root operation - check if already exists
+                            if !model.root_operations.contains(&operation_id) {
+                                model.root_operations.push(operation_id.clone());
+                            }
+                        }
+
+                        model.operations.insert(operation_id.clone(), operation);
+
+                        // Create Activity
                         let activity = Activity {
                             id: activity_id,
                             operation_id: operation_id.clone(),
                             name: operation_name.clone(),
                             short_name: short_name.clone(),
-                            parent_operation: model
-                                .operations
-                                .get(&operation_id)
-                                .and_then(|op| op.parent.clone()),
+                            parent_operation: parent.clone(),
                             start_time: Instant::now(),
                             state: NixActivityState::Active,
                             detail: None,
@@ -366,6 +502,9 @@ where
             // Determine success/failure based on whether an error was recorded
             let success = span.extensions().get::<SpanError>().is_none();
 
+            // Check if this is a DEVENV operation with activity tracking
+            let has_devenv_activity = span.extensions().get::<u64>().is_some();
+
             // Handle specific Nix end events
             let target = metadata.target();
             match target {
@@ -414,30 +553,43 @@ where
                     });
                 }
                 _ => {
-                    // Default operation end for other spans
-                    let result = if success {
-                        OperationResult::Success
+                    // Handle DEVENV operations with activities (created for user-facing spans)
+                    if has_devenv_activity {
+                        let activity_id = span.extensions().get::<u64>().copied().unwrap_or(0);
+
+                        self.update_model(|model| {
+                            // Update activity state
+                            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                                let duration = activity.start_time.elapsed();
+                                activity.state = NixActivityState::Completed { success, duration };
+                            }
+                        });
                     } else {
-                        let error = span
-                            .extensions()
-                            .get::<SpanError>()
-                            .cloned()
-                            .unwrap_or_else(|| SpanError("Unknown error".to_string()));
-                        OperationResult::Failure {
-                            message: error.0,
-                            code: None,
-                            output: None,
-                        }
-                    };
+                        // Default operation end for other spans (without activities)
+                        let result = if success {
+                            OperationResult::Success
+                        } else {
+                            let error = span
+                                .extensions()
+                                .get::<SpanError>()
+                                .cloned()
+                                .unwrap_or_else(|| SpanError("Unknown error".to_string()));
+                            OperationResult::Failure {
+                                message: error.0,
+                                code: None,
+                                output: None,
+                            }
+                        };
 
-                    let operation_id_clone = operation_id.clone();
+                        let operation_id_clone = operation_id.clone();
 
-                    self.update_model(|model| {
-                        if let Some(operation) = model.operations.get_mut(&operation_id_clone) {
-                            let success = matches!(result, OperationResult::Success);
-                            operation.complete(success);
-                        }
-                    });
+                        self.update_model(|model| {
+                            if let Some(operation) = model.operations.get_mut(&operation_id_clone) {
+                                let success = matches!(result, OperationResult::Success);
+                                operation.complete(success);
+                            }
+                        });
+                    }
                 }
             }
         }
