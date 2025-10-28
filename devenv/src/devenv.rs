@@ -4,6 +4,7 @@ use ::nix::unistd::Pid;
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
+use console::style;
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use once_cell::sync::Lazy;
@@ -120,12 +121,26 @@ pub struct Devenv {
     // Secretspec resolved data to pass to Nix
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
 
+    // The status of the devenv (None = Healthy, Some = degraded mode)
+    status: OnceCell<Status>,
+
     // TODO: make private.
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
 
     // Shutdown handle for coordinated shutdown
     shutdown: Arc<tokio_shutdown::Shutdown>,
+}
+
+// The possible degraded status states of the devenv
+// None = Healthy (normal operation)
+// Some(Status) = Degraded mode with specific issue
+enum Status {
+    MissingSecrets {
+        secrets: Vec<String>,
+        provider: String,
+        profile: String,
+    },
 }
 
 impl Devenv {
@@ -220,6 +235,7 @@ impl Devenv {
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
             secretspec_resolved,
+            status: OnceCell::new(),
             container_name: None,
             shutdown: options.shutdown,
         }
@@ -442,6 +458,32 @@ impl Devenv {
     /// On successful exec, this function never returns.
     pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
         let shell_cmd = self.prepare_shell(&cmd, args).await?;
+
+        // Display degraded mode warning if applicable
+        if let Some(Status::MissingSecrets {
+            secrets,
+            provider,
+            profile,
+        }) = self.status.get()
+        {
+            eprintln!();
+            eprintln!(
+                "{}",
+                style("⚠️  DEVENV RUNNING IN DEGRADED MODE").red().bold()
+            );
+            eprintln!("{} {}", style("Missing secrets:").red(), secrets.join(", "));
+            eprintln!("{} {}", style("Provider:").red(), provider);
+            eprintln!("{} {}", style("Profile:").red(), profile);
+            eprintln!();
+            eprintln!("{}", style("To fix:").yellow());
+            eprintln!(
+                "  1. Run {} to configure secrets",
+                style("secretspec check").cyan()
+            );
+            eprintln!("  2. Exit and restart the shell to apply changes");
+            eprintln!();
+        }
+
         info!(devenv.is_user_message = true, "Entering shell");
         let err = shell_cmd.into_std().exec();
 
@@ -1411,12 +1453,21 @@ impl Devenv {
                             .map_err(|_| miette!("Secretspec resolved already set"))?;
                     }
                     Err(validation_errors) => {
-                        bail!(
-                            "Required secrets are missing: {} (provider: {}, profile: {})",
-                            validation_errors.missing_required.join(", "),
-                            validation_errors.provider,
-                            validation_errors.profile
-                        );
+                        if !validation_errors.missing_required.is_empty() {
+                            let _ = self.status.set(Status::MissingSecrets {
+                                secrets: validation_errors.missing_required.clone(),
+                                provider: validation_errors.provider.clone(),
+                                profile: validation_errors.profile.clone(),
+                            });
+                        } else {
+                            // Other validation errors should still fail
+                            bail!(
+                                "Secret validation failed (provider: {}, profile: {}): {:?}",
+                                validation_errors.provider,
+                                validation_errors.profile,
+                                validation_errors
+                            );
+                        }
                     }
                 }
             }
