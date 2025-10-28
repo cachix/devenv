@@ -62,14 +62,7 @@
         "aarch64-linux"
         "aarch64-darwin"
       ];
-      forAllSystems =
-        f:
-        builtins.listToAttrs (
-          map (name: {
-            inherit name;
-            value = f name;
-          }) systems
-        );
+      forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
       packages = forAllSystems (
@@ -77,8 +70,8 @@
         let
           overlays = [
             (final: prev: {
+              inherit (inputs.cachix.packages.${system}) cachix;
               devenv-nix = inputs.nix.packages.${system}.nix-cli;
-              cachix = inputs.cachix.packages.${system}.cachix;
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };

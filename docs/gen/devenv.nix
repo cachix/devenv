@@ -59,7 +59,7 @@ let
     in
     {
       name = url;
-      url = url;
+      inherit url;
     };
 
   # Speed up doc builds by skipping narinfo queries
@@ -186,6 +186,8 @@ let
 
 in
 {
+  devenv.warnOnNewVersion = false;
+
   # Expose the outputs for the flake and scripts to use
   outputs = {
     devenv-docs-options = allOptions.optionsCommonMark;
@@ -212,8 +214,7 @@ in
     description = "Generate lists of all languages and services";
     exec = import ./scripts/generate-docs.nix {
       inherit lib;
-      languages = options.languages;
-      services = options.services;
+      inherit (options) languages services;
     };
   };
 }
