@@ -14,6 +14,16 @@ let
     follows = [ "nixpkgs" ];
   };
 
+  treefmtSubmodule =
+    let
+      optionalModule = builtins.tryEval (
+        treefmt-nix.lib.submoduleWith lib {
+          specialArgs = { inherit pkgs; };
+        }
+      );
+    in
+    if optionalModule.success then optionalModule.value else lib.types.deferredModule;
+
   # Determine tree root: prefer git.root, fallback to devenv.root
   treeRoot = if config.git.root != null then config.git.root else config.devenv.root;
 
@@ -28,9 +38,7 @@ in
 
     config = lib.mkOption {
       description = "treefmt configuration.";
-      type = treefmt-nix.lib.submoduleWith lib {
-        specialArgs = { inherit pkgs; };
-      };
+      type = treefmtSubmodule;
       default = { };
     };
   };
