@@ -7,12 +7,25 @@
 let
   cfg = config.treefmt;
 
-  treefmt-nix = config.lib.getInput {
+  inputArgs = {
     name = "treefmt-nix";
     url = "github:numtide/treefmt-nix";
     attribute = "treefmt";
     follows = [ "nixpkgs" ];
   };
+
+  # When enabled, use getInput (throws helpful error if missing)
+  # Otherwise, use tryGetInput to populate the docs when the input is available.
+  treefmt-nix =
+    if cfg.enable then config.lib.getInput inputArgs else config.lib.tryGetInput inputArgs;
+
+  treefmtSubmodule =
+    if treefmt-nix != null then
+      treefmt-nix.lib.submoduleWith lib {
+        specialArgs = { inherit pkgs; };
+      }
+    else
+      lib.types.attrs;
 
   # Determine tree root: prefer git.root, fallback to devenv.root
   treeRoot = if config.git.root != null then config.git.root else config.devenv.root;
@@ -28,9 +41,7 @@ in
 
     config = lib.mkOption {
       description = "treefmt configuration.";
-      type = treefmt-nix.lib.submoduleWith lib {
-        specialArgs = { inherit pkgs; };
-      };
+      type = treefmtSubmodule;
       default = { };
     };
   };

@@ -18,8 +18,8 @@
             Add the following to flake.nix:
 
             inputs.${name}.url = "${url}";
-            ${if follows != [] 
-              then "inputs.${name}.inputs = { ${lib.concatStringsSep "; " (map (i: "${i}.follows = \"${i}\"") follows)}; };" 
+            ${if follows != []
+              then "inputs.${name}.inputs = { ${lib.concatStringsSep "; " (map (i: "${i}.follows = \"${i}\"") follows)}; };"
               else ""}
           ''
           else if lib.versionAtLeast config.devenv.cliVersion "1.0"
@@ -30,7 +30,7 @@
           ''
           else ''
             add the following to your devenv.yaml:
-          
+
               ✨ devenv 1.0 made this easier: https://devenv.sh/getting-started/#installation ✨
 
               inputs:
@@ -40,6 +40,9 @@
           '';
       in
         inputs.${name} or (throw "To use '${attribute}', ${command}\n\n");
+
+    tryGetInput = { name, url, attribute, follows ? [ ] }:
+      inputs.${name} or null;
 
     mkTests = folder:
       let
