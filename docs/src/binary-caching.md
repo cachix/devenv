@@ -8,36 +8,37 @@ binary caches hosted by [Cachix](https://cachix.org).
 
 # Setup
 
-Devenv will automatically configure Cachix caches for you, or guide you how to add the caches to Nix manually.
-Any caches set up by devenv are used in addition to the caches configured in Nix, for example, in `/etc/nix/nix.conf`.
+Sign up on [Cachix](https://cachix.org), create an organization and your first cache.
+
+You don't need to install Cachix client, devenv will handle binary caching for you.
+
+After that you'll need to set `CACHIX_AUTH_TOKEN=XXX` with either [a personal auth token](https://app.cachix.org/personal-auth-tokens) or a per cache token (that you can create in cache settings).
 
 ## Pull
 
-To pull binaries from [pre-commit-hooks.cachix.org](https://pre-commit-hooks.cachix.org), add it to `cachix.pull`:
+Configure your new cache:
 
 ```nix title="devenv.nix"
 {
-  cachix.enable = true;
-  cachix.pull = [ "pre-commit-hooks" ];
+  cachix.pull = [ "mycache" ];
 }
 ```
 
-### The `devenv` cache
+!!! note 
 
-[devenv.cachix.org](https://devenv.cachix.org) is added to the list of pull caches by default.
-It mirrors the official NixOS cache and is designed to provide caching for the [`devenv-nixpkgs/rolling`](https://github.com/cachix/devenv-nixpkgs) nixpkgs input.
+    [devenv.cachix.org](https://devenv.cachix.org) is added to the list of pull caches by default. 
 
-Some languages and integrations may automatically add caches when enabled.
+    It mirrors the official NixOS cache and is designed to provide caching for the [`devenv-nixpkgs/rolling`](https://github.com/cachix/devenv-nixpkgs) nixpkgs input.
+
+    Some languages and integrations may automatically add caches when enabled.
 
 ## Pushing
 
-If you'd like to push binaries to your own cache, you'll need [to create one](https://app.cachix.org/cache).
-
-After that you'll need to set `cachix authtoken XXX` with either [a personal auth token](https://app.cachix.org/personal-auth-tokens) or a cache token (that you can create in cache settings).
 
 ```nix title="devenv.nix"
-cachix.enable = true
-cachix.push = "mycache";
+{
+  cachix.push = "mycache";
+}
 ```
 
 ### Pushing binaries conditionally
@@ -55,7 +56,9 @@ $ echo '{ cachix.push = "mycache"; }' > devenv.local.nix
 You can disable the integration by setting the following in `devenv.nix`:
 
 ```nix title="devenv.nix"
-cachix.enable = false;
+{
+  cachix.enable = false;
+}
 ```
 
 Nix will continue to substitute binaries from any caches you may have configured externally, such as the official NixOS cache.
