@@ -8,10 +8,9 @@
   treefmt = {
     enable = true;
 
-    config.projectRootFile = "projectRootFile";
+    config.projectRootFile = "devenv.nix";
 
     config.programs = {
-      nixpkgs-fmt.enable = true;
       nixfmt.enable = true;
       rustfmt.enable = true;
     };
@@ -23,7 +22,7 @@
 
   treefmt.config.settings.formatter = {
     "yq-json" = {
-      command = "${pkgs.bash}/bin/bash";
+      command = "${lib.getExe pkgs.bash}";
       options = [
         "-euc"
         ''
@@ -34,7 +33,10 @@
         "--" # bash swallows the second argument when using -c
       ];
       includes = [ "*.json" ];
-      excludes = [ ".git/*" ".devenv/*" ];
+      excludes = [
+        ".git/*"
+        ".devenv/*"
+      ];
     };
   };
 }
