@@ -6,8 +6,8 @@
 - Build with Nix: `nix build`
 - Format code: `cargo fmt`
 - Lint code: `cargo clippy`
-- Run all tests: `cargo test` or `devenv-run-tests tests`
-- Run single test: `devenv-run-tests --only <test_name> tests`
+- Run all tests: `cargo test` or `devenv-run-tests run tests`
+- Run single test: `devenv-run-tests run test --only <test_name>`
 
 ## Code Style Guidelines
 - **Imports**: Group by category (std lib first, then external crates, then internal)
