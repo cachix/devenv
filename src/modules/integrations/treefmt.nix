@@ -60,7 +60,8 @@ in
 
   config = lib.mkIf cfg.enable {
     # Use the same wrapper for git-hooks.
-    git-hooks.hooks.treefmt.package = lib.mkDefault treefmtWrapper;
+    # Use a priority 1 lower than `mkDefault` to avoid conflicts.
+    git-hooks.hooks.treefmt.package = lib.mkOverride 999 treefmtWrapper;
 
     packages = [
       treefmtWrapper
