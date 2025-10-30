@@ -110,10 +110,7 @@ jobs:
           IMAGE_PATH=$(readlink -f ./result)
           echo "image_path=$IMAGE_PATH" >> $GITHUB_OUTPUT
 
-          # Load the image into Docker
-          docker load < "$IMAGE_PATH"
-
-          # Get the image name and tag that was loaded
+          # Load the image into Docker and capture the ID
           IMAGE_ID=$(docker load < "$IMAGE_PATH" | grep -oP '(?<=Loaded image: ).*')
           echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
 
