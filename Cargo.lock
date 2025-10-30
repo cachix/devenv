@@ -1304,7 +1304,6 @@ dependencies = [
  "petgraph 0.8.2",
  "pretty_assertions",
  "proptest",
- "secrecy",
  "serde",
  "serde_json",
  "shell-escape",

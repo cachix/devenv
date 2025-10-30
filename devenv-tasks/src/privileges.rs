@@ -1,5 +1,4 @@
 use nix::unistd::{Gid, Uid, geteuid, setgid, setuid};
-use secrecy::{ExposeSecret, SecretString};
 use std::env;
 
 #[cfg(not(target_os = "macos"))]
@@ -11,15 +10,9 @@ pub struct SudoContext {
     pub user: String,
     pub uid: Uid,
     pub gid: Gid,
-    password: SecretString,
 }
 
 impl SudoContext {
-    /// Get the password as bytes (exposes secret - use carefully)
-    pub fn password_bytes(&self) -> &[u8] {
-        self.password.expose_secret().as_bytes()
-    }
-
     /// Detect if we're running under sudo and extract the original user context
     pub fn detect() -> Option<Self> {
         // Only if we're running as root AND have SUDO_USER set
@@ -31,17 +24,10 @@ impl SudoContext {
         let uid = env::var("SUDO_UID").ok()?.parse().ok()?;
         let gid = env::var("SUDO_GID").ok()?.parse().ok()?;
 
-        use std::io::{self, BufRead, BufReader};
-        tracing::info!("Waiting for password");
-        let mut reader = BufReader::new(io::stdin());
-        let mut password = String::new();
-        reader.read_line(&mut password).unwrap();
-
         Some(SudoContext {
             user,
             uid: Uid::from_raw(uid),
             gid: Gid::from_raw(gid),
-            password: SecretString::new(password.into_boxed_str()),
         })
     }
 

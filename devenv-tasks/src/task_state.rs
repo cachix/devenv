@@ -92,8 +92,9 @@ impl TaskState {
             let mut sudo_cmd = Command::new("sh");
             // Launch the command with elevated privileges.
             // Use -E to preserve environment variables.
+            // Rely on sudo's auth caching (no -S flag for password stdin).
             // The command here is a store path to a task script, not an arbitrary shell command.
-            sudo_cmd.args(["-c", &format!("sudo -E -S {cmd}")]);
+            sudo_cmd.args(["-c", &format!("sudo -E {cmd}")]);
             sudo_cmd
         } else {
             // Normal execution - no sudo involved
@@ -102,8 +103,7 @@ impl TaskState {
 
         command
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .stdin(Stdio::piped());
+            .stderr(Stdio::piped());
 
         // Set working directory if specified
         if let Some(cwd) = &self.task.cwd {
@@ -212,19 +212,10 @@ impl TaskState {
             crate::tracing_events::emit_command_start(&self.task.name, cmd);
 
             // Use spawn and wait with output to properly handle status script execution
-            let result = async {
-                let mut child = command.spawn()?;
-                let mut stdin_opt = child.stdin.take();
-                if let Some(sudo_context) = &self.sudo_context
-                    && let Some(stdin) = stdin_opt.as_mut()
-                {
-                    use tokio::io::AsyncWriteExt;
-                    stdin.write_all(sudo_context.password_bytes()).await?;
-                    stdin.flush().await?;
-                }
-                child.wait_with_output().await
-            }
-            .await;
+            let result = match command.spawn() {
+                Ok(child) => child.wait_with_output().await,
+                Err(e) => Err(e),
+            };
             match result {
                 Ok(output) => {
                     let exit_code = output.status.code();
@@ -318,19 +309,7 @@ impl TaskState {
             .prepare_command(cmd, outputs)
             .wrap_err("Failed to prepare task command")?;
 
-        let result = async {
-            let mut child = command.spawn()?;
-            let mut stdin_opt = child.stdin.take();
-            if let Some(sudo_context) = &self.sudo_context
-                && let Some(stdin) = stdin_opt.as_mut()
-            {
-                use tokio::io::AsyncWriteExt;
-                stdin.write_all(sudo_context.password_bytes()).await?;
-                stdin.flush().await?;
-            }
-            tokio::io::Result::Ok(child)
-        }
-        .await;
+        let result = command.spawn();
 
         let mut child = match result {
             Ok(c) => c,
