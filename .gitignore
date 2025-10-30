@@ -1,21 +1,22 @@
 # DO NOT add editor or system-specific files here.
 # Add them to your global gitignore instead in `$XDG_CONFIG_HOME/git/ignore`
 
-# Nix & devenv
+# Nix
 result
+result-*
+
+# Devenv
+.devenv*
+
+# Environment variables
 /.env
 /.env.*
-.devenv*
-.direnv*
+
+# Direnv
+.direnv
+
+# Pre-commit hooks
 /.pre-commit-config.yaml
-man
-
-# mkdocs
-/docs/site/
-/docs/.cache/
-
-# Examples
-examples/rust/app/target/
 
 # Rust
 target/
