@@ -1,3 +1,7 @@
+# A non-root container image with devenv and Nix pre-installed.
+#
+# This container is built upon Nix's `docker.nix` derivation:
+# https://github.com/NixOS/nix/blob/master/docker.nix
 {
   pkgs,
   nixInput,
