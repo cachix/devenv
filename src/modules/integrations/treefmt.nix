@@ -30,10 +30,22 @@ let
   # Determine tree root: prefer git.root, fallback to devenv.root
   treeRoot = if config.git.root != null then config.git.root else config.devenv.root;
 
-  # Custom wrapper that uses git.root with fallback to devenv.root
-  treefmtWrapper = pkgs.writeShellScriptBin "treefmt" ''
-    exec ${cfg.config.build.wrapper}/bin/treefmt --config-file ${cfg.config.build.configFile} "$@" --tree-root ${lib.escapeShellArg treeRoot}
-  '';
+  # Custom wrapper to point treefmt to the project root.
+  #
+  # treefmt-nix provides a `config.build.wrapper` that uses `config.projectRootFile` to find the tree root.
+  # We instead set the tree root directory based on the information provided by the CLI.
+  # If the user sets a custom `projectRootFile`, we'll use that.
+  treefmtWrapper =
+    let
+      treeRootOption =
+        if cfg.config.projectRootFile != "" then
+          "--tree-root-file " + lib.escapeShellArg cfg.config.projectRootFile
+        else
+          "--tree-root " + lib.escapeShellArg treeRoot;
+    in
+    pkgs.writeShellScriptBin "treefmt" ''
+      exec ${cfg.config.package}/bin/treefmt --config-file ${cfg.config.build.configFile} "$@" ${treeRootOption}
+    '';
 in
 {
   options.treefmt = {
@@ -47,11 +59,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Use the same wrapper for git-hooks.
+    # Use a priority 1 lower than `mkDefault` to avoid conflicts.
+    git-hooks.hooks.treefmt.package = lib.mkOverride 999 treefmtWrapper;
+
     packages = [
       treefmtWrapper
     ];
 
-    # Automatically add treefmt-nix to git-hooks if the user enables it.
-    git-hooks.hooks.treefmt.package = treefmtWrapper;
+    # We automatically configure treefmt with the correct tree root for the project.
+    # Set an empty default to detect when the user wants to use a custom root file.
+    treefmt.config.projectRootFile = lib.mkDefault "";
   };
 }
