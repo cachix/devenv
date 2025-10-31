@@ -15,7 +15,6 @@ pub struct DevenvPaths {
     pub dotfile: PathBuf,
     pub dot_gc: PathBuf,
     pub home_gc: PathBuf,
-    pub cachix_trusted_keys: PathBuf,
 }
 
 /// Options for Nix operations
