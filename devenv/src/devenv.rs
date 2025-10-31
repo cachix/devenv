@@ -177,8 +177,14 @@ impl Devenv {
             dotfile: devenv_dotfile.clone(),
             dot_gc: devenv_dot_gc.clone(),
             home_gc: devenv_home_gc.clone(),
-            cachix_trusted_keys,
         };
+
+        // Create CachixPaths for Nix backend
+        let cachix_paths = crate::cachix::CachixPaths {
+            trusted_keys: cachix_trusted_keys,
+            netrc: devenv_dotfile.join("netrc"),
+        };
+        let cachix_manager = Arc::new(crate::cachix::CachixManager::new(cachix_paths));
 
         // Create shared secretspec_resolved Arc to share between Devenv and Nix
         let secretspec_resolved = Arc::new(OnceCell::new());
@@ -190,6 +196,7 @@ impl Devenv {
                     global_options.clone(),
                     paths,
                     secretspec_resolved.clone(),
+                    Some(cachix_manager),
                 )
                 .await
                 .expect("Failed to initialize Nix backend"),
