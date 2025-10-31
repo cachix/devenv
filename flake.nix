@@ -81,6 +81,13 @@
           inherit (workspace.crates) devenv devenv-tasks devenv-tasks-fast-build;
           default = self.packages.${system}.devenv;
         }
+        // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          devenv-image = import ./containers/devenv/image.nix {
+            inherit pkgs;
+            inherit (self.packages.${system}) devenv;
+            nixInput = inputs.nix;
+          };
+        }
       );
 
       modules = ./src/modules;

@@ -18,7 +18,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REPOSITORY: ${{ github.repository }}
 
 jobs:
   devcontainer:
@@ -52,7 +52,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/devcontainer
+          images: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devcontainer
           context: git # Get context from checkout out repo
 
       - name: Build and push Docker image
@@ -70,7 +70,16 @@ jobs:
             DEVENV_VERSION=${{ steps.checkout.outputs.commit }}
 
   devenv:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64-linux
+            runner: ubuntu-latest
+          - arch: aarch64-linux
+            runner: ubuntu-24.04-arm
+
+    runs-on: ${{ matrix.runner }}
+
     permissions:
       contents: read
       packages: write
@@ -82,12 +91,69 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Set up QEMU for multi-arch builds
-        uses: docker/setup-qemu-action@v3
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
 
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build container image with Nix
+        id: build
+        run: |
+          # Build the container image
+          nix build .#devenv-image -L --accept-flake-config
+
+          # Get the image path
+          IMAGE_PATH=$(readlink -f ./result)
+          echo "image_path=$IMAGE_PATH" >> $GITHUB_OUTPUT
+
+          # Load the image into Docker and capture the ID
+          IMAGE_ID=$(docker load < "$IMAGE_PATH" | grep -oP '(?<=Loaded image: ).*')
+          echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
+
+      - name: Log in to the Container registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | nix run nixpkgs#skopeo -- login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Push image by digest only (no tags)
+        id: push
+        run: |
+          IMAGE_ID="${{ steps.build.outputs.image_id }}"
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devenv"
+
+          # Save digest for manifest creation
+          mkdir -p /tmp/digests
+          DIGEST_PATH="/tmp/digests/${{ matrix.arch }}.digest"
+
+          # Use skopeo to push directly by digest without creating any tags
+          nix run nixpkgs#skopeo -- copy --preserve-digests --digestfile "$DIGEST_PATH" "docker-daemon:${IMAGE_ID}" "docker://${IMAGE_NAME}" --format v2s2
+
+          DIGEST=$(cat "$DIGEST_PATH")
+          echo "Pushed image with digest: $DIGEST"
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/${{ matrix.arch }}.digest
+          retention-days: 1
+
+  devenv-manifest:
+    needs: devenv
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -96,23 +162,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for manifest
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/devenv
-          context: git # Get context from checkout out repo
+          images: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devenv
+          context: git
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - name: Download all digests
+        uses: actions/download-artifact@v6
         with:
-          builder: ${{ steps.buildx.outputs.name }}
-          platforms: linux/amd64,linux/arm64
-          context: ./containers/devenv
-          file: ./containers/devenv/Dockerfile
-          push: true
-          provenance: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            DEVENV_VERSION=${{ steps.checkout.outputs.commit }}
+          pattern: digest-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Create and push multi-arch manifest
+        run: |
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devenv"
+
+          # Read the digests
+          X86_DIGEST=$(cat /tmp/digests/x86_64-linux.digest)
+          ARM_DIGEST=$(cat /tmp/digests/aarch64-linux.digest)
+
+          echo "Creating manifest with:"
+          echo "  x86_64-linux: $X86_DIGEST"
+          echo "  aarch64-linux: $ARM_DIGEST"
+
+          # Create and push manifest list for each tag
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+            echo "Creating manifest list for $tag"
+            docker buildx imagetools create -t "$tag" \
+              "${IMAGE_NAME}@${X86_DIGEST}" \
+              "${IMAGE_NAME}@${ARM_DIGEST}"
+          done
