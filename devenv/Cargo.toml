@@ -36,6 +36,7 @@ schematic.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+ser_nix.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true

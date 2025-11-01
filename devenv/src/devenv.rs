@@ -1,4 +1,4 @@
-use super::{cli, config, log::HumanReadableDuration, nix_backend, tasks, util};
+use super::{cli, config, log::HumanReadableDuration, nix_args::NixArgs, nix_backend, tasks, util};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
@@ -1469,74 +1469,43 @@ impl Devenv {
         // `devenv_runtime` is an absolute string path to the runtime directory for this shell.
         // `devenv_istesting` is a boolean indicating if the shell is being assembled for testing.
         // `container_name` indicates the name of the container being built, copied, or run, if any.
-        let active_profiles = if self.global_options.profile.is_empty() {
-            "[ ]".to_string()
-        } else {
-            format!(
-                "[ {} ]",
-                self.global_options
-                    .profile
-                    .iter()
-                    .map(|p| format!("\"{p}\""))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            )
-        };
 
         // Get current hostname and username using system APIs
         let hostname = hostname::get()
             .ok()
-            .and_then(|h| h.to_str().map(|s| s.to_string()))
-            .unwrap_or_else(|| "unknown".to_string());
+            .and_then(|h| h.to_str().map(|s| s.to_string()));
 
-        let username = whoami::username();
+        let username = whoami::fallible::username().ok();
 
         // Get git repository root from config (already detected during config load)
-        let git_root = config
-            .git_root
-            .as_ref()
-            .map(|path| format!("\"{}\"", path.display()))
-            .unwrap_or_else(|| "null".to_string());
+        let git_root = config.git_root.clone();
 
-        let vars = indoc::formatdoc!(
-            "version = \"{version}\";
-            system = \"{system}\";
-            devenv_root = \"{devenv_root}\";
-            devenv_dotfile = \"{devenv_dotfile}\";
-            devenv_dotfile_path = ./{devenv_dotfile_name};
-            devenv_tmpdir = \"{devenv_tmpdir}\";
-            devenv_runtime = \"{devenv_runtime}\";
-            devenv_istesting = {devenv_istesting};
-            devenv_direnvrc_latest_version = {direnv_version};
-            container_name = {container_name};
-            active_profiles = {active_profiles};
-            hostname = \"{hostname}\";
-            username = \"{username}\";
-            git_root = {git_root};
-            ",
-            version = crate_version!(),
-            system = self.global_options.system,
-            devenv_root = self.devenv_root.display(),
-            devenv_dotfile = self.devenv_dotfile.display(),
-            devenv_dotfile_name = self
+        // Create the Nix arguments struct
+        let args = NixArgs {
+            version: crate_version!().to_string(),
+            system: self.global_options.system.clone(),
+            devenv_root: self.devenv_root.clone(),
+            devenv_dotfile: self.devenv_dotfile.clone(),
+            devenv_dotfile_path: self
                 .devenv_dotfile
                 .file_name()
-                .and_then(OsStr::to_str)
-                .unwrap(),
-            container_name = self
-                .container_name
-                .as_deref()
-                .map(|s| format!("\"{s}\""))
-                .unwrap_or_else(|| "null".to_string()),
-            devenv_tmpdir = self.devenv_tmp,
-            devenv_runtime = self.devenv_runtime.display(),
-            devenv_istesting = is_testing,
-            direnv_version = DIRENVRC_VERSION.to_string(),
-            active_profiles = active_profiles,
-            hostname = hostname,
-            username = username,
-            git_root = git_root
-        );
+                .map(|name| PathBuf::from(format!("./{}", name.to_string_lossy())))
+                .unwrap_or_else(|| PathBuf::from("./.devenv")),
+            devenv_tmpdir: PathBuf::from(self.devenv_tmp.clone()),
+            devenv_runtime: self.devenv_runtime.clone(),
+            devenv_istesting: is_testing,
+            devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
+            container_name: self.container_name.clone(),
+            active_profiles: self.global_options.profile.clone(),
+            hostname,
+            username,
+            git_root,
+        };
+
+        // Serialize the arguments to Nix syntax
+        let vars = ser_nix::to_string(&args)
+            .map_err(|e| miette::miette!("Failed to serialize devenv flake arguments: {}", e))?;
+
         let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
         let flake_path = self.devenv_root.join(DEVENV_FLAKE);
         util::write_file_with_lock(&flake_path, &flake)?;
