@@ -12,7 +12,6 @@ use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::ffi::OsStr;
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
 use std::path::{Path, PathBuf};
@@ -106,7 +105,7 @@ pub struct Devenv {
     devenv_dotfile: PathBuf,
     devenv_dot_gc: PathBuf,
     devenv_home_gc: PathBuf,
-    devenv_tmp: String,
+    devenv_tmp: PathBuf,
     devenv_runtime: PathBuf,
 
     // Whether assemble has been run.
@@ -147,8 +146,10 @@ impl Devenv {
             .unwrap_or(devenv_root.join(".devenv"));
         let devenv_dot_gc = devenv_dotfile.join("gc");
 
-        let devenv_tmp = std::env::var("XDG_RUNTIME_DIR")
-            .unwrap_or_else(|_| std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string()));
+        let devenv_tmp =
+            PathBuf::from(std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
+                std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())
+            }));
         // first 7 chars of sha256 hash of devenv_state
         let devenv_state_hash = {
             let mut hasher = sha2::Sha256::new();
@@ -156,8 +157,7 @@ impl Devenv {
             let result = hasher.finalize();
             hex::encode(result)
         };
-        let devenv_runtime =
-            Path::new(&devenv_tmp).join(format!("devenv-{}", &devenv_state_hash[..7]));
+        let devenv_runtime = devenv_tmp.join(format!("devenv-{}", &devenv_state_hash[..7]));
 
         let global_options = options.global_options.unwrap_or_default();
 
@@ -1324,15 +1324,15 @@ impl Devenv {
                     "{}",
                     indoc::formatdoc! {"
                     Found secretspec.toml but secretspec integration is not enabled.
-                    
+
                     To enable, add to devenv.yaml:
                       secretspec:
                         enable: true
-                    
+
                     To disable this message:
                       secretspec:
                         enable: false
-                    
+
                     Learn more: https://devenv.sh/integrations/secretspec/
                 "}
                 );
@@ -1460,46 +1460,43 @@ impl Devenv {
         }
 
         // Create flake.devenv.nix
-        //
-        // `devenv_root` is an absolute string path to the root of the project directory.
-        // `devenv_dotfile` is an absolute string path to the devenv dotfile directory.
-        // `devenv_dotfile_path` is a relative Nix path to the dotfile directory.
-        //  This is used to load in additional files from the dotfile directory.
-        // `devenv_tmpdir` is an absolute string path to the temporary directory for this shell.
-        // `devenv_runtime` is an absolute string path to the runtime directory for this shell.
-        // `devenv_istesting` is a boolean indicating if the shell is being assembled for testing.
-        // `container_name` indicates the name of the container being built, copied, or run, if any.
 
         // Get current hostname and username using system APIs
         let hostname = hostname::get()
             .ok()
-            .and_then(|h| h.to_str().map(|s| s.to_string()));
+            .map(|h| h.to_string_lossy().into_owned());
 
         let username = whoami::fallible::username().ok();
+
+        // TODO: remove in the next release
+        let dotfile_relative_path = PathBuf::from(format!(
+            "./{}",
+            self.devenv_dotfile
+                .file_name()
+                // This should never fail
+                .expect("Failed to extract the directory name from devenv_dotfile")
+                .to_string_lossy()
+        ));
 
         // Get git repository root from config (already detected during config load)
         let git_root = config.git_root.clone();
 
         // Create the Nix arguments struct
         let args = NixArgs {
-            version: crate_version!().to_string(),
-            system: self.global_options.system.clone(),
-            devenv_root: self.devenv_root.clone(),
-            devenv_dotfile: self.devenv_dotfile.clone(),
-            devenv_dotfile_path: self
-                .devenv_dotfile
-                .file_name()
-                .map(|name| PathBuf::from(format!("./{}", name.to_string_lossy())))
-                .unwrap_or_else(|| PathBuf::from("./.devenv")),
-            devenv_tmpdir: PathBuf::from(self.devenv_tmp.clone()),
-            devenv_runtime: self.devenv_runtime.clone(),
+            version: crate_version!(),
+            system: &self.global_options.system,
+            devenv_root: &self.devenv_root,
+            devenv_dotfile: &self.devenv_dotfile,
+            devenv_dotfile_path: &dotfile_relative_path,
+            devenv_tmpdir: &self.devenv_tmp,
+            devenv_runtime: &self.devenv_runtime,
             devenv_istesting: is_testing,
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
-            container_name: self.container_name.clone(),
-            active_profiles: self.global_options.profile.clone(),
-            hostname,
-            username,
-            git_root,
+            container_name: self.container_name.as_deref(),
+            active_profiles: &self.global_options.profile,
+            hostname: hostname.as_deref(),
+            username: username.as_deref(),
+            git_root: git_root.as_deref(),
         };
 
         // Serialize the arguments to Nix syntax
