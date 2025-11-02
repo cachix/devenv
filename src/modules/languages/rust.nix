@@ -43,7 +43,7 @@ in
       defaultText = lib.literalExpression ''[ ]'';
       description = ''
         List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
-        to install. Defaults to only the native target. 
+        to install. Defaults to only the native target.
       '';
     };
 
@@ -283,7 +283,7 @@ in
         toolchainFromFile = rustBin.fromRustupToolchainFile cfg.toolchainFile;
       in
       {
-        languages.rust.toolchainPackage = lib.mkDefault toolchainFromFile;
+        languages.rust.toolchainPackage = toolchainFromFile;
         packages = [ cfg.toolchainPackage ];
       }
     ))
