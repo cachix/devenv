@@ -647,10 +647,24 @@ impl Nix {
         Ok(nix_conf)
     }
 
+    async fn is_trusted_user_impl(&self) -> Result<bool> {
+        let options = nix_backend::Options {
+            logging: false,
+            ..self.options
+        };
+        let store_output = self
+            .run_nix("nix", &["store", "ping", "--json"], &options)
+            .await?;
+        let store_ping = serde_json::from_slice::<StorePing>(&store_output.stdout)
+            .into_diagnostic()
+            .wrap_err("Failed to query the Nix store")?;
+        Ok(store_ping.is_trusted)
+    }
+
     async fn get_cachix_caches(&self, trusted_keys_path: &Path) -> Result<CachixCacheInfo> {
         self.cachix_caches
             .get_or_try_init(|| async {
-        let no_logging = nix_backend::Options {
+        let _no_logging = nix_backend::Options {
             logging: false,
             ..self.options
         };
@@ -762,8 +776,7 @@ impl Nix {
         }
 
         if !caches.caches.pull.is_empty() {
-            // Run store ping and file write operations concurrently
-            let store_ping_future = self.run_nix("nix", &["store", "ping", "--json"], &no_logging);
+            // Write cache keys and check trusted status concurrently
             let write_keys_future = async {
                 if !new_known_keys.is_empty() {
                     caches.known_keys.extend(new_known_keys.clone());
@@ -782,14 +795,11 @@ impl Nix {
                 }
                 Ok::<(), miette::Report>(())
             };
+            let is_trusted_future = self.is_trusted_user();
 
-            let (store_result, write_result) = tokio::join!(store_ping_future, write_keys_future);
-            let store = store_result?;
+            let (is_trusted_result, write_result) = tokio::join!(is_trusted_future, write_keys_future);
+            let is_trusted = is_trusted_result?;
             write_result?;
-
-            let store_ping = serde_json::from_slice::<StorePing>(&store.stdout)
-                .into_diagnostic()
-                .wrap_err("Failed to query the Nix store")?;
 
             let restart_command = if cfg!(target_os = "linux") {
                 "sudo systemctl restart nix-daemon"
@@ -814,7 +824,7 @@ impl Nix {
             // If the user is not a trusted user, we can't set up the caches for them.
             // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
             // If not, suggest actions to remedy the issue.
-            if !store_ping.is_trusted {
+            if !is_trusted {
                 let (missing_caches, missing_public_keys) = self
                     .get_nix_config()
                     .await
@@ -1010,6 +1020,10 @@ impl NixBackend for Nix {
 
     async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
         self.get_bash(refresh_cached_output).await
+    }
+
+    async fn is_trusted_user(&self) -> Result<bool> {
+        self.is_trusted_user_impl().await
     }
 }
 
