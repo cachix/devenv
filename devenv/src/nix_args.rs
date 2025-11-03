@@ -26,6 +26,7 @@ pub struct NixArgs<'a> {
 
     /// Relative Nix path to the dotfile directory (e.g., ".devenv")
     /// Serialized as a Nix path literal by ser_nix
+    #[serde(serialize_with = "ser_nix::as_nix_path")]
     pub devenv_dotfile_path: &'a Path,
 
     /// Absolute path to the system temporary directory
