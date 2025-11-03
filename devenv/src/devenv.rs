@@ -1482,10 +1482,12 @@ impl Devenv {
         let git_root = config.git_root.clone();
 
         // Create the Nix arguments struct
+        let project_input_ref = format!("path:{}", self.devenv_root.display());
         let args = NixArgs {
             version: crate_version!(),
             system: &self.global_options.system,
             devenv_root: &self.devenv_root,
+            project_input_ref: &project_input_ref,
             devenv_dotfile: &self.devenv_dotfile,
             devenv_dotfile_path: &dotfile_relative_path,
             devenv_tmpdir: &self.devenv_tmp,

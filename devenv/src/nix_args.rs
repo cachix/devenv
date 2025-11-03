@@ -20,6 +20,9 @@ pub struct NixArgs<'a> {
     /// Serialized as a Nix path literal by ser_nix
     pub devenv_root: &'a Path,
 
+    /// Project input reference as string
+    pub project_input_ref: &'a str,
+
     /// Absolute path to the devenv dotfile directory (.devenv)
     /// Serialized as a Nix path literal by ser_nix
     pub devenv_dotfile: &'a Path,
@@ -88,10 +91,12 @@ mod tests {
         let profiles = vec!["frontend".to_string(), "backend".to_string()];
         let username = Some("testuser");
 
+        let project_input_ref = format!("path:{}", root.display());
         let args = NixArgs {
             version,
             system,
             devenv_root: &root,
+            project_input_ref: &project_input_ref,
             devenv_dotfile: &dotfile,
             devenv_dotfile_path: &dotfile_path,
             devenv_tmpdir: &tmpdir,
@@ -115,6 +120,10 @@ mod tests {
         assert!(
             contains_key_value(&serialized, "system", "\"aarch64-darwin\""),
             "system key-value pair not found"
+        );
+        assert!(
+            serialized.contains(&format!("project_input_ref = \"{}\"", project_input_ref)),
+            "project_input_ref key-value pair not found"
         );
         assert!(
             contains_key_value(&serialized, "devenv_istesting", "false"),
