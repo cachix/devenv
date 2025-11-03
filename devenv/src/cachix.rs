@@ -5,7 +5,7 @@
 
 use miette::{IntoDiagnostic, Result, WrapErr};
 use nix_conf_parser::NixConf;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -41,7 +41,7 @@ impl CachixManager {
     /// For example: "extra-substituters" => "https://cache1.cachix.org https://cache2.cachix.org"
     pub async fn get_nix_settings(
         &self,
-        cachix_caches: &CachixCaches,
+        cachix_caches: &CachixCacheInfo,
     ) -> Result<HashMap<String, String>> {
         let mut settings = HashMap::new();
 
@@ -173,29 +173,50 @@ pub struct Cachix {
     pub push: Option<String>,
 }
 
-/// Cached Cachix caches with their trusted keys
+/// Cachix cache information including configuration and public signing keys
 #[derive(Deserialize, Default, Clone)]
-pub struct CachixCaches {
+pub struct CachixCacheInfo {
     pub caches: Cachix,
     pub known_keys: BTreeMap<String, String>,
 }
 
-/// Response from Cachix API for cache information
+/// Cachix API response containing cache metadata
 #[derive(Deserialize, Clone)]
-pub struct CachixResponse {
+pub struct CacheMetadata {
     #[serde(rename = "publicSigningKeys")]
     pub public_signing_keys: Vec<String>,
 }
 
 /// Response from `nix store ping` command
-#[derive(Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct StorePing {
-    pub trusted: Option<u8>,
+    /// Whether the current user is trusted by the Nix store (requires Nix 2.4+)
+    #[serde(rename = "trusted", deserialize_with = "deserialize_trusted")]
+    pub is_trusted: bool,
+}
+
+/// Custom deserializer for the `trusted` field that requires it to be present
+fn deserialize_trusted<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    match Option::<u8>::deserialize(deserializer)? {
+        Some(1) => Ok(true),
+        Some(0) => Ok(false),
+        Some(n) => Err(Error::custom(format!(
+            "expected trusted to be 0 or 1, got {}",
+            n
+        ))),
+        None => Err(Error::missing_field(
+            "trusted field is missing - upgrade to Nix 2.4 or later",
+        )),
+    }
 }
 
 /// Detect which caches and public keys are missing from Nix configuration
 pub fn detect_missing_caches(
-    caches: &CachixCaches,
+    caches: &CachixCacheInfo,
     nix_conf: NixConf,
 ) -> (Vec<String>, Vec<String>) {
     let mut missing_caches = Vec::new();
@@ -249,26 +270,34 @@ mod tests {
     fn test_trusted() {
         let store_ping = r#"{"trusted":1,"url":"daemon","version":"2.18.1"}"#;
         let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.trusted, Some(1));
-    }
-
-    #[test]
-    fn test_no_trusted() {
-        let store_ping = r#"{"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.trusted, None);
+        assert_eq!(store_ping.is_trusted, true);
     }
 
     #[test]
     fn test_not_trusted() {
         let store_ping = r#"{"trusted":0,"url":"daemon","version":"2.18.1"}"#;
         let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.trusted, Some(0));
+        assert_eq!(store_ping.is_trusted, false);
+    }
+
+    #[test]
+    fn test_missing_trusted_field() {
+        // Ensure missing trusted field is rejected with proper error message
+        let store_ping = r#"{"url":"daemon","version":"2.18.1"}"#;
+        let result = serde_json::from_str::<StorePing>(store_ping);
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        // Error should mention the missing field and version requirement
+        assert!(
+            err_msg.contains("trusted") || err_msg.contains("Nix"),
+            "Error message should mention Nix or trusted: {}",
+            err_msg
+        );
     }
 
     #[test]
     fn test_missing_substituters() {
-        let mut cachix = CachixCaches::default();
+        let mut cachix = CachixCacheInfo::default();
         cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
         cachix
             .known_keys
@@ -295,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_extra_missing_substituters() {
-        let mut cachix = CachixCaches::default();
+        let mut cachix = CachixCacheInfo::default();
         cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
         cachix
             .known_keys

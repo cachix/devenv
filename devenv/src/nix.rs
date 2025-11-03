@@ -1,5 +1,5 @@
 use crate::{
-    cachix::{CachixCaches, CachixConfig, CachixResponse, StorePing, detect_missing_caches},
+    cachix::{CacheMetadata, CachixCacheInfo, CachixConfig, StorePing, detect_missing_caches},
     cli, config, devenv,
     nix_backend::{self, NixBackend},
     nix_log_bridge::NixLogBridge,
@@ -28,7 +28,7 @@ pub struct Nix {
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
-    cachix_caches: Arc<OnceCell<CachixCaches>>,
+    cachix_caches: Arc<OnceCell<CachixCacheInfo>>,
     cachix_manager: Option<Arc<crate::cachix::CachixManager>>,
     paths: nix_backend::DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
@@ -647,7 +647,7 @@ impl Nix {
         Ok(nix_conf)
     }
 
-    async fn get_cachix_caches(&self, trusted_keys_path: &Path) -> Result<CachixCaches> {
+    async fn get_cachix_caches(&self, trusted_keys_path: &Path) -> Result<CachixCacheInfo> {
         self.cachix_caches
             .get_or_try_init(|| async {
         let no_logging = nix_backend::Options {
@@ -669,7 +669,7 @@ impl Nix {
 
                 // Return empty caches if the Cachix integration is disabled
                 if !cachix_config.enable {
-                    return Ok(CachixCaches::default());
+                    return Ok(CachixCacheInfo::default());
                 }
 
         let known_keys: BTreeMap<String, String> = known_keys_result
@@ -687,7 +687,7 @@ impl Nix {
                 BTreeMap::new()
             });
 
-        let mut caches = CachixCaches {
+        let mut caches = CachixCacheInfo {
             caches: cachix_config.caches,
             known_keys,
         };
@@ -731,7 +731,7 @@ impl Nix {
                             error!("To create a cache, go to https://app.cachix.org/.");
                             bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
                         } else {
-                            let resp_json: CachixResponse =
+                            let resp_json: CacheMetadata =
                                 resp.json().await.into_diagnostic().wrap_err_with(|| {
                                     format!("Failed to parse Cachix API response for cache '{name}'")
                                 })?;
@@ -790,12 +790,7 @@ impl Nix {
             let store_ping = serde_json::from_slice::<StorePing>(&store.stdout)
                 .into_diagnostic()
                 .wrap_err("Failed to query the Nix store")?;
-            let trusted = store_ping.trusted;
-            if trusted.is_none() {
-                warn!(
-                        "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
-                    );
-            }
+
             let restart_command = if cfg!(target_os = "linux") {
                 "sudo systemctl restart nix-daemon"
             } else {
@@ -819,7 +814,7 @@ impl Nix {
             // If the user is not a trusted user, we can't set up the caches for them.
             // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
             // If not, suggest actions to remedy the issue.
-            if trusted == Some(0) {
+            if !store_ping.is_trusted {
                 let (missing_caches, missing_public_keys) = self
                     .get_nix_config()
                     .await
