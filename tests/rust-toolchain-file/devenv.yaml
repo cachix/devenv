@@ -1,0 +1,8 @@
+inputs:
+  devenv:
+    url: path:../../?dir=src/modules
+  rust-overlay:
+    url: github:oxalica/rust-overlay
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
