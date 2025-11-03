@@ -99,8 +99,8 @@ mod tests {
             devenv_direnvrc_latest_version: 5,
             container_name,
             active_profiles: &profiles,
-            hostname: None,      // None value
-            username,            // Some value
+            hostname: None,            // None value
+            username,                  // Some value
             git_root: Some(&git_root), // Some value with Path type
         };
 
@@ -138,12 +138,10 @@ mod tests {
             "git_root (Some) with Path type key-value pair not found"
         );
 
-        // TODO: Verify None optional fields should be present with null
-        // (currently ser_nix omits these fields entirely, see ser_nix/src/struct.rs)
-        // assert!(
-        //     contains_key_value(&serialized, "hostname", "null"),
-        //     "hostname (None) should serialize as null"
-        // );
+        assert!(
+            contains_key_value(&serialized, "hostname", "null"),
+            "hostname (None) should serialize as null"
+        );
 
         // Verify active_profiles is a Nix list with expected values
         let expected_profiles = "[\n    \"frontend\"\n    \"backend\"\n  ]";

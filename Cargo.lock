@@ -4717,8 +4717,7 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 [[package]]
 name = "ser_nix"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "779f231aae2ed9960f265bdbd187940b5f0ea4fd65dc7f35ed2c684bb95c35e0"
+source = "git+https://github.com/cachix/ser_nix?branch=serialize-null#c8af59efb0ea152de7bc605e3245eaa20da3d77b"
 dependencies = [
  "serde",
 ]
