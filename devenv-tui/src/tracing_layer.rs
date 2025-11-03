@@ -38,6 +38,157 @@ impl DevenvTuiLayer {
             f(&mut model);
         }
     }
+
+    /// Registers an operation in the model hierarchy
+    ///
+    /// This handles:
+    /// - Creating the Operation struct
+    /// - Adding to parent's children list OR root_operations
+    /// - Inserting into model.operations map
+    /// - Preventing duplicate children
+    fn register_operation_in_hierarchy(
+        &self,
+        model: &mut Model,
+        operation_id: OperationId,
+        operation_name: String,
+        parent: Option<OperationId>,
+        fields: &HashMap<String, String>,
+    ) {
+        let operation = Operation::new(
+            operation_id.clone(),
+            operation_name,
+            parent.clone(),
+            fields.clone(),
+        );
+
+        // Add to parent's children if parent exists
+        if let Some(parent_id) = &parent {
+            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                if !parent_op.children.contains(&operation_id) {
+                    parent_op.children.push(operation_id.clone());
+                }
+            }
+        } else {
+            // Root operation - check if already exists
+            if !model.root_operations.contains(&operation_id) {
+                model.root_operations.push(operation_id.clone());
+            }
+        }
+
+        model.operations.insert(operation_id, operation);
+    }
+
+    /// Create a BUILD activity with derivation and machine info
+    fn create_build_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        operation_name: String,
+        short_name: String,
+        parent: Option<OperationId>,
+        visitor: &FieldVisitor,
+    ) -> Activity {
+        let derivation = visitor.get_field(details_fields::DERIVATION);
+        let machine = visitor.get_field(details_fields::MACHINE);
+
+        ActivityBuilder::new(activity_id, operation_id, short_name, parent)
+            .with_name(derivation.unwrap_or(operation_name))
+            .with_detail(machine.as_ref().map(|m| format!("machine: {}", m)))
+            .with_variant(ActivityVariant::Build(BuildActivity {
+                phase: None,
+                log_stdout_lines: Vec::new(),
+                log_stderr_lines: Vec::new(),
+            }))
+            .build()
+    }
+
+    /// Create a DOWNLOAD activity with store path and substituter
+    fn create_download_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        operation_name: String,
+        short_name: String,
+        parent: Option<OperationId>,
+        visitor: &FieldVisitor,
+    ) -> Activity {
+        let store_path = visitor.get_field(details_fields::STORE_PATH);
+        let substituter = visitor.get_field(details_fields::SUBSTITUTER);
+
+        ActivityBuilder::new(activity_id, operation_id, short_name, parent)
+            .with_name(store_path.unwrap_or(operation_name))
+            .with_variant(ActivityVariant::Download(DownloadActivity {
+                size_current: Some(0),
+                size_total: None,
+                speed: Some(0),
+                substituter,
+            }))
+            .build()
+    }
+
+    /// Create a QUERY activity with store path and substituter
+    fn create_query_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        operation_name: String,
+        short_name: String,
+        parent: Option<OperationId>,
+        visitor: &FieldVisitor,
+    ) -> Activity {
+        let store_path = visitor.get_field(details_fields::STORE_PATH);
+        let substituter = visitor.get_field(details_fields::SUBSTITUTER);
+
+        ActivityBuilder::new(activity_id, operation_id, short_name, parent)
+            .with_name(store_path.unwrap_or(operation_name))
+            .with_variant(ActivityVariant::Query(QueryActivity { substituter }))
+            .build()
+    }
+
+    /// Create a FETCH_TREE activity
+    fn create_fetch_tree_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        operation_name: String,
+        short_name: String,
+        parent: Option<OperationId>,
+    ) -> Activity {
+        ActivityBuilder::new(activity_id, operation_id, short_name, parent)
+            .with_name(operation_name)
+            .with_variant(ActivityVariant::FetchTree)
+            .build()
+    }
+
+    /// Create an EVALUATE activity
+    fn create_evaluate_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        operation_name: String,
+        short_name: String,
+        parent: Option<OperationId>,
+    ) -> Activity {
+        ActivityBuilder::new(activity_id, operation_id, short_name, parent)
+            .with_name(operation_name)
+            .with_variant(ActivityVariant::Evaluating)
+            .build()
+    }
+
+    /// Create a DEVENV user operation activity
+    fn create_devenv_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        operation_name: String,
+        short_name: String,
+        parent: Option<OperationId>,
+    ) -> Activity {
+        ActivityBuilder::new(activity_id, operation_id, short_name, parent)
+            .with_name(operation_name)
+            .with_variant(ActivityVariant::UserOperation)
+            .build()
+    }
 }
 
 /// Visitor to extract field values from tracing spans/events
@@ -87,6 +238,103 @@ impl Visit for FieldVisitor {
                 self.fields
                     .insert(field_name.to_string(), value.to_string());
             }
+        }
+    }
+}
+
+/// Trait for extracting and parsing fields from tracing events
+trait FieldExtractor {
+    /// Extract activity ID, defaulting to 0 if not present or invalid
+    fn activity_id_or_zero(&self) -> u64;
+
+    /// Extract activity ID, defaulting to random value if not present or invalid
+    fn activity_id_or_random(&self) -> u64;
+
+    /// Extract field and clone it
+    fn get_field(&self, key: &str) -> Option<String>;
+}
+
+impl FieldExtractor for FieldVisitor {
+    fn activity_id_or_zero(&self) -> u64 {
+        self.fields
+            .get(nix_fields::ACTIVITY_ID)
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0)
+    }
+
+    fn activity_id_or_random(&self) -> u64 {
+        self.fields
+            .get(nix_fields::ACTIVITY_ID)
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or_else(rand::random)
+    }
+
+    fn get_field(&self, key: &str) -> Option<String> {
+        self.fields.get(key).cloned()
+    }
+}
+
+/// Builder for creating Activity instances with flexible customization
+struct ActivityBuilder {
+    activity_id: u64,
+    operation_id: OperationId,
+    name: String,
+    short_name: String,
+    parent_operation: Option<OperationId>,
+    detail: Option<String>,
+    variant: ActivityVariant,
+}
+
+impl ActivityBuilder {
+    /// Create a new builder with required fields
+    fn new(
+        activity_id: u64,
+        operation_id: OperationId,
+        short_name: String,
+        parent_operation: Option<OperationId>,
+    ) -> Self {
+        Self {
+            activity_id,
+            operation_id: operation_id.clone(),
+            name: operation_id.0,
+            short_name,
+            parent_operation,
+            detail: None,
+            variant: ActivityVariant::Unknown,
+        }
+    }
+
+    /// Set the activity name
+    fn with_name(mut self, name: String) -> Self {
+        self.name = name;
+        self
+    }
+
+    /// Set the activity detail
+    fn with_detail(mut self, detail: Option<String>) -> Self {
+        self.detail = detail;
+        self
+    }
+
+    /// Set the activity variant
+    fn with_variant(mut self, variant: ActivityVariant) -> Self {
+        self.variant = variant;
+        self
+    }
+
+    /// Build the final Activity
+    fn build(self) -> Activity {
+        Activity {
+            id: self.activity_id,
+            operation_id: self.operation_id,
+            name: self.name,
+            short_name: self.short_name,
+            parent_operation: self.parent_operation,
+            start_time: Instant::now(),
+            state: NixActivityState::Active,
+            detail: self.detail,
+            variant: self.variant,
+            progress: None,
         }
     }
 }
@@ -157,334 +405,156 @@ where
             // Handle specific operation types based on standardized operation.type field
             match op_type.as_str() {
                 op_type_str if op_type_str == operation_types::BUILD => {
-                    let derivation = visitor.fields.get(details_fields::DERIVATION).cloned();
-                    let machine = visitor.fields.get(details_fields::MACHINE).cloned();
-                    let activity_id = visitor
-                        .fields
-                        .get(nix_fields::ACTIVITY_ID)
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0);
-
-                    // Store activity_id in span extensions for later retrieval
+                    let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
-                        // Create Operation for the build
-                        let operation = Operation::new(
+                        self.register_operation_in_hierarchy(
+                            model,
                             operation_id.clone(),
                             operation_name.clone(),
                             parent.clone(),
-                            visitor.fields.clone(),
+                            &visitor.fields,
                         );
 
-                        // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent {
-                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id.clone());
-                            }
-                        } else {
-                            // Root operation
-                            if !model.root_operations.contains(&operation_id) {
-                                model.root_operations.push(operation_id.clone());
-                            }
-                        }
-
-                        model.operations.insert(operation_id.clone(), operation);
-
-                        // Create Activity
-                        let activity = Activity {
-                            id: activity_id,
-                            operation_id: operation_id.clone(),
-                            name: derivation.clone().unwrap_or_else(|| operation_name.clone()),
-                            short_name: short_name.clone(),
-                            parent_operation: parent.clone(),
-                            start_time: Instant::now(),
-                            state: NixActivityState::Active,
-                            detail: machine.as_ref().map(|m| format!("machine: {}", m)),
-                            variant: ActivityVariant::Build(BuildActivity {
-                                phase: None,
-                                log_stdout_lines: Vec::new(),
-                                log_stderr_lines: Vec::new(),
-                            }),
-                            progress: None,
-                        };
+                        let activity = self.create_build_activity(
+                            activity_id,
+                            operation_id.clone(),
+                            operation_name,
+                            short_name,
+                            parent,
+                            &visitor,
+                        );
                         model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::DOWNLOAD => {
-                    let store_path = visitor.fields.get(details_fields::STORE_PATH).cloned();
-                    let substituter = visitor.fields.get(details_fields::SUBSTITUTER).cloned();
-                    let activity_id = visitor
-                        .fields
-                        .get(nix_fields::ACTIVITY_ID)
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0);
-
-                    // Store activity_id in span extensions for later retrieval
+                    let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
-                        // Create Operation for the download
-                        let operation = Operation::new(
+                        self.register_operation_in_hierarchy(
+                            model,
                             operation_id.clone(),
                             operation_name.clone(),
                             parent.clone(),
-                            visitor.fields.clone(),
+                            &visitor.fields,
                         );
 
-                        // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent {
-                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id.clone());
-                            }
-                        } else {
-                            // Root operation
-                            if !model.root_operations.contains(&operation_id) {
-                                model.root_operations.push(operation_id.clone());
-                            }
-                        }
-
-                        model.operations.insert(operation_id.clone(), operation);
-
-                        // Create Activity
-                        let activity = Activity {
-                            id: activity_id,
-                            operation_id: operation_id.clone(),
-                            name: store_path.clone().unwrap_or_else(|| operation_name.clone()),
-                            short_name: short_name.clone(),
-                            parent_operation: parent.clone(),
-                            start_time: Instant::now(),
-                            state: NixActivityState::Active,
-                            detail: None,
-                            variant: ActivityVariant::Download(DownloadActivity {
-                                size_current: Some(0),
-                                size_total: None,
-                                speed: Some(0),
-                                substituter,
-                            }),
-                            progress: None,
-                        };
+                        let activity = self.create_download_activity(
+                            activity_id,
+                            operation_id.clone(),
+                            operation_name,
+                            short_name,
+                            parent,
+                            &visitor,
+                        );
                         model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::QUERY => {
-                    let store_path = visitor.fields.get(details_fields::STORE_PATH).cloned();
-                    let substituter = visitor.fields.get(details_fields::SUBSTITUTER).cloned();
-                    let activity_id = visitor
-                        .fields
-                        .get(nix_fields::ACTIVITY_ID)
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0);
-
-                    // Store activity_id in span extensions for later retrieval
+                    let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
-                        // Create Operation for the query
-                        let operation = Operation::new(
+                        self.register_operation_in_hierarchy(
+                            model,
                             operation_id.clone(),
                             operation_name.clone(),
                             parent.clone(),
-                            visitor.fields.clone(),
+                            &visitor.fields,
                         );
 
-                        // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent {
-                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id.clone());
-                            }
-                        } else {
-                            // Root operation
-                            if !model.root_operations.contains(&operation_id) {
-                                model.root_operations.push(operation_id.clone());
-                            }
-                        }
-
-                        model.operations.insert(operation_id.clone(), operation);
-
-                        // Create Activity
-                        let activity = Activity {
-                            id: activity_id,
-                            operation_id: operation_id.clone(),
-                            name: store_path.clone().unwrap_or_else(|| operation_name.clone()),
-                            short_name: short_name.clone(),
-                            parent_operation: parent.clone(),
-                            start_time: Instant::now(),
-                            state: NixActivityState::Active,
-                            detail: None,
-                            variant: ActivityVariant::Query(QueryActivity { substituter }),
-                            progress: None,
-                        };
+                        let activity = self.create_query_activity(
+                            activity_id,
+                            operation_id.clone(),
+                            operation_name,
+                            short_name,
+                            parent,
+                            &visitor,
+                        );
                         model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::FETCH_TREE => {
-                    let activity_id = visitor
-                        .fields
-                        .get(nix_fields::ACTIVITY_ID)
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(0);
-
-                    // Store activity_id in span extensions for later retrieval
+                    let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
-                        // Create Operation for the fetch
-                        let operation = Operation::new(
+                        self.register_operation_in_hierarchy(
+                            model,
                             operation_id.clone(),
                             operation_name.clone(),
                             parent.clone(),
-                            visitor.fields.clone(),
+                            &visitor.fields,
                         );
 
-                        // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent {
-                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id.clone());
-                            }
-                        } else {
-                            // Root operation
-                            if !model.root_operations.contains(&operation_id) {
-                                model.root_operations.push(operation_id.clone());
-                            }
-                        }
-
-                        model.operations.insert(operation_id.clone(), operation);
-
-                        // Create Activity
-                        let activity = Activity {
-                            id: activity_id,
-                            operation_id: operation_id.clone(),
-                            name: operation_name.clone(),
-                            short_name: short_name.clone(),
-                            parent_operation: parent.clone(),
-                            start_time: Instant::now(),
-                            state: NixActivityState::Active,
-                            detail: None,
-                            variant: ActivityVariant::FetchTree,
-                            progress: None,
-                        };
+                        let activity = self.create_fetch_tree_activity(
+                            activity_id,
+                            operation_id.clone(),
+                            operation_name,
+                            short_name,
+                            parent,
+                        );
                         model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::EVALUATE => {
-                    let activity_id = visitor
-                        .fields
-                        .get(nix_fields::ACTIVITY_ID)
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or_else(rand::random);
-
-                    // Store activity_id in span extensions for later retrieval
+                    let activity_id = visitor.activity_id_or_random();
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
-                        // Create Operation for the evaluation
-                        let operation = Operation::new(
+                        self.register_operation_in_hierarchy(
+                            model,
                             operation_id.clone(),
                             operation_name.clone(),
                             parent.clone(),
-                            visitor.fields.clone(),
+                            &visitor.fields,
                         );
 
-                        // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent {
-                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id.clone());
-                            }
-                        } else {
-                            // Root operation
-                            if !model.root_operations.contains(&operation_id) {
-                                model.root_operations.push(operation_id.clone());
-                            }
-                        }
-
-                        model.operations.insert(operation_id.clone(), operation);
-
-                        // Create Activity
-                        let activity = Activity {
-                            id: activity_id,
-                            operation_id: operation_id.clone(),
-                            name: operation_name.clone(),
-                            short_name: short_name.clone(),
-                            parent_operation: parent.clone(),
-                            start_time: Instant::now(),
-                            state: NixActivityState::Active,
-                            detail: None,
-                            variant: ActivityVariant::Evaluating,
-                            progress: None,
-                        };
+                        let activity = self.create_evaluate_activity(
+                            activity_id,
+                            operation_id.clone(),
+                            operation_name,
+                            short_name,
+                            parent,
+                        );
                         model.add_activity(activity);
                     });
                 }
                 op_type_str if op_type_str == operation_types::DEVENV => {
-                    // User-facing devenv messages - create both Operation and Activity for proper display
                     let activity_id = rand::random();
-
-                    // Store activity_id in span extensions for later retrieval
                     span.extensions_mut().insert(activity_id);
 
                     self.update_model(|model| {
-                        // Create Operation for proper hierarchy
-                        let operation = Operation::new(
+                        self.register_operation_in_hierarchy(
+                            model,
                             operation_id.clone(),
                             operation_name.clone(),
                             parent.clone(),
-                            visitor.fields.clone(),
+                            &visitor.fields,
                         );
 
-                        // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent {
-                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id.clone());
-                            }
-                        } else {
-                            // Root operation - check if already exists
-                            if !model.root_operations.contains(&operation_id) {
-                                model.root_operations.push(operation_id.clone());
-                            }
-                        }
-
-                        model.operations.insert(operation_id.clone(), operation);
-
-                        // Create Activity
-                        let activity = Activity {
-                            id: activity_id,
-                            operation_id: operation_id.clone(),
-                            name: operation_name.clone(),
-                            short_name: short_name.clone(),
-                            parent_operation: parent.clone(),
-                            start_time: Instant::now(),
-                            state: NixActivityState::Active,
-                            detail: None,
-                            variant: ActivityVariant::UserOperation,
-                            progress: None,
-                        };
+                        let activity = self.create_devenv_activity(
+                            activity_id,
+                            operation_id.clone(),
+                            operation_name,
+                            short_name,
+                            parent,
+                        );
+                        // DEVENV uses direct insert instead of add_activity
                         model.activities.insert(activity_id, activity);
                     });
                 }
                 _ => {
-                    // Default operation start for other operation types
                     self.update_model(|model| {
-                        let operation = Operation::new(
-                            operation_id.clone(),
-                            operation_name.clone(),
-                            parent.clone(),
-                            visitor.fields.clone(),
+                        self.register_operation_in_hierarchy(
+                            model,
+                            operation_id,
+                            operation_name,
+                            parent,
+                            &visitor.fields,
                         );
-
-                        // Add to parent's children if parent exists
-                        if let Some(parent_id) = &parent {
-                            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                                parent_op.children.push(operation_id.clone());
-                            }
-                        } else {
-                            // Root operation - check if already exists
-                            if !model.root_operations.contains(&operation_id) {
-                                model.root_operations.push(operation_id.clone());
-                            }
-                        }
-
-                        model.operations.insert(operation_id, operation);
                     });
                 }
             }
