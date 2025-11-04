@@ -1,4 +1,5 @@
 use crate::{
+    cachix::{CacheMetadata, CachixCacheInfo, CachixConfig, StorePing, detect_missing_caches},
     cli, config, devenv,
     nix_backend::{self, NixBackend},
     nix_log_bridge::NixLogBridge,
@@ -7,7 +8,6 @@ use async_trait::async_trait;
 use futures::future;
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_conf_parser::NixConf;
-use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
@@ -28,10 +28,11 @@ pub struct Nix {
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
-    cachix_caches: Arc<OnceCell<CachixCaches>>,
-    netrc_path: Arc<OnceCell<String>>,
+    cachix_caches: Arc<OnceCell<CachixCacheInfo>>,
+    cachix_manager: Option<Arc<crate::cachix::CachixManager>>,
     paths: nix_backend::DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
+    // Note: CachixManager now owns the netrc lifecycle
 }
 
 impl Nix {
@@ -40,6 +41,7 @@ impl Nix {
         global_options: cli::GlobalOptions,
         paths: nix_backend::DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
+        cachix_manager: Option<Arc<crate::cachix::CachixManager>>,
     ) -> Result<Self> {
         let options = nix_backend::Options::default();
 
@@ -55,7 +57,7 @@ impl Nix {
             config,
             global_options,
             cachix_caches: Arc::new(OnceCell::new()),
-            netrc_path: Arc::new(OnceCell::new()),
+            cachix_manager,
             paths,
             secretspec_resolved,
         })
@@ -484,82 +486,32 @@ impl Nix {
         args: &[&str],
         options: &nix_backend::Options,
     ) -> Result<std::process::Command> {
-        let mut final_args = Vec::new();
-        let known_keys_str;
-        let pull_caches_str;
+        let mut final_args: Vec<String> = Vec::new();
         let mut push_cache = None;
 
         if !self.global_options.offline {
-            let cachix_caches = self.get_cachix_caches().await;
+            if let Some(cachix_manager) = &self.cachix_manager {
+                let trusted_keys_path = &cachix_manager.paths.trusted_keys;
 
-            match cachix_caches {
-                Err(e) => {
-                    warn!("Failed to get cachix caches due to evaluation error");
-                    debug!("{}", e);
-                }
-                Ok(cachix_caches) => {
-                    push_cache = cachix_caches.caches.push.clone();
-                    // handle cachix.pull
-                    if !cachix_caches.caches.pull.is_empty() {
-                        let mut pull_caches = cachix_caches
-                            .caches
-                            .pull
-                            .iter()
-                            .map(|cache| format!("https://{cache}.cachix.org"))
-                            .collect::<Vec<String>>();
-                        pull_caches.sort();
-                        pull_caches_str = pull_caches.join(" ");
-                        final_args.extend_from_slice(&[
-                            "--option",
-                            "extra-substituters",
-                            &pull_caches_str,
-                        ]);
-
-                        let mut known_keys = cachix_caches
-                            .known_keys
-                            .values()
-                            .cloned()
-                            .collect::<Vec<String>>();
-                        known_keys.sort();
-                        known_keys_str = known_keys.join(" ");
-                        final_args.extend_from_slice(&[
-                            "--option",
-                            "extra-trusted-public-keys",
-                            &known_keys_str,
-                        ]);
+                match self.get_cachix_caches(trusted_keys_path).await {
+                    Err(e) => {
+                        warn!("Failed to get cachix caches due to evaluation error");
+                        debug!("{}", e);
                     }
+                    Ok(cachix_caches) => {
+                        push_cache = cachix_caches.caches.push.clone();
 
-                    // Configure a netrc file with the auth token if available
-                    if !cachix_caches.caches.pull.is_empty()
-                        && let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN")
-                    {
-                        let netrc_path = self
-                            .netrc_path
-                            .get_or_try_init(|| async {
-                                let netrc_path = self.paths.dotfile.join("netrc");
-                                let netrc_path_str = netrc_path.to_string_lossy().to_string();
-
-                                self.create_netrc_file(
-                                    &netrc_path,
-                                    &cachix_caches.caches.pull,
-                                    &auth_token,
-                                )
-                                .await?;
-
-                                Ok::<String, miette::Report>(netrc_path_str)
-                            })
-                            .await;
-
-                        match netrc_path {
-                            Ok(netrc_path) => {
-                                final_args.extend_from_slice(&[
-                                    "--option",
-                                    "netrc-file",
-                                    netrc_path,
-                                ]);
+                        // Get Nix settings from CachixManager and apply them
+                        match cachix_manager.get_nix_settings(&cachix_caches).await {
+                            Ok(settings) => {
+                                for (key, value) in settings {
+                                    final_args.push("--option".to_string());
+                                    final_args.push(key);
+                                    final_args.push(value);
+                                }
                             }
                             Err(e) => {
-                                warn!("${e}")
+                                warn!("Failed to apply Cachix settings: {}", e);
                             }
                         }
                     }
@@ -567,8 +519,9 @@ impl Nix {
             }
         }
 
-        final_args.extend(args.iter().copied());
-        let cmd = self.prepare_command(command, &final_args, options)?;
+        final_args.extend(args.iter().map(|s| s.to_string()));
+        let args_str: Vec<&str> = final_args.iter().map(|s| s.as_str()).collect();
+        let cmd = self.prepare_command(command, &args_str, options)?;
 
         // handle cachix.push
         if let Some(push_cache) = push_cache {
@@ -694,58 +647,31 @@ impl Nix {
         Ok(nix_conf)
     }
 
-    async fn create_netrc_file(
-        &self,
-        netrc_path: &Path,
-        pull_caches: &[String],
-        auth_token: &str,
-    ) -> Result<()> {
-        let mut netrc_content = String::new();
-
-        for cache in pull_caches {
-            netrc_content.push_str(&format!(
-                "machine {cache}.cachix.org\nlogin token\npassword {auth_token}\n\n",
-            ));
-        }
-
-        // Create netrc file with restrictive permissions (600)
-        {
-            use tokio::io::AsyncWriteExt;
-
-            let mut file = tokio::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(netrc_path)
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| {
-                    format!("Failed to create netrc file at {}", netrc_path.display())
-                })?;
-
-            file.write_all(netrc_content.as_bytes())
-                .await
-                .into_diagnostic()
-                .wrap_err_with(|| {
-                    format!("Failed to write netrc content to {}", netrc_path.display())
-                })?;
-        }
-
-        Ok(())
+    async fn is_trusted_user_impl(&self) -> Result<bool> {
+        let options = nix_backend::Options {
+            logging: false,
+            ..self.options
+        };
+        let store_output = self
+            .run_nix("nix", &["store", "ping", "--json"], &options)
+            .await?;
+        let store_ping = serde_json::from_slice::<StorePing>(&store_output.stdout)
+            .into_diagnostic()
+            .wrap_err("Failed to query the Nix store")?;
+        Ok(store_ping.is_trusted)
     }
 
-    async fn get_cachix_caches(&self) -> Result<CachixCaches> {
+    async fn get_cachix_caches(&self, trusted_keys_path: &Path) -> Result<CachixCacheInfo> {
         self.cachix_caches
             .get_or_try_init(|| async {
-        let no_logging = nix_backend::Options {
+        let _no_logging = nix_backend::Options {
             logging: false,
             ..self.options
         };
 
         // Run Nix evaluation and file I/O concurrently
         let cachix_eval_future = self.eval(&["devenv.config.cachix"]);
-        let trusted_keys_path = self.paths.cachix_trusted_keys.clone();
+        let trusted_keys_path = trusted_keys_path.to_path_buf();
         let known_keys_future = tokio::fs::read_to_string(&trusted_keys_path);
 
         let (caches_raw, known_keys_result) = tokio::join!(cachix_eval_future, known_keys_future);
@@ -757,7 +683,7 @@ impl Nix {
 
                 // Return empty caches if the Cachix integration is disabled
                 if !cachix_config.enable {
-                    return Ok(CachixCaches::default());
+                    return Ok(CachixCacheInfo::default());
                 }
 
         let known_keys: BTreeMap<String, String> = known_keys_result
@@ -775,7 +701,7 @@ impl Nix {
                 BTreeMap::new()
             });
 
-        let mut caches = CachixCaches {
+        let mut caches = CachixCacheInfo {
             caches: cachix_config.caches,
             known_keys,
         };
@@ -819,7 +745,7 @@ impl Nix {
                             error!("To create a cache, go to https://app.cachix.org/.");
                             bail!("Cache does not exist or you don't have a CACHIX_AUTH_TOKEN configured.")
                         } else {
-                            let resp_json: CachixResponse =
+                            let resp_json: CacheMetadata =
                                 resp.json().await.into_diagnostic().wrap_err_with(|| {
                                     format!("Failed to parse Cachix API response for cache '{name}'")
                                 })?;
@@ -850,9 +776,7 @@ impl Nix {
         }
 
         if !caches.caches.pull.is_empty() {
-            // Run store ping and file write operations concurrently
-            let store_ping_future = self.run_nix("nix", &["store", "ping", "--json"], &no_logging);
-            let trusted_keys_path = self.paths.cachix_trusted_keys.clone();
+            // Write cache keys and check trusted status concurrently
             let write_keys_future = async {
                 if !new_known_keys.is_empty() {
                     caches.known_keys.extend(new_known_keys.clone());
@@ -871,20 +795,12 @@ impl Nix {
                 }
                 Ok::<(), miette::Report>(())
             };
+            let is_trusted_future = self.is_trusted_user();
 
-            let (store_result, write_result) = tokio::join!(store_ping_future, write_keys_future);
-            let store = store_result?;
+            let (is_trusted_result, write_result) = tokio::join!(is_trusted_future, write_keys_future);
+            let is_trusted = is_trusted_result?;
             write_result?;
 
-            let store_ping = serde_json::from_slice::<StorePing>(&store.stdout)
-                .into_diagnostic()
-                .wrap_err("Failed to query the Nix store")?;
-            let trusted = store_ping.trusted;
-            if trusted.is_none() {
-                warn!(
-                        "You're using an outdated version of Nix. Please upgrade and restart the nix-daemon.",
-                    );
-            }
             let restart_command = if cfg!(target_os = "linux") {
                 "sudo systemctl restart nix-daemon"
             } else {
@@ -908,7 +824,7 @@ impl Nix {
             // If the user is not a trusted user, we can't set up the caches for them.
             // Check if all of the requested caches and their public keys are in the substituters and trusted-public-keys lists.
             // If not, suggest actions to remedy the issue.
-            if trusted == Some(0) {
+            if !is_trusted {
                 let (missing_caches, missing_public_keys) = self
                     .get_nix_config()
                     .await
@@ -1006,22 +922,6 @@ impl Nix {
             .await.cloned()
     }
 
-    /// Clean up the netrc file if it was created during this session.
-    ///
-    /// This method safely removes the netrc file containing auth tokens,
-    /// handling race conditions where the file might already be removed.
-    /// Only attempts cleanup if a netrc file was actually created.
-    fn cleanup_netrc(&self) {
-        if let Some(netrc_path_str) = self.netrc_path.get() {
-            let netrc_path = Path::new(netrc_path_str);
-            match std::fs::remove_file(netrc_path) {
-                Ok(()) => debug!("Removed netrc file: {}", netrc_path_str),
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => warn!("Failed to remove netrc file {}: {}", netrc_path_str, e),
-            }
-        }
-    }
-
     fn name(&self) -> &'static str {
         "nix"
     }
@@ -1064,12 +964,6 @@ impl Nix {
             s
         })
         .into_diagnostic()
-    }
-}
-
-impl Drop for Nix {
-    fn drop(&mut self) {
-        self.cleanup_netrc();
     }
 }
 
@@ -1127,6 +1021,10 @@ impl NixBackend for Nix {
     async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
         self.get_bash(refresh_cached_output).await
     }
+
+    async fn is_trusted_user(&self) -> Result<bool> {
+        self.is_trusted_user_impl().await
+    }
 }
 
 async fn symlink_force(link_path: &Path, target: &Path) -> Result<()> {
@@ -1173,159 +1071,4 @@ fn display_command(cmd: &std::process::Command) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     format!("{command} {args}")
-}
-
-/// The Cachix module configuration
-#[derive(Deserialize, Default, Clone)]
-pub struct CachixConfig {
-    enable: bool,
-    #[serde(flatten)]
-    caches: Cachix,
-}
-
-#[derive(Deserialize, Default, Clone)]
-pub struct Cachix {
-    pub pull: Vec<String>,
-    pub push: Option<String>,
-}
-
-#[derive(Deserialize, Default, Clone)]
-pub struct CachixCaches {
-    caches: Cachix,
-    known_keys: BTreeMap<String, String>,
-}
-
-#[derive(Deserialize, Clone)]
-struct CachixResponse {
-    #[serde(rename = "publicSigningKeys")]
-    public_signing_keys: Vec<String>,
-}
-
-#[derive(Deserialize, Clone)]
-struct StorePing {
-    trusted: Option<u8>,
-}
-
-fn detect_missing_caches(caches: &CachixCaches, nix_conf: NixConf) -> (Vec<String>, Vec<String>) {
-    let mut missing_caches = Vec::new();
-    let mut missing_public_keys = Vec::new();
-
-    let substituters = nix_conf
-        .get("substituters")
-        .map(|s| s.split_whitespace().collect::<Vec<_>>());
-    let extra_substituters = nix_conf
-        .get("extra-substituters")
-        .map(|s| s.split_whitespace().collect::<Vec<_>>());
-    let all_substituters = substituters
-        .into_iter()
-        .flatten()
-        .chain(extra_substituters.into_iter().flatten())
-        .collect::<Vec<_>>();
-
-    for cache in caches.caches.pull.iter() {
-        let cache_url = format!("https://{cache}.cachix.org");
-        if !all_substituters.iter().any(|s| s == &cache_url) {
-            missing_caches.push(cache_url);
-        }
-    }
-
-    let trusted_public_keys = nix_conf
-        .get("trusted-public-keys")
-        .map(|s| s.split_whitespace().collect::<Vec<_>>());
-    let extra_trusted_public_keys = nix_conf
-        .get("extra-trusted-public-keys")
-        .map(|s| s.split_whitespace().collect::<Vec<_>>());
-    let all_trusted_public_keys = trusted_public_keys
-        .into_iter()
-        .flatten()
-        .chain(extra_trusted_public_keys.into_iter().flatten())
-        .collect::<Vec<_>>();
-
-    for (_name, key) in caches.known_keys.iter() {
-        if !all_trusted_public_keys.iter().any(|p| p == key) {
-            missing_public_keys.push(key.clone());
-        }
-    }
-
-    (missing_caches, missing_public_keys)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_trusted() {
-        let store_ping = r#"{"trusted":1,"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.trusted, Some(1));
-    }
-
-    #[test]
-    fn test_no_trusted() {
-        let store_ping = r#"{"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.trusted, None);
-    }
-
-    #[test]
-    fn test_not_trusted() {
-        let store_ping = r#"{"trusted":0,"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.trusted, Some(0));
-    }
-
-    #[test]
-    fn test_missing_substituters() {
-        let mut cachix = CachixCaches::default();
-        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
-        cachix
-            .known_keys
-            .insert("cache1".to_string(), "key1".to_string());
-        cachix
-            .known_keys
-            .insert("cache2".to_string(), "key2".to_string());
-        let nix_conf = NixConf::parse_stdout(
-            r#"
-              substituters = https://cache1.cachix.org https://cache3.cachix.org
-              trusted-public-keys = key1 key3
-            "#
-            .as_bytes(),
-        )
-        .expect("Failed to parse NixConf");
-        assert_eq!(
-            detect_missing_caches(&cachix, nix_conf),
-            (
-                vec!["https://cache2.cachix.org".to_string()],
-                vec!["key2".to_string()]
-            )
-        );
-    }
-
-    #[test]
-    fn test_extra_missing_substituters() {
-        let mut cachix = CachixCaches::default();
-        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
-        cachix
-            .known_keys
-            .insert("cache1".to_string(), "key1".to_string());
-        cachix
-            .known_keys
-            .insert("cache2".to_string(), "key2".to_string());
-        let nix_conf = NixConf::parse_stdout(
-            r#"
-              extra-substituters = https://cache1.cachix.org https://cache3.cachix.org
-              extra-trusted-public-keys = key1 key3
-            "#
-            .as_bytes(),
-        )
-        .expect("Failed to parse NixConf");
-        assert_eq!(
-            detect_missing_caches(&cachix, nix_conf),
-            (
-                vec!["https://cache2.cachix.org".to_string()],
-                vec!["key2".to_string()]
-            )
-        );
-    }
 }

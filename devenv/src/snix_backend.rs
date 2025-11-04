@@ -187,4 +187,9 @@ impl NixBackend for SnixBackend {
         // TODO: Implement bash shell acquisition for Snix backend
         bail!("get_bash is not yet implemented for Snix backend")
     }
+
+    async fn is_trusted_user(&self) -> Result<bool> {
+        // TODO: Implement trusted user check for Snix backend
+        bail!("is_trusted_user is not yet implemented for Snix backend")
+    }
 }
