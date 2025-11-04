@@ -1195,6 +1195,7 @@ dependencies = [
  "schematic",
  "secrecy",
  "secretspec",
+ "ser_nix",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -4712,6 +4713,14 @@ name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
+
+[[package]]
+name = "ser_nix"
+version = "0.1.2"
+source = "git+https://github.com/cachix/ser_nix?branch=support-paths#5ebf1358e37315a8c81f3c5dee2c866ce0a4e412"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "serde"
