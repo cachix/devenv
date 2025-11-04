@@ -17516,6 +17516,46 @@ null or package
 
 
 
+## languages.rust.toolchainFile
+
+
+
+Path to a ` rust-toolchain ` or ` rust-toolchain.toml ` file for automatic toolchain configuration.
+
+When set, devenv will use rust-overlay’s ` fromRustupToolchainFile ` to automatically
+configure the toolchain based on the file contents (channel, components, targets, profile).
+
+This follows the standard Rust toolchain file format documented at:
+https://rust-lang.github.io/rustup/overrides.html\#the-toolchain-file
+
+Cannot be used together with manual ` channel ` or ` version ` configuration.
+
+Example:
+
+```nix
+languages.rust.toolchainFile = ./rust-toolchain.toml;
+```
+
+
+
+*Type:*
+null or absolute path
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` ./rust-toolchain.toml `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/rust.nix)
+
+
+
 ## languages.rust.toolchainPackage
 
 

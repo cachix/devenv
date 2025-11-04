@@ -43,7 +43,7 @@ in
       defaultText = lib.literalExpression ''[ ]'';
       description = ''
         List of extra [targets](https://doc.rust-lang.org/nightly/rustc/platform-support.html)
-        to install. Defaults to only the native target. 
+        to install. Defaults to only the native target.
       '';
     };
 
@@ -100,6 +100,28 @@ in
       default = { };
       defaultText = lib.literalExpression "nixpkgs";
       description = "Rust component packages. May optionally define additional components, for example `miri`.";
+    };
+
+    toolchainFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = ''
+        Path to a `rust-toolchain` or `rust-toolchain.toml` file for automatic toolchain configuration.
+
+        When set, devenv will use rust-overlay's `fromRustupToolchainFile` to automatically
+        configure the toolchain based on the file contents (channel, components, targets, profile).
+
+        This follows the standard Rust toolchain file format documented at:
+        https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file
+
+        Cannot be used together with manual `channel` or `version` configuration.
+
+        Example:
+        ```nix
+        languages.rust.toolchainFile = ./rust-toolchain.toml;
+        ```
+      '';
+      example = lib.literalExpression "./rust-toolchain.toml";
     };
 
     toolchainPackage = lib.mkOption {
@@ -181,6 +203,28 @@ in
               languages.rust.channel = "stable";
             '';
           }
+          {
+            assertion = cfg.toolchainFile == null || (cfg.channel == "nixpkgs" && cfg.version == "latest");
+            message = ''
+              Cannot use `languages.rust.toolchainFile` together with manual channel or version configuration.
+
+              When using `toolchainFile`, the toolchain configuration (channel, version, components, targets)
+              is automatically read from the rust-toolchain file.
+
+              Either:
+              - Remove the `toolchainFile` option and configure manually, or
+              - Keep `toolchainFile` and remove manual `channel` and `version` settings
+            '';
+          }
+          {
+            assertion = cfg.toolchainFile == null || cfg.targets == [ ];
+            message = ''
+              Cannot use `languages.rust.toolchainFile` with manual `targets` configuration.
+
+              When using `toolchainFile`, targets are automatically read from the rust-toolchain file.
+              Remove the `targets` option or configure targets in your rust-toolchain.toml instead.
+            '';
+          }
         ];
 
         # Set $CARGO_INSTALL_ROOT so that executables installed by `cargo install` can be found from $PATH
@@ -233,7 +277,18 @@ in
       }
     )
 
-    (lib.mkIf (cfg.channel == "nixpkgs") {
+    (lib.mkIf (cfg.toolchainFile != null) (
+      let
+        rustBin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+        toolchainFromFile = rustBin.fromRustupToolchainFile cfg.toolchainFile;
+      in
+      {
+        languages.rust.toolchainPackage = toolchainFromFile;
+        packages = [ cfg.toolchainPackage ];
+      }
+    ))
+
+    (lib.mkIf (cfg.toolchainFile == null && cfg.channel == "nixpkgs") {
       languages.rust.toolchainPackage = lib.mkDefault (
         pkgs.symlinkJoin {
           name = "rust-toolchain-${cfg.channel}";
@@ -243,7 +298,7 @@ in
       packages = [ cfg.toolchainPackage ];
     })
 
-    (lib.mkIf (cfg.channel != "nixpkgs") (
+    (lib.mkIf (cfg.toolchainFile == null && cfg.channel != "nixpkgs") (
       let
         rustBin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
 

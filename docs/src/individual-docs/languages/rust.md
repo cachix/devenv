@@ -99,30 +99,26 @@ For more control over versions and features, use the `stable`, `beta`, or `night
 }
 ```
 
-<!-- TODO: expose the instantiated rust-bin library -->
-<!-- ### Using rust-toolchain.toml -->
-<!---->
-<!-- If your project uses a `rust-toolchain.toml` file, you can use it to create a custom toolchain with `rust-overlay`: -->
-<!---->
-<!-- ```nix -->
-<!-- { config, ... }: -->
-<!-- { -->
-<!--   languages.rust = { -->
-<!--     enable = true; -->
-<!--     channel = "stable"; -->
-<!--     toolchain = config.languages.rust.rustBin.fromRustupToolchainFile ./rust-toolchain.toml; -->
-<!--   }; -->
-<!-- } -->
-<!-- ``` -->
-<!---->
-<!-- Example `rust-toolchain.toml`: -->
-<!-- ```toml -->
-<!-- [toolchain] -->
-<!-- channel = "1.81.0" -->
-<!-- components = ["rustfmt", "rust-analyzer"] -->
-<!-- targets = ["wasm32-unknown-unknown"] -->
-<!-- profile = "default" -->
-<!-- ``` -->
+### Using rust-toolchain.toml
+
+If your project uses a `rust-toolchain.toml` file, devenv can automatically configure the toolchain from it:
+
+```nix
+{
+  languages.rust = {
+    enable = true;
+    toolchainFile = ./rust-toolchain.toml;
+  };
+}
+```
+
+Example `rust-toolchain.toml`:
+```toml
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
+```
 
 ## Integration with other tools
 
