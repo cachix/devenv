@@ -1,4 +1,4 @@
-pub(crate) mod cachix;
+pub mod cachix;
 pub mod cli;
 pub mod config;
 mod devenv;
