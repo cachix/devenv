@@ -26,7 +26,7 @@ in
 
       packages = with pkgs; [
         cfg.package
-        elixir_ls
+        elixir-ls
       ];
     };
 }
