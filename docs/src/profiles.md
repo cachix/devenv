@@ -45,6 +45,47 @@ $ devenv --profile backend --profile testing shell
 
 When multiple profiles are active, devenv wraps every profile module in a deterministic priority. Conflicting options are resolved by those priorities instead of relying on evaluation order.
 
+### Referencing `config` in profiles
+
+Each profile is a submodule that gets recursively merged into the top-level configuration.
+When you need to reference other configuration values from within a profile, you must make the profile module a function that receives its own `config` argument.
+
+Consider this example that **won't work** as expected:
+
+```nix
+{ config, ... }:
+{
+  profiles.dev.module = {
+    # This references the top-level config, which doesn't yet include
+    # the postgres configuration from this profile.
+    # PGHOST is an environment variable set by the postgres service.
+    env.DB_HOST = config.env.PGHOST;
+    services.postgres.enable = true;
+  };
+}
+```
+
+The `config` here refers to the top-level configuration, which doesn't yet know about values set within the profile itself.
+
+**The solution** is to make the profile module a function:
+
+```nix
+{ config, ... }:
+{
+  profiles.dev.module = { config, ... }: {
+    # Now config includes both top-level and profile-specific values
+    env.DB_HOST = config.env.PGHOST;
+
+    services.postgres.enable = true;
+  };
+}
+```
+
+The inner `config` argument contains the merged result of both the top-level configuration and the profile's own settings.
+
+Use the function form when your profile needs to reference `config` values that are set **within the same profile**.
+Profiles that only set static values, or that only read from the top-level configuration, can use the shorthand attribute set form.
+
 ### Profile priorities
 
 Profile priorities are assigned automatically so you can reason about overrides:
