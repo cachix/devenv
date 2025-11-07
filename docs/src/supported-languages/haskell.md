@@ -7,6 +7,8 @@
 
 ### languages\.haskell\.enable
 
+
+
 Whether to enable tools for Haskell development\.
 
 
@@ -44,6 +46,46 @@ package
 
 *Default:*
 ` pkgs.ghc `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+### languages\.haskell\.cabal\.enable
+
+Whether to enable Cabal\.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
+
+
+
+### languages\.haskell\.cabal\.package
+
+
+
+Cabal package to use\.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` pkgs.cabal-install `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/languages/haskell\.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/haskell.nix)
