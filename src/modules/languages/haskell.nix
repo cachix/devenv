@@ -66,16 +66,35 @@ in
         '';
       };
     };
+
+    cabal = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Whether to enable Cabal.
+        '';
+      };
+
+      package = lib.mkOption {
+        type = lib.types.package;
+        default = pkgs.cabal-install;
+        defaultText = lib.literalExpression "pkgs.cabal-install";
+        description = ''
+          Cabal package to use.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
     packages = with pkgs; [
       cfg.package
-      cabal-install
       zlib
       hpack
     ]
     ++ (lib.optional (cfg.languageServer != null) cfg.languageServer)
+    ++ (lib.optional cfg.cabal.enable cfg.cabal.package)
     ++ (lib.optional cfg.stack.enable stackWrapper);
   };
 }
