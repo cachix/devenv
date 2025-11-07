@@ -1,16 +1,10 @@
 # A non-root container image with devenv and Nix pre-installed.
-#
-# This container is built upon Nix's `docker.nix` derivation:
-# https://github.com/NixOS/nix/blob/master/docker.nix
-{
-  pkgs,
-  nixInput,
-  devenv,
+{ pkgs
+, devenv
+,
 }:
 
 let
-  docker = "${nixInput}/docker.nix";
-
   # Borrowed from https://github.com/nix-community/docker-nixpkgs/
   gitExtraMinimal =
     (pkgs.git.override {
@@ -23,7 +17,7 @@ let
         doInstallCheck = false;
       });
 in
-import docker {
+import ./docker.nix {
   inherit pkgs;
 
   name = "devenv";
@@ -70,10 +64,5 @@ import docker {
 
   # Remove unneeded tools or reduce their closure size
   coreutils-full = pkgs.busybox;
-  curl = pkgs.emptyDirectory;
-  gnutar = pkgs.emptyDirectory;
-  gzip = pkgs.emptyDirectory;
   gitMinimal = gitExtraMinimal;
-  openssh = pkgs.emptyDirectory;
-  wget = pkgs.emptyDirectory;
 }

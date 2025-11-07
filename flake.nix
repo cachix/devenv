@@ -85,7 +85,6 @@
           devenv-image = import ./containers/devenv/image.nix {
             inherit pkgs;
             inherit (self.packages.${system}) devenv;
-            nixInput = inputs.nix;
           };
         }
       );
