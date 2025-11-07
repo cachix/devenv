@@ -5,7 +5,21 @@
 //! using the `ser_nix` crate and inserted into the flake template.
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::Path;
+
+/// SecretSpec data containing loaded secrets and metadata
+#[derive(Debug, Clone, Serialize)]
+pub struct SecretspecData {
+    /// The profile that was used to load secrets
+    pub profile: String,
+
+    /// The provider that was used to load secrets
+    pub provider: String,
+
+    /// Map of secret names to their values
+    pub secrets: HashMap<String, String>,
+}
 
 /// Arguments passed to Nix when assembling the environment
 #[derive(Debug, Clone, Serialize)]
@@ -61,6 +75,9 @@ pub struct NixArgs<'a> {
 
     /// Git repository root path, if detected; otherwise null
     pub git_root: Option<&'a Path>,
+
+    /// SecretSpec resolved data (profile, provider, secrets)
+    pub secretspec: Option<&'a SecretspecData>,
 }
 
 #[cfg(test)]
@@ -108,6 +125,7 @@ mod tests {
             hostname: None,            // None value
             username,                  // Some value
             git_root: Some(&git_root), // Some value with Path type
+            secretspec: None,          // None value
         };
 
         let serialized = ser_nix::to_string(&args).expect("Failed to serialize NixArgs");

@@ -1,4 +1,9 @@
-use super::{cli, config, log::HumanReadableDuration, nix_args::NixArgs, nix_backend, tasks, util};
+use super::{
+    cli, config,
+    log::HumanReadableDuration,
+    nix_args::{NixArgs, SecretspecData},
+    nix_backend, tasks, util,
+};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
@@ -1489,6 +1494,16 @@ impl Devenv {
         // Get git repository root from config (already detected during config load)
         let git_root = config.git_root.clone();
 
+        // Convert secretspec::Resolved to SecretspecData if available
+        let secretspec_data: Option<SecretspecData> =
+            self.secretspec_resolved
+                .get()
+                .map(|resolved| SecretspecData {
+                    profile: resolved.profile.clone(),
+                    provider: resolved.provider.clone(),
+                    secrets: resolved.secrets.clone(),
+                });
+
         // Create the Nix arguments struct
         let project_input_ref = format!("path:{}", self.devenv_root.display());
         let args = NixArgs {
@@ -1507,6 +1522,7 @@ impl Devenv {
             hostname: hostname.as_deref(),
             username: username.as_deref(),
             git_root: git_root.as_deref(),
+            secretspec: secretspec_data.as_ref(),
         };
 
         // Serialize the arguments to Nix syntax
