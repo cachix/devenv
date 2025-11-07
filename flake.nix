@@ -149,43 +149,44 @@
       };
 
       lib = {
-        mkConfig =
+        mkConfig = args: (self.lib.mkEval args).config;
+
+        mkEval =
           args@{
             pkgs,
             inputs,
             modules,
-          }:
-          (self.lib.mkEval args).config;
-        mkEval =
-          {
-            pkgs,
-            inputs,
-            modules,
+            lib ? pkgs.lib,
           }:
           let
-            moduleInputs = {
-              inherit git-hooks;
-            }
-            // inputs;
-            project = inputs.nixpkgs.lib.evalModules {
-              specialArgs = moduleInputs // {
-                inputs = moduleInputs;
-              };
-              modules = [
-                { config._module.args.pkgs = inputs.nixpkgs.lib.mkDefault pkgs; }
-                (self.modules + /top-level.nix)
-                (
-                  { config, ... }:
-                  {
-                    devenv.warnOnNewVersion = false;
-                    devenv.flakesIntegration = true;
-                  }
-                )
-              ]
-              ++ modules;
+            # TODO: deprecate default git-hooks input
+            defaultInputs = { inherit git-hooks; };
+            finalInputs = defaultInputs // inputs;
+
+            specialArgs = finalInputs // {
+              inputs = finalInputs;
             };
+
+            modules = [
+              (self.modules + /top-level.nix)
+              (
+                { config, ... }:
+                {
+                  # Configure overlays
+                  _module.args.pkgs = pkgs.appendOverlays config.overlays;
+                  # Enable the flakes integration
+                  devenv.flakesIntegration = true;
+                  # Disable CLI version checks
+                  devenv.warnOnNewVersion = false;
+                }
+              )
+            ]
+            ++ args.modules;
+
+            project = lib.evalModules { inherit modules specialArgs; };
           in
           project;
+
         mkShell =
           args:
           let
@@ -193,8 +194,8 @@
           in
           config.shell
           // {
-            ci = config.ciDerivation;
             inherit config;
+            ci = config.ciDerivation;
           };
       };
 
