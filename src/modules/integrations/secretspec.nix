@@ -1,15 +1,19 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, secretspec ? null, ... }:
 
 let
-  # Parse SECRETSPEC_SECRETS environment variable if it exists
+  # Use secretspec parameter if available,
+  # otherwise fall back to SECRETSPEC_SECRETS environment variable (sigh, flakes)
   secretspecData =
-    let
-      envVar = builtins.getEnv "SECRETSPEC_SECRETS";
-    in
-    if envVar != "" then
-      builtins.fromJSON envVar
+    if secretspec != null then
+      secretspec
     else
-      null;
+      let
+        envVar = builtins.getEnv "SECRETSPEC_SECRETS";
+      in
+      if envVar != "" then
+        builtins.fromJSON envVar
+      else
+        null;
 in
 {
   options.secretspec = {
