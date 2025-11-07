@@ -196,7 +196,7 @@ impl Devenv {
                     global_options.clone(),
                     paths,
                     secretspec_resolved.clone(),
-                    Some(cachix_manager),
+                    cachix_manager.clone(),
                 )
                 .await
                 .expect("Failed to initialize Nix backend"),
@@ -207,6 +207,7 @@ impl Devenv {
                     options.config.clone(),
                     global_options.clone(),
                     paths,
+                    cachix_manager,
                 )
                 .await
                 .expect("Failed to initialize Snix backend"),

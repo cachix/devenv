@@ -4,7 +4,7 @@
 //! as an alternative to the traditional C++ Nix binary.
 
 use crate::nix_backend::{DevenvPaths, NixBackend, Options};
-use crate::{cli, config};
+use crate::{cachix, cli, config};
 use async_trait::async_trait;
 use devenv_eval_cache::Output;
 use miette::{Result, bail};
@@ -33,6 +33,8 @@ pub struct SnixBackend {
     global_options: cli::GlobalOptions,
     #[allow(dead_code)] // Will be used when more functionality is implemented
     paths: DevenvPaths,
+    #[allow(dead_code)] // Will be used when cachix integration is implemented
+    cachix_manager: Arc<cachix::CachixManager>,
 }
 
 impl SnixBackend {
@@ -40,6 +42,7 @@ impl SnixBackend {
         config: config::Config,
         global_options: cli::GlobalOptions,
         paths: DevenvPaths,
+        cachix_manager: Arc<cachix::CachixManager>,
     ) -> Result<Self> {
         info!("Initializing Snix backend");
 
@@ -47,6 +50,7 @@ impl SnixBackend {
             config,
             global_options,
             paths,
+            cachix_manager,
         })
     }
 

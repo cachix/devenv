@@ -29,7 +29,7 @@ pub struct Nix {
     config: config::Config,
     global_options: cli::GlobalOptions,
     cachix_caches: Arc<OnceCell<CachixCacheInfo>>,
-    cachix_manager: Option<Arc<crate::cachix::CachixManager>>,
+    cachix_manager: Arc<crate::cachix::CachixManager>,
     paths: nix_backend::DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
     // Note: CachixManager now owns the netrc lifecycle
@@ -41,7 +41,7 @@ impl Nix {
         global_options: cli::GlobalOptions,
         paths: nix_backend::DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
-        cachix_manager: Option<Arc<crate::cachix::CachixManager>>,
+        cachix_manager: Arc<crate::cachix::CachixManager>,
     ) -> Result<Self> {
         let options = nix_backend::Options::default();
 
@@ -490,29 +490,27 @@ impl Nix {
         let mut push_cache = None;
 
         if !self.global_options.offline {
-            if let Some(cachix_manager) = &self.cachix_manager {
-                let trusted_keys_path = &cachix_manager.paths.trusted_keys;
+            let trusted_keys_path = &self.cachix_manager.paths.trusted_keys;
 
-                match self.get_cachix_caches(trusted_keys_path).await {
-                    Err(e) => {
-                        warn!("Failed to get cachix caches due to evaluation error");
-                        debug!("{}", e);
-                    }
-                    Ok(cachix_caches) => {
-                        push_cache = cachix_caches.caches.push.clone();
+            match self.get_cachix_caches(trusted_keys_path).await {
+                Err(e) => {
+                    warn!("Failed to get cachix caches due to evaluation error");
+                    debug!("{}", e);
+                }
+                Ok(cachix_caches) => {
+                    push_cache = cachix_caches.caches.push.clone();
 
-                        // Get Nix settings from CachixManager and apply them
-                        match cachix_manager.get_nix_settings(&cachix_caches).await {
-                            Ok(settings) => {
-                                for (key, value) in settings {
-                                    final_args.push("--option".to_string());
-                                    final_args.push(key);
-                                    final_args.push(value);
-                                }
+                    // Get Nix settings from CachixManager and apply them
+                    match self.cachix_manager.get_nix_settings(&cachix_caches).await {
+                        Ok(settings) => {
+                            for (key, value) in settings {
+                                final_args.push("--option".to_string());
+                                final_args.push(key);
+                                final_args.push(value);
                             }
-                            Err(e) => {
-                                warn!("Failed to apply Cachix settings: {}", e);
-                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to apply Cachix settings: {}", e);
                         }
                     }
                 }
