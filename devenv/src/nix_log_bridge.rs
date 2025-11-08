@@ -75,6 +75,36 @@ impl NixLogBridge {
         }
     }
 
+    /// Returns a callback that can be used by any log source.
+    /// Both CLI and FFI backends can use this to feed logs to the bridge.
+    ///
+    /// # Example
+    /// ```
+    /// use devenv::nix_log_bridge::NixLogBridge;
+    /// use devenv_eval_cache::internal_log::{InternalLog, ActivityType, Verbosity};
+    ///
+    /// let bridge = NixLogBridge::new();
+    /// let callback = bridge.get_log_callback();
+    ///
+    /// // Feed logs from any source
+    /// callback(InternalLog::Start {
+    ///     id: 1,
+    ///     typ: ActivityType::Unknown,
+    ///     text: "example".to_string(),
+    ///     fields: vec![],
+    ///     level: Verbosity::Error,
+    ///     parent: 0,
+    /// });
+    /// ```
+    pub fn get_log_callback(
+        self: &Arc<Self>,
+    ) -> impl Fn(InternalLog) + Clone + Send + Sync + 'static {
+        let bridge = Arc::clone(self);
+        move |log: InternalLog| {
+            bridge.process_internal_log(log);
+        }
+    }
+
     /// Flush any pending evaluation updates
     fn flush_evaluation_updates(&self) {
         let Ok(mut state) = self.evaluation_state.lock() else {

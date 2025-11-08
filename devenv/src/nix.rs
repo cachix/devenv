@@ -351,8 +351,8 @@ impl Nix {
             // Setup Nix log bridge for enhanced log processing
             let nix_bridge = NixLogBridge::new();
 
-            // Add stderr processing callback with proper lifetime management
-            let bridge_for_callback = nix_bridge.clone();
+            // Get the log callback from the bridge
+            let log_callback = nix_bridge.get_log_callback();
             let logging = options.logging;
             let quiet = self.global_options.quiet;
             let verbose = self.global_options.verbose;
@@ -360,7 +360,7 @@ impl Nix {
             cached_cmd.on_stderr(move |log| {
                 // Send to Nix log bridge for detailed progress tracking
                 // The bridge will emit appropriate tracing events
-                bridge_for_callback.process_internal_log(log.clone());
+                log_callback(log.clone());
 
                 // Only output to tracing logs if logging is enabled
                 // This provides fallback logging when detailed processing is not needed
