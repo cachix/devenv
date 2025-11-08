@@ -11,7 +11,7 @@ This guide shows how to structure a monorepo where multiple services share commo
 
 ```
 my-monorepo/
-├── devenv/
+├── shared/
 │   └── devenv.nix       # Shared configurations
 ├── services/
 │   ├── api/
@@ -26,7 +26,7 @@ my-monorepo/
 
 Create a shared configuration with common settings:
 
-```nix title="devenv/devenv.nix"
+```nix title="shared/devenv.nix"
 { pkgs, ... }: {
   packages = [
     pkgs.curl
@@ -55,7 +55,7 @@ Each service imports the shared configuration using an **absolute import path**.
 
 ```yaml title="services/api/devenv.yaml"
 imports:
-  - /devenv
+  - /shared
 ```
 
 ```nix title="services/api/devenv.nix"
@@ -84,7 +84,7 @@ imports:
 
 ```yaml title="services/frontend/devenv.yaml"
 imports:
-  - /devenv
+  - /shared
 ```
 
 ```nix title="services/frontend/devenv.nix"
