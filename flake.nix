@@ -198,7 +198,7 @@
             inherit config;
             ci = config.ciDerivation;
           };
-          nonFlakeMkShell = import ./src/non-flake-wrapper.nix self.lib.mkShell;
+        mkStandardShell = import ./src/non-flake-wrapper.nix self.lib.mkShell;
       };
 
       overlays.default = final: prev: {

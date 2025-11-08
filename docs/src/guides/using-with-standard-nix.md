@@ -2,8 +2,9 @@
 
 [Nix Flakes](https://wiki.nixos.org/wiki/Flakes) are not standard nix, and for those who prefer not to,
 or can't use them but still want to pin and share dependencies across multiple targets, there is a way.
-Without flakes or the devenv CLI, you can pin inputs to specific versions with tools like
-[npins](https://github.com/andir/npins) and define devenv shells as output attributes like anything else in Nix.
+Without flakes or the devenv CLI, we can download inputs using built-in functions like fetchGit or fetchTarball,
+or using popular dependency pinning tools like [niv](https://github.com/nmattia/niv) or [npins](https://github.com/andir/npins).
+Then we can define devenv shells as output attributes like anything else in Nix.
 
 !!! note "For those new to devenv and Nix"
     If you're new to both devenv and Nix, starting with the standard devenv CLI approach will provide the smoothest experience. [Getting started with devenv.](../getting-started.md)
@@ -18,22 +19,17 @@ It is only recommended to experienced Nix users who prefer to not use flakes.
 
 ## Getting started
 
-In this guide we will show how to write a basic `default.nix` with sources from npins and a devenv shell definition.
-First, in your project root directory run the following commands, or follow the [getting started](https://github.com/andir/npins?tab=readme-ov-file#getting-started) guide from npins.
+In this guide we will show how to write a basic `default.nix` using the built-in
+fetchTarball to fetch sources from GitHub and a devenv shell definition.
 
-```console
-nix-shell -p npins
-npins init
-npins add github cachix devenv 
-```
-
-Then create a default.nix file in the project root with the following content:
+Create a default.nix file in the project root with the following content:
 
 ```nix title="default.nix"
 let
-  sources = import ./npins;
-  pkgs = import sources.nixpkgs { };
-  devenv = (import sources.devenv).lib.nonFlakeMkShell ./.;
+  nixpkgs = fetchTarball "https://github.com/cachix/devenv-nixpkgs/archive/rolling.tar.gz";
+  pkgs = import nixpkgs { };
+  devenv-src = fetchTarball "https://github.com/cachix/devenv/archive/main.tar.gz";
+  devenv = (import devenv-src).lib.mkStandardShell ./.;
 in
 {
   shell = devenv {
@@ -66,20 +62,14 @@ In some cases, such as Rust channel configurations, devenv requires extra inputs
 If that input is not provided, devenv will print error messages with some instructions meant for a flake-based setup.
 This scenario can be handled the following way with a non-flake setup:
 
-```console
-nix-shell -p npins
-npins init
-npins add github cachix devenv
-npins add github edolstra flake-compat
-npins add github oxalica rust-overlay -b master
-```
-
 ```nix title="default.nix"
 let
-  sources = import ./npins;
-  pkgs = import sources.nixpkgs { };
-  devenv = (import sources.devenv).lib.nonFlakeMkShell ./.;
-  flake-compat = import sources.flake-compat;
+  nixpkgs = fetchTarball "https://github.com/cachix/devenv-nixpkgs/archive/rolling.tar.gz";
+  pkgs = import nixpkgs { };
+  devenv-src = fetchTarball "https://github.com/cachix/devenv/archive/main.tar.gz";
+  devenv = (import devenv-src).lib.mkStandardShell ./.;
+  flake-compat = import (fetchTarball "https://github.com/NixOS/flake-compat/archive/master.tar.gz");
+  rust-overlay-src = fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz";
 in
 {
   shell = devenv {
@@ -87,7 +77,7 @@ in
     modules = [ ./devenv.nix ];
     inputs = {
       nixpkgs = pkgs;
-      rust-overlay = (flake-compat { src = sources.rust-overlay; }).defaultNix;
+      rust-overlay = (flake-compat { src = rust-overlay-src; }).defaultNix;
     };
   };
 }
