@@ -324,6 +324,8 @@ impl Devenv {
         cmd: &Option<String>,
         args: &[String],
     ) -> Result<process::Command> {
+        self.check_secretspec().await?;
+
         let DevEnv { output, .. } = self.get_dev_environment(false).await?;
 
         let bash = match self.nix.get_bash(false).await {
@@ -1176,6 +1178,141 @@ impl Devenv {
         .await
     }
 
+    /// Store validated secrets in the OnceCell for Nix to use.
+    fn store_validated_secrets(
+        &self,
+        validated_secrets: secretspec::ValidatedSecrets,
+    ) -> Result<()> {
+        let resolved = secretspec::Resolved {
+            secrets: validated_secrets
+                .resolved
+                .secrets
+                .into_iter()
+                .map(|(k, v)| (k, v.expose_secret().to_string()))
+                .collect(),
+            provider: validated_secrets.resolved.provider,
+            profile: validated_secrets.resolved.profile,
+        };
+
+        self.secretspec_resolved
+            .set(resolved)
+            .map_err(|_| miette!("Secretspec resolved already set"))?;
+        Ok(())
+    }
+
+    /// Check and validate secretspec configuration if present.
+    /// This should be called early in commands that need secrets to avoid
+    /// interrupting other operations with interactive prompts.
+    ///
+    /// This method is idempotent - if secrets are already resolved, it returns immediately.
+    async fn check_secretspec(&self) -> Result<()> {
+        // If already resolved, nothing to do
+        if self.secretspec_resolved.get().is_some() {
+            return Ok(());
+        }
+
+        // Check for secretspec.toml and load secrets
+        let secretspec_path = self.devenv_root.join("secretspec.toml");
+        let config = self.config.read().await;
+        let secretspec_config_exists = config.secretspec.is_some();
+        let secretspec_enabled = config
+            .secretspec
+            .as_ref()
+            .map(|c| c.enable)
+            .unwrap_or(false); // Default to false if secretspec config is not present
+
+        if secretspec_path.exists() {
+            // Log warning when secretspec.toml exists but is not configured
+            if !secretspec_enabled && !secretspec_config_exists {
+                info!(
+                    "{}",
+                    indoc::formatdoc! {"
+                    Found secretspec.toml but secretspec integration is not enabled.
+
+                    To enable, add to devenv.yaml:
+                      secretspec:
+                        enable: true
+
+                    To disable this message:
+                      secretspec:
+                        enable: false
+
+                    Learn more: https://devenv.sh/integrations/secretspec/
+                "}
+                );
+            }
+
+            if secretspec_enabled {
+                // Get profile and provider from devenv.yaml config
+                let (profile, provider) = if let Some(ref secretspec_config) = config.secretspec {
+                    (
+                        secretspec_config.profile.clone(),
+                        secretspec_config.provider.clone(),
+                    )
+                } else {
+                    (None, None)
+                };
+
+                // Load and validate secrets using SecretSpec API
+                let mut secrets = secretspec::Secrets::load()
+                    .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
+
+                // Configure provider and profile if specified
+                if let Some(ref provider_str) = provider {
+                    secrets.set_provider(provider_str);
+                }
+                if let Some(ref profile_str) = profile {
+                    secrets.set_profile(profile_str);
+                }
+
+                // Validate secrets
+                match secrets.validate()? {
+                    Ok(validated_secrets) => {
+                        self.store_validated_secrets(validated_secrets)?;
+                    }
+                    Err(validation_errors) => {
+                        // Run secretspec check to provide detailed feedback and interactive prompts
+                        error!(
+                            "Required secrets are missing: {} (provider: {}, profile: {})",
+                            validation_errors.missing_required.join(", "),
+                            validation_errors.provider,
+                            validation_errors.profile
+                        );
+
+                        info!(
+                            "Running secretspec check for detailed validation and interactive setup..."
+                        );
+
+                        // Run check() which will display validation status and prompt for missing secrets
+                        match secrets.check() {
+                            Ok(_) => {
+                                info!("Secrets successfully configured. Continuing...");
+
+                                // Now validate again to get the resolved secrets
+                                match secrets.validate()? {
+                                    Ok(validated_secrets) => {
+                                        self.store_validated_secrets(validated_secrets)?;
+                                    }
+                                    Err(e) => {
+                                        bail!(
+                                            "Secret validation failed after configuration: {:?}",
+                                            e
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                bail!("Secret validation failed: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn down(&self) -> Result<()> {
         if !PathBuf::from(&self.processes_pid()).exists() {
             bail!("No processes running");
@@ -1321,89 +1458,7 @@ impl Devenv {
                 miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
             })?;
 
-        // Check for secretspec.toml and load secrets
-        let secretspec_path = self.devenv_root.join("secretspec.toml");
-        let secretspec_config_exists = config.secretspec.is_some();
-        let secretspec_enabled = config
-            .secretspec
-            .as_ref()
-            .map(|c| c.enable)
-            .unwrap_or(false); // Default to false if secretspec config is not present
-
-        if secretspec_path.exists() {
-            // Log warning when secretspec.toml exists but is not configured
-            if !secretspec_enabled && !secretspec_config_exists {
-                info!(
-                    "{}",
-                    indoc::formatdoc! {"
-                    Found secretspec.toml but secretspec integration is not enabled.
-
-                    To enable, add to devenv.yaml:
-                      secretspec:
-                        enable: true
-
-                    To disable this message:
-                      secretspec:
-                        enable: false
-
-                    Learn more: https://devenv.sh/integrations/secretspec/
-                "}
-                );
-            }
-
-            if secretspec_enabled {
-                // Get profile and provider from devenv.yaml config
-                let (profile, provider) = if let Some(ref secretspec_config) = config.secretspec {
-                    (
-                        secretspec_config.profile.clone(),
-                        secretspec_config.provider.clone(),
-                    )
-                } else {
-                    (None, None)
-                };
-
-                // Load and validate secrets using SecretSpec API
-                let mut secrets = secretspec::Secrets::load()
-                    .map_err(|e| miette!("Failed to load secretspec configuration: {}", e))?;
-
-                // Configure provider and profile if specified
-                if let Some(ref provider_str) = provider {
-                    secrets.set_provider(provider_str);
-                }
-                if let Some(ref profile_str) = profile {
-                    secrets.set_profile(profile_str);
-                }
-
-                // Validate secrets
-                match secrets.validate()? {
-                    Ok(validated_secrets) => {
-                        // Store resolved secrets in OnceCell for Nix to use
-                        let resolved = secretspec::Resolved {
-                            secrets: validated_secrets
-                                .resolved
-                                .secrets
-                                .into_iter()
-                                .map(|(k, v)| (k, v.expose_secret().to_string()))
-                                .collect(),
-                            provider: validated_secrets.resolved.provider,
-                            profile: validated_secrets.resolved.profile,
-                        };
-
-                        self.secretspec_resolved
-                            .set(resolved)
-                            .map_err(|_| miette!("Secretspec resolved already set"))?;
-                    }
-                    Err(validation_errors) => {
-                        bail!(
-                            "Required secrets are missing: {} (provider: {}, profile: {})",
-                            validation_errors.missing_required.join(", "),
-                            validation_errors.provider,
-                            validation_errors.profile
-                        );
-                    }
-                }
-            }
-        }
+        self.check_secretspec().await?;
 
         // Create cli-options.nix if there are CLI options
         if !self.global_options.option.is_empty() {
