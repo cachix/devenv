@@ -24,7 +24,7 @@
   };
 
   config = {
-    enterTest = ''
+    enterTest = lib.mkBefore ''
       # Wait for the port to be open until the timeout is reached
       wait_for_port() {
         local port=$1
