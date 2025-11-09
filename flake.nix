@@ -105,8 +105,8 @@
             '';
           };
 
-          simple = {
-            path = ./templates/simple;
+          flake = {
+            path = ./templates/flake;
             description = "A direnv supported Nix flake with devenv integration.";
             welcomeText = ''
               # `.devenv` should be added to `.gitignore`
@@ -115,9 +115,7 @@
               ```
             '';
           };
-        in
-        {
-          inherit simple flake-parts;
+
           terraform = {
             path = ./templates/terraform;
             description = "A Terraform Nix flake with devenv integration.";
@@ -128,7 +126,11 @@
               ```
             '';
           };
-          default = simple;
+        in
+        {
+          inherit flake flake-parts terraform;
+          simple = flake; # Backwards compatibility
+          default = self.templates.flake;
         };
 
       flakeModule = self.flakeModules.default; # Backwards compatibility

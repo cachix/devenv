@@ -121,7 +121,7 @@
       # Test devenv integrated into bare Nix flake
       tmp="$(mktemp -d)"
       pushd "$tmp"
-        nix flake init --template ''${DEVENV_ROOT}#simple
+        nix flake init --template ''${DEVENV_ROOT}
         nix flake update \
           --override-input devenv ''${DEVENV_ROOT}
         nix develop --accept-flake-config --no-pure-eval --command echo nix-develop started succesfully |& tee ./console
