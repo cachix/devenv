@@ -1375,33 +1375,23 @@ impl Devenv {
                 }
 
                 // Validate secrets
-                match secrets.validate()? {
-                    Ok(validated_secrets) => {
-                        // Store resolved secrets in OnceCell for Nix to use
-                        let resolved = secretspec::Resolved {
-                            secrets: validated_secrets
-                                .resolved
-                                .secrets
-                                .into_iter()
-                                .map(|(k, v)| (k, v.expose_secret().to_string()))
-                                .collect(),
-                            provider: validated_secrets.resolved.provider,
-                            profile: validated_secrets.resolved.profile,
-                        };
+                let validated_secrets = secrets.check()?;
 
-                        self.secretspec_resolved
-                            .set(resolved)
-                            .map_err(|_| miette!("Secretspec resolved already set"))?;
-                    }
-                    Err(validation_errors) => {
-                        bail!(
-                            "Required secrets are missing: {} (provider: {}, profile: {})",
-                            validation_errors.missing_required.join(", "),
-                            validation_errors.provider,
-                            validation_errors.profile
-                        );
-                    }
-                }
+                // Store resolved secrets in OnceCell for Nix to use
+                let resolved = secretspec::Resolved {
+                    secrets: validated_secrets
+                        .resolved
+                        .secrets
+                        .into_iter()
+                        .map(|(k, v)| (k, v.expose_secret().to_string()))
+                        .collect(),
+                    provider: validated_secrets.resolved.provider,
+                    profile: validated_secrets.resolved.profile,
+                };
+
+                self.secretspec_resolved
+                    .set(resolved)
+                    .map_err(|_| miette!("Secretspec resolved already set"))?;
             }
         }
 
