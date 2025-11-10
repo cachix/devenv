@@ -445,8 +445,8 @@ in
 
         Without these fixes, venvs cannot access environment packages via `--system-site-packages`.
 
-        Enabled by default for nixpkgs versions prior to 25.11.
-        Newer nixpkgs releases include upstream fixes that make this patch obsolete.
+        Enabled by default.
+        Newer nixpkgs releases will include upstream fixes that make this patch obsolete.
       '';
     };
 
