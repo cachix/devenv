@@ -31,7 +31,7 @@ let
       ];
     in
     buildEnv {
-      name = builtins.trace (toString paths) "${python.name}-env";
+      name = "${python.name}-env";
 
       inherit paths;
       inherit ignoreCollisions;
