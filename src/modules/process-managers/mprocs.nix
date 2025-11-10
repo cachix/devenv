@@ -53,11 +53,18 @@ in
       configFile =
         lib.mkDefault (settingsFormat.generate "mprocs.yaml" cfg.settings);
       settings = {
-        procs = lib.mapAttrs
-          (name: value:
-            let scriptPath = pkgs.writeShellScript name value.exec;
-            in { cmd = [ "${scriptPath}" ]; })
-          config.processes;
+        procs =
+          lib.mapAttrs
+            (
+              name: value:
+                let scriptPath = pkgs.writeShellScript name value.exec;
+                in
+                {
+                  cmd = [ scriptPath ];
+                }
+                // lib.optionalAttrs (lib.hasAttr "cwd" value && value.cwd != null) { cwd = value.cwd; }
+            )
+            config.processes;
       };
     };
   };
