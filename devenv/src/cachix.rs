@@ -35,10 +35,50 @@ impl CachixManager {
         }
     }
 
+    /// Get global Nix settings that must be applied BEFORE store creation
+    ///
+    /// Returns settings like netrc-file path that need to be in place before
+    /// the Nix store makes any HTTP requests.
+    pub fn get_global_settings(&self) -> Result<HashMap<String, String>> {
+        let mut settings = HashMap::new();
+
+        // If CACHIX_AUTH_TOKEN exists, set netrc-file path
+        // The actual file will be created later when we know which caches to configure
+        if env::var("CACHIX_AUTH_TOKEN").is_ok() {
+            let netrc_path_str = self.paths.netrc.to_string_lossy().to_string();
+            settings.insert("netrc-file".to_string(), netrc_path_str);
+        }
+
+        Ok(settings)
+    }
+
+    /// Ensure netrc file is created and populated with cache credentials
+    ///
+    /// This should be called after we know which caches to configure.
+    /// It creates the netrc file with authentication for the given caches.
+    pub async fn ensure_netrc_file(&self, pull_caches: &[String]) -> Result<()> {
+        if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
+            // Only create if we haven't already
+            if self.netrc_path.get().is_none() {
+                let netrc_path = self.paths.netrc.clone();
+                self.create_netrc_file(&netrc_path, pull_caches, &auth_token)
+                    .await?;
+
+                // Cache that we've created it
+                let netrc_path_str = netrc_path.to_string_lossy().to_string();
+                let _ = self.netrc_path.set(netrc_path_str);
+            }
+        }
+        Ok(())
+    }
+
     /// Get Nix settings (--option flags) needed for Cachix substituters
     ///
     /// Returns a HashMap where keys are Nix option names and values are the option values.
     /// For example: "extra-substituters" => "https://cache1.cachix.org https://cache2.cachix.org"
+    ///
+    /// Note: This returns substituters and keys but NOT netrc-file.
+    /// Use get_global_settings() to get netrc-file path before store creation.
     pub async fn get_nix_settings(
         &self,
         cachix_caches: &CachixCacheInfo,
@@ -64,33 +104,10 @@ impl CachixManager {
             keys.sort();
             settings.insert("extra-trusted-public-keys".to_string(), keys.join(" "));
 
-            // Configure netrc file with auth token if available
-            if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
-                let netrc_path = self
-                    .netrc_path
-                    .get_or_try_init(|| async {
-                        let netrc_path = self.paths.netrc.clone();
-                        let netrc_path_str = netrc_path.to_string_lossy().to_string();
-
-                        self.create_netrc_file(
-                            &netrc_path,
-                            &cachix_caches.caches.pull,
-                            &auth_token,
-                        )
-                        .await?;
-
-                        Ok::<String, miette::Report>(netrc_path_str)
-                    })
-                    .await;
-
-                match netrc_path {
-                    Ok(path) => {
-                        settings.insert("netrc-file".to_string(), path.to_string());
-                    }
-                    Err(e) => {
-                        warn!("{e}");
-                    }
-                }
+            // Ensure netrc file is created with cache credentials
+            // (netrc-file path should already be set via get_global_settings())
+            if let Err(e) = self.ensure_netrc_file(&cachix_caches.caches.pull).await {
+                warn!("Failed to create netrc file: {}", e);
             }
         }
 
