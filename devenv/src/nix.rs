@@ -13,12 +13,10 @@ use nix_conf_parser::NixConf;
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
-use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::OnceCell;
 use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
@@ -114,25 +112,15 @@ impl Nix {
             .run_nix_with_substituters("nix", &args, &options)
             .await?;
 
-        // Delete any old generations of this profile.
+        // Delete any old generations of this Nix profile.
+        // This is Nix-specific: nix print-dev-env --profile creates a Nix profile
+        // with generation tracking, so we clean up old generations here.
         let options = nix_backend::Options {
             logging: false,
             ..self.options
         };
         let args: Vec<&str> = vec!["-p", gc_root_str, "--delete-generations", "old"];
         self.run_nix("nix-env", &args, &options).await?;
-
-        // Save the GC root for this profile.
-        let now_ns = get_now_with_nanoseconds();
-        let target = format!("{now_ns}-shell");
-        if let Ok(resolved_gc_root) = fs::canonicalize(gc_root).await {
-            symlink_force(&resolved_gc_root, &self.paths.home_gc.join(target)).await?;
-        } else {
-            warn!(
-                "Failed to resolve the GC root path to the Nix store: {}. Try running devenv again with --refresh-eval-cache.",
-                gc_root.display()
-            );
-        }
 
         Ok(env)
     }
@@ -1035,41 +1023,6 @@ impl NixBackend for Nix {
     async fn is_trusted_user(&self) -> Result<bool> {
         self.is_trusted_user_impl().await
     }
-}
-
-async fn symlink_force(link_path: &Path, target: &Path) -> Result<()> {
-    let _lock = dotlock::Dotlock::create(target.with_extension("lock")).unwrap();
-
-    debug!(
-        "Creating symlink {} -> {}",
-        link_path.display(),
-        target.display()
-    );
-
-    if target.exists() {
-        fs::remove_file(target)
-            .await
-            .map_err(|e| miette::miette!("Failed to remove {}: {}", target.display(), e))?;
-    }
-
-    symlink(link_path, target).map_err(|e| {
-        miette::miette!(
-            "Failed to create symlink: {} -> {}: {}",
-            link_path.display(),
-            target.display(),
-            e
-        )
-    })?;
-
-    Ok(())
-}
-
-fn get_now_with_nanoseconds() -> String {
-    let now = SystemTime::now();
-    let duration = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
-    let secs = duration.as_secs();
-    let nanos = duration.subsec_nanos();
-    format!("{secs}.{nanos}")
 }
 
 // Display a command as a pretty string.

@@ -1526,6 +1526,55 @@ impl Devenv {
         let span = tracing::debug_span!("evaluating_dev_env");
         let env = self.nix.dev_env(json, &gc_root).instrument(span).await?;
 
+        // Save timestamped GC root symlink for history tracking and GC protection
+        // This is backend-independent: all backends create a gc_root symlink,
+        // and we want to track the history of shell environments.
+        if let Ok(resolved_gc_root) = fs::canonicalize(&gc_root).await {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let now = SystemTime::now();
+            let duration = now
+                .duration_since(UNIX_EPOCH)
+                .expect("System time before UNIX epoch");
+            let secs = duration.as_secs();
+            let nanos = duration.subsec_nanos();
+            let timestamp = format!("{secs}.{nanos}");
+            let target = format!("{timestamp}-shell");
+
+            let home_gc_target = self.devenv_home_gc.join(&target);
+
+            // Create timestamped symlink (devenv's GC protection layer)
+            if let Err(e) = async {
+                if home_gc_target.exists() {
+                    fs::remove_file(&home_gc_target)
+                        .await
+                        .map_err(|e| miette::miette!("Failed to remove existing symlink: {}", e))?;
+                }
+                tokio::task::spawn_blocking({
+                    let resolved = resolved_gc_root.clone();
+                    let target_path = home_gc_target.clone();
+                    move || std::os::unix::fs::symlink(&resolved, &target_path)
+                })
+                .await
+                .map_err(|e| miette::miette!("Failed to spawn symlink task: {}", e))?
+                .map_err(|e| miette::miette!("Failed to create symlink: {}", e))?;
+                Ok::<_, miette::Report>(())
+            }
+            .await
+            {
+                warn!(
+                    "Failed to create timestamped GC root symlink: {}. \
+                     This may affect GC protection but won't prevent the shell from working.",
+                    e
+                );
+            }
+        } else {
+            warn!(
+                "Failed to resolve the GC root path to the Nix store: {}. \
+                 Try running devenv again with --refresh-eval-cache.",
+                gc_root.display()
+            );
+        }
+
         use devenv_eval_cache::command::{FileInputDesc, Input};
         util::write_file_with_lock(
             self.devenv_dotfile.join("input-paths.txt"),
