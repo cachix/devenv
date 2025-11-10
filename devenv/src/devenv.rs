@@ -33,7 +33,6 @@ use tokio::sync::{OnceCell, RwLock, Semaphore};
 use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
 
 // templates
-const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
 const EXISTING_REQUIRED_FILES: [&str; 1] = [".gitignore"];
 const PROJECT_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/init");
@@ -1284,9 +1283,6 @@ impl Devenv {
             miette::miette!("Failed to create {}: {}", self.devenv_dot_gc.display(), e)
         })?;
 
-        // Initialise any Nix state
-        self.nix.assemble().await?;
-
         let mut flake_inputs = BTreeMap::new();
         let config = self.config.read().await;
         for (input, attrs) in config.inputs.iter() {
@@ -1515,13 +1511,8 @@ impl Devenv {
             secretspec: secretspec_data.as_ref(),
         };
 
-        // Serialize the arguments to Nix syntax
-        let vars = ser_nix::to_string(&args)
-            .map_err(|e| miette::miette!("Failed to serialize devenv flake arguments: {}", e))?;
-
-        let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
-        let flake_path = self.devenv_root.join(DEVENV_FLAKE);
-        util::write_file_with_lock(&flake_path, &flake)?;
+        // Initialise the backend (generates flake and other backend-specific files)
+        self.nix.assemble(&args).await?;
 
         self.assembled.store(true, Ordering::Release);
         Ok(())

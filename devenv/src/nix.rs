@@ -1,8 +1,10 @@
 use crate::{
     cachix::{CacheMetadata, CachixCacheInfo, CachixConfig, StorePing, detect_missing_caches},
     cli, config, devenv,
+    nix_args::NixArgs,
     nix_backend::{self, NixBackend},
     nix_log_bridge::NixLogBridge,
+    util,
 };
 use async_trait::async_trait;
 use futures::future;
@@ -20,6 +22,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tokio::sync::OnceCell;
 use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
+
+// Nix-specific flake template
+const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 
 pub struct Nix {
     pub options: nix_backend::Options,
@@ -64,7 +69,7 @@ impl Nix {
     }
 
     // Defer creating local project state
-    pub async fn assemble(&self) -> Result<()> {
+    pub async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
         self.pool
             .get_or_try_init(|| async {
                 // Extract database path from URL
@@ -79,6 +84,13 @@ impl Nix {
                 Ok::<_, miette::Report>(db.pool().clone())
             })
             .await?;
+
+        // Generate the flake template with arguments
+        let vars = ser_nix::to_string(args)
+            .map_err(|e| miette::miette!("Failed to serialize devenv flake arguments: {}", e))?;
+        let flake = FLAKE_TMPL.replace("__DEVENV_VARS__", &vars);
+        let flake_path = self.paths.root.join(devenv::DEVENV_FLAKE);
+        util::write_file_with_lock(&flake_path, &flake)?;
 
         Ok(())
     }
@@ -967,8 +979,8 @@ impl Nix {
 
 #[async_trait(?Send)]
 impl NixBackend for Nix {
-    async fn assemble(&self) -> Result<()> {
-        self.assemble().await
+    async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
+        self.assemble(args).await
     }
 
     async fn dev_env(&self, json: bool, gc_root: &Path) -> Result<devenv_eval_cache::Output> {

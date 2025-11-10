@@ -3,6 +3,7 @@
 //! This module provides a Rust-native Nix evaluator backend using Snix
 //! as an alternative to the traditional C++ Nix binary.
 
+use crate::nix_args::NixArgs;
 use crate::nix_backend::{DevenvPaths, NixBackend, Options};
 use crate::{cachix, cli, config};
 use async_trait::async_trait;
@@ -119,8 +120,7 @@ impl SnixBackend {
 
 #[async_trait(?Send)]
 impl NixBackend for SnixBackend {
-    async fn assemble(&self) -> Result<()> {
-        // No shared state to initialize - evaluators are created per operation
+    async fn assemble(&self, _args: &NixArgs<'_>) -> Result<()> {
         Ok(())
     }
 
