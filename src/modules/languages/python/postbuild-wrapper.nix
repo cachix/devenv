@@ -1,5 +1,13 @@
 { lib, jq }:
 
+# Modified from the upstream post-build patch.
+# https://github.com/NixOS/nixpkgs/blob/4c5533c55af2c3899fa4696e26430ef567601dad/pkgs/development/interpreters/python/wrapper.nix
+#
+# devenv-specific modifications:
+#
+# - Use jq to extract buildEnv `paths` and re-process them
+# - Use --resolve-argv0 for the main python executable wrapper.
+#   This correctly points to the wrapped env when the executable is a symlink, e.g. in a devenv profile.
 {
   # Python derivation info
   python
@@ -30,6 +38,7 @@ in
           if [ "$prg" = "${python.executable}" ]; then
             makeWrapper "${python.interpreter}" "$out/bin/$prg" \
               --inherit-argv0 \
+              --resolve-argv0 \
               ${lib.optionalString (!permitUserSite) ''--set PYTHONNOUSERSITE "true" \''}
               ${lib.concatStringsSep " " makeWrapperArgs}
           elif [ "$(readlink "$prg")" = "${python.executable}" ]; then
