@@ -1,39 +1,11 @@
 { pkgs
 , config
 , lib
-, inputs
 , ...
 }:
 
 let
   cfg = config.languages.python;
-
-  # Determine whether to patch Python's `buildEnv`
-  # Enabled for:
-  #   nixpkgs < 25.11
-  #   nixpkgs-unstable < 2025-11-01
-  legacyBuildEnvPatchEnabled =
-    let
-      nixpkgsInput = inputs.nixpkgs or null;
-    in
-    if nixpkgsInput != null then
-      let
-        # Check if we have version info (stable release)
-        version = nixpkgsInput.sourceInfo.version or null;
-        # Check lastModified timestamp (for unstable)
-        lastModified = nixpkgsInput.sourceInfo.lastModified or 0;
-        # FIXME: update date to actual nixpkgs-unstable release (-ish)
-        cutoffTimestamp = 1761091200;
-      in
-      if version != null then
-      # For stable releases, enable if version < 25.11
-        lib.versionOlder version "25.11"
-      else
-      # For unstable, enable if lastModified <= November 1, 2025
-        lastModified <= cutoffTimestamp
-    else
-    # If no nixpkgs input, default to enabled
-      true;
 
   libraries =
     cfg.libraries
@@ -406,14 +378,14 @@ in
               ];
             });
         in
-        # if cfg.patches.buildEnv.enable then
-        lib.pipe drv [
-          patchBuildEnv
-          overrideBuildEnv
-          appendLibraries
-        ];
-      # else
-      #   appendLibraries drv;
+        if cfg.patches.buildEnv.enable then
+          lib.pipe drv [
+            patchBuildEnv
+            overrideBuildEnv
+            appendLibraries
+          ]
+        else
+         appendLibraries drv;
     };
 
     manylinux.enable = lib.mkOption {
@@ -464,7 +436,8 @@ in
 
     patches.buildEnv.enable = lib.mkOption {
       type = lib.types.bool;
-      default = legacyBuildEnvPatchEnabled;
+      # TODO: Implement bounds check on `lib.version` once the upstream patch reaches a release.
+      default = true;
       description = ''
         Whether to apply fixes to Python's `buildEnv` for correct runtime initialization:
         - Executables use `--inherit-argv0` to ensure Python initializes with correct `sys.prefix` and `sys.base_prefix`
