@@ -268,9 +268,21 @@ in
         let
           isBuildEnv = drv: lib.hasAttr "extraLibs" (lib.functionArgs drv.override);
 
+          makeWrapperArgs = [
+            "--prefix"
+            "LD_LIBRARY_PATH"
+            ":"
+            (lib.makeLibraryPath libraries)
+          ]
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            "--prefix"
+            "DYLD_LIBRARY_PATH"
+            ":"
+            (lib.makeLibraryPath libraries)
+          ];
+
           patchBuildEnv =
             drv:
-            # If we got a buildEnv from withPackages, modify its postBuild to use our wrapper logic
             let
               makePostBuildWrapper = pkgs.callPackage ./postbuild-wrapper.nix { };
               patchedEnv =
@@ -284,68 +296,21 @@ in
                   (
                     prevAttrs:
                     let
-                      makeWrapperArgs = [
-                        "--prefix"
-                        "LD_LIBRARY_PATH"
-                        ":"
-                        (lib.makeLibraryPath libraries)
-                      ]
-                      ++ lib.optionals pkgs.stdenv.isDarwin [
-                        "--prefix"
-                        "DYLD_LIBRARY_PATH"
-                        ":"
-                        (lib.makeLibraryPath libraries)
-                      ];
-
                       # Generate the patched wrapper script using the shared function
-                      patchedWrapperScript = makePostBuildWrapper {
+                      patchedPostBuildWrapper = makePostBuildWrapper {
                         inherit (drv) python;
                         inherit makeWrapperArgs;
                       };
-
-                      # Split postBuild by lines
-                      lines = lib.splitString "\n" prevAttrs.postBuild;
-
-                      # Use fold to track state (skip counter) and build new lines
-                      result =
-                        lib.foldl
-                          (
-                            acc: line:
-                              if acc.skip > 0 then
-                              # Skip this line
-                                {
-                                  lines = acc.lines;
-                                  skip = acc.skip - 1;
-                                }
-                              else if lib.hasInfix ''if [ -L "$out/bin" ]; then'' line then
-                              # Found the start of the postBuild block - replace entire block with our patched version
-                                {
-                                  lines = acc.lines ++ [ patchedWrapperScript ];
-                                  skip = 17; # Skip the next 17 lines of the original block (18 total)
-                                }
-                              else
-                              # Keep this line
-                                {
-                                  lines = acc.lines ++ [ line ];
-                                  skip = 0;
-                                }
-                          )
-                          {
-                            lines = [ ];
-                            skip = 0;
-                          }
-                          lines;
-
-                      filteredLines = result.lines;
                     in
                     {
-                      postBuild = lib.concatStringsSep "\n" filteredLines;
+                      postBuild = patchedPostBuildWrapper;
                       passthru = prevAttrs.passthru // {
                         interpreter = "${patchedEnv}/bin/${drv.python.executable}";
                       };
                     }
                   );
             in
+            # If we got a buildEnv from withPackages, modify its postBuild to use our wrapper logic
             if isBuildEnv drv then patchedEnv else drv;
 
           overrideBuildEnv =
@@ -363,20 +328,7 @@ in
           # Add extra libraries to the Python `buildEnv`.
           appendLibraries =
             drv:
-            (if isBuildEnv drv then drv else drv.buildEnv).override (args: {
-              makeWrapperArgs = [
-                "--prefix"
-                "LD_LIBRARY_PATH"
-                ":"
-                (lib.makeLibraryPath libraries)
-              ]
-              ++ lib.optionals pkgs.stdenv.isDarwin [
-                "--prefix"
-                "DYLD_LIBRARY_PATH"
-                ":"
-                (lib.makeLibraryPath libraries)
-              ];
-            });
+            (if isBuildEnv drv then drv else drv.buildEnv).override (args: { inherit makeWrapperArgs; });
         in
         if cfg.patches.buildEnv.enable then
           lib.pipe drv [
