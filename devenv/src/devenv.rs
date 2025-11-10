@@ -16,6 +16,7 @@ use secrecy::ExposeSecret;
 use serde::Deserialize;
 use sha2::Digest;
 use similar::{ChangeTag, TextDiff};
+use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::os::unix::{fs::PermissionsExt, process::CommandExt};
@@ -120,6 +121,9 @@ pub struct Devenv {
 
     has_processes: Arc<OnceCell<bool>>,
 
+    // Eval-cache pool (framework layer concern, used by backends)
+    eval_cache_pool: Arc<OnceCell<SqlitePool>>,
+
     // Secretspec resolved data to pass to Nix
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
 
@@ -193,6 +197,9 @@ impl Devenv {
         // Create shared secretspec_resolved Arc to share between Devenv and Nix
         let secretspec_resolved = Arc::new(OnceCell::new());
 
+        // Create eval-cache pool (framework layer concern, used by backends)
+        let eval_cache_pool = Arc::new(OnceCell::new());
+
         let nix: Box<dyn nix_backend::NixBackend> = match backend_type {
             config::NixBackendType::Nix => Box::new(
                 crate::nix::Nix::new(
@@ -201,6 +208,7 @@ impl Devenv {
                     paths,
                     secretspec_resolved.clone(),
                     cachix_manager.clone(),
+                    Some(eval_cache_pool.clone()),
                 )
                 .await
                 .expect("Failed to initialize Nix backend"),
@@ -212,6 +220,7 @@ impl Devenv {
                     global_options.clone(),
                     paths,
                     cachix_manager,
+                    Some(eval_cache_pool.clone()),
                 )
                 .await
                 .expect("Failed to initialize Snix backend"),
@@ -231,6 +240,7 @@ impl Devenv {
             assembled: Arc::new(AtomicBool::new(false)),
             assemble_lock: Arc::new(Semaphore::new(1)),
             has_processes: Arc::new(OnceCell::new()),
+            eval_cache_pool,
             secretspec_resolved,
             container_name: None,
             shutdown: options.shutdown,
@@ -1283,27 +1293,7 @@ impl Devenv {
             miette::miette!("Failed to create {}: {}", self.devenv_dot_gc.display(), e)
         })?;
 
-        let mut flake_inputs = BTreeMap::new();
         let config = self.config.read().await;
-        for (input, attrs) in config.inputs.iter() {
-            match config::FlakeInput::try_from(attrs) {
-                Ok(flake_input) => {
-                    flake_inputs.insert(input.clone(), flake_input);
-                }
-                Err(e) => {
-                    error!("Failed to parse input {}: {}", input, e);
-                    bail!("Failed to parse inputs");
-                }
-            }
-        }
-        util::write_file_with_lock(
-            self.devenv_dotfile.join("flake.json"),
-            serde_json::to_string(&flake_inputs).unwrap(),
-        )?;
-        util::write_file_with_lock(
-            self.devenv_dotfile.join("devenv.json"),
-            serde_json::to_string(&*config).unwrap(),
-        )?;
         // TODO: superceded by eval caching.
         // Remove once direnvrc migration is implemented.
         util::write_file_with_lock(
@@ -1316,6 +1306,24 @@ impl Devenv {
             .map_err(|e| {
                 miette::miette!("Failed to create {}: {}", self.devenv_runtime.display(), e)
             })?;
+
+        // Initialize eval-cache database (framework layer concern, used by backends)
+        if self.global_options.eval_cache {
+            self.eval_cache_pool
+                .get_or_try_init(|| async {
+                    let db_path = self.devenv_dotfile.join("nix-eval-cache.db");
+                    let db = devenv_cache_core::db::Database::new(
+                        db_path,
+                        &devenv_eval_cache::db::MIGRATIONS,
+                    )
+                    .await
+                    .map_err(|e| {
+                        miette::miette!("Failed to initialize eval cache database: {}", e)
+                    })?;
+                    Ok::<_, miette::Report>(db.pool().clone())
+                })
+                .await?;
+        }
 
         // Check for secretspec.toml and load secrets
         let secretspec_path = self.devenv_root.join("secretspec.toml");
@@ -1388,73 +1396,6 @@ impl Devenv {
                 self.secretspec_resolved
                     .set(resolved)
                     .map_err(|_| miette!("Secretspec resolved already set"))?;
-            }
-        }
-
-        // Create cli-options.nix if there are CLI options
-        if !self.global_options.option.is_empty() {
-            let mut cli_options = String::from("{ pkgs, lib, config, ... }: {\n");
-
-            const SUPPORTED_TYPES: &[&str] =
-                &["string", "int", "float", "bool", "path", "pkg", "pkgs"];
-
-            for chunk in self.global_options.option.chunks_exact(2) {
-                // Parse the path and type from the first value
-                let key_parts: Vec<&str> = chunk[0].split(':').collect();
-                if key_parts.len() < 2 {
-                    miette::bail!(
-                        "Invalid option format: '{}'. Must include type, e.g. 'languages.rust.version:string'. Supported types: {}",
-                        chunk[0],
-                        SUPPORTED_TYPES.join(", ")
-                    );
-                }
-
-                let path = key_parts[0];
-                let type_name = key_parts[1];
-
-                // Format value based on type
-                let value = match type_name {
-                    "string" => format!("\"{}\"", &chunk[1]),
-                    "int" => chunk[1].clone(),
-                    "float" => chunk[1].clone(),
-                    "bool" => chunk[1].clone(), // true/false will work directly in Nix
-                    "path" => format!("./{}", &chunk[1]), // relative path
-                    "pkg" => format!("pkgs.{}", &chunk[1]),
-                    "pkgs" => {
-                        // Split by whitespace and format as a Nix list of package references
-                        let items = chunk[1]
-                            .split_whitespace()
-                            .map(|item| format!("pkgs.{item}"))
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        format!("[ {items} ]")
-                    }
-                    _ => miette::bail!(
-                        "Unsupported type: '{}'. Supported types: {}",
-                        type_name,
-                        SUPPORTED_TYPES.join(", ")
-                    ),
-                };
-
-                // Use lib.mkForce for all types except pkgs
-                let final_value = if type_name == "pkgs" {
-                    value
-                } else {
-                    format!("lib.mkForce {value}")
-                };
-                cli_options.push_str(&format!("  {path} = {final_value};\n"));
-            }
-
-            cli_options.push_str("}\n");
-
-            util::write_file_with_lock(self.devenv_dotfile.join("cli-options.nix"), &cli_options)?;
-        } else {
-            // Remove the file if it exists but there are no CLI options
-            let cli_options_path = self.devenv_dotfile.join("cli-options.nix");
-            if cli_options_path.exists() {
-                fs::remove_file(&cli_options_path)
-                    .await
-                    .expect("Failed to remove cli-options.nix");
             }
         }
 

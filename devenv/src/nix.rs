@@ -27,7 +27,6 @@ const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 pub struct Nix {
     pub options: nix_backend::Options,
     pool: Arc<OnceCell<SqlitePool>>,
-    database_url: String,
     // TODO: all these shouldn't be here
     config: config::Config,
     global_options: cli::GlobalOptions,
@@ -45,18 +44,13 @@ impl Nix {
         paths: nix_backend::DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
         cachix_manager: Arc<crate::cachix::CachixManager>,
+        pool: Option<Arc<OnceCell<SqlitePool>>>,
     ) -> Result<Self> {
         let options = nix_backend::Options::default();
 
-        let database_url = format!(
-            "sqlite:{}/nix-eval-cache.db",
-            paths.dotfile.to_string_lossy()
-        );
-
         Ok(Self {
             options,
-            pool: Arc::new(OnceCell::new()),
-            database_url,
+            pool: pool.unwrap_or_else(|| Arc::new(OnceCell::new())),
             config,
             global_options,
             cachix_caches: Arc::new(OnceCell::new()),
@@ -68,20 +62,96 @@ impl Nix {
 
     // Defer creating local project state
     pub async fn assemble(&self, args: &NixArgs<'_>) -> Result<()> {
-        self.pool
-            .get_or_try_init(|| async {
-                // Extract database path from URL
-                let path = PathBuf::from(self.database_url.trim_start_matches("sqlite:"));
+        // Generate backend-specific configuration files
 
-                // Connect to database and run migrations in one step
-                let db =
-                    devenv_cache_core::db::Database::new(path, &devenv_eval_cache::db::MIGRATIONS)
-                        .await
-                        .map_err(|e| miette::miette!("Failed to initialize database: {}", e))?;
+        // Generate flake.json from flake inputs (with type conversion)
+        let mut flake_inputs = BTreeMap::new();
+        for (input, attrs) in self.config.inputs.iter() {
+            match config::FlakeInput::try_from(attrs) {
+                Ok(flake_input) => {
+                    flake_inputs.insert(input.clone(), flake_input);
+                }
+                Err(e) => {
+                    error!("Failed to parse input {}: {}", input, e);
+                    bail!("Failed to parse inputs");
+                }
+            }
+        }
+        let flake_inputs_json = serde_json::to_string(&flake_inputs)
+            .map_err(|e| miette::miette!("Failed to serialize flake inputs: {}", e))?;
+        util::write_file_with_lock(self.paths.dotfile.join("flake.json"), &flake_inputs_json)?;
 
-                Ok::<_, miette::Report>(db.pool().clone())
-            })
-            .await?;
+        // Generate devenv.json from devenv configuration
+        let devenv_json = serde_json::to_string(&self.config)
+            .map_err(|e| miette::miette!("Failed to serialize devenv configuration: {}", e))?;
+        util::write_file_with_lock(self.paths.dotfile.join("devenv.json"), &devenv_json)?;
+
+        // Generate cli-options.nix if there are CLI options
+        if !self.global_options.option.is_empty() {
+            let mut cli_options = String::from("{ pkgs, lib, config, ... }: {\n");
+
+            const SUPPORTED_TYPES: &[&str] =
+                &["string", "int", "float", "bool", "path", "pkg", "pkgs"];
+
+            for chunk in self.global_options.option.chunks_exact(2) {
+                // Parse the path and type from the first value
+                let key_parts: Vec<&str> = chunk[0].split(':').collect();
+                if key_parts.len() < 2 {
+                    miette::bail!(
+                        "Invalid option format: '{}'. Must include type, e.g. 'languages.rust.version:string'. Supported types: {}",
+                        chunk[0],
+                        SUPPORTED_TYPES.join(", ")
+                    );
+                }
+
+                let path = key_parts[0];
+                let type_name = key_parts[1];
+
+                // Format value based on type
+                let value = match type_name {
+                    "string" => format!("\"{}\"", &chunk[1]),
+                    "int" => chunk[1].clone(),
+                    "float" => chunk[1].clone(),
+                    "bool" => chunk[1].clone(), // true/false will work directly in Nix
+                    "path" => format!("./{}", &chunk[1]), // relative path
+                    "pkg" => format!("pkgs.{}", &chunk[1]),
+                    "pkgs" => {
+                        // Split by whitespace and format as a Nix list of package references
+                        let items = chunk[1]
+                            .split_whitespace()
+                            .map(|item| format!("pkgs.{item}"))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        format!("[ {items} ]")
+                    }
+                    _ => miette::bail!(
+                        "Unsupported type: '{}'. Supported types: {}",
+                        type_name,
+                        SUPPORTED_TYPES.join(", ")
+                    ),
+                };
+
+                // Use lib.mkForce for all types except pkgs
+                let final_value = if type_name == "pkgs" {
+                    value
+                } else {
+                    format!("lib.mkForce {}", value)
+                };
+                cli_options.push_str(&format!("  {} = {};\n", path, final_value));
+            }
+
+            cli_options.push_str("}\n");
+
+            util::write_file_with_lock(self.paths.dotfile.join("cli-options.nix"), &cli_options)?;
+        } else {
+            // Remove the file if it exists but there are no CLI options
+            let cli_options_path = self.paths.dotfile.join("cli-options.nix");
+            if cli_options_path.exists() {
+                fs::remove_file(&cli_options_path)
+                    .await
+                    .expect("Failed to remove cli-options.nix");
+            }
+        }
 
         // Generate the flake template with arguments
         let vars = ser_nix::to_string(args)
