@@ -3,9 +3,11 @@ resolver = "2"
 members = [
   "devenv",
   "devenv-cache-core",
+  "devenv-core",
   "devenv-eval-cache",
   "devenv-generate",
   "devenv-run-tests",
+  "devenv-snix-backend",
   "devenv-tasks",
   "http-client-tls",
   "nix-conf-parser",
@@ -22,8 +24,10 @@ repository = "https://github.com/cachix/devenv/"
 
 [workspace.dependencies]
 devenv = { path = "devenv" }
+devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }
+devenv-snix-backend = { path = "devenv-snix-backend" }
 devenv-tasks = { path = "devenv-tasks" }
 devenv-cache-core = { path = "devenv-cache-core" }
 http-client-tls = { path = "http-client-tls" }

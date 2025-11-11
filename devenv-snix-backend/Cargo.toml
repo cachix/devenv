@@ -1,0 +1,24 @@
+[package]
+name = "devenv-snix-backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+devenv-core.workspace = true
+devenv-eval-cache.workspace = true
+
+async-trait.workspace = true
+miette.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+# Snix dependencies
+snix-eval.workspace = true
+snix-glue.workspace = true
+snix-castore.workspace = true
+snix-store.workspace = true
+snix-build.workspace = true
+nix-compat.workspace = true
+nix-compat-derive.workspace = true

@@ -1,8 +1,8 @@
 # Tooling to build the workspace crates
-{
-  lib,
-  callPackage,
-  cargoProfile ? "release",
+{ lib
+, callPackage
+, cargoProfile ? "release"
+,
 }:
 
 let
@@ -18,6 +18,8 @@ let
           ./devenv-generate
           ./devenv-eval-cache
           ./devenv-cache-core
+          ./devenv-core
+          ./devenv-snix-backend
           ./devenv-run-tests
           ./devenv-tasks
           ./http-client-tls

@@ -1,12 +1,15 @@
-use crate::{
-    cachix::{CacheMetadata, CachixCacheInfo, CachixConfig, StorePing, detect_missing_caches},
-    cli, config, devenv,
-    nix_args::NixArgs,
-    nix_backend::{self, NixBackend},
-    nix_log_bridge::NixLogBridge,
-    util,
-};
+use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
+use devenv_core::{
+    cachix::{
+        CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
+        detect_missing_caches,
+    },
+    cli::GlobalOptions,
+    config::{Config, FlakeInput},
+    nix_args::NixArgs,
+    nix_backend::{DevenvPaths, NixBackend, Options},
+};
 use futures::future;
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_conf_parser::NixConf;
@@ -25,28 +28,28 @@ use tracing::{Instrument, debug, debug_span, error, info, instrument, warn};
 const FLAKE_TMPL: &str = include_str!("flake.tmpl.nix");
 
 pub struct Nix {
-    pub options: nix_backend::Options,
+    pub options: Options,
     pool: Arc<OnceCell<SqlitePool>>,
     // TODO: all these shouldn't be here
-    config: config::Config,
-    global_options: cli::GlobalOptions,
+    config: Config,
+    global_options: GlobalOptions,
     cachix_caches: Arc<OnceCell<CachixCacheInfo>>,
-    cachix_manager: Arc<crate::cachix::CachixManager>,
-    paths: nix_backend::DevenvPaths,
+    cachix_manager: Arc<CachixManager>,
+    paths: DevenvPaths,
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
     // Note: CachixManager now owns the netrc lifecycle
 }
 
 impl Nix {
     pub async fn new(
-        config: config::Config,
-        global_options: cli::GlobalOptions,
-        paths: nix_backend::DevenvPaths,
+        config: Config,
+        global_options: GlobalOptions,
+        paths: DevenvPaths,
         secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
-        cachix_manager: Arc<crate::cachix::CachixManager>,
+        cachix_manager: Arc<CachixManager>,
         pool: Option<Arc<OnceCell<SqlitePool>>>,
     ) -> Result<Self> {
-        let options = nix_backend::Options::default();
+        let options = Options::default();
 
         Ok(Self {
             options,
@@ -67,7 +70,7 @@ impl Nix {
         // Generate flake.json from flake inputs (with type conversion)
         let mut flake_inputs = BTreeMap::new();
         for (input, attrs) in self.config.inputs.iter() {
-            match config::FlakeInput::try_from(attrs) {
+            match FlakeInput::try_from(attrs) {
                 Ok(flake_input) => {
                     flake_inputs.insert(input.clone(), flake_input);
                 }
@@ -168,7 +171,7 @@ impl Nix {
         // This can happen if the store path is forcefully removed: GC'd or the Nix store is
         // tampered with.
         let refresh_cached_output = fs::canonicalize(gc_root).await.is_err();
-        let options = nix_backend::Options {
+        let options = Options {
             cache_output: true,
             refresh_cached_output,
             ..self.options
@@ -185,7 +188,7 @@ impl Nix {
         // Delete any old generations of this Nix profile.
         // This is Nix-specific: nix print-dev-env --profile creates a Nix profile
         // with generation tracking, so we clean up old generations here.
-        let options = nix_backend::Options {
+        let options = Options {
             logging: false,
             ..self.options
         };
@@ -204,14 +207,14 @@ impl Nix {
     pub async fn build(
         &self,
         attributes: &[&str],
-        options: Option<nix_backend::Options>,
+        options: Option<Options>,
         gc_root: Option<&Path>,
     ) -> Result<Vec<PathBuf>> {
         if attributes.is_empty() {
             return Ok(Vec::new());
         }
 
-        let options = options.unwrap_or(nix_backend::Options {
+        let options = options.unwrap_or(Options {
             cache_output: true,
             ..self.options
         });
@@ -246,7 +249,7 @@ impl Nix {
     }
 
     pub async fn eval(&self, attributes: &[&str]) -> Result<String> {
-        let options = nix_backend::Options {
+        let options = Options {
             cache_output: true,
             ..self.options
         };
@@ -274,7 +277,7 @@ impl Nix {
     }
 
     pub async fn metadata(&self) -> Result<String> {
-        let options = nix_backend::Options {
+        let options = Options {
             cache_output: true,
             ..self.options
         };
@@ -304,7 +307,7 @@ impl Nix {
     pub async fn search(
         &self,
         name: &str,
-        options: Option<nix_backend::Options>,
+        options: Option<Options>,
     ) -> Result<devenv_eval_cache::Output> {
         let opts = options.as_ref().unwrap_or(&self.options);
         self.run_nix_with_substituters(
@@ -345,7 +348,7 @@ impl Nix {
         &self,
         command: &str,
         args: &[&str],
-        options: &nix_backend::Options,
+        options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         let cmd = self.prepare_command(command, args, options)?;
         self.run_nix_command(cmd, options).await
@@ -355,7 +358,7 @@ impl Nix {
         &self,
         command: &str,
         args: &[&str],
-        options: &nix_backend::Options,
+        options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         let cmd = self
             .prepare_command_with_substituters(command, args, options)
@@ -367,7 +370,7 @@ impl Nix {
     async fn run_nix_command(
         &self,
         mut cmd: std::process::Command,
-        options: &nix_backend::Options,
+        options: &Options,
     ) -> Result<devenv_eval_cache::Output> {
         use devenv_eval_cache::internal_log::Verbosity;
         use devenv_eval_cache::{NixCommand, supports_eval_caching};
@@ -554,7 +557,7 @@ impl Nix {
         &self,
         command: &str,
         args: &[&str],
-        options: &nix_backend::Options,
+        options: &Options,
     ) -> Result<std::process::Command> {
         let mut final_args: Vec<String> = Vec::new();
         let mut push_cache = None;
@@ -626,7 +629,7 @@ impl Nix {
         &self,
         command: &str,
         args: &[&str],
-        options: &nix_backend::Options,
+        options: &Options,
     ) -> Result<std::process::Command> {
         let mut flags = options.nix_flags.to_vec();
         flags.push("--max-jobs");
@@ -706,7 +709,7 @@ impl Nix {
     }
 
     async fn get_nix_config(&self) -> Result<NixConf> {
-        let options = nix_backend::Options {
+        let options = Options {
             logging: false,
             ..self.options
         };
@@ -716,7 +719,7 @@ impl Nix {
     }
 
     async fn is_trusted_user_impl(&self) -> Result<bool> {
-        let options = nix_backend::Options {
+        let options = Options {
             logging: false,
             ..self.options
         };
@@ -732,7 +735,7 @@ impl Nix {
     async fn get_cachix_caches(&self, trusted_keys_path: &Path) -> Result<CachixCacheInfo> {
         self.cachix_caches
             .get_or_try_init(|| async {
-        let _no_logging = nix_backend::Options {
+        let _no_logging = Options {
             logging: false,
             ..self.options
         };
@@ -999,7 +1002,7 @@ impl Nix {
     /// This builds `nixpkgs#legacyPackages.{system}.bashInteractive.out` and returns
     /// the path to the bash executable. The result is cached unless refresh_cached_output is true.
     async fn get_bash(&self, refresh_cached_output: bool) -> Result<String> {
-        let options = nix_backend::Options {
+        let options = Options {
             cache_output: true,
             refresh_cached_output,
             ..self.options
@@ -1052,7 +1055,7 @@ impl NixBackend for Nix {
     async fn build(
         &self,
         attributes: &[&str],
-        options: Option<nix_backend::Options>,
+        options: Option<Options>,
         gc_root: Option<&Path>,
     ) -> Result<Vec<PathBuf>> {
         self.build(attributes, options, gc_root).await
@@ -1073,7 +1076,7 @@ impl NixBackend for Nix {
     async fn search(
         &self,
         name: &str,
-        options: Option<nix_backend::Options>,
+        options: Option<Options>,
     ) -> Result<devenv_eval_cache::Output> {
         self.search(name, options).await
     }

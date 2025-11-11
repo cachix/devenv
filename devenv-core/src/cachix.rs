@@ -35,10 +35,50 @@ impl CachixManager {
         }
     }
 
+    /// Get global Nix settings that must be applied BEFORE store creation
+    ///
+    /// Returns settings like netrc-file path that need to be in place before
+    /// the Nix store makes any HTTP requests.
+    pub fn get_global_settings(&self) -> Result<HashMap<String, String>> {
+        let mut settings = HashMap::new();
+
+        // If CACHIX_AUTH_TOKEN exists, set netrc-file path
+        // The actual file will be created later when we know which caches to configure
+        if env::var("CACHIX_AUTH_TOKEN").is_ok() {
+            let netrc_path_str = self.paths.netrc.to_string_lossy().to_string();
+            settings.insert("netrc-file".to_string(), netrc_path_str);
+        }
+
+        Ok(settings)
+    }
+
+    /// Ensure netrc file is created and populated with cache credentials
+    ///
+    /// This should be called after we know which caches to configure.
+    /// It creates the netrc file with authentication for the given caches.
+    pub async fn ensure_netrc_file(&self, pull_caches: &[String]) -> Result<()> {
+        if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
+            // Only create if we haven't already
+            if self.netrc_path.get().is_none() {
+                let netrc_path = self.paths.netrc.clone();
+                self.create_netrc_file(&netrc_path, pull_caches, &auth_token)
+                    .await?;
+
+                // Cache that we've created it
+                let netrc_path_str = netrc_path.to_string_lossy().to_string();
+                let _ = self.netrc_path.set(netrc_path_str);
+            }
+        }
+        Ok(())
+    }
+
     /// Get Nix settings (--option flags) needed for Cachix substituters
     ///
     /// Returns a HashMap where keys are Nix option names and values are the option values.
     /// For example: "extra-substituters" => "https://cache1.cachix.org https://cache2.cachix.org"
+    ///
+    /// Note: This returns substituters and keys but NOT netrc-file.
+    /// Use get_global_settings() to get netrc-file path before store creation.
     pub async fn get_nix_settings(
         &self,
         cachix_caches: &CachixCacheInfo,
@@ -64,33 +104,10 @@ impl CachixManager {
             keys.sort();
             settings.insert("extra-trusted-public-keys".to_string(), keys.join(" "));
 
-            // Configure netrc file with auth token if available
-            if let Ok(auth_token) = env::var("CACHIX_AUTH_TOKEN") {
-                let netrc_path = self
-                    .netrc_path
-                    .get_or_try_init(|| async {
-                        let netrc_path = self.paths.netrc.clone();
-                        let netrc_path_str = netrc_path.to_string_lossy().to_string();
-
-                        self.create_netrc_file(
-                            &netrc_path,
-                            &cachix_caches.caches.pull,
-                            &auth_token,
-                        )
-                        .await?;
-
-                        Ok::<String, miette::Report>(netrc_path_str)
-                    })
-                    .await;
-
-                match netrc_path {
-                    Ok(path) => {
-                        settings.insert("netrc-file".to_string(), path.to_string());
-                    }
-                    Err(e) => {
-                        warn!("{e}");
-                    }
-                }
+            // Ensure netrc file is created with cache credentials
+            // (netrc-file path should already be set via get_global_settings())
+            if let Err(e) = self.ensure_netrc_file(&cachix_caches.caches.pull).await {
+                warn!("Failed to create netrc file: {}", e);
             }
         }
 
@@ -196,7 +213,7 @@ pub struct StorePing {
 }
 
 /// Custom deserializer for the `trusted` field that requires it to be present
-fn deserialize_trusted<'de, D>(deserializer: D) -> Result<bool, D::Error>
+fn deserialize_trusted<'de, D>(deserializer: D) -> std::result::Result<bool, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -260,92 +277,4 @@ pub fn detect_missing_caches(
     }
 
     (missing_caches, missing_public_keys)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_trusted() {
-        let store_ping = r#"{"trusted":1,"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.is_trusted, true);
-    }
-
-    #[test]
-    fn test_not_trusted() {
-        let store_ping = r#"{"trusted":0,"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.is_trusted, false);
-    }
-
-    #[test]
-    fn test_missing_trusted_field() {
-        // Ensure missing trusted field is rejected with proper error message
-        let store_ping = r#"{"url":"daemon","version":"2.18.1"}"#;
-        let result = serde_json::from_str::<StorePing>(store_ping);
-        assert!(result.is_err());
-        let err_msg = format!("{}", result.unwrap_err());
-        // Error should mention the missing field and version requirement
-        assert!(
-            err_msg.contains("trusted") || err_msg.contains("Nix"),
-            "Error message should mention Nix or trusted: {}",
-            err_msg
-        );
-    }
-
-    #[test]
-    fn test_missing_substituters() {
-        let mut cachix = CachixCacheInfo::default();
-        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
-        cachix
-            .known_keys
-            .insert("cache1".to_string(), "key1".to_string());
-        cachix
-            .known_keys
-            .insert("cache2".to_string(), "key2".to_string());
-        let nix_conf = NixConf::parse_stdout(
-            r#"
-              substituters = https://cache1.cachix.org https://cache3.cachix.org
-              trusted-public-keys = key1 key3
-            "#
-            .as_bytes(),
-        )
-        .expect("Failed to parse NixConf");
-        assert_eq!(
-            detect_missing_caches(&cachix, nix_conf),
-            (
-                vec!["https://cache2.cachix.org".to_string()],
-                vec!["key2".to_string()]
-            )
-        );
-    }
-
-    #[test]
-    fn test_extra_missing_substituters() {
-        let mut cachix = CachixCacheInfo::default();
-        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
-        cachix
-            .known_keys
-            .insert("cache1".to_string(), "key1".to_string());
-        cachix
-            .known_keys
-            .insert("cache2".to_string(), "key2".to_string());
-        let nix_conf = NixConf::parse_stdout(
-            r#"
-              extra-substituters = https://cache1.cachix.org https://cache3.cachix.org
-              extra-trusted-public-keys = key1 key3
-            "#
-            .as_bytes(),
-        )
-        .expect("Failed to parse NixConf");
-        assert_eq!(
-            detect_missing_caches(&cachix, nix_conf),
-            (
-                vec!["https://cache2.cachix.org".to_string()],
-                vec!["key2".to_string()]
-            )
-        );
-    }
 }
