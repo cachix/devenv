@@ -58,6 +58,8 @@ pub enum LogFormat {
     TracingPretty,
     /// A JSON log format used for machine consumption.
     TracingJson,
+    /// Interactive Terminal User Interface with real-time progress.
+    Tui,
 }
 
 macro_rules! json_export_layer {
@@ -80,7 +82,7 @@ pub fn init_tracing(
     level: Level,
     log_format: LogFormat,
     trace_export_file: Option<&Path>,
-    _shutdown: Arc<tokio_shutdown::Shutdown>,
+    shutdown: Arc<tokio_shutdown::Shutdown>,
 ) {
     let devenv_layer = DevenvLayer::new();
 
@@ -160,6 +162,24 @@ pub fn init_tracing(
                 .with(filter)
                 .with(stderr_layer)
                 .with(file_layer)
+                .init();
+        }
+        LogFormat::Tui => {
+            // Initialize TUI with proper shutdown coordination
+            let tui_handle = devenv_tui::init_tui();
+            let model = tui_handle.model.clone();
+
+            // Spawn TUI app in background
+            let shutdown_clone = shutdown.clone();
+            tokio::spawn(async move {
+                let _ = devenv_tui::app::run_app(model, shutdown_clone).await;
+            });
+
+            // Register layers including TUI layer
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(tui_handle.layer)
+                .with(devenv_layer)
                 .init();
         }
     }
@@ -475,7 +495,7 @@ where
                     id,
                     span,
                     "message" = msg,
-                    "devenv.is_user_message" = true,
+                    "devenv.ui.message" = true,
                     "devenv.span_event_kind" = SpanKind::Start as u8,
                     "devenv.span_has_error" = false,
                     |event| {
@@ -524,7 +544,7 @@ where
                 id,
                 span,
                 "message" = msg,
-                "devenv.is_user_message" = true,
+                "devenv.ui.message" = true,
                 "devenv.span_event_kind" = SpanKind::End as u8,
                 "devenv.span_has_error" = has_error,
                 "devenv.time_total" = time_total,
@@ -582,7 +602,7 @@ where
             }
 
             fn record_bool(&mut self, field: &Field, value: bool) {
-                if field.name() == "devenv.is_user_message" {
+                if field.name() == "devenv.ui.message" {
                     self.is_user_message = value;
                 }
             }

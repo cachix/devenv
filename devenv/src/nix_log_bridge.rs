@@ -1,9 +1,12 @@
 use devenv_eval_cache::Op;
 use devenv_eval_cache::internal_log::{ActivityType, Field, InternalLog, ResultType, Verbosity};
+use devenv_tui::tracing_interface::{
+    details_fields, nix_fields, operation_fields, operation_types, progress_events, status_events,
+};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{Span, debug, debug_span, error, info, trace, warn};
+use tracing::{Span, debug, error, info, info_span, trace, warn};
 
 /// Simple operation ID type for correlating Nix activities
 pub type OperationId = String;
@@ -14,6 +17,8 @@ pub struct NixLogBridge {
     active_activities: Arc<Mutex<HashMap<u64, NixActivityInfo>>>,
     /// Current parent operation ID for correlating Nix activities
     current_operation_id: Arc<Mutex<Option<OperationId>>>,
+    /// Current parent span for nesting Nix activities (uses Span::none() when not set)
+    current_parent_span: Arc<Mutex<Span>>,
     /// Evaluation tracking state
     evaluation_state: Arc<Mutex<EvaluationState>>,
 }
@@ -45,14 +50,20 @@ impl NixLogBridge {
         Arc::new(Self {
             active_activities: Arc::new(Mutex::new(HashMap::new())),
             current_operation_id: Arc::new(Mutex::new(None)),
+            current_parent_span: Arc::new(Mutex::new(Span::none())),
             evaluation_state: Arc::new(Mutex::new(EvaluationState::default())),
         })
     }
 
     /// Set the current operation ID for correlating Nix activities
+    /// Also captures the current span context for proper span nesting
     pub fn set_current_operation(&self, operation_id: OperationId) {
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = Some(operation_id);
+        }
+        // Capture the current span so Nix activities can be nested under it
+        if let Ok(mut span) = self.current_parent_span.lock() {
+            *span = Span::current();
         }
     }
 
@@ -64,6 +75,11 @@ impl NixLogBridge {
 
         if let Ok(mut current) = self.current_operation_id.lock() {
             *current = None;
+        }
+
+        // Reset the parent span to none
+        if let Ok(mut span) = self.current_parent_span.lock() {
+            *span = Span::none();
         }
 
         // Also reset the evaluation state for the next operation
@@ -136,9 +152,10 @@ impl NixLogBridge {
         if let Some(ref span) = state.span {
             span.in_scope(|| {
                 trace!(
-                    devenv.user_message = format!("Evaluated {} files", files.len()),
-                    files = ?files,
-                    "Evaluated {} files", files.len()
+                    { progress_events::fields::TYPE } = progress_events::FILES,
+                    { progress_events::fields::CURRENT } = files.len(),
+                    "Evaluated {} files",
+                    files.len()
                 );
             });
         }
@@ -221,8 +238,8 @@ impl NixLogBridge {
                     {
                         activity_info.span.in_scope(|| {
                             info!(
-                                devenv.user_message = format!("Build phase: {}", phase),
-                                phase = %phase,
+                                { details_fields::PHASE } = %phase,
+                                { status_events::fields::STATUS } = status_events::ACTIVE,
                                 "Build phase: {}", phase
                             );
                         });
@@ -233,7 +250,7 @@ impl NixLogBridge {
                     if let Some(op) = Op::from_internal_log(&log)
                         && let Op::EvaluatedFile { source } = op
                     {
-                        self.handle_file_evaluation(operation_id.clone(), source);
+                        self.handle_file_evaluation(source);
                         return;
                     }
 
@@ -250,6 +267,34 @@ impl NixLogBridge {
         }
     }
 
+    /// Insert an activity into the active activities map
+    fn insert_activity(
+        &self,
+        activity_id: u64,
+        operation_id: OperationId,
+        activity_type: ActivityType,
+        span: Span,
+    ) {
+        if let Ok(mut activities) = self.active_activities.lock() {
+            activities.insert(
+                activity_id,
+                NixActivityInfo {
+                    operation_id,
+                    activity_type,
+                    span,
+                },
+            );
+        }
+    }
+
+    /// Extract a string value from a Field
+    fn extract_string_field(field: &Field) -> Option<String> {
+        match field {
+            Field::String(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
     /// Handle the start of a Nix activity
     fn handle_activity_start(
         &self,
@@ -263,16 +308,10 @@ impl NixLogBridge {
             ActivityType::Build => {
                 let derivation_path = fields
                     .first()
-                    .and_then(|f| match f {
-                        Field::String(s) => Some(s.clone()),
-                        _ => None,
-                    })
+                    .and_then(Self::extract_string_field)
                     .unwrap_or_else(|| text.clone());
 
-                let machine = fields.get(1).and_then(|f| match f {
-                    Field::String(s) => Some(s.clone()),
-                    _ => None,
-                });
+                let machine = fields.get(1).and_then(Self::extract_string_field);
 
                 let derivation_name = extract_derivation_name(&derivation_path);
 
@@ -282,112 +321,102 @@ impl NixLogBridge {
                     format!("Building {}", derivation_name)
                 };
 
-                let span = debug_span!(
-                    "nix_derivation",
-                    devenv.user_message = %message,
-                    activity_id = activity_id,
-                    derivation_path = %derivation_path,
-                    derivation_name = %derivation_name,
-                    machine = ?machine
+                let parent = self.current_parent_span.lock().expect("Lock poisoned");
+                let span = info_span!(
+                    parent: &*parent,
+                    "nix_build",
+                    { operation_fields::TYPE } = operation_types::BUILD,
+                    { operation_fields::NAME } = %derivation_name,
+                    { operation_fields::SHORT_NAME } = %derivation_name,
+                    { details_fields::DERIVATION } = %derivation_path,
+                    { details_fields::MACHINE } = ?machine,
+                    { nix_fields::ACTIVITY_ID } = activity_id
                 );
                 span.in_scope(|| {
-                    info!("{}", message);
+                    info!(
+                        { status_events::fields::STATUS } = status_events::STARTING,
+                        "{}", message
+                    );
                 });
 
-                if let Ok(mut activities) = self.active_activities.lock() {
-                    activities.insert(
-                        activity_id,
-                        NixActivityInfo {
-                            operation_id,
-                            activity_type,
-                            span,
-                        },
-                    );
-                }
+                self.insert_activity(activity_id, operation_id, activity_type, span);
             }
             ActivityType::QueryPathInfo => {
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
+                if let (Some(store_path), Some(substituter)) = (
+                    fields.first().and_then(Self::extract_string_field),
+                    fields.get(1).and_then(Self::extract_string_field),
+                ) {
+                    let package_name = extract_package_name(&store_path);
 
-                    let span = debug_span!(
+                    let parent = self.current_parent_span.lock().expect("Lock poisoned");
+                    let span = info_span!(
+                        parent: &*parent,
                         "nix_query",
-                        devenv.user_message = format!("Querying {}", package_name),
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
+                        { operation_fields::TYPE } = operation_types::QUERY,
+                        { operation_fields::NAME } = %package_name,
+                        { operation_fields::SHORT_NAME } = %package_name,
+                        { details_fields::STORE_PATH } = %store_path,
+                        { details_fields::SUBSTITUTER } = %substituter,
+                        { nix_fields::ACTIVITY_ID } = activity_id
                     );
                     span.in_scope(|| {
-                        info!("Querying {}", package_name);
+                        info!(
+                            { status_events::fields::STATUS } = status_events::STARTING,
+                            "Querying {}", package_name
+                        );
                     });
 
-                    if let Ok(mut activities) = self.active_activities.lock() {
-                        activities.insert(
-                            activity_id,
-                            NixActivityInfo {
-                                operation_id,
-                                activity_type,
-                                span,
-                            },
-                        );
-                    }
+                    self.insert_activity(activity_id, operation_id, activity_type, span);
                 }
             }
             ActivityType::CopyPath => {
                 // CopyPath is the actual download activity that shows byte progress
-                if let (Some(Field::String(store_path)), Some(Field::String(substituter))) =
-                    (fields.first(), fields.get(1))
-                {
-                    let package_name = extract_package_name(store_path);
+                if let (Some(store_path), Some(substituter)) = (
+                    fields.first().and_then(Self::extract_string_field),
+                    fields.get(1).and_then(Self::extract_string_field),
+                ) {
+                    let package_name = extract_package_name(&store_path);
 
-                    let span = debug_span!(
+                    let parent = self.current_parent_span.lock().expect("Lock poisoned");
+                    let span = info_span!(
+                        parent: &*parent,
                         "nix_download",
-                        devenv.user_message = format!("Downloading {}", package_name),
-                        activity_id = activity_id,
-                        store_path = %store_path,
-                        package_name = %package_name,
-                        substituter = %substituter
+                        { operation_fields::TYPE } = operation_types::DOWNLOAD,
+                        { operation_fields::NAME } = %package_name,
+                        { operation_fields::SHORT_NAME } = %package_name,
+                        { details_fields::STORE_PATH } = %store_path,
+                        { details_fields::SUBSTITUTER } = %substituter,
+                        { nix_fields::ACTIVITY_ID } = activity_id
                     );
                     span.in_scope(|| {
-                        info!("Downloading {}", package_name);
+                        info!(
+                            { status_events::fields::STATUS } = status_events::STARTING,
+                            "Downloading {}", package_name
+                        );
                     });
 
-                    if let Ok(mut activities) = self.active_activities.lock() {
-                        activities.insert(
-                            activity_id,
-                            NixActivityInfo {
-                                operation_id,
-                                activity_type,
-                                span,
-                            },
-                        );
-                    }
+                    self.insert_activity(activity_id, operation_id, activity_type, span);
                 }
             }
             ActivityType::FetchTree => {
                 // FetchTree activities show when fetching Git repos, tarballs, etc.
-                let span = debug_span!(
-                    "fetch_tree",
-                    devenv.user_message = format!("Fetching {}", text),
-                    activity_id = activity_id,
-                    message = %text
+                let parent = self.current_parent_span.lock().expect("Lock poisoned");
+                let span = info_span!(
+                    parent: &*parent,
+                    "nix_fetch_tree",
+                    { operation_fields::TYPE } = operation_types::FETCH_TREE,
+                    { operation_fields::NAME } = %text,
+                    { operation_fields::SHORT_NAME } = %text,
+                    { nix_fields::ACTIVITY_ID } = activity_id
                 );
                 span.in_scope(|| {
-                    info!("Fetching {}", text);
+                    info!(
+                        { status_events::fields::STATUS } = status_events::STARTING,
+                        "Fetching {}", text
+                    );
                 });
 
-                if let Ok(mut activities) = self.active_activities.lock() {
-                    activities.insert(
-                        activity_id,
-                        NixActivityInfo {
-                            operation_id,
-                            activity_type,
-                            span,
-                        },
-                    );
-                }
+                self.insert_activity(activity_id, operation_id, activity_type, span);
             }
             _ => {
                 // For other activity types, we can add support as needed
@@ -408,53 +437,62 @@ impl NixLogBridge {
 
             match activity_info.activity_type {
                 ActivityType::Build => {
-                    let message = if success {
-                        "Build completed"
-                    } else {
-                        "Build failed"
-                    };
                     activity_info.span.in_scope(|| {
                         if success {
-                            info!("{}", message);
+                            info!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Build completed"
+                            );
                         } else {
-                            warn!("{}", message);
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Build failed"
+                            );
                         }
                     });
                 }
                 ActivityType::CopyPath => {
-                    let message = if success {
-                        "Download completed"
-                    } else {
-                        "Download failed"
-                    };
                     activity_info.span.in_scope(|| {
                         if success {
-                            info!("{}", message);
+                            info!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Download completed"
+                            );
                         } else {
-                            warn!("{}", message);
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Download failed"
+                            );
                         }
                     });
                 }
                 ActivityType::QueryPathInfo => {
                     activity_info.span.in_scope(|| {
                         if success {
-                            debug!("Query completed");
+                            debug!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Query completed"
+                            );
                         } else {
-                            warn!("Query failed");
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Query failed"
+                            );
                         }
                     });
                 }
                 ActivityType::FetchTree => {
-                    let message = if success {
-                        "Fetch completed"
-                    } else {
-                        "Fetch failed"
-                    };
                     activity_info.span.in_scope(|| {
                         if success {
-                            info!("{}", message);
+                            info!(
+                                { status_events::fields::STATUS } = status_events::COMPLETED,
+                                "Fetch completed"
+                            );
                         } else {
-                            warn!("{}", message);
+                            warn!(
+                                { status_events::fields::STATUS } = status_events::FAILED,
+                                "Fetch failed"
+                            );
                         }
                     });
                 }
@@ -485,12 +523,9 @@ impl NixLogBridge {
                     {
                         activity_info.span.in_scope(|| {
                             debug!(
-                                devenv.user_message =
-                                    format!("Progress: {}/{} done", done, expected),
-                                done = done,
-                                expected = expected,
-                                running = running,
-                                failed = failed,
+                                { progress_events::fields::TYPE } = progress_events::GENERIC,
+                                { progress_events::fields::CURRENT } = done,
+                                { progress_events::fields::TOTAL } = expected,
                                 "Progress: {}/{} done, {} running, {} failed",
                                 done,
                                 expected,
@@ -514,20 +549,28 @@ impl NixLogBridge {
                         {
                             // Only CopyPath activities have byte-based download progress
                             if activity_info.activity_type == ActivityType::CopyPath {
-                                let message = if let Some(total) = total_bytes {
-                                    let percent = (*downloaded as f64 / total as f64) * 100.0;
-                                    format!("Download progress: {:.1}%", percent)
+                                let percent = if let Some(total) = total_bytes {
+                                    Some((*downloaded as f64 / total as f64) * 100.0)
                                 } else {
-                                    format!("Downloaded {} bytes", downloaded)
+                                    None
                                 };
 
                                 activity_info.span.in_scope(|| {
-                                    debug!(
-                                        devenv.user_message = %message,
-                                        bytes_downloaded = downloaded,
-                                        total_bytes = ?total_bytes,
-                                        "{}", message
-                                    );
+                                    if let Some(pct) = percent {
+                                        debug!(
+                                            { progress_events::fields::TYPE } = progress_events::BYTES,
+                                            { progress_events::fields::CURRENT } = downloaded,
+                                            { progress_events::fields::TOTAL } = ?total_bytes,
+                                            { progress_events::fields::PERCENTAGE } = pct,
+                                            "Download progress: {:.1}%", pct
+                                        );
+                                    } else {
+                                        debug!(
+                                            { progress_events::fields::TYPE } = progress_events::BYTES,
+                                            { progress_events::fields::CURRENT } = downloaded,
+                                            "Downloaded {} bytes", downloaded
+                                        );
+                                    }
                                 });
                             }
                         }
@@ -543,8 +586,8 @@ impl NixLogBridge {
                 {
                     activity_info.span.in_scope(|| {
                         info!(
-                            devenv.user_message = format!("Build phase: {}", phase),
-                            phase = %phase,
+                            { details_fields::PHASE } = %phase,
+                            { status_events::fields::STATUS } = status_events::ACTIVE,
                             "Build phase: {}", phase
                         );
                     });
@@ -572,7 +615,7 @@ impl NixLogBridge {
     }
 
     /// Handle file evaluation events
-    fn handle_file_evaluation(&self, _operation_id: OperationId, file_path: std::path::PathBuf) {
+    fn handle_file_evaluation(&self, file_path: std::path::PathBuf) {
         const BATCH_SIZE: usize = 5; // Reduced from 10 for more responsive updates
         const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100); // Reduced from 200ms
 
@@ -581,13 +624,19 @@ impl NixLogBridge {
 
             // If this is the first file, create and store the evaluation span
             if state.total_files_evaluated == 0 && state.pending_files.is_empty() {
-                let span = debug_span!(
+                let parent = self.current_parent_span.lock().expect("Lock poisoned");
+                let span = info_span!(
+                    parent: &*parent,
                     "nix_evaluation",
-                    devenv.user_message = "Evaluating Nix files",
-                    first_file = %file_path_str
+                    { operation_fields::TYPE } = operation_types::EVALUATE,
+                    { operation_fields::NAME } = "Nix evaluation",
+                    { operation_fields::SHORT_NAME } = "Eval"
                 );
                 span.in_scope(|| {
-                    info!("Starting Nix evaluation: {}", file_path_str);
+                    info!(
+                        { status_events::fields::STATUS } = status_events::STARTING,
+                        "Starting Nix evaluation: {}", file_path_str
+                    );
                 });
                 state.span = Some(span);
             }
@@ -611,9 +660,9 @@ impl NixLogBridge {
                 if let Some(ref span) = state.span {
                     span.in_scope(|| {
                         info!(
-                            devenv.user_message = format!("Evaluating Nix files ({} total)", state.total_files_evaluated),
-                            files = ?files,
-                            total_files_evaluated = state.total_files_evaluated,
+                            { progress_events::fields::TYPE } = progress_events::FILES,
+                            { progress_events::fields::CURRENT } = state.total_files_evaluated,
+                            { status_events::fields::STATUS } = status_events::ACTIVE,
                             "Evaluated {} files (total: {})",
                             files.len(),
                             state.total_files_evaluated
@@ -629,12 +678,17 @@ impl NixLogBridge {
     }
 }
 
-/// Extract a human-readable derivation name from a derivation path
-fn extract_derivation_name(derivation_path: &str) -> String {
-    // Remove .drv suffix if present
-    let path = derivation_path
-        .strip_suffix(".drv")
-        .unwrap_or(derivation_path);
+/// Extract a human-readable name from a Nix path
+///
+/// For derivations, strips .drv suffix if present.
+/// Extracts the name part after the hash (format: /nix/store/hash-name)
+fn extract_nix_name(path: &str, strip_drv: bool) -> String {
+    // Remove .drv suffix if requested
+    let path = if strip_drv {
+        path.strip_suffix(".drv").unwrap_or(path)
+    } else {
+        path
+    };
 
     // Extract the name part after the hash
     if let Some(dash_pos) = path.rfind('-')
@@ -647,21 +701,14 @@ fn extract_derivation_name(derivation_path: &str) -> String {
     path.split('/').next_back().unwrap_or(path).to_string()
 }
 
+/// Extract a human-readable derivation name from a derivation path
+fn extract_derivation_name(derivation_path: &str) -> String {
+    extract_nix_name(derivation_path, true)
+}
+
 /// Extract a human-readable package name from a store path
 fn extract_package_name(store_path: &str) -> String {
-    // Extract the name part after the hash (format: /nix/store/hash-name)
-    if let Some(dash_pos) = store_path.rfind('-')
-        && let Some(slash_pos) = store_path[..dash_pos].rfind('/')
-    {
-        return store_path[slash_pos + 1..].to_string();
-    }
-
-    // Fallback: just take the filename
-    store_path
-        .split('/')
-        .next_back()
-        .unwrap_or(store_path)
-        .to_string()
+    extract_nix_name(store_path, false)
 }
 
 #[cfg(test)]
