@@ -154,7 +154,7 @@ pub fn init_tracing(
         LogFormat::Tui => {
             // Initialize TUI with proper shutdown coordination
             let tui_handle = devenv_tui::init_tui();
-            let model = tui_handle.model.clone();
+            let model = tui_handle.model();
 
             // Spawn TUI app in background
             let shutdown_clone = shutdown.clone();
@@ -165,7 +165,7 @@ pub fn init_tracing(
             // Register layers including TUI layer
             tracing_subscriber::registry()
                 .with(filter)
-                .with(tui_handle.layer)
+                .with(tui_handle.layer())
                 .with(devenv_layer)
                 .init();
         }
