@@ -1168,7 +1168,9 @@ dependencies = [
  "cli-table",
  "console 0.16.1",
  "devenv-cache-core",
+ "devenv-core",
  "devenv-eval-cache",
+ "devenv-snix-backend",
  "devenv-tasks",
  "dialoguer",
  "dotlock",
@@ -1235,6 +1237,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "devenv-core"
+version = "1.10.1"
+dependencies = [
+ "async-trait",
+ "clap",
+ "devenv-eval-cache",
+ "miette",
+ "nix-conf-parser",
+ "once_cell",
+ "pathdiff",
+ "schemars 1.0.4",
+ "schematic",
+ "ser_nix",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "devenv-eval-cache"
 version = "1.10.1"
 dependencies = [
@@ -1289,6 +1312,26 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-shutdown",
+]
+
+[[package]]
+name = "devenv-snix-backend"
+version = "1.10.1"
+dependencies = [
+ "async-trait",
+ "devenv-core",
+ "devenv-eval-cache",
+ "miette",
+ "nix-compat",
+ "nix-compat-derive",
+ "snix-build",
+ "snix-castore",
+ "snix-eval",
+ "snix-glue",
+ "snix-store",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

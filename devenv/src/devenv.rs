@@ -1,14 +1,18 @@
-use super::{
-    cli, config,
-    log::HumanReadableDuration,
-    nix_args::{NixArgs, SecretspecData},
-    nix_backend, tasks, util,
-};
+use super::{log::HumanReadableDuration, tasks, util};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
+use devenv_core::{
+    cachix::{CachixManager, CachixPaths},
+    cli::GlobalOptions,
+    config::{Config, NixBackendType},
+    nix_args::{NixArgs, SecretspecData},
+    nix_backend::{DevenvPaths, NixBackend, Options},
+};
+#[cfg(feature = "snix")]
+use devenv_snix_backend;
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use once_cell::sync::Lazy;
@@ -57,8 +61,8 @@ pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
 #[derive(Debug)]
 pub struct DevenvOptions {
-    pub config: config::Config,
-    pub global_options: Option<cli::GlobalOptions>,
+    pub config: Config,
+    pub global_options: Option<GlobalOptions>,
     pub devenv_root: Option<PathBuf>,
     pub devenv_dotfile: Option<PathBuf>,
     pub shutdown: Arc<tokio_shutdown::Shutdown>,
@@ -67,7 +71,7 @@ pub struct DevenvOptions {
 impl DevenvOptions {
     pub fn new(shutdown: Arc<tokio_shutdown::Shutdown>) -> Self {
         Self {
-            config: config::Config::default(),
+            config: Config::default(),
             global_options: None,
             devenv_root: None,
             devenv_dotfile: None,
@@ -79,7 +83,7 @@ impl DevenvOptions {
 impl Default for DevenvOptions {
     fn default() -> Self {
         Self {
-            config: config::Config::default(),
+            config: Config::default(),
             global_options: None,
             devenv_root: None,
             devenv_dotfile: None,
@@ -100,10 +104,10 @@ pub struct ProcessOptions<'a> {
 }
 
 pub struct Devenv {
-    pub config: Arc<RwLock<config::Config>>,
-    pub global_options: cli::GlobalOptions,
+    pub config: Arc<RwLock<Config>>,
+    pub global_options: GlobalOptions,
 
-    pub nix: Arc<Box<dyn nix_backend::NixBackend>>,
+    pub nix: Arc<Box<dyn NixBackend>>,
 
     // All kinds of paths
     devenv_root: PathBuf,
@@ -180,7 +184,7 @@ impl Devenv {
         let backend_type = options.config.backend.clone();
 
         // Create DevenvPaths struct
-        let paths = nix_backend::DevenvPaths {
+        let paths = DevenvPaths {
             root: devenv_root.clone(),
             dotfile: devenv_dotfile.clone(),
             dot_gc: devenv_dot_gc.clone(),
@@ -188,11 +192,11 @@ impl Devenv {
         };
 
         // Create CachixPaths for Nix backend
-        let cachix_paths = crate::cachix::CachixPaths {
+        let cachix_paths = CachixPaths {
             trusted_keys: cachix_trusted_keys,
             netrc: devenv_dotfile.join("netrc"),
         };
-        let cachix_manager = Arc::new(crate::cachix::CachixManager::new(cachix_paths));
+        let cachix_manager = Arc::new(CachixManager::new(cachix_paths));
 
         // Create shared secretspec_resolved Arc to share between Devenv and Nix
         let secretspec_resolved = Arc::new(OnceCell::new());
@@ -200,8 +204,8 @@ impl Devenv {
         // Create eval-cache pool (framework layer concern, used by backends)
         let eval_cache_pool = Arc::new(OnceCell::new());
 
-        let nix: Box<dyn nix_backend::NixBackend> = match backend_type {
-            config::NixBackendType::Nix => Box::new(
+        let nix: Box<dyn NixBackend> = match backend_type {
+            NixBackendType::Nix => Box::new(
                 crate::nix::Nix::new(
                     options.config.clone(),
                     global_options.clone(),
@@ -214,8 +218,8 @@ impl Devenv {
                 .expect("Failed to initialize Nix backend"),
             ),
             #[cfg(feature = "snix")]
-            config::NixBackendType::Snix => Box::new(
-                crate::snix_backend::SnixBackend::new(
+            NixBackendType::Snix => Box::new(
+                devenv_snix_backend::SnixBackend::new(
                     options.config.clone(),
                     global_options.clone(),
                     paths,
@@ -678,7 +682,7 @@ impl Devenv {
     }
 
     async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {
-        let build_options = nix_backend::Options {
+        let build_options = Options {
             logging: false,
             cache_output: true,
             ..Default::default()
@@ -714,7 +718,7 @@ impl Devenv {
     }
 
     async fn search_packages(&self, name: &str) -> Result<Vec<DevenvPackageResult>> {
-        let search_options = nix_backend::Options {
+        let search_options = Options {
             logging: false,
             cache_output: true,
             ..Default::default()

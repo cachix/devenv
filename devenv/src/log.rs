@@ -46,19 +46,8 @@ impl From<Level> for LevelFilter {
     }
 }
 
-#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum LogFormat {
-    /// The default human-readable log format used in the CLI.
-    #[default]
-    Cli,
-    /// A verbose structured log format used for debugging.
-    TracingFull,
-    /// A pretty human-readable log format used for debugging.
-    TracingPretty,
-    /// A JSON log format used for machine consumption.
-    TracingJson,
-}
+// Re-export LogFormat from devenv_core
+pub use devenv_core::cli::LogFormat;
 
 macro_rules! json_export_layer {
     ($export_file:expr) => {

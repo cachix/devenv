@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
-use crate::config::Config;
 use crate::devenv::{Devenv, DevenvOptions};
-use crate::nix_backend;
+use devenv_core::{Config, Options};
 use miette::Result;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{ServerCapabilities, ServerInfo};
@@ -141,7 +140,7 @@ impl DevenvMcpServer {
         devenv.assemble(true).await?;
 
         // Build the optionsJSON attribute like in devenv.rs search function
-        let build_options = nix_backend::Options {
+        let build_options = Options {
             logging: false,
             cache_output: true,
             ..Default::default()

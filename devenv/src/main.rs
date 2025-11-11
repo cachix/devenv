@@ -1,9 +1,10 @@
 use clap::crate_version;
 use devenv::{
-    Devenv,
+    Config, Devenv,
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
-    config, log,
+    log,
 };
+use devenv_core::config;
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{env, os::unix::process::CommandExt, process::Command, sync::Arc};
 use tempfile::TempDir;
@@ -57,7 +58,7 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
         shutdown.clone(),
     );
 
-    let mut config = config::Config::load()?;
+    let mut config = Config::load()?;
     for input in cli.global_options.override_input.chunks_exact(2) {
         config
             .override_input_url(&input[0].clone(), &input[1].clone())

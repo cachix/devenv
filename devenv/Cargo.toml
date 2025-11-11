@@ -10,9 +10,11 @@ default-run = "devenv"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+devenv-core.workspace = true
 devenv-eval-cache.workspace = true
 devenv-tasks.workspace = true
 devenv-cache-core.workspace = true
+devenv-snix-backend = { workspace = true, optional = true }
 http-client-tls.workspace = true
 nix-conf-parser.workspace = true
 
@@ -72,6 +74,7 @@ nix-compat-derive = { workspace = true, optional = true }
 default = []
 integration-tests = []
 snix = [
+  "dep:devenv-snix-backend",
   "dep:nix-compat",
   "dep:nix-compat-derive",
   "dep:snix-build",

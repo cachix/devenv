@@ -3,10 +3,10 @@
 //! This module provides a Rust-native Nix evaluator backend using Snix
 //! as an alternative to the traditional C++ Nix binary.
 
-use crate::nix_args::NixArgs;
-use crate::nix_backend::{DevenvPaths, NixBackend, Options};
-use crate::{cachix, cli, config};
 use async_trait::async_trait;
+use devenv_core::{
+    CachixManager, Config, DevenvPaths, GlobalOptions, NixArgs, NixBackend, Options,
+};
 use devenv_eval_cache::Output;
 use miette::{Result, bail};
 use snix_build::buildservice::{BuildService, DummyBuildService};
@@ -29,21 +29,21 @@ use tracing::{debug, info, warn};
 /// rather than storing them in shared state.
 pub struct SnixBackend {
     #[allow(dead_code)] // Will be used when more functionality is implemented
-    config: config::Config,
+    config: Config,
     #[allow(dead_code)] // Will be used when more functionality is implemented
-    global_options: cli::GlobalOptions,
+    global_options: GlobalOptions,
     #[allow(dead_code)] // Will be used when more functionality is implemented
     paths: DevenvPaths,
     #[allow(dead_code)] // Will be used when cachix integration is implemented
-    cachix_manager: Arc<cachix::CachixManager>,
+    cachix_manager: Arc<CachixManager>,
 }
 
 impl SnixBackend {
     pub async fn new(
-        config: config::Config,
-        global_options: cli::GlobalOptions,
+        config: Config,
+        global_options: GlobalOptions,
         paths: DevenvPaths,
-        cachix_manager: Arc<cachix::CachixManager>,
+        cachix_manager: Arc<CachixManager>,
         _pool: Option<Arc<tokio::sync::OnceCell<sqlx::SqlitePool>>>,
     ) -> Result<Self> {
         info!("Initializing Snix backend");

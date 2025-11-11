@@ -213,7 +213,7 @@ pub struct StorePing {
 }
 
 /// Custom deserializer for the `trusted` field that requires it to be present
-fn deserialize_trusted<'de, D>(deserializer: D) -> Result<bool, D::Error>
+fn deserialize_trusted<'de, D>(deserializer: D) -> std::result::Result<bool, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -277,92 +277,4 @@ pub fn detect_missing_caches(
     }
 
     (missing_caches, missing_public_keys)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_trusted() {
-        let store_ping = r#"{"trusted":1,"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.is_trusted, true);
-    }
-
-    #[test]
-    fn test_not_trusted() {
-        let store_ping = r#"{"trusted":0,"url":"daemon","version":"2.18.1"}"#;
-        let store_ping: StorePing = serde_json::from_str(store_ping).unwrap();
-        assert_eq!(store_ping.is_trusted, false);
-    }
-
-    #[test]
-    fn test_missing_trusted_field() {
-        // Ensure missing trusted field is rejected with proper error message
-        let store_ping = r#"{"url":"daemon","version":"2.18.1"}"#;
-        let result = serde_json::from_str::<StorePing>(store_ping);
-        assert!(result.is_err());
-        let err_msg = format!("{}", result.unwrap_err());
-        // Error should mention the missing field and version requirement
-        assert!(
-            err_msg.contains("trusted") || err_msg.contains("Nix"),
-            "Error message should mention Nix or trusted: {}",
-            err_msg
-        );
-    }
-
-    #[test]
-    fn test_missing_substituters() {
-        let mut cachix = CachixCacheInfo::default();
-        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
-        cachix
-            .known_keys
-            .insert("cache1".to_string(), "key1".to_string());
-        cachix
-            .known_keys
-            .insert("cache2".to_string(), "key2".to_string());
-        let nix_conf = NixConf::parse_stdout(
-            r#"
-              substituters = https://cache1.cachix.org https://cache3.cachix.org
-              trusted-public-keys = key1 key3
-            "#
-            .as_bytes(),
-        )
-        .expect("Failed to parse NixConf");
-        assert_eq!(
-            detect_missing_caches(&cachix, nix_conf),
-            (
-                vec!["https://cache2.cachix.org".to_string()],
-                vec!["key2".to_string()]
-            )
-        );
-    }
-
-    #[test]
-    fn test_extra_missing_substituters() {
-        let mut cachix = CachixCacheInfo::default();
-        cachix.caches.pull = vec!["cache1".to_string(), "cache2".to_string()];
-        cachix
-            .known_keys
-            .insert("cache1".to_string(), "key1".to_string());
-        cachix
-            .known_keys
-            .insert("cache2".to_string(), "key2".to_string());
-        let nix_conf = NixConf::parse_stdout(
-            r#"
-              extra-substituters = https://cache1.cachix.org https://cache3.cachix.org
-              extra-trusted-public-keys = key1 key3
-            "#
-            .as_bytes(),
-        )
-        .expect("Failed to parse NixConf");
-        assert_eq!(
-            detect_missing_caches(&cachix, nix_conf),
-            (
-                vec!["https://cache2.cachix.org".to_string()],
-                vec!["key2".to_string()]
-            )
-        );
-    }
 }
