@@ -404,7 +404,7 @@ where
 
             // Handle specific operation types based on standardized operation.type field
             match op_type.as_str() {
-                op_type_str if op_type_str == operation_types::BUILD => {
+                operation_types::BUILD => {
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
@@ -428,7 +428,7 @@ where
                         model.add_activity(activity);
                     });
                 }
-                op_type_str if op_type_str == operation_types::DOWNLOAD => {
+                operation_types::DOWNLOAD => {
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
@@ -452,7 +452,7 @@ where
                         model.add_activity(activity);
                     });
                 }
-                op_type_str if op_type_str == operation_types::QUERY => {
+                operation_types::QUERY => {
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
@@ -476,7 +476,7 @@ where
                         model.add_activity(activity);
                     });
                 }
-                op_type_str if op_type_str == operation_types::FETCH_TREE => {
+                operation_types::FETCH_TREE => {
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
@@ -499,7 +499,7 @@ where
                         model.add_activity(activity);
                     });
                 }
-                op_type_str if op_type_str == operation_types::EVALUATE => {
+                operation_types::EVALUATE => {
                     let activity_id = visitor.activity_id_or_random();
                     span.extensions_mut().insert(activity_id);
 
@@ -522,7 +522,7 @@ where
                         model.add_activity(activity);
                     });
                 }
-                op_type_str if op_type_str == operation_types::DEVENV => {
+                operation_types::DEVENV => {
                     let activity_id = rand::random();
                     span.extensions_mut().insert(activity_id);
 
@@ -729,77 +729,75 @@ where
         if target.starts_with("devenv.nix.") {
             match target {
                 "devenv.nix.progress" => {
-                    if let Some(activity_id_str) = visitor.fields.get("activity_id") {
-                        if let Ok(activity_id) = activity_id_str.parse::<u64>()
-                            && let (Some(done_str), Some(expected_str)) =
-                                (visitor.fields.get("done"), visitor.fields.get("expected"))
-                            && let (Ok(done), Ok(expected)) =
-                                (done_str.parse::<u64>(), expected_str.parse::<u64>())
-                        {
-                            let _running = visitor
-                                .fields
-                                .get("running")
-                                .and_then(|s| s.parse::<u64>().ok())
-                                .unwrap_or(0);
-                            let _failed = visitor
-                                .fields
-                                .get("failed")
-                                .and_then(|s| s.parse::<u64>().ok())
-                                .unwrap_or(0);
+                    if let Some(activity_id_str) = visitor.fields.get("activity_id")
+                        && let Ok(activity_id) = activity_id_str.parse::<u64>()
+                        && let (Some(done_str), Some(expected_str)) =
+                            (visitor.fields.get("done"), visitor.fields.get("expected"))
+                        && let (Ok(done), Ok(expected)) =
+                            (done_str.parse::<u64>(), expected_str.parse::<u64>())
+                    {
+                        let _running = visitor
+                            .fields
+                            .get("running")
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .unwrap_or(0);
+                        let _failed = visitor
+                            .fields
+                            .get("failed")
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .unwrap_or(0);
 
-                            self.update_model(|model| {
-                                if let Some(activity) = model.activities.get_mut(&activity_id) {
-                                    activity.progress = Some(ProgressActivity {
-                                        current: Some(done),
-                                        total: Some(expected),
-                                        unit: None,
-                                        percent: if expected > 0 {
-                                            Some((done as f32 / expected as f32) * 100.0)
-                                        } else {
-                                            None
-                                        },
-                                    });
-                                }
-                            });
-                        }
+                        self.update_model(|model| {
+                            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                                activity.progress = Some(ProgressActivity {
+                                    current: Some(done),
+                                    total: Some(expected),
+                                    unit: None,
+                                    percent: if expected > 0 {
+                                        Some((done as f32 / expected as f32) * 100.0)
+                                    } else {
+                                        None
+                                    },
+                                });
+                            }
+                        });
                     }
                 }
                 "devenv.nix.download" if event.metadata().name() == "nix_download_progress" => {
-                    if let Some(activity_id_str) = visitor.fields.get("activity_id") {
-                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
-                            let bytes_downloaded = visitor
-                                .fields
-                                .get("bytes_downloaded")
-                                .and_then(|s| s.parse::<u64>().ok())
-                                .unwrap_or(0);
-                            let total_bytes = visitor
-                                .fields
-                                .get("total_bytes")
-                                .and_then(|s| s.parse::<u64>().ok());
+                    if let Some(activity_id_str) = visitor.fields.get("activity_id")
+                        && let Ok(activity_id) = activity_id_str.parse::<u64>()
+                    {
+                        let bytes_downloaded = visitor
+                            .fields
+                            .get("bytes_downloaded")
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .unwrap_or(0);
+                        let total_bytes = visitor
+                            .fields
+                            .get("total_bytes")
+                            .and_then(|s| s.parse::<u64>().ok());
 
-                            self.update_model(|model| {
-                                if let Some(activity) = model.activities.get_mut(&activity_id)
-                                    && let ActivityVariant::Download(ref mut download_activity) =
-                                        activity.variant
-                                {
-                                    // Calculate download speed from previous values
-                                    let speed =
-                                        if let Some(current) = download_activity.size_current {
-                                            let time_delta = 0.1; // Assume ~100ms between updates
-                                            let bytes_delta =
-                                                bytes_downloaded.saturating_sub(current) as f64;
-                                            (bytes_delta / time_delta) as u64
-                                        } else {
-                                            0
-                                        };
+                        self.update_model(|model| {
+                            if let Some(activity) = model.activities.get_mut(&activity_id)
+                                && let ActivityVariant::Download(ref mut download_activity) =
+                                    activity.variant
+                            {
+                                // Calculate download speed from previous values
+                                let speed = if let Some(current) = download_activity.size_current {
+                                    let time_delta = 0.1; // Assume ~100ms between updates
+                                    let bytes_delta =
+                                        bytes_downloaded.saturating_sub(current) as f64;
+                                    (bytes_delta / time_delta) as u64
+                                } else {
+                                    0
+                                };
 
-                                    // Update download progress
-                                    download_activity.size_current = Some(bytes_downloaded);
-                                    download_activity.size_total = total_bytes;
-                                    download_activity.speed = Some(speed);
-                                }
-                            });
-                        }
+                                // Update download progress
+                                download_activity.size_current = Some(bytes_downloaded);
+                                download_activity.size_total = total_bytes;
+                                download_activity.speed = Some(speed);
+                            }
+                        });
                     }
                 }
                 "devenv.nix.build" => {
@@ -807,68 +805,65 @@ where
                     if let (Some(activity_id_str), Some(phase)) = (
                         visitor.fields.get("activity_id"),
                         visitor.fields.get("phase"),
-                    ) {
-                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
-                            self.update_model(|model| {
-                                if let Some(activity) = model.activities.get_mut(&activity_id)
-                                    && let ActivityVariant::Build(ref mut build_activity) =
-                                        activity.variant
-                                {
-                                    build_activity.phase = Some(phase.clone());
-                                }
-                            });
-                        }
+                    ) && let Ok(activity_id) = activity_id_str.parse::<u64>()
+                    {
+                        self.update_model(|model| {
+                            if let Some(activity) = model.activities.get_mut(&activity_id)
+                                && let ActivityVariant::Build(ref mut build_activity) =
+                                    activity.variant
+                            {
+                                build_activity.phase = Some(phase.clone());
+                            }
+                        });
                     }
                     // Handle build logs
                     if let (Some(activity_id_str), Some(line)) = (
                         visitor.fields.get("activity_id"),
                         visitor.fields.get("line"),
-                    ) {
-                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
-                            self.update_model(|model| {
-                                model.add_build_log(activity_id, line.clone());
-                            });
-                        }
+                    ) && let Ok(activity_id) = activity_id_str.parse::<u64>()
+                    {
+                        self.update_model(|model| {
+                            model.add_build_log(activity_id, line.clone());
+                        });
                     }
                 }
                 "devenv.nix.eval" if event.metadata().name() == "nix_evaluation_progress" => {
                     if let (Some(activity_id_str), Some(files_str)) = (
                         visitor.fields.get(nix_fields::ACTIVITY_ID),
                         visitor.fields.get("files"),
-                    ) {
-                        if let Ok(activity_id) = activity_id_str.parse::<u64>() {
-                            let total_files_evaluated = visitor
-                                .fields
-                                .get("total_files_evaluated")
-                                .and_then(|s| s.parse::<u64>().ok())
-                                .unwrap_or(0);
+                    ) && let Ok(activity_id) = activity_id_str.parse::<u64>()
+                    {
+                        let total_files_evaluated = visitor
+                            .fields
+                            .get("total_files_evaluated")
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .unwrap_or(0);
 
-                            // Parse the files array - this is a bit crude but should work
-                            let files: Vec<String> = files_str
-                                .trim_start_matches('[')
-                                .trim_end_matches(']')
-                                .split(", ")
-                                .map(|s| s.trim_matches('"').to_string())
-                                .filter(|s| !s.is_empty())
-                                .collect();
+                        // Parse the files array - this is a bit crude but should work
+                        let files: Vec<String> = files_str
+                            .trim_start_matches('[')
+                            .trim_end_matches(']')
+                            .split(", ")
+                            .map(|s| s.trim_matches('"').to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect();
 
-                            self.update_model(|model| {
-                                if let Some(activity) = model.activities.get_mut(&activity_id) {
-                                    // Update progress with file count
-                                    activity.progress = Some(ProgressActivity {
-                                        current: Some(total_files_evaluated),
-                                        total: None,
-                                        unit: Some("files".to_string()),
-                                        percent: None,
-                                    });
+                        self.update_model(|model| {
+                            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                                // Update progress with file count
+                                activity.progress = Some(ProgressActivity {
+                                    current: Some(total_files_evaluated),
+                                    total: None,
+                                    unit: Some("files".to_string()),
+                                    percent: None,
+                                });
 
-                                    // Store latest file being evaluated in detail
-                                    if let Some(latest_file) = files.last() {
-                                        activity.detail = Some(latest_file.clone());
-                                    }
+                                // Store latest file being evaluated in detail
+                                if let Some(latest_file) = files.last() {
+                                    activity.detail = Some(latest_file.clone());
                                 }
-                            });
-                        }
+                            }
+                        });
                     }
                 }
                 _ => {}
@@ -877,30 +872,26 @@ where
 
         // Handle log output events (stdout/stderr streaming)
         let target = event.metadata().target();
-        if target == log_fields::STDOUT_TARGET || target == log_fields::STDERR_TARGET {
-            if let (Some(stream), Some(message)) = (
+        if (target == log_fields::STDOUT_TARGET || target == log_fields::STDERR_TARGET)
+            && let (Some(stream), Some(message)) = (
                 visitor.fields.get(log_fields::STREAM),
                 visitor.fields.get(log_fields::MESSAGE),
-            ) {
-                // TODO: Associate with the correct task activity
-                // For now, add to message log
-                let log_level = if stream.contains("stderr") {
-                    LogLevel::Warn
-                } else {
-                    LogLevel::Info
-                };
+            )
+        {
+            // TODO: Associate with the correct task activity
+            // For now, add to message log
+            let log_level = if stream.contains("stderr") {
+                LogLevel::Warn
+            } else {
+                LogLevel::Info
+            };
 
-                let log_msg = crate::LogMessage::new(
-                    log_level,
-                    message.clone(),
-                    LogSource::Nix,
-                    HashMap::new(),
-                );
+            let log_msg =
+                crate::LogMessage::new(log_level, message.clone(), LogSource::Nix, HashMap::new());
 
-                self.update_model(|model| {
-                    model.add_log_message(log_msg);
-                });
-            }
+            self.update_model(|model| {
+                model.add_log_message(log_msg);
+            });
         }
 
         // Handle log messages marked with devenv.log = true
