@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use devenv_tui::init_tui;
+use devenv_tui::TuiHandle;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
 use tracing::span::EnteredSpan;
-use tracing::{info, info_span, warn};
+use tracing::{error, info, info_span, warn};
 
 /// JSON trace event from tracing-subscriber's JSON formatter
 #[derive(Debug, Deserialize, Clone)]
@@ -20,146 +20,252 @@ struct TraceEvent {
     #[serde(default)]
     fields: HashMap<String, serde_json::Value>,
     #[serde(default)]
-    span: Option<SpanInfo>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-struct SpanInfo {
+    span: Option<HashMap<String, serde_json::Value>>,
     #[serde(default)]
-    name: String,
-    id: Option<u64>,
+    spans: Vec<HashMap<String, serde_json::Value>>,
 }
 
 /// Helper to extract typed values from JSON fields
-struct FieldExtractor<'a>(&'a HashMap<String, serde_json::Value>);
+struct FieldExtractor<'a> {
+    event_fields: &'a HashMap<String, serde_json::Value>,
+    span_fields: &'a HashMap<String, serde_json::Value>,
+}
 
 impl<'a> FieldExtractor<'a> {
-    fn str_field(&self, key: &str) -> &str {
-        self.0.get(key).and_then(|v| v.as_str()).unwrap_or("")
+    fn new(
+        event_fields: &'a HashMap<String, serde_json::Value>,
+        span_fields: &'a HashMap<String, serde_json::Value>,
+    ) -> Self {
+        Self {
+            event_fields,
+            span_fields,
+        }
+    }
+
+    fn str_field(&self, key: &str) -> String {
+        self.span_fields
+            .get(key)
+            .or_else(|| self.event_fields.get(key))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
     }
 
     fn u64_field(&self, key: &str) -> u64 {
-        self.0.get(key).and_then(|v| v.as_u64()).unwrap_or(0)
+        self.span_fields
+            .get(key)
+            .or_else(|| self.event_fields.get(key))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
     }
 
-    fn event_type(&self) -> Option<&str> {
-        self.0.get("event").and_then(|v| v.as_str())
+    fn span_name(&self) -> String {
+        self.span_fields
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string()
+    }
+
+    fn is_new_span(&self) -> bool {
+        self.event_fields.get("message").and_then(|v| v.as_str()) == Some("new")
     }
 }
 
 /// Replays JSON trace events by recreating spans and events
 struct TraceReplayer {
-    active_spans: Mutex<HashMap<u64, EnteredSpan>>,
+    active_spans: Mutex<Vec<(String, EnteredSpan)>>, // Track (span_name, entered_span)
+    last_depth: Mutex<usize>,
 }
 
 impl TraceReplayer {
     fn new() -> Self {
         Self {
-            active_spans: Mutex::new(HashMap::new()),
+            active_spans: Mutex::new(Vec::new()),
+            last_depth: Mutex::new(0),
         }
     }
 
     fn replay(&self, event: &TraceEvent) {
-        let fields = FieldExtractor(&event.fields);
+        let span_fields = event.span.clone().unwrap_or_default();
+        let fields = FieldExtractor::new(&event.fields, &span_fields);
+        let target_depth = event.spans.len();
 
-        match (event.span.as_ref(), fields.event_type()) {
-            (Some(span_info), Some("new")) => self.start_span(span_info, &fields),
-            (Some(span_info), Some("close")) => self.end_span(span_info),
-            _ => self.emit_event(&fields),
+        // Determine the span name at this level
+        let current_span_name = span_fields
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+
+        // Only adjust spans if depth changed or if this is a new event
+        if fields.is_new_span() {
+            self.adjust_spans(&current_span_name, &span_fields, target_depth);
+        } else {
+            // For non-new events, still close spans if depth decreased
+            if let Ok(mut spans) = self.active_spans.lock() {
+                while spans.len() > target_depth {
+                    spans.pop();
+                }
+                if let Ok(mut last_depth) = self.last_depth.lock() {
+                    *last_depth = target_depth;
+                }
+            }
+            self.emit_event(&fields);
         }
     }
 
-    fn start_span(&self, span_info: &SpanInfo, fields: &FieldExtractor) {
-        let Some(span_id) = span_info.id else { return };
-
-        let span = match fields.str_field("operation.type") {
-            "build" => info_span!(
-                "nix_build",
-                operation.type = "build",
-                operation.name = fields.str_field("operation.name"),
-                operation.short_name = fields.str_field("operation.short_name"),
-                operation.derivation = fields.str_field("operation.derivation"),
-                nix.activity_id = fields.u64_field("nix.activity_id"),
-            ),
-            "download" => info_span!(
-                "nix_download",
-                operation.type = "download",
-                operation.name = fields.str_field("operation.name"),
-                operation.short_name = fields.str_field("operation.short_name"),
-                operation.store_path = fields.str_field("operation.store_path"),
-                operation.substituter = fields.str_field("operation.substituter"),
-                nix.activity_id = fields.u64_field("nix.activity_id"),
-            ),
-            "query" => info_span!(
-                "nix_query",
-                operation.type = "query",
-                operation.name = fields.str_field("operation.name"),
-                operation.short_name = fields.str_field("operation.short_name"),
-                operation.store_path = fields.str_field("operation.store_path"),
-                operation.substituter = fields.str_field("operation.substituter"),
-                nix.activity_id = fields.u64_field("nix.activity_id"),
-            ),
-            "fetch_tree" => info_span!(
-                "fetch_tree",
-                operation.type = "fetch_tree",
-                operation.name = fields.str_field("operation.name"),
-                operation.short_name = fields.str_field("operation.short_name"),
-                nix.activity_id = fields.u64_field("nix.activity_id"),
-            ),
-            "evaluate" => info_span!(
-                "nix_evaluate",
-                operation.type = "evaluate",
-                operation.name = fields.str_field("operation.name"),
-                operation.short_name = fields.str_field("operation.short_name"),
-                nix.activity_id = fields.u64_field("nix.activity_id"),
-            ),
-            _ => info_span!(
-                "generic_operation",
-                operation.type = fields.str_field("operation.type"),
-                operation.name = fields.str_field("operation.name"),
-                operation.short_name = fields.str_field("operation.short_name"),
-            ),
-        };
-
+    /// Create or close spans based on depth changes
+    fn adjust_spans(
+        &self,
+        current_span_name: &str,
+        span_fields: &HashMap<String, serde_json::Value>,
+        target_depth: usize,
+    ) {
         if let Ok(mut spans) = self.active_spans.lock() {
-            spans.insert(span_id, span.entered());
+            if let Ok(mut last_depth) = self.last_depth.lock() {
+                let prev_depth = *last_depth;
+
+                // Close spans if we exited them
+                while spans.len() > target_depth {
+                    spans.pop();
+                }
+
+                // Only create a new span if depth increased
+                if target_depth > prev_depth && target_depth > spans.len() {
+                    let span = self.create_span(current_span_name, span_fields);
+                    spans.push((current_span_name.to_string(), span.entered()));
+                }
+
+                *last_depth = target_depth;
+            }
         }
     }
 
-    fn end_span(&self, span_info: &SpanInfo) {
-        if let (Some(span_id), Ok(mut spans)) = (span_info.id, self.active_spans.lock()) {
-            spans.remove(&span_id);
+    fn create_span(
+        &self,
+        _name: &str,
+        span_fields: &HashMap<String, serde_json::Value>,
+    ) -> tracing::Span {
+        let empty = HashMap::new();
+        let fields = FieldExtractor::new(&empty, span_fields);
+        let operation_type = fields.str_field("devenv.ui.operation.type");
+        let op_name = fields.str_field("devenv.ui.operation.name");
+        let op_short_name = fields.str_field("devenv.ui.operation.short_name");
+
+        match operation_type.as_str() {
+            "build" => {
+                let derivation = fields.str_field("devenv.ui.details.derivation");
+                info_span!(
+                    "nix_build",
+                    "devenv.ui.operation.type" = "build",
+                    "devenv.ui.operation.name" = op_name.as_str(),
+                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
+                    "devenv.ui.details.derivation" = derivation.as_str(),
+                )
+            }
+            "download" => {
+                let store_path = fields.str_field("devenv.ui.details.store_path");
+                let substituter = fields.str_field("devenv.ui.details.substituter");
+                info_span!(
+                    "nix_download",
+                    "devenv.ui.operation.type" = "download",
+                    "devenv.ui.operation.name" = op_name.as_str(),
+                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
+                    "devenv.ui.details.store_path" = store_path.as_str(),
+                    "devenv.ui.details.substituter" = substituter.as_str(),
+                )
+            }
+            "query" => {
+                let store_path = fields.str_field("devenv.ui.details.store_path");
+                let substituter = fields.str_field("devenv.ui.details.substituter");
+                info_span!(
+                    "nix_query",
+                    "devenv.ui.operation.type" = "query",
+                    "devenv.ui.operation.name" = op_name.as_str(),
+                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
+                    "devenv.ui.details.store_path" = store_path.as_str(),
+                    "devenv.ui.details.substituter" = substituter.as_str(),
+                )
+            }
+            "fetch_tree" => {
+                info_span!(
+                    "fetch_tree",
+                    "devenv.ui.operation.type" = "fetch_tree",
+                    "devenv.ui.operation.name" = op_name.as_str(),
+                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
+                )
+            }
+            "evaluate" => {
+                info_span!(
+                    "nix_evaluate",
+                    "devenv.ui.operation.type" = "evaluate",
+                    "devenv.ui.operation.name" = op_name.as_str(),
+                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
+                )
+            }
+            _ => info_span!("operation"),
         }
     }
 
     fn emit_event(&self, fields: &FieldExtractor) {
         let message = fields.str_field("message");
+        let progress_type = fields.str_field("devenv.ui.progress.type");
+        let progress_current = fields.u64_field("devenv.ui.progress.current");
+        let progress_total = fields.u64_field("devenv.ui.progress.total");
+        let progress_rate = fields.u64_field("devenv.ui.progress.rate");
+        let status = fields.str_field("devenv.ui.status");
+
         if !message.is_empty() {
-            info!("{}", message);
+            if !progress_type.is_empty() {
+                info!(
+                    "devenv.ui.progress.type" = progress_type.as_str(),
+                    "devenv.ui.progress.current" = progress_current,
+                    "devenv.ui.progress.total" = progress_total,
+                    "devenv.ui.progress.rate" = progress_rate,
+                    "devenv.ui.status" = status.as_str(),
+                    "{}",
+                    message
+                );
+            } else if !status.is_empty() {
+                info!("devenv.ui.status" = status.as_str(), "{}", message);
+            } else {
+                info!("{}", message);
+            }
         }
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let shutdown = Shutdown::new();
-    run_replay(shutdown.clone()).await?;
+    // Initialize TUI
+    let tui_handle = TuiHandle::init();
 
-    eprintln!("Replay complete. Press Ctrl+C to exit.");
+    use tracing_subscriber::prelude::*;
+    tracing_subscriber::registry()
+        .with(tui_handle.layer())
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    let shutdown = Shutdown::new();
+    run_replay(tui_handle, shutdown.clone()).await?;
+
+    info!("Replay complete. Press Ctrl+C to exit.");
     shutdown.wait_for_shutdown().await;
     Ok(())
 }
 
-async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
+async fn run_replay(tui_handle: TuiHandle, shutdown: Arc<Shutdown>) -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
-        eprintln!("Usage: {} <trace-file.json>", args[0]);
-        eprintln!();
-        eprintln!("Generate a trace file using:");
-        eprintln!("  devenv --trace-export-file=trace.json <command>");
-        eprintln!();
-        eprintln!("Or with JSON log format:");
-        eprintln!("  devenv --log-format=tracing-json <command> > trace.json");
+        info!(
+            r"Usage: {binary} <trace-file.json>
+        Generate a trace file using:
+          devenv --trace-export-file=trace.json <command>
+        Or with JSON log format:
+          devenv --log-format=tracing-json <command> > trace.json",
+            binary = args[0]
+        );
         std::process::exit(1);
     }
 
@@ -180,25 +286,21 @@ async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
         match serde_json::from_str::<TraceEvent>(&line) {
             Ok(event) => entries.push(event),
             Err(e) => {
-                eprintln!("Failed to parse JSON on line {}: {}", line_num + 1, e);
-                eprintln!("Line: {}", line);
+                error!(
+                    "Failed to parse JSON on line {line_num}: {e}",
+                    line_num = line_num + 1
+                );
+                error!("Line: {line}");
             }
         }
     }
 
     if entries.is_empty() {
-        eprintln!("No valid trace entries found");
+        error!("No valid trace entries found");
         return Ok(());
     }
 
-    eprintln!("Loaded {} trace events", entries.len());
-
-    // Initialize TUI
-    let tui_handle = init_tui();
-    let model = tui_handle.model();
-
-    use tracing_subscriber::prelude::*;
-    tracing_subscriber::registry().with(tui_handle.layer).init();
+    info!("Loaded {} trace events", entries.len());
 
     let replayer = TraceReplayer::new();
 
@@ -206,9 +308,9 @@ async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
     let tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
         async move {
-            match devenv_tui::app::run_app(model, shutdown).await {
-                Ok(_) => eprintln!("TUI exited normally"),
-                Err(e) => eprintln!("TUI error: {}", e),
+            match devenv_tui::app::run_app(tui_handle.model(), shutdown).await {
+                Ok(_) => info!("TUI exited normally"),
+                Err(e) => error!("TUI error: {e}"),
             }
         }
     });
@@ -237,18 +339,12 @@ async fn run_replay(shutdown: Arc<Shutdown>) -> Result<()> {
         }
 
         replayer.replay(event);
-
-        // Show progress periodically
-        if idx % 100 == 0 && idx > 0 {
-            let progress = ((idx + 1) as f64 / entries.len() as f64) * 100.0;
-            eprintln!("Replay progress: {:.1}%", progress);
-        }
     }
 
-    eprintln!("Replay finished. Activities are still visible in the TUI.");
+    info!("Replay finished. Activities are still visible in the TUI.");
 
     if tui_task.is_finished() {
-        eprintln!("Warning: TUI task has already exited!");
+        warn!("Warning: TUI task has already exited!");
     }
 
     Ok(())

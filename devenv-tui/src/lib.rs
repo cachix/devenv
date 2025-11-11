@@ -15,15 +15,23 @@ use crate::model::Model;
 use std::sync::{Arc, Mutex};
 
 /// Handle for TUI system with proper shutdown tracking
+#[derive(Clone, Default)]
 pub struct TuiHandle {
-    pub layer: DevenvTuiLayer,
     pub model: Arc<Mutex<Model>>,
 }
 
 impl TuiHandle {
+    pub fn init() -> Self {
+        Self::default()
+    }
+
     /// Get a clone of the model handle
     pub fn model(&self) -> Arc<Mutex<Model>> {
         self.model.clone()
+    }
+
+    pub fn layer(&self) -> DevenvTuiLayer {
+        DevenvTuiLayer::new(Arc::clone(&self.model))
     }
 }
 
@@ -31,8 +39,5 @@ impl TuiHandle {
 ///
 /// The TUI should be started manually using SubsystemBuilder::new()
 pub fn init_tui() -> TuiHandle {
-    let model = Arc::new(Mutex::new(Model::new()));
-    let layer = DevenvTuiLayer::new(model.clone());
-
-    TuiHandle { layer, model }
+    TuiHandle::init()
 }

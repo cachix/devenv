@@ -30,16 +30,16 @@ devenv (library) ──tracing events──> devenv-tui ──iocraft──> Ter
 use devenv_tui::{init_tui};
 
 // Initialize TUI system
-let (tui_handle, rx) = init_tui();
+let tui_handle = init_tui();
 
 // Register tracing layer
 tracing_subscriber::registry()
-    .with(tui_handle.layer)
+    .with(tui_handle.layer())
     .init();
 
 // Start TUI app
 tokio::spawn(async move {
-    devenv_tui::app::run(rx).await
+    devenv_tui::app::run(tui_handle.model()).await
 });
 ```
 
