@@ -1309,6 +1309,7 @@ dependencies = [
  "include_dir",
  "indicatif",
  "indoc",
+ "json-subscriber",
  "miette",
  "nix 0.30.1",
  "nix-compat",
@@ -2882,6 +2883,21 @@ checksum = "ec48937a97411dcb524a265206ccd4c90bb711fca92b2792c407f268825b9305"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "json-subscriber"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39891c6f2a8e066540984e1050747baa3ad274fd416d2e79dec79f91c6221c33"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tracing",
+ "tracing-core",
+ "tracing-serde",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

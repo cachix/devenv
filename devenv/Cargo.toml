@@ -48,6 +48,7 @@ termimad.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+json-subscriber.workspace = true
 tracing-indicatif.workspace = true
 indicatif.workspace = true
 which.workspace = true

@@ -1,4 +1,6 @@
 use console::style;
+use json_subscriber::JsonLayer;
+use serde::Serialize;
 use std::collections::HashSet;
 use std::fmt;
 use std::fs::File;
@@ -17,12 +19,44 @@ use tracing_subscriber::{
     EnvFilter, Layer,
     fmt::{
         FmtContext, FormatEvent, FormatFields,
-        format::{FmtSpan, Writer},
+        format::Writer,
     },
     layer,
     prelude::*,
     registry::LookupSpan,
 };
+
+/// Span ID information for JSON serialization
+#[derive(Debug, Clone, Serialize)]
+struct SpanIds {
+    /// The ID of this span
+    span_id: String,
+    /// The ID of the parent span, if any
+    parent_span_id: Option<String>,
+}
+
+/// Layer that captures span IDs and stores them as extensions
+pub struct SpanIdLayer;
+
+impl<S> Layer<S> for SpanIdLayer
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn on_new_span(&self, _attrs: &span::Attributes<'_>, id: &span::Id, ctx: layer::Context<'_, S>) {
+        let span = ctx.span(id).expect("Span not found in context");
+
+        // Get parent span ID if it exists
+        let parent_span_id = span.parent().map(|parent| format!("{:?}", parent.id()));
+
+        let span_ids = SpanIds {
+            span_id: format!("{:?}", id),
+            parent_span_id,
+        };
+
+        let mut extensions = span.extensions_mut();
+        extensions.insert(span_ids);
+    }
+}
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
@@ -49,15 +83,18 @@ impl From<Level> for LevelFilter {
 // Re-export LogFormat from devenv_core
 pub use devenv_core::cli::LogFormat;
 
-macro_rules! json_export_layer {
-    ($export_file:expr) => {
-        $export_file.map(|file| {
-            tracing_subscriber::fmt::layer()
-                .with_writer(file)
-                .json()
-                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-        })
-    };
+fn create_json_export_layer<S>(file: File) -> JsonLayer<S, File>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    let mut layer = JsonLayer::new(file);
+    // Use prefixed keys to control sort order: timestamp, level, target, span_ids, then fields
+    layer.with_timer("a_timestamp", tracing_subscriber::fmt::time::SystemTime);
+    layer.with_level("b_level");
+    layer.with_target("c_target");
+    layer.serialize_extension::<SpanIds>("d_span_ids");
+    layer.with_event("e_fields");
+    layer
 }
 
 pub fn init_tracing_default() {
@@ -72,6 +109,7 @@ pub fn init_tracing(
     shutdown: Arc<tokio_shutdown::Shutdown>,
 ) {
     let devenv_layer = DevenvLayer::new();
+    let span_id_layer = SpanIdLayer;
 
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::from(level).into())
@@ -87,26 +125,54 @@ pub fn init_tracing(
             let stderr_layer = tracing_subscriber::fmt::layer()
                 .with_writer(stderr)
                 .with_ansi(ansi);
-            let file_layer = json_export_layer!(export_file);
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(stderr_layer)
-                .with(devenv_layer)
-                .with(file_layer)
-                .init();
+
+            match export_file {
+                Some(file) => {
+                    let file_layer = create_json_export_layer(file);
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(devenv_layer)
+                        .with(stderr_layer)
+                        .with(file_layer)
+                        .init();
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(devenv_layer)
+                        .with(stderr_layer)
+                        .init();
+                }
+            }
         }
         LogFormat::TracingPretty => {
             let stderr_layer = tracing_subscriber::fmt::layer()
                 .with_writer(stderr)
                 .with_ansi(ansi)
                 .pretty();
-            let file_layer = json_export_layer!(export_file);
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(stderr_layer)
-                .with(devenv_layer)
-                .with(file_layer)
-                .init();
+
+            match export_file {
+                Some(file) => {
+                    let file_layer = create_json_export_layer(file);
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(devenv_layer)
+                        .with(stderr_layer)
+                        .with(file_layer)
+                        .init();
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(devenv_layer)
+                        .with(stderr_layer)
+                        .init();
+                }
+            }
         }
         LogFormat::Cli => {
             // For CLI mode, use IndicatifLayer to coordinate ALL output with progress bars
@@ -129,27 +195,63 @@ pub fn init_tracing(
                 .with_writer(indicatif_writer)
                 .with_ansi(ansi);
 
-            let file_layer = json_export_layer!(export_file);
-
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(stderr_layer)
-                .with(devenv_layer)
-                .with(filtered_layer)
-                .with(file_layer)
-                .init();
+            match export_file {
+                Some(file) => {
+                    let file_layer = create_json_export_layer(file);
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(devenv_layer)
+                        .with(stderr_layer)
+                        .with(filtered_layer)
+                        .with(file_layer)
+                        .init();
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(devenv_layer)
+                        .with(stderr_layer)
+                        .with(filtered_layer)
+                        .init();
+                }
+            }
         }
         LogFormat::TracingJson => {
-            let stderr_layer = tracing_subscriber::fmt::layer()
-                .with_writer(stderr)
-                .json()
-                .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE);
-            let file_layer = json_export_layer!(export_file);
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(stderr_layer)
-                .with(file_layer)
-                .init();
+            fn create_stderr_layer<S>() -> JsonLayer<S>
+            where
+                S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+            {
+                let mut layer = JsonLayer::stdout();
+                // Use prefixed keys to control sort order: timestamp, level, target, span_ids, then fields
+                layer.with_timer("a_timestamp", tracing_subscriber::fmt::time::SystemTime);
+                layer.with_level("b_level");
+                layer.with_target("c_target");
+                layer.serialize_extension::<SpanIds>("d_span_ids");
+                layer.with_event("e_fields");
+                layer
+            }
+
+            match export_file {
+                Some(file) => {
+                    let file_layer = create_json_export_layer(file);
+                    let stderr_layer = create_stderr_layer();
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(stderr_layer)
+                        .with(file_layer)
+                        .init();
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(filter)
+                        .with(create_stderr_layer())
+                        .init();
+                }
+            }
         }
         LogFormat::Tui => {
             // Initialize TUI with proper shutdown coordination
@@ -167,6 +269,7 @@ pub fn init_tracing(
                 .with(filter)
                 .with(tui_handle.layer())
                 .with(devenv_layer)
+                .with(span_id_layer)
                 .init();
         }
     }
