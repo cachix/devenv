@@ -3040,6 +3040,122 @@ null or YAML 1.1 value
 
 
 
+## git.conflictStyle
+
+
+
+Git conflict style (e.g., ‘merge’, ‘diff3’, ‘zdiff3’).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
+
+
+
+## git.diffTool
+
+
+
+Git diff tool to use (e.g., ‘difftastic’, ‘vimdiff’).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
+
+
+
+## git.mergeDriver
+
+
+
+Custom git merge drivers (e.g., mergiraf).
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
+
+
+
+## git.mergeDriver.\<name>.driver
+
+
+
+Driver command to run.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
+
+
+
+## git.mergeDriver.\<name>.name
+
+
+
+Name of the merge driver.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
+
+
+
+## git.mergeTool
+
+
+
+Git merge tool to use (e.g., ‘vimdiff’, ‘meld’).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/git.nix)
+
+
+
 ## git.root
 
 
@@ -18465,6 +18581,27 @@ package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
+
+
+## mergiraf.enable
+
+
+
+Integrate mergiraf as git merge driver: https://mergiraf.org/
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/integrations/mergiraf.nix](https://github.com/cachix/devenv/blob/main/src/modules/integrations/mergiraf.nix)
 
 
 
