@@ -246,181 +246,163 @@ pub enum TracingUpdate {
 }
 
 /// Nix progress update (for builds, copies, etc.)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct NixProgressUpdate {
     pub activity_id: u64,
     pub done: u64,
     pub expected: u64,
+    #[serde(default)]
     pub running: u64,
+    #[serde(default)]
     pub failed: u64,
 }
 
 /// Build phase update
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct BuildPhaseUpdate {
     pub activity_id: u64,
     pub phase: String,
 }
 
 /// Build log line
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct BuildLogUpdate {
     pub activity_id: u64,
     pub line: String,
 }
 
 /// Download progress update
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct DownloadProgressUpdate {
     pub activity_id: u64,
     pub bytes_downloaded: u64,
+    #[serde(default)]
     pub total_bytes: Option<u64>,
 }
 
 /// Evaluation progress update
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct EvaluationProgressUpdate {
     pub activity_id: u64,
+    #[serde(default)]
     pub total_files_evaluated: u64,
+    #[serde(rename = "files", deserialize_with = "deserialize_files_array")]
     pub latest_files: Vec<String>,
 }
 
+/// Custom deserializer for the files array which might be a string like '["file1", "file2"]'
+/// or already parsed as a Vec
+fn deserialize_files_array<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    use serde_json::Value;
+
+    let value = Value::deserialize(deserializer)?;
+
+    match value {
+        // If it's already an array (from our conversion), use it directly
+        Value::Array(arr) => {
+            Ok(arr.into_iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        }
+        // If it's a string containing JSON array, parse it
+        Value::String(s) => {
+            serde_json::from_str::<Vec<String>>(&s).or_else(|_| Ok(Vec::new()))
+        }
+        _ => Ok(Vec::new()),
+    }
+}
+
 /// Task status update
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct TaskStatusUpdate {
+    #[serde(alias = "devenv.ui.task.name")]
     pub name: String,
+    #[serde(alias = "devenv.ui.status", default = "default_status")]
     pub status: String,
+    #[serde(alias = "devenv.ui.status.result")]
     pub result: Option<String>,
     pub duration_secs: Option<f64>,
     pub success: Option<bool>,
     pub error: Option<String>,
 }
 
+fn default_status() -> String {
+    "unknown".to_string()
+}
+
 /// Log output (stdout/stderr)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct LogOutputUpdate {
+    #[serde(alias = "devenv.ui.log.stream")]
     pub stream: String,
+    #[serde(alias = "devenv.ui.log.message")]
     pub message: String,
 }
 
-/// Helper function to parse u64 from string fields
-fn parse_u64(fields: &std::collections::HashMap<String, String>, key: &str) -> Option<u64> {
-    fields.get(key)?.parse().ok()
-}
+/// Helper to deserialize from HashMap<String, String> using serde
+fn from_fields<T: serde::de::DeserializeOwned>(
+    fields: &std::collections::HashMap<String, String>,
+) -> Option<T> {
+    // Convert HashMap<String, String> to serde_json::Value
+    let map: serde_json::Map<String, serde_json::Value> = fields
+        .iter()
+        .map(|(k, v)| {
+            // Try to parse as JSON value first (for bools, numbers, arrays)
+            let value = serde_json::from_str(v).unwrap_or_else(|_| {
+                // If it fails, treat as string
+                serde_json::Value::String(v.clone())
+            });
+            (k.clone(), value)
+        })
+        .collect();
 
-/// Helper function to parse f64 from string fields
-fn parse_f64(fields: &std::collections::HashMap<String, String>, key: &str) -> Option<f64> {
-    fields.get(key)?.parse().ok()
-}
+    let value = serde_json::Value::Object(map);
 
-/// Helper function to parse bool from string fields
-fn parse_bool(fields: &std::collections::HashMap<String, String>, key: &str) -> Option<bool> {
-    let value = fields.get(key)?;
-    match value.trim_matches('"').to_lowercase().as_str() {
-        "true" => Some(true),
-        "false" => Some(false),
-        _ => None,
-    }
+    // Deserialize using serde
+    serde_json::from_value(value).ok()
 }
 
 impl NixProgressUpdate {
     pub fn from_fields(fields: &std::collections::HashMap<String, String>) -> Option<Self> {
-        Some(Self {
-            activity_id: parse_u64(fields, "activity_id")?,
-            done: parse_u64(fields, "done")?,
-            expected: parse_u64(fields, "expected")?,
-            running: parse_u64(fields, "running").unwrap_or(0),
-            failed: parse_u64(fields, "failed").unwrap_or(0),
-        })
+        from_fields(fields)
     }
 }
 
 impl BuildPhaseUpdate {
     pub fn from_fields(fields: &std::collections::HashMap<String, String>) -> Option<Self> {
-        Some(Self {
-            activity_id: parse_u64(fields, "activity_id")?,
-            phase: fields.get("phase")?.clone(),
-        })
+        from_fields(fields)
     }
 }
 
 impl BuildLogUpdate {
     pub fn from_fields(fields: &std::collections::HashMap<String, String>) -> Option<Self> {
-        Some(Self {
-            activity_id: parse_u64(fields, "activity_id")?,
-            line: fields.get("line")?.clone(),
-        })
+        from_fields(fields)
     }
 }
 
 impl DownloadProgressUpdate {
     pub fn from_fields(fields: &std::collections::HashMap<String, String>) -> Option<Self> {
-        Some(Self {
-            activity_id: parse_u64(fields, "activity_id")?,
-            bytes_downloaded: parse_u64(fields, "bytes_downloaded")?,
-            total_bytes: parse_u64(fields, "total_bytes"),
-        })
+        from_fields(fields)
     }
 }
 
 impl EvaluationProgressUpdate {
     pub fn from_fields(fields: &std::collections::HashMap<String, String>) -> Option<Self> {
-        let activity_id = parse_u64(fields, "activity_id")?;
-        let total_files_evaluated = parse_u64(fields, "total_files_evaluated").unwrap_or(0);
-
-        let files_str = fields.get("files")?;
-        let latest_files: Vec<String> = files_str
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .split(", ")
-            .map(|s| s.trim_matches('"').to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-
-        Some(Self {
-            activity_id,
-            total_files_evaluated,
-            latest_files,
-        })
+        from_fields(fields)
     }
 }
 
 impl TaskStatusUpdate {
     pub fn from_fields(fields: &std::collections::HashMap<String, String>) -> Option<Self> {
-        let name = fields.get("devenv.ui.task.name")
-            .or_else(|| fields.get("name"))?
-            .trim_matches('"')
-            .to_string();
-
-        let status = fields.get("devenv.ui.status")
-            .or_else(|| fields.get("status"))
-            .map(|s| s.trim_matches('"').to_string());
-
-        let result = fields.get("devenv.ui.status.result")
-            .or_else(|| fields.get("result"))
-            .map(|s| s.trim_matches('"').to_string());
-
-        let duration_secs = parse_f64(fields, "duration_secs");
-        let success = parse_bool(fields, "success");
-        let error = fields.get("error").map(|s| s.trim_matches('"').to_string());
-
-        Some(Self {
-            name,
-            status: status.unwrap_or_else(|| "unknown".to_string()),
-            result,
-            duration_secs,
-            success,
-            error,
-        })
+        from_fields(fields)
     }
 }
 
 impl LogOutputUpdate {
     pub fn from_fields(fields: &std::collections::HashMap<String, String>) -> Option<Self> {
-        Some(Self {
-            stream: fields.get("devenv.ui.log.stream")?.clone(),
-            message: fields.get("devenv.ui.log.message")?.clone(),
-        })
+        from_fields(fields)
     }
 }
 
@@ -455,5 +437,207 @@ impl TracingUpdate {
             }
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to create field map from key-value pairs
+    fn fields(pairs: &[(&str, &str)]) -> std::collections::HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn test_parse_nix_progress_valid() {
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("done", "10"),
+            ("expected", "100"),
+            ("running", "2"),
+            ("failed", "1"),
+        ]);
+
+        let update = NixProgressUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.activity_id, 42);
+        assert_eq!(update.done, 10);
+        assert_eq!(update.expected, 100);
+        assert_eq!(update.running, 2);
+        assert_eq!(update.failed, 1);
+    }
+
+    #[test]
+    fn test_parse_nix_progress_minimal() {
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("done", "10"),
+            ("expected", "100"),
+        ]);
+
+        let update = NixProgressUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.activity_id, 42);
+        assert_eq!(update.done, 10);
+        assert_eq!(update.expected, 100);
+        assert_eq!(update.running, 0); // default
+        assert_eq!(update.failed, 0); // default
+    }
+
+    #[test]
+    fn test_parse_nix_progress_missing_required() {
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("done", "10"),
+        ]);
+
+        let update = NixProgressUpdate::from_fields(&fields);
+        assert!(update.is_none());
+    }
+
+    #[test]
+    fn test_parse_nix_progress_invalid_number() {
+        let fields = fields(&[
+            ("activity_id", "not_a_number"),
+            ("done", "10"),
+            ("expected", "100"),
+        ]);
+
+        let update = NixProgressUpdate::from_fields(&fields);
+        assert!(update.is_none());
+    }
+
+    #[test]
+    fn test_parse_build_phase_valid() {
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("phase", "configure"),
+        ]);
+
+        let update = BuildPhaseUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.activity_id, 42);
+        assert_eq!(update.phase, "configure");
+    }
+
+    #[test]
+    fn test_parse_download_progress_with_bool_success() {
+        // Test that serde properly deserializes booleans
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("bytes_downloaded", "1024"),
+            ("total_bytes", "4096"),
+        ]);
+
+        let update = DownloadProgressUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.activity_id, 42);
+        assert_eq!(update.bytes_downloaded, 1024);
+        assert_eq!(update.total_bytes, Some(4096));
+    }
+
+    #[test]
+    fn test_parse_task_status_with_serde_bool() {
+        // Test that serde properly handles bool parsing
+        let fields = fields(&[
+            ("name", "build:hello"),
+            ("status", "completed"),
+            ("success", "true"), // serde will parse this
+            ("duration_secs", "1.5"),
+        ]);
+
+        let update = TaskStatusUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.name, "build:hello");
+        assert_eq!(update.status, "completed");
+        assert_eq!(update.success, Some(true));
+        assert_eq!(update.duration_secs, Some(1.5));
+    }
+
+    #[test]
+    fn test_parse_task_status_with_quoted_bool() {
+        // Test that serde handles JSON-style quoted values
+        let fields = fields(&[
+            ("name", "build:fail"),
+            ("status", "\"failed\""),
+            ("success", "false"),
+            ("error", "\"build error\""),
+        ]);
+
+        let update = TaskStatusUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.name, "build:fail");
+        assert_eq!(update.status, "failed");
+        assert_eq!(update.success, Some(false));
+        assert_eq!(update.error, Some("build error".to_string()));
+    }
+
+    #[test]
+    fn test_parse_evaluation_progress_with_json_array() {
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("total_files_evaluated", "150"),
+            ("files", r#"["file1.nix", "file2.nix", "file3.nix"]"#),
+        ]);
+
+        let update = EvaluationProgressUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.activity_id, 42);
+        assert_eq!(update.total_files_evaluated, 150);
+        assert_eq!(update.latest_files, vec!["file1.nix", "file2.nix", "file3.nix"]);
+    }
+
+    #[test]
+    fn test_tracing_update_from_event_nix_progress() {
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("done", "50"),
+            ("expected", "100"),
+        ]);
+
+        let update = TracingUpdate::from_event("devenv.nix.progress", "progress", &fields);
+
+        assert!(matches!(update, Some(TracingUpdate::NixProgress(_))));
+    }
+
+    #[test]
+    fn test_tracing_update_from_event_invalid_fields() {
+        let fields = fields(&[("activity_id", "not_a_number")]);
+
+        let update = TracingUpdate::from_event("devenv.nix.progress", "progress", &fields);
+
+        assert!(update.is_none());
+    }
+
+    #[test]
+    fn test_serde_handles_field_aliases() {
+        // Test that serde alias attributes work
+        let fields = fields(&[
+            ("devenv.ui.task.name", "mytask"),
+            ("devenv.ui.status", "running"),
+        ]);
+
+        let update = TaskStatusUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.name, "mytask");
+        assert_eq!(update.status, "running");
+    }
+
+    #[test]
+    fn test_serde_uses_defaults() {
+        // Test that serde default attributes work
+        let fields = fields(&[
+            ("activity_id", "42"),
+            ("bytes_downloaded", "1024"),
+            // total_bytes omitted - should default to None
+        ]);
+
+        let update = DownloadProgressUpdate::from_fields(&fields).unwrap();
+
+        assert_eq!(update.total_bytes, None);
     }
 }
