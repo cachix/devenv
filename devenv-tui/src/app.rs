@@ -13,7 +13,7 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let (terminal_width, _terminal_height) = hooks.use_terminal_size();
 
     // Use state to trigger re-renders
-    let tick = hooks.use_state(|| 0u64);
+    let mut tick = hooks.use_state(|| 0u64);
 
     // Handle keyboard events directly
     hooks.use_terminal_events({
@@ -49,7 +49,6 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     // Spinner animation update loop - triggers re-renders via state updates
     hooks.use_future({
         let model = model.clone();
-        let mut tick = tick.clone();
         async move {
             let mut counter = 0u64;
             loop {
@@ -81,7 +80,7 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     });
 
     // Render the view
-    let model_clone = model.clone();
+    let model_clone = Arc::clone(&model);
 
     if let Ok(model_guard) = model_clone.lock() {
         element! {
@@ -101,14 +100,11 @@ pub async fn run_app(
 ) -> std::io::Result<()> {
     // Run the iocraft render loop - tokio-graceful-shutdown will handle cancellation automatically
     let mut tui_element = element! {
-        ContextProvider(value: Context::owned(model.clone())) {
+        ContextProvider(value: Context::owned(Arc::clone(&model))) {
             TuiApp
         }
     };
 
     // No need for select! - tokio-graceful-shutdown handles cancellation
-    tui_element
-        .render_loop()
-        .await
-        .map_err(|e| std::io::Error::other(e))
+    tui_element.render_loop().await
 }

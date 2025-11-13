@@ -39,6 +39,12 @@ pub struct Model {
     evaluation_files_count: HashMap<u64, usize>,
 }
 
+impl Default for Model {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Build-specific activity data
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BuildActivity {
@@ -730,10 +736,4 @@ pub struct ActivitySummary {
     pub completed_downloads: usize,
     pub active_queries: usize,
     pub completed_queries: usize,
-}
-
-impl Default for Model {
-    fn default() -> Self {
-        Self::new()
-    }
 }
