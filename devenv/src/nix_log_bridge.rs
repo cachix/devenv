@@ -549,11 +549,8 @@ impl NixLogBridge {
                         {
                             // Only CopyPath activities have byte-based download progress
                             if activity_info.activity_type == ActivityType::CopyPath {
-                                let percent = if let Some(total) = total_bytes {
-                                    Some((*downloaded as f64 / total as f64) * 100.0)
-                                } else {
-                                    None
-                                };
+                                let percent = total_bytes
+                                    .map(|total| (*downloaded as f64 / total as f64) * 100.0);
 
                                 activity_info.span.in_scope(|| {
                                     if let Some(pct) = percent {
