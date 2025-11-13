@@ -1,7 +1,7 @@
 use console::style;
 use json_subscriber::JsonLayer;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs::File;
 use std::io::{self, IsTerminal};
@@ -58,6 +58,59 @@ where
     }
 }
 
+/// Stores span attributes for serialization
+#[derive(Debug, Clone, Serialize)]
+struct SpanAttributes {
+    fields: HashMap<String, String>,
+}
+
+/// Layer that captures span attributes and stores them as extensions
+pub struct SpanAttributesLayer;
+
+impl<S> Layer<S> for SpanAttributesLayer
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+{
+    fn on_new_span(&self, attrs: &span::Attributes<'_>, id: &span::Id, ctx: layer::Context<'_, S>) {
+        let span = ctx.span(id).expect("Span not found in context");
+
+        // Collect all span attributes
+        struct AttrVisitor {
+            fields: HashMap<String, String>,
+        }
+
+        impl Visit for AttrVisitor {
+            fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+                self.fields.insert(field.name().to_string(), format!("{:?}", value));
+            }
+
+            fn record_str(&mut self, field: &Field, value: &str) {
+                self.fields.insert(field.name().to_string(), value.to_string());
+            }
+
+            fn record_u64(&mut self, field: &Field, value: u64) {
+                self.fields.insert(field.name().to_string(), value.to_string());
+            }
+
+            fn record_i64(&mut self, field: &Field, value: i64) {
+                self.fields.insert(field.name().to_string(), value.to_string());
+            }
+
+            fn record_bool(&mut self, field: &Field, value: bool) {
+                self.fields.insert(field.name().to_string(), value.to_string());
+            }
+        }
+
+        let mut visitor = AttrVisitor { fields: HashMap::new() };
+        attrs.record(&mut visitor);
+
+        // Store span attributes as extension
+        let span_attrs = SpanAttributes { fields: visitor.fields };
+        let mut extensions = span.extensions_mut();
+        extensions.insert(span_attrs);
+    }
+}
+
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Level {
     Silent,
@@ -101,12 +154,12 @@ where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
     let mut layer = JsonLayer::new(file);
-    // Use prefixed keys to control sort order: timestamp, level, target, span_ids, then fields
-    layer.with_timer("a_timestamp", tracing_subscriber::fmt::time::SystemTime);
-    layer.with_level("b_level");
-    layer.with_target("c_target");
-    layer.serialize_extension::<SpanIds>("d_span_ids");
-    layer.with_event("e_fields");
+    layer.with_timer("timestamp", tracing_subscriber::fmt::time::SystemTime);
+    layer.with_level("level");
+    layer.with_target("target");
+    layer.serialize_extension::<SpanIds>("span_ids");
+    layer.serialize_extension::<SpanAttributes>("span_attrs");
+    layer.with_event("fields");
     layer
 }
 
@@ -123,6 +176,7 @@ pub fn init_tracing(
 ) {
     let devenv_layer = DevenvLayer::new();
     let span_id_layer = SpanIdLayer;
+    let span_attrs_layer = SpanAttributesLayer;
 
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::from(level).into())
@@ -144,6 +198,7 @@ pub fn init_tracing(
                     let file_layer = create_json_export_layer(file);
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -153,6 +208,7 @@ pub fn init_tracing(
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -171,6 +227,7 @@ pub fn init_tracing(
                     let file_layer = create_json_export_layer(file);
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -180,6 +237,7 @@ pub fn init_tracing(
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -213,6 +271,7 @@ pub fn init_tracing(
                     let file_layer = create_json_export_layer(file);
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -223,6 +282,7 @@ pub fn init_tracing(
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(devenv_layer)
                         .with(stderr_layer)
@@ -237,12 +297,12 @@ pub fn init_tracing(
                 S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
             {
                 let mut layer = JsonLayer::stdout();
-                // Use prefixed keys to control sort order: timestamp, level, target, span_ids, then fields
-                layer.with_timer("a_timestamp", tracing_subscriber::fmt::time::SystemTime);
-                layer.with_level("b_level");
-                layer.with_target("c_target");
-                layer.serialize_extension::<SpanIds>("d_span_ids");
-                layer.with_event("e_fields");
+                layer.with_timer("timestamp", tracing_subscriber::fmt::time::SystemTime);
+                layer.with_level("level");
+                layer.with_target("target");
+                layer.serialize_extension::<SpanIds>("span_ids");
+                layer.serialize_extension::<SpanAttributes>("span_attrs");
+                layer.with_event("fields");
                 layer
             }
 
@@ -252,6 +312,7 @@ pub fn init_tracing(
                     let stderr_layer = create_stderr_layer();
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(stderr_layer)
                         .with(file_layer)
@@ -260,6 +321,7 @@ pub fn init_tracing(
                 None => {
                     tracing_subscriber::registry()
                         .with(span_id_layer)
+                        .with(span_attrs_layer)
                         .with(filter)
                         .with(create_stderr_layer())
                         .init();
@@ -283,6 +345,7 @@ pub fn init_tracing(
                 .with(tui_handle.layer())
                 .with(devenv_layer)
                 .with(span_id_layer)
+                .with(span_attrs_layer)
                 .init();
         }
     }

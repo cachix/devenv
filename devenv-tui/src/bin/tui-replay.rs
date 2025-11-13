@@ -6,231 +6,737 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
-use tracing::span::EnteredSpan;
-use tracing::{error, info, info_span, warn};
+use tracing::{info, warn};
 
 /// JSON trace event from tracing-subscriber's JSON formatter
 #[derive(Debug, Deserialize, Clone)]
-struct TraceEvent {
+struct RawTraceEvent {
     timestamp: DateTime<Utc>,
+    #[serde(default)]
+    level: String,
+    #[serde(default)]
+    target: String,
     #[serde(default)]
     fields: HashMap<String, serde_json::Value>,
     #[serde(default)]
-    span: Option<HashMap<String, serde_json::Value>>,
+    span_ids: Option<SpanIds>,
     #[serde(default)]
-    spans: Vec<HashMap<String, serde_json::Value>>,
+    span_attrs: Option<SpanAttrs>,
 }
 
-/// Helper to extract typed values from JSON fields
-struct FieldExtractor<'a> {
-    event_fields: &'a HashMap<String, serde_json::Value>,
-    span_fields: &'a HashMap<String, serde_json::Value>,
+/// Span ID information
+#[derive(Debug, Deserialize, Clone)]
+struct SpanIds {
+    span_id: String,
+    parent_span_id: Option<String>,
 }
 
-impl<'a> FieldExtractor<'a> {
-    fn new(
-        event_fields: &'a HashMap<String, serde_json::Value>,
-        span_fields: &'a HashMap<String, serde_json::Value>,
-    ) -> Self {
+/// Span attributes
+#[derive(Debug, Deserialize, Clone)]
+struct SpanAttrs {
+    fields: HashMap<String, String>,
+}
+
+/// Processed trace event ready for model update
+#[derive(Debug, Clone)]
+struct TraceEvent {
+    timestamp: DateTime<Utc>,
+    #[allow(dead_code)]
+    level: String,
+    #[allow(dead_code)]
+    target: String,
+    fields: HashMap<String, String>,
+    span_id: Option<String>,
+    parent_span_id: Option<String>,
+}
+
+impl TraceEvent {
+    /// Convert from raw JSON event to processed event
+    fn from_raw(raw: RawTraceEvent) -> Self {
+        // Start with event fields
+        let mut fields = extract_string_map(&raw.fields);
+
+        // Merge in span attributes if present (only emitted on first event for this span)
+        if let Some(span_attrs) = raw.span_attrs {
+            for (key, value) in span_attrs.fields {
+                fields.entry(key).or_insert(value);
+            }
+        }
+
+        let (span_id, parent_span_id) = raw
+            .span_ids
+            .map(|ids| (Some(ids.span_id), ids.parent_span_id))
+            .unwrap_or((None, None));
+
         Self {
-            event_fields,
-            span_fields,
+            timestamp: raw.timestamp,
+            level: raw.level,
+            target: raw.target,
+            fields,
+            span_id,
+            parent_span_id,
         }
     }
-
-    fn str_field(&self, key: &str) -> String {
-        self.span_fields
-            .get(key)
-            .or_else(|| self.event_fields.get(key))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string()
-    }
-
-    fn u64_field(&self, key: &str) -> u64 {
-        self.span_fields
-            .get(key)
-            .or_else(|| self.event_fields.get(key))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
-    }
-
-    fn span_name(&self) -> String {
-        self.span_fields
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string()
-    }
-
-    fn is_new_span(&self) -> bool {
-        self.event_fields.get("message").and_then(|v| v.as_str()) == Some("new")
-    }
 }
 
-/// Replays JSON trace events by recreating spans and events
-struct TraceReplayer {
-    active_spans: Mutex<Vec<(String, EnteredSpan)>>, // Track (span_name, entered_span)
-    last_depth: Mutex<usize>,
+/// Extract all string-convertible values from a JSON map
+fn extract_string_map(json_map: &HashMap<String, serde_json::Value>) -> HashMap<String, String> {
+    json_map
+        .iter()
+        .filter_map(|(k, v)| {
+            v.as_str()
+                .map(|s| (k.clone(), s.to_string()))
+                .or_else(|| v.as_u64().map(|n| (k.clone(), n.to_string())))
+                .or_else(|| v.as_i64().map(|n| (k.clone(), n.to_string())))
+        })
+        .collect()
 }
 
-impl TraceReplayer {
+/// Tracks the relationship between span IDs and operations/activities
+#[derive(Debug)]
+struct SpanTracker {
+    /// Maps span_id to operation_id
+    span_to_operation: HashMap<String, devenv_tui::OperationId>,
+    /// Maps span_id to activity_id
+    span_to_activity: HashMap<String, u64>,
+    /// Counter for generating unique activity IDs
+    next_activity_id: u64,
+}
+
+impl SpanTracker {
     fn new() -> Self {
         Self {
-            active_spans: Mutex::new(Vec::new()),
-            last_depth: Mutex::new(0),
+            span_to_operation: HashMap::new(),
+            span_to_activity: HashMap::new(),
+            next_activity_id: 1,
         }
     }
 
-    fn replay(&self, event: &TraceEvent) {
-        let span_fields = event.span.clone().unwrap_or_default();
-        let fields = FieldExtractor::new(&event.fields, &span_fields);
-        let target_depth = event.spans.len();
+    fn register_operation(&mut self, span_id: String, operation_id: devenv_tui::OperationId) {
+        self.span_to_operation.insert(span_id, operation_id);
+    }
 
-        // Determine the span name at this level
-        let current_span_name = span_fields
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
+    fn register_activity(&mut self, span_id: String, activity_id: u64) {
+        self.span_to_activity.insert(span_id, activity_id);
+    }
 
-        // Only adjust spans if depth changed or if this is a new event
-        if fields.is_new_span() {
-            self.adjust_spans(&current_span_name, &span_fields, target_depth);
+    fn get_operation(&self, span_id: &str) -> Option<&devenv_tui::OperationId> {
+        self.span_to_operation.get(span_id)
+    }
+
+    fn get_activity(&self, span_id: &str) -> Option<u64> {
+        self.span_to_activity.get(span_id).copied()
+    }
+
+    fn generate_activity_id(&mut self) -> u64 {
+        let id = self.next_activity_id;
+        self.next_activity_id += 1;
+        id
+    }
+}
+
+/// Stream that reads JSON values line-by-line on demand
+struct TraceStream {
+    lines: std::io::Lines<BufReader<File>>,
+    line_num: usize,
+    first_timestamp: Option<DateTime<Utc>>,
+}
+
+impl TraceStream {
+    fn new(file: File) -> Self {
+        Self {
+            lines: BufReader::new(file).lines(),
+            line_num: 0,
+            first_timestamp: None,
+        }
+    }
+
+    /// Get the next event from the stream, or None if EOF
+    fn next_event(&mut self) -> Result<Option<TraceEvent>> {
+        loop {
+            self.line_num += 1;
+
+            match self.lines.next() {
+                Some(Ok(line)) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+
+                    match serde_json::from_str::<RawTraceEvent>(&line) {
+                        Ok(raw_event) => {
+                            let event = TraceEvent::from_raw(raw_event);
+
+                            if self.first_timestamp.is_none() {
+                                self.first_timestamp = Some(event.timestamp);
+                            }
+
+                            return Ok(Some(event));
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to parse JSON on line {}: {}. Skipping...",
+                                self.line_num, e
+                            );
+                            continue;
+                        }
+                    }
+                }
+                Some(Err(e)) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to read line {}: {}",
+                        self.line_num,
+                        e
+                    ));
+                }
+                None => return Ok(None),
+            }
+        }
+    }
+}
+
+/// Processes trace events and updates the model
+struct EventProcessor {
+    span_tracker: SpanTracker,
+    /// Track which span IDs we've already seen and created
+    seen_spans: HashMap<String, bool>,
+}
+
+impl EventProcessor {
+    fn new() -> Self {
+        Self {
+            span_tracker: SpanTracker::new(),
+            seen_spans: HashMap::new(),
+        }
+    }
+
+    /// Process a single trace event and update the model
+    fn process(&mut self, event: &TraceEvent, model: &mut devenv_tui::model::Model) {
+        let Some(span_id) = &event.span_id else {
+            return;
+        };
+
+        // Check if this is the first time we're seeing this span
+        let is_new_span = !self.seen_spans.contains_key(span_id);
+
+        if is_new_span {
+            self.seen_spans.insert(span_id.clone(), true);
+            self.handle_span_creation(event, model);
         } else {
-            // For non-new events, still close spans if depth decreased
-            if let Ok(mut spans) = self.active_spans.lock() {
-                while spans.len() > target_depth {
-                    spans.pop();
-                }
-                if let Ok(mut last_depth) = self.last_depth.lock() {
-                    *last_depth = target_depth;
-                }
-            }
-            self.emit_event(&fields);
+            self.handle_event_update(event, model);
         }
     }
 
-    /// Create or close spans based on depth changes
-    fn adjust_spans(
-        &self,
-        current_span_name: &str,
-        span_fields: &HashMap<String, serde_json::Value>,
-        target_depth: usize,
+    /// Handle creation of new spans (operations/activities)
+    fn handle_span_creation(
+        &mut self,
+        event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
     ) {
-        if let Ok(mut spans) = self.active_spans.lock() {
-            if let Ok(mut last_depth) = self.last_depth.lock() {
-                let prev_depth = *last_depth;
+        let Some(span_id) = &event.span_id else {
+            return;
+        };
 
-                // Close spans if we exited them
-                while spans.len() > target_depth {
-                    spans.pop();
-                }
+        // Check if this has explicit operation type/name fields
+        let op_type = event.fields.get("devenv.ui.operation.type");
+        let op_name = event.fields.get("devenv.ui.operation.name");
 
-                // Only create a new span if depth increased
-                if target_depth > prev_depth && target_depth > spans.len() {
-                    let span = self.create_span(current_span_name, span_fields);
-                    spans.push((current_span_name.to_string(), span.entered()));
-                }
+        // Only create operations/activities if they have explicit metadata
+        if op_type.is_none() && op_name.is_none() {
+            return;
+        }
 
-                *last_depth = target_depth;
+        // Determine parent operation from parent span
+        let parent_operation = event
+            .parent_span_id
+            .as_ref()
+            .and_then(|pid| self.span_tracker.get_operation(pid).cloned());
+
+        let name = op_name.cloned().unwrap_or_else(|| "Unknown".to_string());
+
+        match op_type.map(|s| s.as_str()) {
+            Some("evaluate") => {
+                self.create_evaluate_activity(span_id, &name, parent_operation, event, model);
+            }
+            Some("build") => {
+                self.create_build_activity(span_id, &name, parent_operation, event, model);
+            }
+            Some("download") => {
+                self.create_download_activity(span_id, &name, parent_operation, event, model);
+            }
+            Some("query") => {
+                self.create_query_activity(span_id, &name, parent_operation, event, model);
+            }
+            Some("fetch_tree") => {
+                self.create_fetch_tree_activity(span_id, &name, parent_operation, event, model);
+            }
+            _ => {
+                // Generic operation with explicit name but no specific type
+                self.create_generic_operation(span_id, &name, parent_operation, event, model);
             }
         }
     }
 
-    fn create_span(
-        &self,
-        _name: &str,
-        span_fields: &HashMap<String, serde_json::Value>,
-    ) -> tracing::Span {
-        let empty = HashMap::new();
-        let fields = FieldExtractor::new(&empty, span_fields);
-        let operation_type = fields.str_field("devenv.ui.operation.type");
-        let op_name = fields.str_field("devenv.ui.operation.name");
-        let op_short_name = fields.str_field("devenv.ui.operation.short_name");
+    /// Create an evaluate activity
+    fn create_evaluate_activity(
+        &mut self,
+        span_id: &str,
+        name: &str,
+        parent_operation: Option<devenv_tui::OperationId>,
+        _event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        use devenv_tui::model::{Activity, ActivityVariant};
 
-        match operation_type.as_str() {
-            "build" => {
-                let derivation = fields.str_field("devenv.ui.details.derivation");
-                info_span!(
-                    "nix_build",
-                    "devenv.ui.operation.type" = "build",
-                    "devenv.ui.operation.name" = op_name.as_str(),
-                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
-                    "devenv.ui.details.derivation" = derivation.as_str(),
-                )
+        let operation_id = devenv_tui::OperationId::new(span_id.to_string());
+        self.span_tracker
+            .register_operation(span_id.to_string(), operation_id.clone());
+
+        // Create operation
+        let operation = devenv_tui::Operation::new(
+            operation_id.clone(),
+            name.to_string(),
+            parent_operation.clone(),
+            HashMap::new(),
+        );
+
+        // Add to parent's children if applicable
+        if let Some(parent_id) = &parent_operation {
+            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                parent_op.children.push(operation_id.clone());
             }
-            "download" => {
-                let store_path = fields.str_field("devenv.ui.details.store_path");
-                let substituter = fields.str_field("devenv.ui.details.substituter");
-                info_span!(
-                    "nix_download",
-                    "devenv.ui.operation.type" = "download",
-                    "devenv.ui.operation.name" = op_name.as_str(),
-                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
-                    "devenv.ui.details.store_path" = store_path.as_str(),
-                    "devenv.ui.details.substituter" = substituter.as_str(),
-                )
+        } else {
+            model.root_operations.push(operation_id.clone());
+        }
+
+        model.operations.insert(operation_id.clone(), operation);
+
+        // Create evaluate activity
+        let activity_id = self.span_tracker.generate_activity_id();
+        self.span_tracker
+            .register_activity(span_id.to_string(), activity_id);
+
+        let activity = Activity {
+            id: activity_id,
+            operation_id: operation_id.clone(),
+            name: name.to_string(),
+            short_name: "Evaluating".to_string(),
+            parent_operation,
+            start_time: Instant::now(),
+            state: devenv_tui::NixActivityState::Active,
+            detail: Some("0 files".to_string()),
+            variant: ActivityVariant::Evaluating,
+            progress: None,
+        };
+
+        model.add_activity(activity);
+    }
+
+    /// Create a build activity
+    fn create_build_activity(
+        &mut self,
+        span_id: &str,
+        name: &str,
+        parent_operation: Option<devenv_tui::OperationId>,
+        event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        use devenv_tui::model::{Activity, ActivityVariant, BuildActivity};
+
+        let operation_id = devenv_tui::OperationId::new(span_id.to_string());
+        self.span_tracker
+            .register_operation(span_id.to_string(), operation_id.clone());
+
+        let mut data = HashMap::new();
+        if let Some(derivation) = event.fields.get("devenv.ui.details.derivation") {
+            data.insert("derivation".to_string(), derivation.clone());
+        }
+
+        let operation = devenv_tui::Operation::new(
+            operation_id.clone(),
+            name.to_string(),
+            parent_operation.clone(),
+            data,
+        );
+
+        if let Some(parent_id) = &parent_operation {
+            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                parent_op.children.push(operation_id.clone());
             }
-            "query" => {
-                let store_path = fields.str_field("devenv.ui.details.store_path");
-                let substituter = fields.str_field("devenv.ui.details.substituter");
-                info_span!(
-                    "nix_query",
-                    "devenv.ui.operation.type" = "query",
-                    "devenv.ui.operation.name" = op_name.as_str(),
-                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
-                    "devenv.ui.details.store_path" = store_path.as_str(),
-                    "devenv.ui.details.substituter" = substituter.as_str(),
-                )
+        } else {
+            model.root_operations.push(operation_id.clone());
+        }
+
+        model.operations.insert(operation_id.clone(), operation);
+
+        let activity_id = self.span_tracker.generate_activity_id();
+        self.span_tracker
+            .register_activity(span_id.to_string(), activity_id);
+
+        let activity = Activity {
+            id: activity_id,
+            operation_id: operation_id.clone(),
+            name: name.to_string(),
+            short_name: "Building".to_string(),
+            parent_operation,
+            start_time: Instant::now(),
+            state: devenv_tui::NixActivityState::Active,
+            detail: event.fields.get("devenv.ui.details.derivation").cloned(),
+            variant: ActivityVariant::Build(BuildActivity {
+                phase: Some("preparing".to_string()),
+                log_stdout_lines: Vec::new(),
+                log_stderr_lines: Vec::new(),
+            }),
+            progress: None,
+        };
+
+        model.add_activity(activity);
+    }
+
+    /// Create a download activity
+    fn create_download_activity(
+        &mut self,
+        span_id: &str,
+        name: &str,
+        parent_operation: Option<devenv_tui::OperationId>,
+        event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        use devenv_tui::model::{Activity, ActivityVariant, DownloadActivity};
+
+        let operation_id = devenv_tui::OperationId::new(span_id.to_string());
+        self.span_tracker
+            .register_operation(span_id.to_string(), operation_id.clone());
+
+        let mut data = HashMap::new();
+        if let Some(store_path) = event.fields.get("devenv.ui.details.store_path") {
+            data.insert("store_path".to_string(), store_path.clone());
+        }
+        if let Some(substituter) = event.fields.get("devenv.ui.details.substituter") {
+            data.insert("substituter".to_string(), substituter.clone());
+        }
+
+        let operation = devenv_tui::Operation::new(
+            operation_id.clone(),
+            name.to_string(),
+            parent_operation.clone(),
+            data,
+        );
+
+        if let Some(parent_id) = &parent_operation {
+            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                parent_op.children.push(operation_id.clone());
             }
-            "fetch_tree" => {
-                info_span!(
-                    "fetch_tree",
-                    "devenv.ui.operation.type" = "fetch_tree",
-                    "devenv.ui.operation.name" = op_name.as_str(),
-                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
-                )
+        } else {
+            model.root_operations.push(operation_id.clone());
+        }
+
+        model.operations.insert(operation_id.clone(), operation);
+
+        let activity_id = self.span_tracker.generate_activity_id();
+        self.span_tracker
+            .register_activity(span_id.to_string(), activity_id);
+
+        let activity = Activity {
+            id: activity_id,
+            operation_id: operation_id.clone(),
+            name: name.to_string(),
+            short_name: "Downloading".to_string(),
+            parent_operation,
+            start_time: Instant::now(),
+            state: devenv_tui::NixActivityState::Active,
+            detail: event.fields.get("devenv.ui.details.store_path").cloned(),
+            variant: ActivityVariant::Download(DownloadActivity {
+                size_current: None,
+                size_total: None,
+                speed: None,
+                substituter: event.fields.get("devenv.ui.details.substituter").cloned(),
+            }),
+            progress: None,
+        };
+
+        model.add_activity(activity);
+    }
+
+    /// Create a query activity
+    fn create_query_activity(
+        &mut self,
+        span_id: &str,
+        name: &str,
+        parent_operation: Option<devenv_tui::OperationId>,
+        event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        use devenv_tui::model::{Activity, ActivityVariant, QueryActivity};
+
+        let operation_id = devenv_tui::OperationId::new(span_id.to_string());
+        self.span_tracker
+            .register_operation(span_id.to_string(), operation_id.clone());
+
+        let mut data = HashMap::new();
+        if let Some(store_path) = event.fields.get("devenv.ui.details.store_path") {
+            data.insert("store_path".to_string(), store_path.clone());
+        }
+        if let Some(substituter) = event.fields.get("devenv.ui.details.substituter") {
+            data.insert("substituter".to_string(), substituter.clone());
+        }
+
+        let operation = devenv_tui::Operation::new(
+            operation_id.clone(),
+            name.to_string(),
+            parent_operation.clone(),
+            data,
+        );
+
+        if let Some(parent_id) = &parent_operation {
+            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                parent_op.children.push(operation_id.clone());
             }
-            "evaluate" => {
-                info_span!(
-                    "nix_evaluate",
-                    "devenv.ui.operation.type" = "evaluate",
-                    "devenv.ui.operation.name" = op_name.as_str(),
-                    "devenv.ui.operation.short_name" = op_short_name.as_str(),
-                )
+        } else {
+            model.root_operations.push(operation_id.clone());
+        }
+
+        model.operations.insert(operation_id.clone(), operation);
+
+        let activity_id = self.span_tracker.generate_activity_id();
+        self.span_tracker
+            .register_activity(span_id.to_string(), activity_id);
+
+        let activity = Activity {
+            id: activity_id,
+            operation_id: operation_id.clone(),
+            name: name.to_string(),
+            short_name: "Querying".to_string(),
+            parent_operation,
+            start_time: Instant::now(),
+            state: devenv_tui::NixActivityState::Active,
+            detail: event.fields.get("devenv.ui.details.store_path").cloned(),
+            variant: ActivityVariant::Query(QueryActivity {
+                substituter: event.fields.get("devenv.ui.details.substituter").cloned(),
+            }),
+            progress: None,
+        };
+
+        model.add_activity(activity);
+    }
+
+    /// Create a fetch_tree activity
+    fn create_fetch_tree_activity(
+        &mut self,
+        span_id: &str,
+        name: &str,
+        parent_operation: Option<devenv_tui::OperationId>,
+        _event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        use devenv_tui::model::{Activity, ActivityVariant};
+
+        let operation_id = devenv_tui::OperationId::new(span_id.to_string());
+        self.span_tracker
+            .register_operation(span_id.to_string(), operation_id.clone());
+
+        let operation = devenv_tui::Operation::new(
+            operation_id.clone(),
+            name.to_string(),
+            parent_operation.clone(),
+            HashMap::new(),
+        );
+
+        if let Some(parent_id) = &parent_operation {
+            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                parent_op.children.push(operation_id.clone());
             }
-            _ => info_span!("operation"),
+        } else {
+            model.root_operations.push(operation_id.clone());
+        }
+
+        model.operations.insert(operation_id.clone(), operation);
+
+        let activity_id = self.span_tracker.generate_activity_id();
+        self.span_tracker
+            .register_activity(span_id.to_string(), activity_id);
+
+        let activity = Activity {
+            id: activity_id,
+            operation_id: operation_id.clone(),
+            name: name.to_string(),
+            short_name: "Fetching".to_string(),
+            parent_operation,
+            start_time: Instant::now(),
+            state: devenv_tui::NixActivityState::Active,
+            detail: None,
+            variant: ActivityVariant::FetchTree,
+            progress: None,
+        };
+
+        model.add_activity(activity);
+    }
+
+    /// Create a generic operation (without activity)
+    fn create_generic_operation(
+        &mut self,
+        span_id: &str,
+        name: &str,
+        parent_operation: Option<devenv_tui::OperationId>,
+        _event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        let operation_id = devenv_tui::OperationId::new(span_id.to_string());
+        self.span_tracker
+            .register_operation(span_id.to_string(), operation_id.clone());
+
+        let operation = devenv_tui::Operation::new(
+            operation_id.clone(),
+            name.to_string(),
+            parent_operation.clone(),
+            HashMap::new(),
+        );
+
+        if let Some(parent_id) = &parent_operation {
+            if let Some(parent_op) = model.operations.get_mut(parent_id) {
+                parent_op.children.push(operation_id.clone());
+            }
+        } else {
+            model.root_operations.push(operation_id.clone());
+        }
+
+        model.operations.insert(operation_id, operation);
+    }
+
+    /// Handle event updates (status, progress, etc.)
+    fn handle_event_update(&mut self, event: &TraceEvent, model: &mut devenv_tui::model::Model) {
+        let Some(span_id) = &event.span_id else {
+            return;
+        };
+
+        // Check if this is a progress update
+        if let Some(progress_type) = event.fields.get("devenv.ui.progress.type") {
+            self.handle_progress_update(span_id, progress_type, event, model);
+        }
+
+        // Check if this is a status update
+        if let Some(status) = event.fields.get("devenv.ui.status") {
+            self.handle_status_update(span_id, status, event, model);
         }
     }
 
-    fn emit_event(&self, fields: &FieldExtractor) {
-        let message = fields.str_field("message");
-        let progress_type = fields.str_field("devenv.ui.progress.type");
-        let progress_current = fields.u64_field("devenv.ui.progress.current");
-        let progress_total = fields.u64_field("devenv.ui.progress.total");
-        let progress_rate = fields.u64_field("devenv.ui.progress.rate");
-        let status = fields.str_field("devenv.ui.status");
+    /// Handle progress updates
+    fn handle_progress_update(
+        &mut self,
+        span_id: &str,
+        progress_type: &str,
+        event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        use devenv_tui::model::ProgressActivity;
 
-        if !message.is_empty() {
-            if !progress_type.is_empty() {
-                info!(
-                    "devenv.ui.progress.type" = progress_type.as_str(),
-                    "devenv.ui.progress.current" = progress_current,
-                    "devenv.ui.progress.total" = progress_total,
-                    "devenv.ui.progress.rate" = progress_rate,
-                    "devenv.ui.status" = status.as_str(),
-                    "{}",
-                    message
-                );
-            } else if !status.is_empty() {
-                info!("devenv.ui.status" = status.as_str(), "{}", message);
-            } else {
-                info!("{}", message);
+        let Some(activity_id) = self.span_tracker.get_activity(span_id) else {
+            return;
+        };
+
+        let Some(activity) = model.activities.get_mut(&activity_id) else {
+            return;
+        };
+
+        match progress_type {
+            "files" => {
+                if let Some(current_str) = event.fields.get("devenv.ui.progress.current") {
+                    if let Ok(current) = current_str.parse::<u64>() {
+                        activity.progress = Some(ProgressActivity {
+                            current: Some(current),
+                            total: None,
+                            unit: Some("files".to_string()),
+                            percent: None,
+                        });
+                        activity.detail = Some(format!("{} files", current));
+                    }
+                }
+            }
+            "bytes" => {
+                if let (Some(current_str), Some(total_str)) = (
+                    event.fields.get("devenv.ui.progress.current"),
+                    event.fields.get("devenv.ui.progress.total"),
+                ) {
+                    if let (Ok(current), Ok(total)) = (current_str.parse::<u64>(), total_str.parse::<u64>()) {
+                        let percent = if total > 0 {
+                            Some((current as f32 / total as f32) * 100.0)
+                        } else {
+                            None
+                        };
+
+                        activity.progress = Some(ProgressActivity {
+                            current: Some(current),
+                            total: Some(total),
+                            unit: Some("bytes".to_string()),
+                            percent,
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Handle status updates
+    fn handle_status_update(
+        &mut self,
+        span_id: &str,
+        status: &str,
+        _event: &TraceEvent,
+        model: &mut devenv_tui::model::Model,
+    ) {
+        // Update activity if one exists
+        if let Some(activity_id) = self.span_tracker.get_activity(span_id) {
+            if let Some(activity) = model.activities.get_mut(&activity_id) {
+                match status {
+                    "active" => {
+                        activity.state = devenv_tui::NixActivityState::Active;
+                    }
+                    "completed" | "success" => {
+                        let duration = activity.start_time.elapsed();
+                        activity.state = devenv_tui::NixActivityState::Completed {
+                            success: true,
+                            duration,
+                        };
+
+                        // Also complete the operation
+                        if let Some(operation) = model.operations.get_mut(&activity.operation_id) {
+                            operation.complete(true);
+                        }
+                    }
+                    "failed" | "error" => {
+                        let duration = activity.start_time.elapsed();
+                        activity.state = devenv_tui::NixActivityState::Completed {
+                            success: false,
+                            duration,
+                        };
+
+                        // Also complete the operation
+                        if let Some(operation) = model.operations.get_mut(&activity.operation_id) {
+                            operation.complete(false);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // If there's an operation but no activity, still complete the operation
+        if let Some(operation_id) = self.span_tracker.get_operation(span_id) {
+            match status {
+                "completed" | "success" => {
+                    if let Some(operation) = model.operations.get_mut(operation_id) {
+                        operation.complete(true);
+                    }
+                }
+                "failed" | "error" => {
+                    if let Some(operation) = model.operations.get_mut(operation_id) {
+                        operation.complete(false);
+                    }
+                }
+                _ => {}
             }
         }
     }
@@ -244,18 +750,15 @@ async fn main() -> Result<()> {
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
         .with(tui_handle.layer())
-        .with(tracing_subscriber::fmt::layer())
         .init();
 
     let shutdown = Shutdown::new();
-    run_replay(tui_handle, shutdown.clone()).await?;
+    run_replay(tui_handle, shutdown).await?;
 
-    info!("Replay complete. Press Ctrl+C to exit.");
-    shutdown.wait_for_shutdown().await;
     Ok(())
 }
 
-async fn run_replay(tui_handle: TuiHandle, shutdown: Arc<Shutdown>) -> Result<()> {
+async fn run_replay(tui_handle: TuiHandle, shutdown: std::sync::Arc<Shutdown>) -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
         info!(
@@ -273,53 +776,44 @@ async fn run_replay(tui_handle: TuiHandle, shutdown: Arc<Shutdown>) -> Result<()
     let file = File::open(&trace_path)
         .with_context(|| format!("Failed to open trace file: {}", trace_path.display()))?;
 
-    let reader = BufReader::new(file);
-    let mut entries = Vec::new();
+    let mut stream = TraceStream::new(file);
 
-    // Parse all trace entries
-    for (line_num, line) in reader.lines().enumerate() {
-        let line = line.with_context(|| format!("Failed to read line {}", line_num + 1))?;
-        if line.trim().is_empty() {
-            continue;
-        }
+    // Get the first event to establish the baseline timestamp
+    let first_event = stream
+        .next_event()?
+        .with_context(|| "No valid trace entries found")?;
 
-        match serde_json::from_str::<TraceEvent>(&line) {
-            Ok(event) => entries.push(event),
-            Err(e) => {
-                error!(
-                    "Failed to parse JSON on line {line_num}: {e}",
-                    line_num = line_num + 1
-                );
-                error!("Line: {line}");
-            }
-        }
-    }
-
-    if entries.is_empty() {
-        error!("No valid trace entries found");
-        return Ok(());
-    }
-
-    info!("Loaded {} trace events", entries.len());
-
-    let replayer = TraceReplayer::new();
+    let first_timestamp = first_event.timestamp;
+    info!("Starting trace replay from: {}", trace_path.display());
 
     // Start TUI in background
     let tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
+        let model = tui_handle.model();
         async move {
-            match devenv_tui::app::run_app(tui_handle.model(), shutdown).await {
+            match devenv_tui::app::run_app(model, shutdown).await {
                 Ok(_) => info!("TUI exited normally"),
-                Err(e) => error!("TUI error: {e}"),
+                Err(e) => warn!("TUI error: {e}"),
             }
         }
     });
 
     // Replay trace entries with timing
     let start_time = Instant::now();
-    let first_timestamp = entries[0].timestamp;
+    let mut processor = EventProcessor::new();
+    let mut event_count = 0;
 
-    for (idx, event) in entries.iter().enumerate() {
+    // Process the first event immediately
+    if let Ok(mut model) = tui_handle.model().lock() {
+        processor.process(&first_event, &mut model);
+    }
+
+    // Stream through remaining events
+    while let Some(event) = stream.next_event()? {
+        event_count += 1;
+        if event_count % 100 == 0 {
+            info!("Processed {} events", event_count);
+        }
         // Calculate delay from first entry
         let time_offset = event.timestamp.signed_duration_since(first_timestamp);
         let target_elapsed = Duration::from_millis(time_offset.num_milliseconds().max(0) as u64);
@@ -338,13 +832,23 @@ async fn run_replay(tui_handle: TuiHandle, shutdown: Arc<Shutdown>) -> Result<()
             }
         }
 
-        replayer.replay(event);
+        // Process event and update model
+        if let Ok(mut model) = tui_handle.model().lock() {
+            processor.process(&event, &mut model);
+        }
     }
 
-    info!("Replay finished. Activities are still visible in the TUI.");
+    info!("Replay finished. Processed {} total events.", event_count + 1);
+    info!("Press Ctrl+C to exit the TUI");
 
-    if tui_task.is_finished() {
-        warn!("Warning: TUI task has already exited!");
+    // Wait for TUI to finish or shutdown
+    tokio::select! {
+        _ = tui_task => {
+            info!("TUI task completed");
+        }
+        _ = shutdown.wait_for_shutdown() => {
+            info!("Shutdown requested");
+        }
     }
 
     Ok(())
