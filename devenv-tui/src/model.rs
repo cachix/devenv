@@ -583,6 +583,133 @@ impl Model {
             }
         }
     }
+
+    /// Apply a typed tracing update to the model
+    pub fn apply_update(&mut self, update: crate::TracingUpdate) {
+        use crate::TracingUpdate;
+
+        match update {
+            TracingUpdate::NixProgress(update) => self.apply_nix_progress(update),
+            TracingUpdate::BuildPhase(update) => self.apply_build_phase(update),
+            TracingUpdate::BuildLog(update) => self.apply_build_log(update),
+            TracingUpdate::DownloadProgress(update) => self.apply_download_progress(update),
+            TracingUpdate::EvaluationProgress(update) => self.apply_evaluation_progress(update),
+            TracingUpdate::TaskStatus(update) => self.apply_task_status(update),
+            TracingUpdate::LogOutput(update) => self.apply_log_output(update),
+        }
+    }
+
+    /// Apply Nix progress update
+    fn apply_nix_progress(&mut self, update: crate::NixProgressUpdate) {
+        if let Some(activity) = self.activities.get_mut(&update.activity_id) {
+            activity.progress = Some(ProgressActivity {
+                current: Some(update.done),
+                total: Some(update.expected),
+                unit: None,
+                percent: if update.expected > 0 {
+                    Some((update.done as f32 / update.expected as f32) * 100.0)
+                } else {
+                    None
+                },
+            });
+        }
+    }
+
+    /// Apply build phase update
+    fn apply_build_phase(&mut self, update: crate::BuildPhaseUpdate) {
+        if let Some(activity) = self.activities.get_mut(&update.activity_id) {
+            if let ActivityVariant::Build(ref mut build_activity) = activity.variant {
+                build_activity.phase = Some(update.phase);
+            }
+        }
+    }
+
+    /// Apply build log update
+    fn apply_build_log(&mut self, update: crate::BuildLogUpdate) {
+        self.add_build_log(update.activity_id, update.line);
+    }
+
+    /// Apply download progress update
+    fn apply_download_progress(&mut self, update: crate::DownloadProgressUpdate) {
+        if let Some(activity) = self.activities.get_mut(&update.activity_id) {
+            if let ActivityVariant::Download(ref mut download_activity) = activity.variant {
+                let speed = if let Some(current) = download_activity.size_current {
+                    let time_delta = 0.1;
+                    let bytes_delta = update.bytes_downloaded.saturating_sub(current) as f64;
+                    (bytes_delta / time_delta) as u64
+                } else {
+                    0
+                };
+
+                download_activity.size_current = Some(update.bytes_downloaded);
+                download_activity.size_total = update.total_bytes;
+                download_activity.speed = Some(speed);
+            }
+        }
+    }
+
+    /// Apply evaluation progress update
+    fn apply_evaluation_progress(&mut self, update: crate::EvaluationProgressUpdate) {
+        if let Some(activity) = self.activities.get_mut(&update.activity_id) {
+            activity.progress = Some(ProgressActivity {
+                current: Some(update.total_files_evaluated),
+                total: None,
+                unit: Some("files".to_string()),
+                percent: None,
+            });
+
+            if let Some(latest_file) = update.latest_files.last() {
+                activity.detail = Some(latest_file.clone());
+            }
+        }
+    }
+
+    /// Apply task status update
+    fn apply_task_status(&mut self, update: crate::TaskStatusUpdate) {
+        if let Some(duration_secs) = update.duration_secs {
+            if let Some(success) = update.success {
+                let duration = std::time::Duration::from_secs_f64(duration_secs);
+                self.handle_task_end(update.name, Some(duration), success, update.error);
+                return;
+            }
+        }
+
+        use crate::LogMessage;
+        let message = if let Some(result) = update.result {
+            format!(
+                "Task '{}' status: {} (result: {})",
+                update.name, update.status, result
+            )
+        } else {
+            format!("Task '{}' status: {}", update.name, update.status)
+        };
+
+        let log_msg = LogMessage::new(
+            crate::LogLevel::Info,
+            message,
+            crate::LogSource::System,
+            std::collections::HashMap::new(),
+        );
+        self.add_log_message(log_msg);
+    }
+
+    /// Apply log output update
+    fn apply_log_output(&mut self, update: crate::LogOutputUpdate) {
+        let log_level = if update.stream.contains("stderr") {
+            crate::LogLevel::Warn
+        } else {
+            crate::LogLevel::Info
+        };
+
+        let log_msg = crate::LogMessage::new(
+            log_level,
+            update.message,
+            crate::LogSource::Nix,
+            std::collections::HashMap::new(),
+        );
+
+        self.add_log_message(log_msg);
+    }
 }
 
 /// Activity with display depth

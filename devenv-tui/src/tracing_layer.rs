@@ -1,12 +1,8 @@
 use crate::Operation;
 use crate::model::{
-    Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, ProgressActivity,
-    QueryActivity,
+    Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, QueryActivity,
 };
-use crate::tracing_interface::{
-    details_fields, log_fields, nix_fields, operation_fields, operation_types, status_events,
-    task_fields,
-};
+use crate::tracing_interface::{details_fields, nix_fields, operation_fields, operation_types, task_fields};
 use crate::{LogLevel, LogSource, NixActivityState, OperationId, OperationResult};
 use rand;
 use std::collections::HashMap;
@@ -669,229 +665,15 @@ where
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
 
-        // Handle task events from devenv-tasks (using formal interface constants)
-        if event.metadata().target().starts_with("devenv_tasks")
-            && let Some(task_name) = visitor.fields.get(task_fields::NAME)
-        {
-            let task_name = task_name.trim_matches('"').to_string();
-
-            // Check for task status updates
-            if let Some(status) = visitor.fields.get(status_events::fields::STATUS) {
-                let status = status.trim_matches('"').to_string();
-                let result = visitor
-                    .fields
-                    .get(status_events::fields::RESULT)
-                    .map(|r| r.trim_matches('"').to_string());
-
-                // Update task status in the model
-                let task_name_clone = task_name.clone();
-                let status_clone = status.clone();
-                let result_clone = result.clone();
-
-                self.update_model(|model| {
-                    use crate::LogMessage;
-                    let message = if let Some(result) = result_clone {
-                        format!(
-                            "Task '{}' status: {} (result: {})",
-                            task_name_clone, status_clone, result
-                        )
-                    } else {
-                        format!("Task '{}' status: {}", task_name_clone, status_clone)
-                    };
-
-                    let log_msg =
-                        LogMessage::new(LogLevel::Info, message, LogSource::System, HashMap::new());
-                    model.add_log_message(log_msg);
-                });
-            }
-
-            // Check for task completion events (with duration and success)
-            if let (Some(duration_secs), Some(success)) = (
-                visitor.fields.get("duration_secs"),
-                visitor.fields.get("success"),
-            ) {
-                let duration_secs: f64 = duration_secs.trim_matches('"').parse().unwrap_or(0.0);
-                let duration = std::time::Duration::from_secs_f64(duration_secs);
-                let success = success.trim_matches('"') == "true";
-                let error = visitor
-                    .fields
-                    .get("error")
-                    .map(|e| e.trim_matches('"').to_string());
-
-                self.update_model(|model| {
-                    model.handle_task_end(task_name, Some(duration), success, error);
-                });
-            }
-        }
-
-        // Handle Nix progress and other events
         let target = event.metadata().target();
-        if target.starts_with("devenv.nix.") {
-            match target {
-                "devenv.nix.progress" => {
-                    if let Some(activity_id_str) = visitor.fields.get("activity_id")
-                        && let Ok(activity_id) = activity_id_str.parse::<u64>()
-                        && let (Some(done_str), Some(expected_str)) =
-                            (visitor.fields.get("done"), visitor.fields.get("expected"))
-                        && let (Ok(done), Ok(expected)) =
-                            (done_str.parse::<u64>(), expected_str.parse::<u64>())
-                    {
-                        let _running = visitor
-                            .fields
-                            .get("running")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
-                        let _failed = visitor
-                            .fields
-                            .get("failed")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
+        let event_name = event.metadata().name();
 
-                        self.update_model(|model| {
-                            if let Some(activity) = model.activities.get_mut(&activity_id) {
-                                activity.progress = Some(ProgressActivity {
-                                    current: Some(done),
-                                    total: Some(expected),
-                                    unit: None,
-                                    percent: if expected > 0 {
-                                        Some((done as f32 / expected as f32) * 100.0)
-                                    } else {
-                                        None
-                                    },
-                                });
-                            }
-                        });
-                    }
-                }
-                "devenv.nix.download" if event.metadata().name() == "nix_download_progress" => {
-                    if let Some(activity_id_str) = visitor.fields.get("activity_id")
-                        && let Ok(activity_id) = activity_id_str.parse::<u64>()
-                    {
-                        let bytes_downloaded = visitor
-                            .fields
-                            .get("bytes_downloaded")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
-                        let total_bytes = visitor
-                            .fields
-                            .get("total_bytes")
-                            .and_then(|s| s.parse::<u64>().ok());
-
-                        self.update_model(|model| {
-                            if let Some(activity) = model.activities.get_mut(&activity_id)
-                                && let ActivityVariant::Download(ref mut download_activity) =
-                                    activity.variant
-                            {
-                                // Calculate download speed from previous values
-                                let speed = if let Some(current) = download_activity.size_current {
-                                    let time_delta = 0.1; // Assume ~100ms between updates
-                                    let bytes_delta =
-                                        bytes_downloaded.saturating_sub(current) as f64;
-                                    (bytes_delta / time_delta) as u64
-                                } else {
-                                    0
-                                };
-
-                                // Update download progress
-                                download_activity.size_current = Some(bytes_downloaded);
-                                download_activity.size_total = total_bytes;
-                                download_activity.speed = Some(speed);
-                            }
-                        });
-                    }
-                }
-                "devenv.nix.build" => {
-                    // Handle phase updates
-                    if let (Some(activity_id_str), Some(phase)) = (
-                        visitor.fields.get("activity_id"),
-                        visitor.fields.get("phase"),
-                    ) && let Ok(activity_id) = activity_id_str.parse::<u64>()
-                    {
-                        self.update_model(|model| {
-                            if let Some(activity) = model.activities.get_mut(&activity_id)
-                                && let ActivityVariant::Build(ref mut build_activity) =
-                                    activity.variant
-                            {
-                                build_activity.phase = Some(phase.clone());
-                            }
-                        });
-                    }
-                    // Handle build logs
-                    if let (Some(activity_id_str), Some(line)) = (
-                        visitor.fields.get("activity_id"),
-                        visitor.fields.get("line"),
-                    ) && let Ok(activity_id) = activity_id_str.parse::<u64>()
-                    {
-                        self.update_model(|model| {
-                            model.add_build_log(activity_id, line.clone());
-                        });
-                    }
-                }
-                "devenv.nix.eval" if event.metadata().name() == "nix_evaluation_progress" => {
-                    if let (Some(activity_id_str), Some(files_str)) = (
-                        visitor.fields.get(nix_fields::ACTIVITY_ID),
-                        visitor.fields.get("files"),
-                    ) && let Ok(activity_id) = activity_id_str.parse::<u64>()
-                    {
-                        let total_files_evaluated = visitor
-                            .fields
-                            .get("total_files_evaluated")
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .unwrap_or(0);
-
-                        // Parse the files array - this is a bit crude but should work
-                        let files: Vec<String> = files_str
-                            .trim_start_matches('[')
-                            .trim_end_matches(']')
-                            .split(", ")
-                            .map(|s| s.trim_matches('"').to_string())
-                            .filter(|s| !s.is_empty())
-                            .collect();
-
-                        self.update_model(|model| {
-                            if let Some(activity) = model.activities.get_mut(&activity_id) {
-                                // Update progress with file count
-                                activity.progress = Some(ProgressActivity {
-                                    current: Some(total_files_evaluated),
-                                    total: None,
-                                    unit: Some("files".to_string()),
-                                    percent: None,
-                                });
-
-                                // Store latest file being evaluated in detail
-                                if let Some(latest_file) = files.last() {
-                                    activity.detail = Some(latest_file.clone());
-                                }
-                            }
-                        });
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        // Handle log output events (stdout/stderr streaming)
-        let target = event.metadata().target();
-        if (target == log_fields::STDOUT_TARGET || target == log_fields::STDERR_TARGET)
-            && let (Some(stream), Some(message)) = (
-                visitor.fields.get(log_fields::STREAM),
-                visitor.fields.get(log_fields::MESSAGE),
-            )
-        {
-            // TODO: Associate with the correct task activity
-            // For now, add to message log
-            let log_level = if stream.contains("stderr") {
-                LogLevel::Warn
-            } else {
-                LogLevel::Info
-            };
-
-            let log_msg =
-                crate::LogMessage::new(log_level, message.clone(), LogSource::Nix, HashMap::new());
-
+        // Try to parse as a typed update
+        if let Some(update) = crate::TracingUpdate::from_event(target, event_name, &visitor.fields) {
             self.update_model(|model| {
-                model.add_log_message(log_msg);
+                model.apply_update(update);
             });
+            return;
         }
 
         // Handle log messages marked with devenv.log = true
