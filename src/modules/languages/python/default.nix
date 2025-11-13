@@ -6,31 +6,14 @@
 
 let
   cfg = config.languages.python;
-  libraries = lib.makeLibraryPath (
+
+  libraries =
     cfg.libraries
     ++ (lib.optional cfg.manylinux.enable pkgs.pythonManylinuxPackages.manylinux2014Package)
     # see https://matrix.to/#/!kjdutkOsheZdjqYmqp:nixos.org/$XJ5CO4bKMevYzZq_rrNo64YycknVFJIJTy6hVCJjRlA?via=nixos.org&via=matrix.org&via=nixos.dev
-    ++ [ pkgs.stdenv.cc.cc.lib ]
-  );
+    ++ [ pkgs.stdenv.cc.cc.lib ];
 
   readlink = "${pkgs.coreutils}/bin/readlink -f ";
-  package = pkgs.callPackage ../../python-wrapper.nix {
-    python = cfg.package;
-    requiredPythonModules = cfg.package.pkgs.requiredPythonModules;
-    makeWrapperArgs =
-      [
-        "--prefix"
-        "LD_LIBRARY_PATH"
-        ":"
-        libraries
-      ]
-      ++ lib.optionals pkgs.stdenv.isDarwin [
-        "--prefix"
-        "DYLD_LIBRARY_PATH"
-        ":"
-        libraries
-      ];
-  };
 
   requirements = pkgs.writeText "requirements.txt" (
     toString (
@@ -57,7 +40,7 @@ let
 
     VENV_PATH="${config.env.DEVENV_STATE}/venv"
 
-    profile_python="$(${readlink} ${package.interpreter})"
+    profile_python="$(${readlink} ${cfg.package.interpreter})"
     devenv_interpreter_path="$(${pkgs.coreutils}/bin/cat "$VENV_PATH/.devenv_interpreter" 2> /dev/null || echo false )"
     venv_python="$(${readlink} "$devenv_interpreter_path")"
 
@@ -74,20 +57,20 @@ let
       ${
         if cfg.uv.enable then
           ''
-            echo uv venv -p ${package.interpreter} "$VENV_PATH"
-            uv venv -p ${package.interpreter} "$VENV_PATH"
+            echo uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
+            uv venv -p ${cfg.package.interpreter} "$VENV_PATH"
           ''
         else
           ''
-            echo ${package.interpreter} -m venv ${
+            echo ${cfg.package.interpreter} -m venv ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
-            ${package.interpreter} -m venv ${
+            ${cfg.package.interpreter} -m venv ${
               if builtins.isNull cfg.version || lib.versionAtLeast cfg.version "3.9" then "--upgrade-deps" else ""
             } "$VENV_PATH"
           ''
       }
-      echo "${package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
+      echo "${cfg.package.interpreter}" > "$VENV_PATH/.devenv_interpreter"
     fi
 
     source "$VENV_PATH"/bin/activate
@@ -174,7 +157,7 @@ let
 
       # Avoid running "uv sync" for every shell.
       # Only run it when the "pyproject.toml" file or Python interpreter has changed.
-      local ACTUAL_UV_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
+      local ACTUAL_UV_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):''${UV_SYNC_COMMAND[@]}"
       local UV_CHECKSUM_FILE="$VENV_PATH/uv.sync.checksum"
       if [ -f "$UV_CHECKSUM_FILE" ]
       then
@@ -224,7 +207,7 @@ let
       unset VIRTUAL_ENV
 
       # Make sure poetry's venv uses the configured Python executable.
-      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${package.interpreter}
+      ${cfg.poetry.package}/bin/poetry env use --no-interaction --quiet ${cfg.package.interpreter}
     }
 
     function _devenv_poetry_install
@@ -233,7 +216,7 @@ let
       # Avoid running "poetry install" for every shell.
       # Only run it when the "poetry.lock" file or Python interpreter has changed.
       # We do this by storing the interpreter path and a hash of "poetry.lock" in venv.
-      local ACTUAL_POETRY_CHECKSUM="${package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
+      local ACTUAL_POETRY_CHECKSUM="${cfg.package.interpreter}:$(${pkgs.nix}/bin/nix-hash --type sha256 pyproject.toml):$(${pkgs.nix}/bin/nix-hash --type sha256 poetry.lock):''${POETRY_INSTALL_COMMAND[@]}"
       local POETRY_CHECKSUM_FILE=".venv/poetry.lock.checksum"
       if [ -f "$POETRY_CHECKSUM_FILE" ]
       then
@@ -280,6 +263,81 @@ in
       default = pkgs.python3;
       defaultText = lib.literalExpression "pkgs.python3";
       description = "The Python package to use.";
+      apply =
+        drv:
+        let
+          isBuildEnv = drv: lib.hasAttr "extraLibs" (lib.functionArgs drv.override);
+
+          makeWrapperArgs = [
+            "--prefix"
+            "LD_LIBRARY_PATH"
+            ":"
+            (lib.makeLibraryPath libraries)
+          ]
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            "--prefix"
+            "DYLD_LIBRARY_PATH"
+            ":"
+            (lib.makeLibraryPath libraries)
+          ];
+
+          patchBuildEnv =
+            drv:
+            let
+              makePostBuildWrapper = pkgs.callPackage ./postbuild-wrapper.nix { };
+              patchedEnv =
+                (drv.override (args: {
+                  extraLibs = (args.extraLibs or [ ]) ++ [
+                    (pkgs.runCommand "bin" { } ''
+                      mkdir -p $out/bin
+                    '')
+                  ];
+                })).overrideAttrs
+                  (
+                    prevAttrs:
+                    let
+                      # Generate the patched wrapper script using the shared function
+                      patchedPostBuildWrapper = makePostBuildWrapper {
+                        inherit (drv) python;
+                        inherit makeWrapperArgs;
+                      };
+                    in
+                    {
+                      postBuild = patchedPostBuildWrapper;
+                      passthru = prevAttrs.passthru // {
+                        interpreter = "${patchedEnv}/bin/${drv.python.executable}";
+                      };
+                    }
+                  );
+            in
+            # If we got a buildEnv from withPackages, modify its postBuild to use our wrapper logic
+            if isBuildEnv drv then patchedEnv else drv;
+
+          overrideBuildEnv =
+            drv:
+            drv.overrideAttrs (prevAttrs: rec {
+              buildEnv = pkgs.callPackage ./wrapper.nix {
+                python = drv;
+                requiredPythonModules = drv.pkgs.requiredPythonModules;
+              };
+              passthru = prevAttrs.passthru // {
+                inherit buildEnv;
+              };
+            });
+
+          # Add extra libraries to the Python `buildEnv`.
+          appendLibraries =
+            drv:
+            (if isBuildEnv drv then drv else drv.buildEnv).override (args: { inherit makeWrapperArgs; });
+        in
+        if cfg.patches.buildEnv.enable then
+          lib.pipe drv [
+            patchBuildEnv
+            overrideBuildEnv
+            appendLibraries
+          ]
+        else
+         appendLibraries drv;
     };
 
     manylinux.enable = lib.mkOption {
@@ -326,6 +384,22 @@ in
         Can be an absolute path or one relative to the root of the devenv project.
       '';
       example = "./directory";
+    };
+
+    patches.buildEnv.enable = lib.mkOption {
+      type = lib.types.bool;
+      # TODO: Implement bounds check on `lib.version` once the upstream patch reaches a release.
+      default = true;
+      description = ''
+        Whether to apply fixes to Python's `buildEnv` for correct runtime initialization:
+        - Executables use `--inherit-argv0` and `--resolve-argv0` to ensure Python initializes with correct `sys.prefix` and `sys.base_prefix`
+        - Python package scripts are unwrapped to invoke the environment's interpreter directly
+
+        Without these fixes, venvs cannot access environment packages via `--system-site-packages`.
+
+        Enabled by default.
+        Newer nixpkgs releases may include upstream fixes that make this patch obsolete.
+      '';
     };
 
     venv = {
@@ -521,10 +595,11 @@ in
 
     cachix.pull = lib.mkIf (cfg.version != null) [ "nixpkgs-python" ];
 
-    packages =
-      [ package ]
-      ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
-      ++ (lib.optional cfg.uv.enable cfg.uv.package);
+    packages = [
+      cfg.package
+    ]
+    ++ (lib.optional cfg.poetry.enable cfg.poetry.package)
+    ++ (lib.optional cfg.uv.enable cfg.uv.package);
 
     env =
       (lib.optionalAttrs cfg.uv.enable {
@@ -532,7 +607,7 @@ in
         UV_PROJECT_ENVIRONMENT = "${config.env.DEVENV_STATE}/venv";
         # Force uv not to download a Python binary when the version in pyproject.toml does not match the one installed by devenv
         UV_PYTHON_DOWNLOADS = "never";
-        # Make uv choose the first python on PATH that is not uv provided. 
+        # Make uv choose the first python on PATH that is not uv provided.
         # The one it finds is then consistently the one from nix (which is what we want).
         UV_PYTHON_PREFERENCE = "only-system";
       })
@@ -582,7 +657,7 @@ in
     };
 
     enterShell = ''
-      export PYTHONPATH="$DEVENV_PROFILE/${package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
+      export PYTHONPATH="$DEVENV_PROFILE/${cfg.package.sitePackages}''${PYTHONPATH:+:$PYTHONPATH}"
     '';
   };
 }
