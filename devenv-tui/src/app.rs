@@ -9,44 +9,38 @@ use std::time::Duration;
 /// Main TUI component
 #[component]
 fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let tui_handle = hooks.use_context::<crate::TuiHandle>();
     let model = hooks.use_context::<Arc<Mutex<Model>>>();
     let (terminal_width, _terminal_height) = hooks.use_terminal_size();
 
     // Use state to trigger re-renders
     let mut tick = hooks.use_state(|| 0u64);
 
-    // Handle keyboard events directly
+    // Handle keyboard events by sending to event queue
     hooks.use_terminal_events({
+        let tui_handle = tui_handle.clone();
         let model = model.clone();
         move |event| {
             if let TerminalEvent::Key(key_event) = event
                 && key_event.kind != KeyEventKind::Release
-                && let Ok(mut model_guard) = model.lock()
             {
                 match key_event.code {
                     KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        model_guard.app_state = AppState::Shutdown;
+                        // Ctrl+C needs to set AppState directly for shutdown
+                        if let Ok(mut model_guard) = model.lock() {
+                            model_guard.app_state = AppState::Shutdown;
+                        }
                     }
-                    KeyCode::Down => {
-                        model_guard.select_next_build();
+                    code => {
+                        // Send other keyboard events to queue
+                        tui_handle.send_ui_event(crate::UiEvent::KeyInput(code));
                     }
-                    KeyCode::Up => {
-                        model_guard.select_previous_build();
-                    }
-                    KeyCode::Esc => {
-                        model_guard.ui.selected_activity = None;
-                    }
-                    KeyCode::Char('e') => {
-                        model_guard.ui.view_options.show_expanded_logs =
-                            !model_guard.ui.view_options.show_expanded_logs;
-                    }
-                    _ => {}
                 }
             }
         }
     });
 
-    // Spinner animation update loop - triggers re-renders via state updates
+    // Trigger re-renders based on tick events
     hooks.use_future({
         let model = model.clone();
         async move {
@@ -54,19 +48,8 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
             loop {
                 tokio::time::sleep(Duration::from_millis(50)).await;
 
-                if let Ok(mut model_guard) = model.lock() {
-                    // Update spinner animation directly
-                    let now = std::time::Instant::now();
-                    if now
-                        .duration_since(model_guard.ui.last_spinner_update)
-                        .as_millis()
-                        >= 50
-                    {
-                        model_guard.ui.spinner_frame = (model_guard.ui.spinner_frame + 1) % 10;
-                        model_guard.ui.last_spinner_update = now;
-                    }
-
-                    // Check if we should exit
+                // Check if we should exit
+                if let Ok(model_guard) = model.lock() {
                     if model_guard.app_state == AppState::Shutdown {
                         break;
                     }
@@ -95,13 +78,27 @@ fn TuiApp(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
 /// Create and run the TUI application
 pub async fn run_app(
-    model: Arc<Mutex<Model>>,
+    tui_handle: crate::TuiHandle,
     _shutdown: std::sync::Arc<tokio_shutdown::Shutdown>,
 ) -> std::io::Result<()> {
+    let model = tui_handle.model();
+
+    // Spawn ticker task to send Tick events
+    let tui_handle_clone = tui_handle.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(50));
+        loop {
+            interval.tick().await;
+            tui_handle_clone.send_ui_event(crate::UiEvent::Tick);
+        }
+    });
+
     // Run the iocraft render loop - tokio-graceful-shutdown will handle cancellation automatically
     let mut tui_element = element! {
-        ContextProvider(value: Context::owned(Arc::clone(&model))) {
-            TuiApp
+        ContextProvider(value: Context::owned(tui_handle)) {
+            ContextProvider(value: Context::owned(Arc::clone(&model))) {
+                TuiApp
+            }
         }
     };
 

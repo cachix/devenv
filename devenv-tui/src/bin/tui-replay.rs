@@ -789,9 +789,9 @@ async fn run_replay(tui_handle: TuiHandle, shutdown: std::sync::Arc<Shutdown>) -
     // Start TUI in background
     let tui_task = tokio::spawn({
         let shutdown = shutdown.clone();
-        let model = tui_handle.model();
+        let tui_handle_clone = tui_handle.clone();
         async move {
-            match devenv_tui::app::run_app(model, shutdown).await {
+            match devenv_tui::app::run_app(tui_handle_clone, shutdown).await {
                 Ok(_) => info!("TUI exited normally"),
                 Err(e) => warn!("TUI error: {e}"),
             }

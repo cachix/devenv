@@ -1,13 +1,13 @@
-use crate::Operation;
+use crate::model_events::DataEvent;
 use crate::model::{
-    Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, QueryActivity,
+    Activity, ActivityVariant, BuildActivity, DownloadActivity, QueryActivity,
 };
 use crate::tracing_interface::{details_fields, nix_fields, operation_fields, operation_types, task_fields};
 use crate::{LogLevel, LogSource, NixActivityState, OperationId, OperationResult};
 use rand;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use tokio::sync::mpsc;
 use tracing::{
     Event, Subscriber,
     field::{Field, Visit},
@@ -15,63 +15,21 @@ use tracing::{
 };
 use tracing_subscriber::{Layer, layer::Context};
 
-/// Tracing layer that integrates with the TUI system
+/// Tracing layer that integrates with the TUI system via event queue
 pub struct DevenvTuiLayer {
-    model: Arc<Mutex<Model>>,
+    event_tx: mpsc::UnboundedSender<DataEvent>,
 }
 
 impl DevenvTuiLayer {
-    pub fn new(model: Arc<Mutex<Model>>) -> Self {
-        Self { model }
+    pub fn new(event_tx: mpsc::UnboundedSender<DataEvent>) -> Self {
+        Self { event_tx }
     }
 
-    /// Helper to update the model with a closure (React-like state update)
-    fn update_model<F>(&self, f: F)
-    where
-        F: FnOnce(&mut Model),
-    {
-        if let Ok(mut model) = self.model.lock() {
-            f(&mut model);
-        }
-    }
-
-    /// Registers an operation in the model hierarchy
-    ///
-    /// This handles:
-    /// - Creating the Operation struct
-    /// - Adding to parent's children list OR root_operations
-    /// - Inserting into model.operations map
-    /// - Preventing duplicate children
-    fn register_operation_in_hierarchy(
-        &self,
-        model: &mut Model,
-        operation_id: OperationId,
-        operation_name: String,
-        parent: Option<OperationId>,
-        fields: &HashMap<String, String>,
-    ) {
-        let operation = Operation::new(
-            operation_id.clone(),
-            operation_name,
-            parent.clone(),
-            fields.clone(),
-        );
-
-        // Add to parent's children if parent exists
-        if let Some(parent_id) = &parent {
-            if let Some(parent_op) = model.operations.get_mut(parent_id) {
-                if !parent_op.children.contains(&operation_id) {
-                    parent_op.children.push(operation_id.clone());
-                }
-            }
-        } else {
-            // Root operation - check if already exists
-            if !model.root_operations.contains(&operation_id) {
-                model.root_operations.push(operation_id.clone());
-            }
-        }
-
-        model.operations.insert(operation_id, operation);
+    /// Send an event to the model event queue
+    fn send_event(&self, event: DataEvent) {
+        // Ignore send errors - they only occur if the receiver has been dropped,
+        // which happens during shutdown. We don't want to panic in that case.
+        let _ = self.event_tx.send(event);
     }
 
     /// Create a BUILD activity with derivation and machine info
@@ -354,9 +312,24 @@ where
                 let operation_id = OperationId::new(format!("task:{}", task_name));
                 let activity_id = id.into_u64();
 
-                self.update_model(|model| {
-                    model.handle_task_start(task_name, Instant::now(), operation_id, activity_id);
-                });
+                // Create task activity directly instead of calling handle_task_start
+                let activity = Activity {
+                    id: activity_id,
+                    operation_id,
+                    name: task_name,
+                    short_name: "Task".to_string(),
+                    parent_operation: None, // add_activity will handle this
+                    start_time: Instant::now(),
+                    state: NixActivityState::Active,
+                    detail: None,
+                    variant: ActivityVariant::Task(crate::model::TaskActivity {
+                        status: crate::model::TaskDisplayStatus::Running,
+                        duration: None,
+                    }),
+                    progress: None,
+                };
+
+                self.send_event(DataEvent::AddActivity(activity));
             }
         }
 
@@ -404,153 +377,144 @@ where
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
-                    self.update_model(|model| {
-                        self.register_operation_in_hierarchy(
-                            model,
-                            operation_id.clone(),
-                            operation_name.clone(),
-                            parent.clone(),
-                            &visitor.fields,
-                        );
-
-                        let activity = self.create_build_activity(
-                            activity_id,
-                            operation_id.clone(),
-                            operation_name,
-                            short_name,
-                            parent,
-                            &visitor,
-                        );
-                        model.add_activity(activity);
+                    // Register operation in hierarchy
+                    self.send_event(DataEvent::RegisterOperation {
+                        operation_id: operation_id.clone(),
+                        operation_name: operation_name.clone(),
+                        parent: parent.clone(),
+                        fields: visitor.fields.clone(),
                     });
+
+                    // Create and add activity
+                    let activity = self.create_build_activity(
+                        activity_id,
+                        operation_id.clone(),
+                        operation_name,
+                        short_name,
+                        parent,
+                        &visitor,
+                    );
+                    self.send_event(DataEvent::AddActivity(activity));
                 }
                 operation_types::DOWNLOAD => {
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
-                    self.update_model(|model| {
-                        self.register_operation_in_hierarchy(
-                            model,
-                            operation_id.clone(),
-                            operation_name.clone(),
-                            parent.clone(),
-                            &visitor.fields,
-                        );
-
-                        let activity = self.create_download_activity(
-                            activity_id,
-                            operation_id.clone(),
-                            operation_name,
-                            short_name,
-                            parent,
-                            &visitor,
-                        );
-                        model.add_activity(activity);
+                    // Register operation in hierarchy
+                    self.send_event(DataEvent::RegisterOperation {
+                        operation_id: operation_id.clone(),
+                        operation_name: operation_name.clone(),
+                        parent: parent.clone(),
+                        fields: visitor.fields.clone(),
                     });
+
+                    // Create and add activity
+                    let activity = self.create_download_activity(
+                        activity_id,
+                        operation_id.clone(),
+                        operation_name,
+                        short_name,
+                        parent,
+                        &visitor,
+                    );
+                    self.send_event(DataEvent::AddActivity(activity));
                 }
                 operation_types::QUERY => {
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
-                    self.update_model(|model| {
-                        self.register_operation_in_hierarchy(
-                            model,
-                            operation_id.clone(),
-                            operation_name.clone(),
-                            parent.clone(),
-                            &visitor.fields,
-                        );
-
-                        let activity = self.create_query_activity(
-                            activity_id,
-                            operation_id.clone(),
-                            operation_name,
-                            short_name,
-                            parent,
-                            &visitor,
-                        );
-                        model.add_activity(activity);
+                    // Register operation in hierarchy
+                    self.send_event(DataEvent::RegisterOperation {
+                        operation_id: operation_id.clone(),
+                        operation_name: operation_name.clone(),
+                        parent: parent.clone(),
+                        fields: visitor.fields.clone(),
                     });
+
+                    // Create and add activity
+                    let activity = self.create_query_activity(
+                        activity_id,
+                        operation_id.clone(),
+                        operation_name,
+                        short_name,
+                        parent,
+                        &visitor,
+                    );
+                    self.send_event(DataEvent::AddActivity(activity));
                 }
                 operation_types::FETCH_TREE => {
                     let activity_id = visitor.activity_id_or_zero();
                     span.extensions_mut().insert(activity_id);
 
-                    self.update_model(|model| {
-                        self.register_operation_in_hierarchy(
-                            model,
-                            operation_id.clone(),
-                            operation_name.clone(),
-                            parent.clone(),
-                            &visitor.fields,
-                        );
-
-                        let activity = self.create_fetch_tree_activity(
-                            activity_id,
-                            operation_id.clone(),
-                            operation_name,
-                            short_name,
-                            parent,
-                        );
-                        model.add_activity(activity);
+                    // Register operation in hierarchy
+                    self.send_event(DataEvent::RegisterOperation {
+                        operation_id: operation_id.clone(),
+                        operation_name: operation_name.clone(),
+                        parent: parent.clone(),
+                        fields: visitor.fields.clone(),
                     });
+
+                    // Create and add activity
+                    let activity = self.create_fetch_tree_activity(
+                        activity_id,
+                        operation_id.clone(),
+                        operation_name,
+                        short_name,
+                        parent,
+                    );
+                    self.send_event(DataEvent::AddActivity(activity));
                 }
                 operation_types::EVALUATE => {
                     let activity_id = visitor.activity_id_or_random();
                     span.extensions_mut().insert(activity_id);
 
-                    self.update_model(|model| {
-                        self.register_operation_in_hierarchy(
-                            model,
-                            operation_id.clone(),
-                            operation_name.clone(),
-                            parent.clone(),
-                            &visitor.fields,
-                        );
-
-                        let activity = self.create_evaluate_activity(
-                            activity_id,
-                            operation_id.clone(),
-                            operation_name,
-                            short_name,
-                            parent,
-                        );
-                        model.add_activity(activity);
+                    // Register operation in hierarchy
+                    self.send_event(DataEvent::RegisterOperation {
+                        operation_id: operation_id.clone(),
+                        operation_name: operation_name.clone(),
+                        parent: parent.clone(),
+                        fields: visitor.fields.clone(),
                     });
+
+                    // Create and add activity
+                    let activity = self.create_evaluate_activity(
+                        activity_id,
+                        operation_id.clone(),
+                        operation_name,
+                        short_name,
+                        parent,
+                    );
+                    self.send_event(DataEvent::AddActivity(activity));
                 }
                 operation_types::DEVENV => {
                     let activity_id = rand::random();
                     span.extensions_mut().insert(activity_id);
 
-                    self.update_model(|model| {
-                        self.register_operation_in_hierarchy(
-                            model,
-                            operation_id.clone(),
-                            operation_name.clone(),
-                            parent.clone(),
-                            &visitor.fields,
-                        );
-
-                        let activity = self.create_devenv_activity(
-                            activity_id,
-                            operation_id.clone(),
-                            operation_name,
-                            short_name,
-                            parent,
-                        );
-                        // DEVENV uses direct insert instead of add_activity
-                        model.activities.insert(activity_id, activity);
+                    // Register operation in hierarchy
+                    self.send_event(DataEvent::RegisterOperation {
+                        operation_id: operation_id.clone(),
+                        operation_name: operation_name.clone(),
+                        parent: parent.clone(),
+                        fields: visitor.fields.clone(),
                     });
+
+                    // Create and add activity (DEVENV uses direct activities.insert)
+                    let activity = self.create_devenv_activity(
+                        activity_id,
+                        operation_id.clone(),
+                        operation_name,
+                        short_name,
+                        parent,
+                    );
+                    self.send_event(DataEvent::AddActivity(activity));
                 }
                 _ => {
-                    self.update_model(|model| {
-                        self.register_operation_in_hierarchy(
-                            model,
-                            operation_id,
-                            operation_name,
-                            parent,
-                            &visitor.fields,
-                        );
+                    // Register operation without activity
+                    self.send_event(DataEvent::RegisterOperation {
+                        operation_id,
+                        operation_name,
+                        parent,
+                        fields: visitor.fields.clone(),
                     });
                 }
             }
@@ -560,6 +524,9 @@ where
     fn on_close(&self, id: span::Id, ctx: Context<'_, S>) {
         let span = ctx.span(&id).expect("Span not found");
         let metadata = span.metadata();
+
+        // Capture close timestamp from event
+        let end_time = Instant::now();
 
         // Get operation ID first
         let operation_id = span.extensions().get::<OperationId>().cloned();
@@ -578,44 +545,40 @@ where
                     // Get activity_id from span extensions (stored during on_new_span)
                     let activity_id = span.extensions().get::<u64>().copied().unwrap_or(0);
 
-                    self.update_model(|model| {
-                        if let Some(activity) = model.activities.get_mut(&activity_id) {
-                            let duration = activity.start_time.elapsed();
-                            activity.state = NixActivityState::Completed { success, duration };
-                        }
-
-                        // Clean up build logs for this activity
-                        model.build_logs.remove(&activity_id);
+                    self.send_event(DataEvent::CompleteActivity {
+                        activity_id,
+                        success,
+                        end_time,
                     });
+
+                    // Clean up build logs for this activity
+                    self.send_event(DataEvent::RemoveBuildLogs { activity_id });
                 }
                 "devenv.nix.download" if metadata.name() == "nix_download_start" => {
                     let activity_id = span.extensions().get::<u64>().copied().unwrap_or(0);
 
-                    self.update_model(|model| {
-                        if let Some(activity) = model.activities.get_mut(&activity_id) {
-                            let duration = activity.start_time.elapsed();
-                            activity.state = NixActivityState::Completed { success, duration };
-                        }
+                    self.send_event(DataEvent::CompleteActivity {
+                        activity_id,
+                        success,
+                        end_time,
                     });
                 }
                 "devenv.nix.query" if metadata.name() == "nix_query_start" => {
                     let activity_id = span.extensions().get::<u64>().copied().unwrap_or(0);
 
-                    self.update_model(|model| {
-                        if let Some(activity) = model.activities.get_mut(&activity_id) {
-                            let duration = activity.start_time.elapsed();
-                            activity.state = NixActivityState::Completed { success, duration };
-                        }
+                    self.send_event(DataEvent::CompleteActivity {
+                        activity_id,
+                        success,
+                        end_time,
                     });
                 }
                 "devenv.nix.fetch" if metadata.name() == "fetch_tree_start" => {
                     let activity_id = span.extensions().get::<u64>().copied().unwrap_or(0);
 
-                    self.update_model(|model| {
-                        if let Some(activity) = model.activities.get_mut(&activity_id) {
-                            let duration = activity.start_time.elapsed();
-                            activity.state = NixActivityState::Completed { success, duration };
-                        }
+                    self.send_event(DataEvent::CompleteActivity {
+                        activity_id,
+                        success,
+                        end_time,
                     });
                 }
                 _ => {
@@ -623,12 +586,10 @@ where
                     if has_devenv_activity {
                         let activity_id = span.extensions().get::<u64>().copied().unwrap_or(0);
 
-                        self.update_model(|model| {
-                            // Update activity state
-                            if let Some(activity) = model.activities.get_mut(&activity_id) {
-                                let duration = activity.start_time.elapsed();
-                                activity.state = NixActivityState::Completed { success, duration };
-                            }
+                        self.send_event(DataEvent::CompleteActivity {
+                            activity_id,
+                            success,
+                            end_time,
                         });
                     } else {
                         // Default operation end for other spans (without activities)
@@ -647,13 +608,9 @@ where
                             }
                         };
 
-                        let operation_id_clone = operation_id.clone();
-
-                        self.update_model(|model| {
-                            if let Some(operation) = model.operations.get_mut(&operation_id_clone) {
-                                let success = matches!(result, OperationResult::Success);
-                                operation.complete(success);
-                            }
+                        self.send_event(DataEvent::CloseOperation {
+                            operation_id: operation_id.clone(),
+                            result,
                         });
                     }
                 }
@@ -670,9 +627,7 @@ where
 
         // Try to parse as a typed update
         if let Some(update) = crate::TracingUpdate::from_event(target, event_name, &visitor.fields) {
-            self.update_model(|model| {
-                model.apply_update(update);
-            });
+            self.send_event(DataEvent::ApplyTracingUpdate(update));
             return;
         }
 
@@ -684,16 +639,14 @@ where
                 .unwrap_or(&"".to_string())
                 .clone();
 
-            self.update_model(|model| {
-                use crate::LogMessage;
-                let log_msg = LogMessage::new(
-                    LogLevel::from(*event.metadata().level()),
-                    message,
-                    LogSource::Tracing,
-                    visitor.fields,
-                );
-                model.add_log_message(log_msg);
-            });
+            use crate::LogMessage;
+            let log_msg = LogMessage::new(
+                LogLevel::from(*event.metadata().level()),
+                message,
+                LogSource::Tracing,
+                visitor.fields,
+            );
+            self.send_event(DataEvent::AddLogMessage(log_msg));
         }
     }
 
