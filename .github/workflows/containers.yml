@@ -110,29 +110,28 @@ jobs:
           IMAGE_PATH=$(readlink -f ./result)
           echo "image_path=$IMAGE_PATH" >> $GITHUB_OUTPUT
 
-          # Load the image into Docker and capture the ID
-          IMAGE_ID=$(docker load < "$IMAGE_PATH" | grep -oP '(?<=Loaded image: ).*')
-          echo "image_id=$IMAGE_ID" >> $GITHUB_OUTPUT
-
       - name: Log in to the Container registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | nix run nixpkgs#skopeo -- login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-      - name: Push image by digest only (no tags)
+      - name: Push image by digest
         id: push
         run: |
-          IMAGE_ID="${{ steps.build.outputs.image_id }}"
+          IMAGE_PATH="${{ steps.build.outputs.image_path }}"
           IMAGE_NAME="${{ env.REGISTRY }}/${{ env.REPOSITORY }}/devenv"
+
+          # Get the digest from the tarball
+          DIGEST=$(nix run nixpkgs#skopeo -- inspect "tarball:${IMAGE_PATH}" --format '{{.Digest}}')
+          echo "Image digest: $DIGEST"
 
           # Save digest for manifest creation
           mkdir -p /tmp/digests
-          DIGEST_PATH="/tmp/digests/${{ matrix.arch }}.digest"
+          echo "$DIGEST" > "/tmp/digests/${{ matrix.arch }}.digest"
 
-          # Use skopeo to push directly by digest without creating any tags
-          nix run nixpkgs#skopeo -- copy --preserve-digests --digestfile "$DIGEST_PATH" "docker-daemon:${IMAGE_ID}" "docker://${IMAGE_NAME}" --format v2s2
+          # Push directly to digest reference without creating any tags
+          nix run nixpkgs#skopeo -- copy --preserve-digests "tarball:${IMAGE_PATH}" "docker://${IMAGE_NAME}@${DIGEST}"
 
-          DIGEST=$(cat "$DIGEST_PATH")
-          echo "Pushed image with digest: $DIGEST"
+          echo "Pushed image to ${IMAGE_NAME}@${DIGEST}"
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       - name: Upload digest artifact
