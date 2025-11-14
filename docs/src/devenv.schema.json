@@ -62,6 +62,12 @@
           "type": "null"
         }
       ]
+    },
+    "profile": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "$defs": {

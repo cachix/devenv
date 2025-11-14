@@ -1435,6 +1435,16 @@ impl Devenv {
                     secrets: resolved.secrets.clone(),
                 });
 
+        // Determine active profiles: CLI overrides YAML
+        // If CLI profiles are specified, use those. Otherwise, use YAML profile if set.
+        let active_profiles = if !self.global_options.profile.is_empty() {
+            self.global_options.profile.clone()
+        } else if let Some(yaml_profile) = &config.profile {
+            vec![yaml_profile.clone()]
+        } else {
+            Vec::new()
+        };
+
         // Create the Nix arguments struct
         let project_input_ref = format!("path:{}", self.devenv_root.display());
         let args = NixArgs {
@@ -1449,7 +1459,7 @@ impl Devenv {
             devenv_istesting: is_testing,
             devenv_direnvrc_latest_version: *DIRENVRC_VERSION,
             container_name: self.container_name.as_deref(),
-            active_profiles: &self.global_options.profile,
+            active_profiles: &active_profiles,
             hostname: hostname.as_deref(),
             username: username.as_deref(),
             git_root: git_root.as_deref(),

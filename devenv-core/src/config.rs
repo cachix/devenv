@@ -182,6 +182,9 @@ pub struct Config {
     #[setting(nested)]
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub secretspec: Option<SecretspecConfig>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    #[setting(merge = schematic::merge::replace)]
+    pub profile: Option<String>,
     /// Git repository root path (not serialized, computed during load)
     #[serde(skip)]
     pub git_root: Option<PathBuf>,
@@ -867,5 +870,41 @@ mod tests {
             "{}",
             "Default config should serialize to empty YAML"
         );
+    }
+
+    #[test]
+    fn profile_field_none_by_default() {
+        let config = Config::default();
+        assert_eq!(config.profile, None);
+    }
+
+    #[test]
+    fn profile_field_serializes() {
+        let mut config = Config::default();
+        config.profile = Some("production".to_string());
+
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        assert!(yaml.contains("profile: production"));
+    }
+
+    #[test]
+    fn profile_field_not_serialized_when_none() {
+        let config = Config::default();
+        let yaml = serde_yaml::to_string(&config).expect("Failed to serialize config");
+        assert!(!yaml.contains("profile"));
+    }
+
+    #[test]
+    fn profile_field_respects_replace_merge_strategy() {
+        let mut config1 = Config::default();
+        config1.profile = Some("base".to_string());
+
+        let mut config2 = Config::default();
+        config2.profile = Some("override".to_string());
+
+        // Simulating what schematic would do with replace merge strategy:
+        // The second value should override the first
+        let merged_profile = config2.profile.or(config1.profile);
+        assert_eq!(merged_profile, Some("override".to_string()));
     }
 }

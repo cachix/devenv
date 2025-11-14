@@ -28,9 +28,15 @@
 | nixpkgs.per-platform.&lt;system&gt;.permittedInsecurePackages | (per-platform) A list of insecure permitted packages. Defaults to `[]`        |
 | nixpkgs.per-platform.&lt;system&gt;.permittedUnfreePackages   | (per-platform) A list of unfree packages to allow by name. Defaults to `[]`   |
 |                                                               |                                                                               |
+| profile                                                       | Default profile to activate. Can be overridden by `--profile` CLI flags.       |
+|                                                               |                                                                               |
 | secretspec.enable                                             | Enable [secretspec integration](../integrations/secretspec.md). Defaults to `false`.                           |
 | secretspec.profile                                            | Secretspec profile name to use.                                               |
 | secretspec.provider                                           | Secretspec provider to use.                                                   |
+
+!!! note "Added in 1.11"
+
+    - `profile`
 
 !!! note "Added in 1.9"
 
