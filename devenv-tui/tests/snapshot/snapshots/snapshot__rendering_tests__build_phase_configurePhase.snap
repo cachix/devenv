@@ -1,0 +1,6 @@
+---
+source: devenv-tui/tests/snapshot/rendering_tests.rs
+assertion_line: 121
+expression: summary
+---
+Activity { id: 0, name: "Building package in configurePhase", short_name: "act-0", state: Active, variant: Build [phase: Some("configurePhase")] }

@@ -1,0 +1,6 @@
+---
+source: devenv-tui/tests/snapshot/rendering_tests.rs
+assertion_line: 164
+expression: summary
+---
+Activity { id: 2, name: "Task lifecycle", short_name: "act-2", state: Active, variant: Task [Success] }

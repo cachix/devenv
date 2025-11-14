@@ -1,0 +1,6 @@
+---
+source: devenv-tui/tests/snapshot/rendering_tests.rs
+assertion_line: 142
+expression: summary
+---
+Activity { id: 2, name: "Downloading package", short_name: "act-2", state: Active, variant: Download [500/1000] }

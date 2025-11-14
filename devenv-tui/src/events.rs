@@ -286,7 +286,7 @@ pub struct EvaluationProgressUpdate {
     pub activity_id: u64,
     #[serde(default)]
     pub total_files_evaluated: u64,
-    #[serde(rename = "files", deserialize_with = "deserialize_files_array")]
+    #[serde(default, rename = "files", deserialize_with = "deserialize_files_array")]
     pub latest_files: Vec<String>,
 }
 
