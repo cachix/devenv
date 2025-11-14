@@ -318,12 +318,12 @@ pub fn init_tracing(
         LogFormat::Tui => {
             // Initialize TUI with proper shutdown coordination
             let tui_handle = devenv_tui::init_tui();
-            let model = tui_handle.model();
 
             // Spawn TUI app in background
             let shutdown_clone = shutdown.clone();
+            let tui_handle_clone = tui_handle.clone();
             tokio::spawn(async move {
-                let _ = devenv_tui::app::run_app(model, shutdown_clone).await;
+                let _ = devenv_tui::app::run_app(tui_handle_clone, shutdown_clone).await;
             });
 
             // Register layers including TUI layer
