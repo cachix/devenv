@@ -4,6 +4,10 @@ babel==2.17.0
     # via mkdocs-material
 backrefs==5.9
     # via mkdocs-material
+beautifulsoup4==4.14.2
+    # via
+    #   markdownify
+    #   mkdocs-llmstxt
 bracex==2.6
     # via wcmatch
 cachecontrol==0.14.3
@@ -47,33 +51,47 @@ markdown==3.9
     #   mkdocs
     #   mkdocs-material
     #   pymdown-extensions
+markdown-it-py==3.0.0
+    # via mdformat
+markdownify==1.2.0
+    # via mkdocs-llmstxt
 markupsafe==3.0.2
     # via
     #   jinja2
     #   mkdocs
+mdformat==0.7.22
+    # via
+    #   mdformat-tables
+    #   mkdocs-llmstxt
+mdformat-tables==1.0.0
+    # via mkdocs-llmstxt
+mdurl==0.1.2
+    # via markdown-it-py
 mergedeep==1.3.4
     # via
     #   mkdocs
     #   mkdocs-get-deps
 mkdocs==1.6.1
     # via
-    #   -r docs/requirements.in
+    #   -r requirements.in
     #   mkdocs-awesome-nav
     #   mkdocs-include-markdown-plugin
     #   mkdocs-material
     #   mkdocs-rss-plugin
 mkdocs-awesome-nav==3.2.0
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-get-deps==0.2.0
     # via mkdocs
 mkdocs-include-markdown-plugin==7.1.7
-    # via -r docs/requirements.in
+    # via -r requirements.in
+mkdocs-llmstxt==0.4.0
+    # via -r requirements.in
 mkdocs-material==9.6.20
-    # via -r docs/requirements.in
+    # via -r requirements.in
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
 mkdocs-rss-plugin==1.17.3
-    # via -r docs/requirements.in
+    # via -r requirements.in
 msgpack==1.1.1
     # via cachecontrol
 natsort==8.4.0
@@ -116,15 +134,20 @@ requests==2.32.5
     #   mkdocs-material
     #   mkdocs-rss-plugin
 six==1.17.0
-    # via python-dateutil
+    # via
+    #   markdownify
+    #   python-dateutil
 smmap==5.0.2
     # via gitdb
+soupsieve==2.8
+    # via beautifulsoup4
 tinycss2==1.4.0
     # via
     #   cairosvg
     #   cssselect2
 typing-extensions==4.15.0
     # via
+    #   beautifulsoup4
     #   pydantic
     #   pydantic-core
     #   typing-inspection
@@ -138,6 +161,8 @@ wcmatch==10.1
     # via
     #   mkdocs-awesome-nav
     #   mkdocs-include-markdown-plugin
+wcwidth==0.2.14
+    # via mdformat-tables
 webencodings==0.5.1
     # via
     #   cssselect2
