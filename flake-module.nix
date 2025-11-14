@@ -3,15 +3,9 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
 
     let
       devenvType = (devenvFlake.lib.mkEval {
-        inherit inputs pkgs;
-        modules = [
-          ({ config, ... }: {
-            config = {
-              _module.args.pkgs = pkgs.appendOverlays config.overlays;
-              # Add flake-parts-specific config here if necessary
-            };
-          })
-        ] ++ config.devenv.modules;
+        inherit inputs lib pkgs;
+        # Add flake-parts-specific config here if necessary
+        inherit (config.devenv) modules;
       }).type;
 
       shellPrefix = shellName: if shellName == "default" then "" else "${shellName}-";
