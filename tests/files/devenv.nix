@@ -18,5 +18,10 @@
     "foo.txt".text = "foo";
 
     "dir/foo.txt".text = "foo";
+
+    "script.sh" = {
+      text = "#!/bin/bash\necho hello";
+      executable = true;
+    };
   };
 }

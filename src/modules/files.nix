@@ -63,11 +63,19 @@ let
           else if activeFormatCount > 1 then throw "Multiple formats specified for 'files.${name}'"
           else throw "No contents specified for 'files.${name}'";
         activeFormat = formats.${activeFormatName};
+        generated = config.format.generate name config.data;
       in
       {
         format = activeFormat;
         data = config.${activeFormatName};
-        file = config.format.generate name config.data;
+        file =
+          if config.executable then
+            pkgs.runCommand name { } ''
+              cp --no-preserve=mode ${generated} $out
+              chmod +x $out
+            ''
+          else
+            generated;
       };
   });
   createFileScript = filename: fileOption: ''

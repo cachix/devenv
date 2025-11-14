@@ -29,3 +29,10 @@ EOF
 assert_file dir/foo.txt <<EOF
 foo
 EOF
+
+# Test executable flag
+test -x script.sh
+assert_file script.sh <<EOF
+#!/bin/bash
+echo hello
+EOF
