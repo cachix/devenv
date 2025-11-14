@@ -1,0 +1,5 @@
+---
+source: devenv-tui/tests/snapshot/rendering_tests.rs
+expression: summary
+---
+Activity { id: 1, name: "Downloading with substituter", short_name: "act-1", state: Active, variant: Download [500/1000] }

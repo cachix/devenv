@@ -126,6 +126,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
+name = "assert_matches"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
+
+[[package]]
 name = "astral-tokio-tar"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1497,6 +1503,7 @@ name = "devenv-tui"
 version = "1.10.1"
 dependencies = [
  "anyhow",
+ "assert_matches",
  "async-trait",
  "chrono",
  "console 0.16.1",
@@ -1505,6 +1512,7 @@ dependencies = [
  "futures",
  "human-repr",
  "indexmap 2.11.4",
+ "insta",
  "iocraft",
  "miette",
  "once_cell",
@@ -1516,6 +1524,7 @@ dependencies = [
  "thiserror 2.0.16",
  "tokio",
  "tokio-shutdown",
+ "tokio-test",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2732,6 +2741,18 @@ dependencies = [
  "thiserror 1.0.69",
  "unicode-segmentation",
  "unicode-width 0.1.14",
+]
+
+[[package]]
+name = "insta"
+version = "1.43.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46fdb647ebde000f43b5b53f773c30cf9b0cb4300453208713fa38b2c70935a0"
+dependencies = [
+ "console 0.15.11",
+ "once_cell",
+ "serde",
+ "similar",
 ]
 
 [[package]]

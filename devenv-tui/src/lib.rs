@@ -10,10 +10,13 @@ pub mod model;
 pub mod view;
 
 pub use events::*;
+pub use model::{
+    Model, Activity, ActivityVariant, BuildActivity, DownloadActivity, ProgressActivity,
+    QueryActivity, TaskActivity, TaskDisplayStatus,
+};
 pub use model_events::{DataEvent, UiEvent};
 pub use tracing_layer::DevenvTuiLayer;
 
-use crate::model::Model;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 

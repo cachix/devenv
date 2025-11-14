@@ -1,0 +1,5 @@
+---
+source: devenv-tui/tests/snapshot/rendering_tests.rs
+expression: summary
+---
+Activity { id: 4, name: "Running test suite", short_name: "test", state: Active, variant: Task [Running] }
