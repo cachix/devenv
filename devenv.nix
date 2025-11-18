@@ -43,7 +43,6 @@
 
   # Project dependencies
   packages = [
-    pkgs.cairo
     pkgs.git
     pkgs.xorg.libxcb
     pkgs.yaml2json
