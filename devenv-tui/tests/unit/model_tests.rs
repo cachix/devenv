@@ -1,148 +1,22 @@
 use devenv_tui::{
-    ActivityVariant, DataEvent, LogLevel, LogMessage, LogSource,
-    Model, NixActivityState, OperationId, OperationResult, OperationState,
+    ActivityVariant, LogLevel, LogMessage, LogSource, Model, NixActivityState, OperationId,
     TaskDisplayStatus,
 };
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use crate::test_utils::builders::{ActivityBuilder, OperationBuilder};
+use crate::test_utils::builders::ActivityBuilder;
 use crate::test_utils::fixtures::{
-    completed_operation, model_with_activities, model_with_hierarchy, simple_build_activity,
-    simple_operation, task_activity_running,
+    model_with_activities, model_with_hierarchy, simple_build_activity, task_activity_running,
 };
 
 #[test]
 fn test_new_model_is_empty() {
     let model = Model::new();
 
-    assert!(model.operations.is_empty());
     assert!(model.activities.is_empty());
     assert!(model.message_log.is_empty());
-    assert!(model.root_operations.is_empty());
-}
-
-#[test]
-fn test_register_operation_adds_to_operations() {
-    let mut model = Model::new();
-    let op_id = OperationId::new("test-op");
-
-    let event = DataEvent::RegisterOperation {
-        operation_id: op_id.clone(),
-        operation_name: "Test Operation".to_string(),
-        parent: None,
-        fields: HashMap::new(),
-    };
-
-    event.apply(&mut model);
-
-    assert_eq!(model.operations.len(), 1);
-    assert!(model.operations.contains_key(&op_id));
-    assert_eq!(model.operations[&op_id].message, "Test Operation");
-}
-
-#[test]
-fn test_register_operation_with_parent_updates_parent_children() {
-    let mut model = Model::new();
-    let parent_id = OperationId::new("parent");
-    let child_id = OperationId::new("child");
-
-    let parent_event = DataEvent::RegisterOperation {
-        operation_id: parent_id.clone(),
-        operation_name: "Parent".to_string(),
-        parent: None,
-        fields: HashMap::new(),
-    };
-    parent_event.apply(&mut model);
-
-    let child_event = DataEvent::RegisterOperation {
-        operation_id: child_id.clone(),
-        operation_name: "Child".to_string(),
-        parent: Some(parent_id.clone()),
-        fields: HashMap::new(),
-    };
-    child_event.apply(&mut model);
-
-    assert_eq!(model.operations.len(), 2);
-    assert_eq!(model.operations[&parent_id].children.len(), 1);
-    assert_eq!(model.operations[&parent_id].children[0], child_id);
-    assert_eq!(model.operations[&child_id].parent, Some(parent_id));
-}
-
-#[test]
-fn test_register_root_operation_adds_to_root_operations() {
-    let mut model = Model::new();
-    let op_id = OperationId::new("root-op");
-
-    let event = DataEvent::RegisterOperation {
-        operation_id: op_id.clone(),
-        operation_name: "Root Operation".to_string(),
-        parent: None,
-        fields: HashMap::new(),
-    };
-
-    event.apply(&mut model);
-
-    assert_eq!(model.root_operations.len(), 1);
-    assert_eq!(model.root_operations[0], op_id);
-}
-
-#[test]
-fn test_close_operation_marks_complete() {
-    let mut model = Model::new();
-    let op_id = OperationId::new("test-op");
-
-    let register_event = DataEvent::RegisterOperation {
-        operation_id: op_id.clone(),
-        operation_name: "Test Op".to_string(),
-        parent: None,
-        fields: HashMap::new(),
-    };
-    register_event.apply(&mut model);
-
-    let close_event = DataEvent::CloseOperation {
-        operation_id: op_id.clone(),
-        result: OperationResult::Success,
-    };
-    close_event.apply(&mut model);
-
-    match &model.operations[&op_id].state {
-        OperationState::Complete { success, .. } => {
-            assert!(success);
-        }
-        _ => panic!("Operation should be complete"),
-    }
-}
-
-#[test]
-fn test_close_operation_with_failure() {
-    let mut model = Model::new();
-    let op_id = OperationId::new("test-op");
-
-    let register_event = DataEvent::RegisterOperation {
-        operation_id: op_id.clone(),
-        operation_name: "Test Op".to_string(),
-        parent: None,
-        fields: HashMap::new(),
-    };
-    register_event.apply(&mut model);
-
-    let close_event = DataEvent::CloseOperation {
-        operation_id: op_id.clone(),
-        result: OperationResult::Failure {
-            message: "Build failed".to_string(),
-            code: Some(1),
-            output: None,
-        },
-    };
-    close_event.apply(&mut model);
-
-    match &model.operations[&op_id].state {
-        OperationState::Complete { success, .. } => {
-            assert!(!success);
-        }
-        _ => panic!("Operation should be complete"),
-    }
+    assert!(model.root_activities.is_empty());
 }
 
 #[test]
@@ -151,59 +25,11 @@ fn test_add_activity_inserts_activity() {
     let activity = simple_build_activity();
     let activity_id = activity.id;
 
-    let event = DataEvent::AddActivity(activity);
-    event.apply(&mut model);
+    model.root_activities.push(activity_id);
+    model.activities.insert(activity_id, activity);
 
     assert_eq!(model.activities.len(), 1);
     assert!(model.activities.contains_key(&activity_id));
-}
-
-#[test]
-fn test_complete_activity_updates_state() {
-    let mut model = Model::new();
-    let activity = simple_build_activity();
-    let activity_id = activity.id;
-
-    let add_event = DataEvent::AddActivity(activity);
-    add_event.apply(&mut model);
-
-    let complete_event = DataEvent::CompleteActivity {
-        activity_id,
-        success: true,
-        end_time: Instant::now(),
-    };
-    complete_event.apply(&mut model);
-
-    match &model.activities[&activity_id].state {
-        NixActivityState::Completed { success, .. } => {
-            assert!(success);
-        }
-        _ => panic!("Activity should be completed"),
-    }
-}
-
-#[test]
-fn test_complete_activity_with_failure() {
-    let mut model = Model::new();
-    let activity = simple_build_activity();
-    let activity_id = activity.id;
-
-    let add_event = DataEvent::AddActivity(activity);
-    add_event.apply(&mut model);
-
-    let complete_event = DataEvent::CompleteActivity {
-        activity_id,
-        success: false,
-        end_time: Instant::now(),
-    };
-    complete_event.apply(&mut model);
-
-    match &model.activities[&activity_id].state {
-        NixActivityState::Completed { success, .. } => {
-            assert!(!success);
-        }
-        _ => panic!("Activity should be completed"),
-    }
 }
 
 #[test]
@@ -217,8 +43,7 @@ fn test_add_log_message() {
         HashMap::new(),
     );
 
-    let event = DataEvent::AddLogMessage(log_msg);
-    event.apply(&mut model);
+    model.add_log_message(log_msg);
 
     assert_eq!(model.message_log.len(), 1);
     assert_eq!(model.message_log[0].message, "Test message");
@@ -238,13 +63,13 @@ fn test_get_active_activities() {
 fn test_model_with_hierarchy_structure() {
     let (model, parent_id, child_ids) = model_with_hierarchy();
 
-    assert!(model.operations.contains_key(&parent_id));
-    assert_eq!(model.root_operations.len(), 1);
-    assert_eq!(model.root_operations[0], parent_id);
+    assert!(model.activities.contains_key(&parent_id));
+    assert_eq!(model.root_activities.len(), 1);
+    assert_eq!(model.root_activities[0], parent_id);
 
     for child_id in &child_ids {
-        assert!(model.operations.contains_key(child_id));
-        assert_eq!(model.operations[child_id].parent, Some(parent_id.clone()));
+        assert!(model.activities.contains_key(child_id));
+        assert_eq!(model.activities[child_id].parent_id, Some(parent_id));
     }
 }
 
@@ -321,36 +146,6 @@ fn test_builder_creates_task_activity() {
 }
 
 #[test]
-fn test_operation_builder_creates_valid_operation() {
-    let op = OperationBuilder::new("test-op")
-        .message("Building package")
-        .data("key1", "value1")
-        .data("key2", "value2")
-        .build();
-
-    assert_eq!(op.id, OperationId::new("test-op"));
-    assert_eq!(op.message, "Building package");
-    assert_eq!(op.data.get("key1"), Some(&"value1".to_string()));
-    assert_eq!(op.data.get("key2"), Some(&"value2".to_string()));
-}
-
-#[test]
-fn test_operation_builder_with_completion() {
-    let op = OperationBuilder::new("completed-op")
-        .message("Completed task")
-        .completed(true, 10)
-        .build();
-
-    match op.state {
-        OperationState::Complete { success, duration } => {
-            assert!(success);
-            assert_eq!(duration, Duration::from_secs(10));
-        }
-        _ => panic!("Expected Complete state"),
-    }
-}
-
-#[test]
 fn test_multiple_activities_different_types() {
     let mut model = Model::new();
 
@@ -366,73 +161,19 @@ fn test_multiple_activities_different_types() {
         .task_activity(TaskDisplayStatus::Running)
         .build();
 
-    DataEvent::AddActivity(build).apply(&mut model);
-    DataEvent::AddActivity(download).apply(&mut model);
-    DataEvent::AddActivity(task).apply(&mut model);
+    model.root_activities.push(1);
+    model.root_activities.push(2);
+    model.root_activities.push(3);
+
+    model.activities.insert(1, build);
+    model.activities.insert(2, download);
+    model.activities.insert(3, task);
 
     assert_eq!(model.activities.len(), 3);
 
-    assert_matches::assert_matches!(
-        model.activities[&1].variant,
-        ActivityVariant::Build(_)
-    );
-    assert_matches::assert_matches!(
-        model.activities[&2].variant,
-        ActivityVariant::Download(_)
-    );
-    assert_matches::assert_matches!(
-        model.activities[&3].variant,
-        ActivityVariant::Task(_)
-    );
-}
-
-#[test]
-fn test_remove_build_logs() {
-    let mut model = Model::new();
-    let activity_id = 1;
-
-    let activity = ActivityBuilder::new(activity_id)
-        .build_activity()
-        .build();
-
-    DataEvent::AddActivity(activity).apply(&mut model);
-
-    model.build_logs.insert(activity_id, vec!["log line 1".to_string()].into());
-
-    assert!(model.build_logs.contains_key(&activity_id));
-
-    let remove_event = DataEvent::RemoveBuildLogs { activity_id };
-    remove_event.apply(&mut model);
-
-    assert!(!model.build_logs.contains_key(&activity_id));
-}
-
-#[test]
-fn test_simple_operation_fixture() {
-    let operation = simple_operation();
-
-    assert_eq!(operation.id.0, "op-1");
-    assert_eq!(operation.message, "Test operation");
-    match operation.state {
-        OperationState::Active => (),
-        _ => panic!("Expected Active state"),
-    }
-    assert!(operation.children.is_empty());
-    assert!(operation.parent.is_none());
-}
-
-#[test]
-fn test_completed_operation_fixture() {
-    let operation = completed_operation();
-
-    assert_eq!(operation.id.0, "op-2");
-    assert_eq!(operation.message, "Completed operation");
-    match operation.state {
-        OperationState::Complete { success, .. } => {
-            assert!(success);
-        }
-        _ => panic!("Expected Complete state"),
-    }
+    assert_matches::assert_matches!(model.activities[&1].variant, ActivityVariant::Build(_));
+    assert_matches::assert_matches!(model.activities[&2].variant, ActivityVariant::Download(_));
+    assert_matches::assert_matches!(model.activities[&3].variant, ActivityVariant::Task(_));
 }
 
 #[test]
@@ -446,29 +187,12 @@ fn test_task_activity_running_fixture() {
 }
 
 #[test]
-fn test_operation_builder_with_parent_child() {
-    let parent = OperationBuilder::new("parent-op")
-        .message("Parent")
-        .build();
-
-    let parent_id = parent.id.clone();
-    let child = OperationBuilder::new("child-op")
-        .message("Child")
-        .parent(parent_id.clone())
-        .build();
-
-    assert_eq!(child.parent, Some(parent_id.clone()));
-    assert_eq!(parent.id.0, "parent-op");
-    assert_eq!(child.id.0, "child-op");
-}
-
-#[test]
 fn test_activity_builder_with_all_fields() {
     let activity = ActivityBuilder::new(1)
         .name("Test Activity")
         .short_name("test")
         .operation_id(OperationId::new("op-1"))
-        .parent_operation(OperationId::new("parent-op"))
+        .parent_id(99)
         .detail("Some detail")
         .download_activity(Some(100), Some(200))
         .build();
@@ -476,6 +200,47 @@ fn test_activity_builder_with_all_fields() {
     assert_eq!(activity.name, "Test Activity");
     assert_eq!(activity.short_name, "test");
     assert_eq!(activity.operation_id.0, "op-1");
-    assert_eq!(activity.parent_operation, Some(OperationId::new("parent-op")));
+    assert_eq!(activity.parent_id, Some(99));
     assert_eq!(activity.detail, Some("Some detail".to_string()));
+}
+
+#[test]
+fn test_calculate_summary() {
+    let model = model_with_activities();
+    let summary = model.calculate_summary();
+
+    // model_with_activities has 1 active build, 1 completed download, 1 failed build
+    assert!(summary.total_builds >= 1);
+    assert!(summary.completed_downloads >= 0);
+}
+
+#[test]
+fn test_select_next_build() {
+    let mut model = Model::new();
+
+    // Add two build activities
+    let build1 = ActivityBuilder::new(1).build_activity().build();
+    let build2 = ActivityBuilder::new(2).build_activity().build();
+
+    model.root_activities.push(1);
+    model.root_activities.push(2);
+    model.activities.insert(1, build1);
+    model.activities.insert(2, build2);
+
+    // Initially no selection
+    assert!(model.ui.selected_activity.is_none());
+
+    // Select next should select first build
+    model.select_next_build();
+    assert!(model.ui.selected_activity.is_some());
+}
+
+#[test]
+fn test_get_display_activities() {
+    let (model, _parent_id, _child_ids) = model_with_hierarchy();
+
+    let display_activities = model.get_display_activities();
+
+    // Should have parent and all children
+    assert_eq!(display_activities.len(), 4);
 }

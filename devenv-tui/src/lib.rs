@@ -1,7 +1,6 @@
 pub mod events;
 pub mod model_events;
 pub mod tracing_interface;
-pub mod tracing_layer;
 
 // UI modules
 pub mod app;
@@ -11,12 +10,12 @@ pub mod view;
 
 pub use events::*;
 pub use model::{
-    Model, Activity, ActivityVariant, BuildActivity, DownloadActivity, ProgressActivity,
+    Activity, ActivityVariant, BuildActivity, DownloadActivity, Model, ProgressActivity,
     QueryActivity, TaskActivity, TaskDisplayStatus,
 };
-pub use model_events::{DataEvent, UiEvent};
-pub use tracing_layer::DevenvTuiLayer;
+pub use model_events::UiEvent;
 
+use devenv_activity::ActivityEvent;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
@@ -25,8 +24,8 @@ use tokio::sync::mpsc;
 pub struct TuiHandle {
     /// Model shared with rendering (read-only in practice)
     pub model: Arc<Mutex<Model>>,
-    /// Data event sender (tracing events - high volume, batchable)
-    data_tx: mpsc::UnboundedSender<DataEvent>,
+    /// Activity event sender (from devenv-activity)
+    activity_tx: mpsc::UnboundedSender<ActivityEvent>,
     /// UI event sender (keyboard, tick - low volume, high priority)
     ui_tx: mpsc::UnboundedSender<UiEvent>,
 }
@@ -34,18 +33,18 @@ pub struct TuiHandle {
 impl TuiHandle {
     pub fn init() -> Self {
         let model = Arc::new(Mutex::new(Model::new()));
-        let (data_tx, data_rx) = mpsc::unbounded_channel();
+        let (activity_tx, activity_rx) = mpsc::unbounded_channel();
         let (ui_tx, ui_rx) = mpsc::unbounded_channel();
 
         // Spawn event processor task with two queues
         let model_clone = Arc::clone(&model);
         tokio::spawn(async move {
-            process_events(data_rx, ui_rx, model_clone).await;
+            process_events(activity_rx, ui_rx, model_clone).await;
         });
 
         Self {
             model,
-            data_tx,
+            activity_tx,
             ui_tx,
         }
     }
@@ -55,14 +54,14 @@ impl TuiHandle {
         self.model.clone()
     }
 
-    /// Create a tracing layer that sends data events to the processor
-    pub fn layer(&self) -> DevenvTuiLayer {
-        DevenvTuiLayer::new(self.data_tx.clone())
+    /// Get the activity event sender for forwarding activity events
+    pub fn activity_tx(&self) -> mpsc::UnboundedSender<ActivityEvent> {
+        self.activity_tx.clone()
     }
 
-    /// Send a data event (from tracing layer)
-    pub fn send_data_event(&self, event: DataEvent) {
-        let _ = self.data_tx.send(event);
+    /// Send an activity event
+    pub fn send_activity_event(&self, event: ActivityEvent) {
+        let _ = self.activity_tx.send(event);
     }
 
     /// Send a UI event (from keyboard, timers, etc.)
@@ -74,13 +73,13 @@ impl TuiHandle {
 /// Event processor task with two queues and priority handling
 ///
 /// UI events are always processed first for responsiveness.
-/// Data events are batched (up to 32) for efficiency.
+/// Activity events are batched (up to 32) for efficiency.
 async fn process_events(
-    mut data_rx: mpsc::UnboundedReceiver<DataEvent>,
+    mut activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
     mut ui_rx: mpsc::UnboundedReceiver<UiEvent>,
     model: Arc<Mutex<Model>>,
 ) {
-    let mut data_batch = Vec::with_capacity(32);
+    let mut activity_batch = Vec::with_capacity(32);
 
     loop {
         tokio::select! {
@@ -91,23 +90,23 @@ async fn process_events(
                 }
             }
 
-            // Priority 2: Data events (batched for efficiency)
-            Some(data_event) = data_rx.recv() => {
+            // Priority 2: Activity events (batched for efficiency)
+            Some(activity_event) = activity_rx.recv() => {
                 // Collect first event
-                data_batch.push(data_event);
+                activity_batch.push(activity_event);
 
                 // Drain remaining events without blocking (batching)
-                while let Ok(event) = data_rx.try_recv() {
-                    data_batch.push(event);
-                    if data_batch.len() >= 32 {
+                while let Ok(event) = activity_rx.try_recv() {
+                    activity_batch.push(event);
+                    if activity_batch.len() >= 32 {
                         break;
                     }
                 }
 
                 // Process batch with single lock
                 if let Ok(mut model_guard) = model.lock() {
-                    for event in data_batch.drain(..) {
-                        event.apply(&mut model_guard);
+                    for event in activity_batch.drain(..) {
+                        model_guard.apply_activity_event(event);
                     }
                 }
             }
@@ -123,4 +122,18 @@ async fn process_events(
 /// The TUI should be started manually using SubsystemBuilder::new()
 pub fn init_tui() -> TuiHandle {
     TuiHandle::init()
+}
+
+/// Spawn a task that forwards ActivityEvents from the activity system to the TUI
+pub fn spawn_activity_forwarder(
+    mut activity_rx: mpsc::UnboundedReceiver<ActivityEvent>,
+    activity_tx: mpsc::UnboundedSender<ActivityEvent>,
+) {
+    tokio::spawn(async move {
+        while let Some(event) = activity_rx.recv().await {
+            if activity_tx.send(event).is_err() {
+                break;
+            }
+        }
+    });
 }

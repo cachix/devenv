@@ -1299,6 +1299,7 @@ dependencies = [
  "clap",
  "cli-table",
  "console 0.16.1",
+ "devenv-activity",
  "devenv-cache-core",
  "devenv-core",
  "devenv-eval-cache",
@@ -1323,6 +1324,7 @@ dependencies = [
  "nix-conf-parser",
  "once_cell",
  "pathdiff",
+ "rand 0.8.5",
  "regex",
  "reqwest",
  "rmcp",
@@ -1354,6 +1356,17 @@ dependencies = [
  "which",
  "whoami",
  "xdg",
+]
+
+[[package]]
+name = "devenv-activity"
+version = "1.10.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1507,6 +1520,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "console 0.16.1",
+ "devenv-activity",
  "devenv-cache-core",
  "devenv-eval-cache",
  "futures",

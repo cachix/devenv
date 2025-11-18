@@ -1,0 +1,6 @@
+---
+source: devenv-tui/tests/snapshot/tui_tests.rs
+assertion_line: 124
+expression: output
+---
+  ✅ Build completed 0.0s

@@ -3,27 +3,18 @@
 //! These tests verify that when events are fed into the model,
 //! the TUI renders the expected output.
 
-use devenv_tui::{DataEvent, Model, TaskDisplayStatus};
-use std::collections::HashMap;
+use devenv_tui::{Model, TaskDisplayStatus};
 
 use crate::test_utils::builders::ActivityBuilder;
 use crate::test_utils::render::render_to_string;
 
-/// Helper to register an operation and add an activity to it.
-fn add_activity_with_operation(model: &mut Model, activity: devenv_tui::Activity) {
-    let op_id = activity.operation_id.clone();
-
-    // Register the operation first
-    DataEvent::RegisterOperation {
-        operation_id: op_id.clone(),
-        operation_name: activity.name.clone(),
-        parent: None,
-        fields: HashMap::new(),
+/// Helper to add an activity to the model.
+fn add_activity(model: &mut Model, activity: devenv_tui::Activity) {
+    let id = activity.id;
+    if activity.parent_id.is_none() {
+        model.root_activities.push(id);
     }
-    .apply(model);
-
-    // Then add the activity
-    DataEvent::AddActivity(activity).apply(model);
+    model.activities.insert(id, activity);
 }
 
 /// Test that an empty model renders correctly.
@@ -45,7 +36,7 @@ fn test_single_build_activity() {
         .build_activity_with_phase("buildPhase")
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -62,7 +53,7 @@ fn test_download_with_progress() {
         .download_activity(Some(5000), Some(10000))
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -79,7 +70,7 @@ fn test_task_running() {
         .task_activity(TaskDisplayStatus::Running)
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -108,9 +99,9 @@ fn test_multiple_activities() {
         .task_activity(TaskDisplayStatus::Running)
         .build();
 
-    add_activity_with_operation(&mut model, build);
-    add_activity_with_operation(&mut model, download);
-    add_activity_with_operation(&mut model, task);
+    add_activity(&mut model, build);
+    add_activity(&mut model, download);
+    add_activity(&mut model, task);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -127,7 +118,7 @@ fn test_task_success() {
         .task_activity(TaskDisplayStatus::Success)
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -144,7 +135,7 @@ fn test_task_failed() {
         .task_activity(TaskDisplayStatus::Failed)
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -161,7 +152,7 @@ fn test_evaluating_activity() {
         .evaluating_activity()
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -178,7 +169,7 @@ fn test_query_activity() {
         .query_activity_with_substituter("https://cache.nixos.org")
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -195,7 +186,7 @@ fn test_fetch_tree_activity() {
         .fetch_tree_activity()
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -212,7 +203,7 @@ fn test_download_with_substituter() {
         .download_activity_with_substituter(Some(1000), Some(2000), "https://cache.nixos.org")
         .build();
 
-    add_activity_with_operation(&mut model, activity);
+    add_activity(&mut model, activity);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);

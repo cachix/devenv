@@ -25,6 +25,7 @@ repository = "https://github.com/cachix/devenv/"
 
 [workspace.dependencies]
 devenv = { path = "devenv" }
+devenv-activity = { path = "devenv-activity" }
 devenv-core = { path = "devenv-core" }
 devenv-eval-cache = { path = "devenv-eval-cache" }
 devenv-run-tests = { path = "devenv-run-tests" }

@@ -1,0 +1,6 @@
+---
+source: devenv-tui/tests/snapshot/tui_tests.rs
+assertion_line: 141
+expression: output
+---
+  ❌ Tests failed 0.0s

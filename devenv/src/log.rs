@@ -1,4 +1,5 @@
 use console::style;
+use devenv_activity::{ActivityEventForwarder, ActivityLayer};
 use json_subscriber::JsonLayer;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -317,7 +318,12 @@ pub fn init_tracing(
         }
         LogFormat::Tui => {
             // Initialize TUI with proper shutdown coordination
-            let tui_handle = devenv_tui::init_tui();
+            let tui_handle = devenv_tui::TuiHandle::init();
+
+            // Create activity layers that forward to TUI
+            let activity_tx = tui_handle.activity_tx();
+            let activity_layer = ActivityLayer::new();
+            let activity_forwarder = ActivityEventForwarder::new(activity_tx);
 
             // Spawn TUI app in background
             let shutdown_clone = shutdown.clone();
@@ -326,10 +332,11 @@ pub fn init_tracing(
                 let _ = devenv_tui::app::run_app(tui_handle_clone, shutdown_clone).await;
             });
 
-            // Register layers including TUI layer
+            // Register layers including activity layers
             tracing_subscriber::registry()
                 .with(filter)
-                .with(tui_handle.layer())
+                .with(activity_layer)
+                .with(activity_forwarder)
                 .with(devenv_layer)
                 .with(span_id_layer)
                 .with(span_attrs_layer)

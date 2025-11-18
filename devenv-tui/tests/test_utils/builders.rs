@@ -1,79 +1,16 @@
 use devenv_tui::{
-    Activity, ActivityVariant, BuildActivity, DownloadActivity, NixActivityState,
-    Operation, OperationId, OperationState, ProgressActivity, QueryActivity,
-    TaskActivity, TaskDisplayStatus,
+    Activity, ActivityVariant, BuildActivity, DownloadActivity, NixActivityState, OperationId,
+    ProgressActivity, QueryActivity, TaskActivity, TaskDisplayStatus,
 };
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-
-pub struct OperationBuilder {
-    id: OperationId,
-    message: String,
-    parent: Option<OperationId>,
-    data: HashMap<String, String>,
-    state: OperationState,
-    children: Vec<OperationId>,
-}
-
-impl OperationBuilder {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self {
-            id: OperationId::new(id),
-            message: "Test operation".to_string(),
-            parent: None,
-            data: HashMap::new(),
-            state: OperationState::Active,
-            children: Vec::new(),
-        }
-    }
-
-    pub fn message(mut self, message: impl Into<String>) -> Self {
-        self.message = message.into();
-        self
-    }
-
-    pub fn parent(mut self, parent: OperationId) -> Self {
-        self.parent = Some(parent);
-        self
-    }
-
-    pub fn data(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.data.insert(key.into(), value.into());
-        self
-    }
-
-    pub fn completed(mut self, success: bool, duration_secs: u64) -> Self {
-        self.state = OperationState::Complete {
-            duration: Duration::from_secs(duration_secs),
-            success,
-        };
-        self
-    }
-
-    pub fn child(mut self, child_id: OperationId) -> Self {
-        self.children.push(child_id);
-        self
-    }
-
-    pub fn build(self) -> Operation {
-        Operation {
-            id: self.id,
-            message: self.message,
-            state: self.state,
-            start_time: Instant::now(),
-            children: self.children,
-            parent: self.parent,
-            data: self.data,
-        }
-    }
-}
 
 pub struct ActivityBuilder {
     id: u64,
     operation_id: OperationId,
     name: String,
     short_name: String,
-    parent_operation: Option<OperationId>,
+    parent_id: Option<u64>,
     state: NixActivityState,
     detail: Option<String>,
     variant: ActivityVariant,
@@ -84,10 +21,10 @@ impl ActivityBuilder {
     pub fn new(id: u64) -> Self {
         Self {
             id,
-            operation_id: OperationId::new(format!("op-{}", id)),
+            operation_id: OperationId::from_activity_id(id),
             name: format!("Activity {}", id),
             short_name: format!("act-{}", id),
-            parent_operation: None,
+            parent_id: None,
             state: NixActivityState::Active,
             detail: None,
             variant: ActivityVariant::Unknown,
@@ -110,8 +47,8 @@ impl ActivityBuilder {
         self
     }
 
-    pub fn parent_operation(mut self, parent: OperationId) -> Self {
-        self.parent_operation = Some(parent);
+    pub fn parent_id(mut self, parent: u64) -> Self {
+        self.parent_id = Some(parent);
         self
     }
 
@@ -150,7 +87,7 @@ impl ActivityBuilder {
             operation_id: self.operation_id,
             name: self.name,
             short_name: self.short_name,
-            parent_operation: self.parent_operation,
+            parent_id: self.parent_id,
             start_time: Instant::now(),
             state: self.state,
             detail: self.detail,
