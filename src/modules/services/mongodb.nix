@@ -5,56 +5,81 @@ with lib;
 let
   cfg = config.services.mongodb;
 
-  setupScript = pkgs.writeShellScriptBin "setup-mongodb" ''
-    set -euo pipefail
-    # Abort if the data dir already exists
-    [[ ! -d "$MONGODBDATA" ]] || exit 0
-    mkdir -p "$MONGODBDATA"
-  '';
+  setupScript =
+    let
+      replication =
+        if cfg.replication.enable
+        then ''
+          # Set up replication (requires a keyfile)
+          ${pkgs.openssl}/bin/openssl rand -base64 765 > "$MONGODBDATA/keyfile"
+          chmod 400 "$MONGODBDATA/keyfile"''
+        else "";
+    in
+    pkgs.writeShellScriptBin "setup-mongodb" ''
+      set -euo pipefail
+      # Abort if the data dir already exists
+      [[ ! -d "$MONGODBDATA" ]] || exit 0
+      mkdir -p "$MONGODBDATA"
 
-  startScript = pkgs.writeShellScriptBin "start-mongodb" ''
-    set -euo pipefail
-    ${setupScript}/bin/setup-mongodb
-    exec ${cfg.package}/bin/mongod ${
-      lib.concatStringsSep " " cfg.additionalArgs
-    } -dbpath "$MONGODBDATA"
-  '';
+      ${replication}
+    '';
+
+  startScript =
+    let
+      replication =
+        if cfg.replication.enable
+        then [ "--keyFile" "$MONGODBDATA/keyfile" "--replSet" cfg.replication.replSet ]
+        else [ ];
+    in
+    pkgs.writeShellScriptBin "start-mongodb" ''
+      set -euo pipefail
+      ${setupScript}/bin/setup-mongodb
+      exec ${cfg.package}/bin/mongod ${
+        lib.concatStringsSep " " (replication ++ cfg.additionalArgs)
+      } -dbpath "$MONGODBDATA"
+    '';
 
   configureScript = pkgs.writeShellScriptBin "configure-mongodb" ''
-    set -euo pipefail
+        set -euo pipefail
 
-    mongodArgs=(${lib.concatStringsSep " " cfg.additionalArgs})
-    mongoShellArgs=""
+        mongodArgs=(${lib.concatStringsSep " " cfg.additionalArgs})
+        mongoShellArgs=""
 
-    # Loop over the arguments, check if it contains --port
-    # If it does grab the port which must be the following arg
-    # wanted to keep the additionalArgs to not break any existing
-    # configs using it.
-    for i in "''${!mongodArgs[@]}"; do
-       if [[ "''${mongodArgs[$i]}" = "--port" ]]; then
-           mongoShellArgs="--port ''${mongodArgs[i + 1]}"
-           break
-       fi
-    done
+        # Loop over the arguments, check if it contains --port
+        # If it does grab the port which must be the following arg
+        # wanted to keep the additionalArgs to not break any existing
+        # configs using it.
+        for i in "''${!mongodArgs[@]}"; do
+           if [[ "''${mongodArgs[$i]}" = "--port" ]]; then
+               mongoShellArgs="--port ''${mongodArgs[i + 1]}"
+               break
+           fi
+        done
 
-    while ! ${pkgs.mongosh}/bin/mongosh --quiet --eval "{ ping: 1 }" ''${mongoShellArgs} 2>&1 >/dev/null ; do
-        sleep 1
-    done
+        while ! ${pkgs.mongosh}/bin/mongosh --quiet --eval "{ ping: 1 }" ''${mongoShellArgs} 2>&1 >/dev/null ; do
+            sleep 1
+        done
 
-    if [ "${cfg.initDatabaseUsername}" ] && [ "${cfg.initDatabasePassword}" ]; then
-        echo "Creating initial user"
-        rootAuthDatabase="admin"
-        ${pkgs.mongosh}/bin/mongosh ''${mongoShellArgs} "$rootAuthDatabase" >/dev/null <<-EOJS
-            db.createUser({
-                user: "${cfg.initDatabaseUsername}",
-                pwd: "${cfg.initDatabasePassword}",``
-                roles: [ { role: 'root', db: "$rootAuthDatabase" } ]
-            })
-    EOJS
-    fi
+        if ${lib.boolToString cfg.replication.enable}; then
+            echo "Initialising replica-set"
+            rootAuthDatabase="admin"
+            ${pkgs.mongosh}/bin/mongosh ''${mongoShellArgs} "$rootAuthDatabase" --eval 'rs.initiate()' >/dev/null
+        fi
 
-    # We need to keep this process running otherwise all processes stop
-    tail -f /dev/null
+        if [ "${cfg.initDatabaseUsername}" ] && [ "${cfg.initDatabasePassword}" ]; then
+            echo "Creating initial user"
+            rootAuthDatabase="admin"
+            ${pkgs.mongosh}/bin/mongosh ''${mongoShellArgs} "$rootAuthDatabase" >/dev/null <<-EOJS
+                db.createUser({
+                    user: "${cfg.initDatabaseUsername}",
+                    pwd: "${cfg.initDatabasePassword}",``
+                    roles: [ { role: 'root', db: "$rootAuthDatabase" } ]
+                })
+    	EOJS
+        fi
+
+        # We need to keep this process running otherwise all processes stop
+        tail -f /dev/null
   '';
 
 in
@@ -84,6 +109,16 @@ in
       description = ''
         Additional arguments passed to `mongod`.
       '';
+    };
+
+    replication = {
+      enable = mkEnableOption "MongoDB replication with a 1-node replica-set.";
+      replSet = lib.mkOption {
+        type = lib.types.str;
+        default = "rs0";
+        example = "rs0";
+        description = "Replica-set name";
+      };
     };
 
     initDatabaseUsername = lib.mkOption {
