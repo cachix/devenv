@@ -1,5 +1,0 @@
----
-source: devenv-tui/tests/snapshot/rendering_tests.rs
-expression: summary
----
-Activity { id: 1, name: "User operation", short_name: "user-op", state: Active, variant: UserOperation }
