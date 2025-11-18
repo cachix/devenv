@@ -15,6 +15,7 @@ let
           ./Cargo.toml
           ./Cargo.lock
           ./devenv
+          ./devenv-activity
           ./devenv-generate
           ./devenv-eval-cache
           ./devenv-cache-core
