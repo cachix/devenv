@@ -22,12 +22,14 @@ We have a rule that new features need to come with documentation and tests (`dev
 
 2. `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv init`
 
-3. Add devenv input pointing to local source directory to `devenv.yaml`
+3. Add devenv input pointing to local source directory to `devenv.yaml` under `inputs`
 
-```
-devenv:
-  url: path:<PATH-TO-DEVENV-SOURCE-CODE>?dir=src/modules
-```
+    ```
+    inputs:
+      ...
+      devenv:
+        url: path:<PATH-TO-DEVENV-SOURCE-CODE>?dir=src/modules
+    ```
 
 4. `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv update`
 
