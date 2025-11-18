@@ -41,6 +41,9 @@ serde_json = { workspace = true }
 # Nix log parsing
 devenv-eval-cache = { path = "../devenv-eval-cache" }
 
+# Activity system
+devenv-activity = { path = "../devenv-activity" }
+
 # Shared task types
 devenv-cache-core = { path = "../devenv-cache-core" }
 

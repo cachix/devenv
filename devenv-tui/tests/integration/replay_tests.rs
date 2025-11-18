@@ -308,6 +308,6 @@ fn test_all_trace_files_are_valid_json() {
 fn test_model_integration_with_simple_trace() {
     let model = Model::new();
 
-    assert_eq!(model.operations.len(), 0);
+    assert_eq!(model.root_activities.len(), 0);
     assert_eq!(model.activities.len(), 0);
 }
