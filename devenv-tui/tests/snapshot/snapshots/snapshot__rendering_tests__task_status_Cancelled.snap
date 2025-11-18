@@ -1,5 +1,0 @@
----
-source: devenv-tui/tests/snapshot/rendering_tests.rs
-expression: summary
----
-Activity { id: 5, name: "Task lifecycle", short_name: "act-5", state: Active, variant: Task [Cancelled] }

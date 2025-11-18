@@ -1,5 +1,0 @@
----
-source: devenv-tui/tests/snapshot/rendering_tests.rs
-expression: summary
----
-Activity { id: 1, name: "Fetching tree", short_name: "fetch-tree", state: Active, variant: FetchTree }

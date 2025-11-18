@@ -1,5 +1,0 @@
----
-source: devenv-tui/tests/snapshot/rendering_tests.rs
-expression: summary
----
-Activity { id: 4, name: "Task lifecycle", short_name: "act-4", state: Active, variant: Task [Skipped] }

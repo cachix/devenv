@@ -1,0 +1,9 @@
+---
+source: devenv-tui/tests/snapshot/tui_tests.rs
+expression: output
+---
+ └── Downloading nixpkgs                                                                                               0.0s
+      ────────────────────────────────────────────────────────────────────────────────────────────────────5kB / 10kB at 0B/d
+
+
+ 0 of 1 downloads
