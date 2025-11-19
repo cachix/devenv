@@ -23,23 +23,29 @@ let
   anyHookEnabled = builtins.any (hook: hook.enable or false) (lib.attrValues (cfg.hooks or { }));
 
   # A default module stub for when git-hooks is not available.
-  defaultModule = lib.types.submodule {
-    options = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        description = ''
-          Whether to enable the pre-commit hooks module.
+  # Uses freeformType to accept any attributes (tools, hooks, etc.) without type errors.
+  defaultModule = lib.types.submoduleWith {
+    modules = [
+      ({ ... }: {
+        freeformType = lib.types.attrsOf lib.types.anything;
+        options = {
+          enable = lib.mkOption {
+            type = lib.types.bool;
+            description = ''
+              Whether to enable the pre-commit hooks module.
 
-          When set to false, this disables the entire module.
-        '';
-        default = false;
-      };
-      hooks = lib.mkOption {
-        type = lib.types.attrsOf lib.types.attrs;
-        description = "Configuration for individual pre-commit hooks.";
-        default = { };
-      };
-    };
+              When set to false, this disables the entire module.
+            '';
+            default = false;
+          };
+          hooks = lib.mkOption {
+            type = lib.types.attrsOf lib.types.attrs;
+            description = "Configuration for individual pre-commit hooks.";
+            default = { };
+          };
+        };
+      })
+    ];
   };
 
   githooksSubmodule =
