@@ -19,9 +19,8 @@ let
 
   git-hooks = inputs.git-hooks or inputs.pre-commit-hooks or (config.lib.tryGetInput inputArgs);
 
-  # Check if hooks are enabled (used in config section after type is resolved)
-  hooksEnabled =
-    cfg.enable || (builtins.any (hook: hook.enable or false) (lib.attrValues (cfg.hooks or { })));
+  # Check if any individual hooks are enabled
+  anyHookEnabled = builtins.any (hook: hook.enable or false) (lib.attrValues (cfg.hooks or { }));
 
   # A default module stub for when git-hooks is not available.
   defaultModule = lib.types.submodule {
@@ -88,11 +87,16 @@ in
   };
 
   config = lib.mkMerge [
+    # Auto-enable when any hook is enabled, so other modules can check git-hooks.enable
+    {
+      git-hooks.enable = lib.mkDefault anyHookEnabled;
+    }
+
     # Assert that input is available when hooks are configured
     {
       assertions = [
         {
-          assertion = !hooksEnabled || git-hooks != null;
+          assertion = !cfg.enable || git-hooks != null;
           message = ''
             The git-hooks input is required when using git-hooks.
 
@@ -105,7 +109,7 @@ in
       ];
     }
 
-    (lib.mkIf (!hooksEnabled) {
+    (lib.mkIf (!cfg.enable) {
       # Remove the existing `configPath` if it exists and is in the nix store
       #
       # TODO(sander): turn this into a task.
@@ -133,7 +137,7 @@ in
       '';
     })
 
-    (lib.mkIf hooksEnabled {
+    (lib.mkIf cfg.enable {
       ci = [ cfg.run ];
       # Add the packages for any enabled hooks at the end to avoid overriding the language-defined packages.
       packages = lib.mkAfter ([ packageBin ] ++ (cfg.enabledPackages or [ ]));
