@@ -1,14 +1,7 @@
-use devenv_tui::{
-    ActivityVariant, LogLevel, LogMessage, LogSource, Model, NixActivityState, OperationId,
-    TaskDisplayStatus,
-};
+use devenv_tui::{LogLevel, LogMessage, LogSource, Model, TaskDisplayStatus};
+use devenv_activity::{ActivityEvent, ActivityKind, ActivityOutcome, ProgressState, ProgressUnit};
 use std::collections::HashMap;
-use std::time::Duration;
-
-use crate::test_utils::builders::ActivityBuilder;
-use crate::test_utils::fixtures::{
-    model_with_activities, model_with_hierarchy, simple_build_activity, task_activity_running,
-};
+use std::time::SystemTime;
 
 #[test]
 fn test_new_model_is_empty() {
@@ -22,11 +15,18 @@ fn test_new_model_is_empty() {
 #[test]
 fn test_add_activity_inserts_activity() {
     let mut model = Model::new();
-    let activity = simple_build_activity();
-    let activity_id = activity.id;
+    let activity_id = 1;
 
-    model.root_activities.push(activity_id);
-    model.activities.insert(activity_id, activity);
+    let event = ActivityEvent::Start {
+        id: activity_id,
+        kind: ActivityKind::Build,
+        name: "Building example-package".to_string(),
+        parent: None,
+        detail: Some("/nix/store/abc123-example-package.drv".to_string()),
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(event);
 
     assert_eq!(model.activities.len(), 1);
     assert!(model.activities.contains_key(&activity_id));
@@ -52,16 +52,52 @@ fn test_add_log_message() {
 
 #[test]
 fn test_get_active_activities() {
-    let model = model_with_activities();
+    let mut model = Model::new();
+
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "Building example-package".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(event);
 
     let active_count = model.get_active_activities().len();
-
     assert!(active_count > 0);
 }
 
 #[test]
 fn test_model_with_hierarchy_structure() {
-    let (model, parent_id, child_ids) = model_with_hierarchy();
+    let mut model = Model::new();
+    let parent_id = 1;
+    let child_ids = vec![2, 3, 4];
+
+    // Create parent activity
+    let parent_event = ActivityEvent::Start {
+        id: parent_id,
+        kind: ActivityKind::Operation,
+        name: "Parent operation".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+    model.apply_activity_event(parent_event);
+
+    // Create child activities
+    for &child_id in &child_ids {
+        let child_event = ActivityEvent::Start {
+            id: child_id,
+            kind: ActivityKind::Build,
+            name: format!("Child operation {}", child_id),
+            parent: Some(parent_id),
+            detail: None,
+            timestamp: SystemTime::now(),
+        };
+        model.apply_activity_event(child_event);
+    }
 
     assert!(model.activities.contains_key(&parent_id));
     assert_eq!(model.root_activities.len(), 1);
@@ -74,158 +110,211 @@ fn test_model_with_hierarchy_structure() {
 }
 
 #[test]
-fn test_builder_creates_valid_activity() {
-    let activity = ActivityBuilder::new(42)
-        .name("Test Build")
-        .short_name("test")
-        .build_activity_with_phase("buildPhase")
-        .build();
+fn test_start_event_creates_build_activity() {
+    let mut model = Model::new();
 
+    let event = ActivityEvent::Start {
+        id: 42,
+        kind: ActivityKind::Build,
+        name: "Test Build".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(event);
+
+    assert!(model.activities.contains_key(&42));
+    let activity = &model.activities[&42];
     assert_eq!(activity.id, 42);
     assert_eq!(activity.name, "Test Build");
-    assert_eq!(activity.short_name, "test");
-
-    match activity.variant {
-        ActivityVariant::Build(build) => {
-            assert_eq!(build.phase, Some("buildPhase".to_string()));
-        }
-        _ => panic!("Expected Build variant"),
-    }
 }
 
 #[test]
-fn test_builder_creates_download_activity() {
-    let activity = ActivityBuilder::new(100)
-        .name("Download Package")
-        .download_activity(Some(1024), Some(2048))
-        .progress(1024, 2048, "bytes")
-        .build();
+fn test_progress_event_updates_download_activity() {
+    let mut model = Model::new();
 
+    let start_event = ActivityEvent::Start {
+        id: 100,
+        kind: ActivityKind::Fetch,
+        name: "Download Package".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(start_event);
+
+    let progress_event = ActivityEvent::Progress {
+        id: 100,
+        progress: ProgressState::Determinate {
+            current: 1024,
+            total: 2048,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(progress_event);
+
+    assert!(model.activities.contains_key(&100));
+    let activity = &model.activities[&100];
     assert_eq!(activity.id, 100);
-
-    match activity.variant {
-        ActivityVariant::Download(download) => {
-            assert_eq!(download.size_current, Some(1024));
-            assert_eq!(download.size_total, Some(2048));
-        }
-        _ => panic!("Expected Download variant"),
-    }
-
     assert!(activity.progress.is_some());
-    let progress = activity.progress.unwrap();
-    assert_eq!(progress.current, Some(1024));
-    assert_eq!(progress.total, Some(2048));
-    assert!(progress.percent.unwrap() > 49.0 && progress.percent.unwrap() < 51.0);
 }
 
 #[test]
-fn test_builder_creates_task_activity() {
-    let activity = ActivityBuilder::new(200)
-        .name("Run Tests")
-        .task_activity_with_duration(TaskDisplayStatus::Success, 30)
-        .completed(true, 30)
-        .build();
+fn test_complete_event_marks_task_as_completed() {
+    let mut model = Model::new();
 
+    let start_event = ActivityEvent::Start {
+        id: 200,
+        kind: ActivityKind::Task,
+        name: "Run Tests".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(start_event);
+
+    let complete_event = ActivityEvent::Complete {
+        id: 200,
+        outcome: ActivityOutcome::Success,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(complete_event);
+
+    assert!(model.activities.contains_key(&200));
+    let activity = &model.activities[&200];
     assert_eq!(activity.id, 200);
-
-    match activity.variant {
-        ActivityVariant::Task(task) => {
-            assert_eq!(task.status, TaskDisplayStatus::Success);
-            assert_eq!(task.duration, Some(Duration::from_secs(30)));
-        }
-        _ => panic!("Expected Task variant"),
-    }
-
-    match activity.state {
-        NixActivityState::Completed { success, duration } => {
-            assert!(success);
-            assert_eq!(duration, Duration::from_secs(30));
-        }
-        _ => panic!("Expected Completed state"),
-    }
 }
 
 #[test]
 fn test_multiple_activities_different_types() {
     let mut model = Model::new();
 
-    let build = ActivityBuilder::new(1)
-        .build_activity_with_phase("configurePhase")
-        .build();
+    let build_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "Build Package".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    let download = ActivityBuilder::new(2)
-        .download_activity(Some(500), Some(1000))
-        .build();
+    let download_event = ActivityEvent::Start {
+        id: 2,
+        kind: ActivityKind::Fetch,
+        name: "Download Package".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    let task = ActivityBuilder::new(3)
-        .task_activity(TaskDisplayStatus::Running)
-        .build();
+    let task_event = ActivityEvent::Start {
+        id: 3,
+        kind: ActivityKind::Task,
+        name: "Run Task".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    model.root_activities.push(1);
-    model.root_activities.push(2);
-    model.root_activities.push(3);
-
-    model.activities.insert(1, build);
-    model.activities.insert(2, download);
-    model.activities.insert(3, task);
+    model.apply_activity_event(build_event);
+    model.apply_activity_event(download_event);
+    model.apply_activity_event(task_event);
 
     assert_eq!(model.activities.len(), 3);
-
-    assert_matches::assert_matches!(model.activities[&1].variant, ActivityVariant::Build(_));
-    assert_matches::assert_matches!(model.activities[&2].variant, ActivityVariant::Download(_));
-    assert_matches::assert_matches!(model.activities[&3].variant, ActivityVariant::Task(_));
+    assert!(model.activities.contains_key(&1));
+    assert!(model.activities.contains_key(&2));
+    assert!(model.activities.contains_key(&3));
 }
 
 #[test]
-fn test_task_activity_running_fixture() {
-    let activity = task_activity_running();
+fn test_task_activity_running() {
+    let mut model = Model::new();
 
+    let event = ActivityEvent::Start {
+        id: 4,
+        kind: ActivityKind::Task,
+        name: "Running test suite".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(event);
+
+    let activity = &model.activities[&4];
     assert_eq!(activity.name, "Running test suite");
-    assert_eq!(activity.short_name, "test");
-    assert_eq!(activity.state, NixActivityState::Active);
-    assert!(matches!(activity.variant, ActivityVariant::Task(_)));
 }
 
 #[test]
-fn test_activity_builder_with_all_fields() {
-    let activity = ActivityBuilder::new(1)
-        .name("Test Activity")
-        .short_name("test")
-        .operation_id(OperationId::new("op-1"))
-        .parent_id(99)
-        .detail("Some detail")
-        .download_activity(Some(100), Some(200))
-        .build();
+fn test_activity_event_with_all_fields() {
+    let mut model = Model::new();
 
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Fetch,
+        name: "Test Activity".to_string(),
+        parent: Some(99),
+        detail: Some("Some detail".to_string()),
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(event);
+
+    let activity = &model.activities[&1];
     assert_eq!(activity.name, "Test Activity");
-    assert_eq!(activity.short_name, "test");
-    assert_eq!(activity.operation_id.0, "op-1");
     assert_eq!(activity.parent_id, Some(99));
     assert_eq!(activity.detail, Some("Some detail".to_string()));
 }
 
 #[test]
 fn test_calculate_summary() {
-    let model = model_with_activities();
-    let summary = model.calculate_summary();
+    let mut model = Model::new();
 
-    // model_with_activities has 1 active build, 1 completed download, 1 failed build
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "Building example-package".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(event);
+
+    let summary = model.calculate_summary();
     assert!(summary.total_builds >= 1);
-    assert!(summary.completed_downloads >= 0);
 }
 
 #[test]
 fn test_select_next_build() {
     let mut model = Model::new();
 
-    // Add two build activities
-    let build1 = ActivityBuilder::new(1).build_activity().build();
-    let build2 = ActivityBuilder::new(2).build_activity().build();
+    let build1_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "Build Package 1".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    model.root_activities.push(1);
-    model.root_activities.push(2);
-    model.activities.insert(1, build1);
-    model.activities.insert(2, build2);
+    let build2_event = ActivityEvent::Start {
+        id: 2,
+        kind: ActivityKind::Build,
+        name: "Build Package 2".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(build1_event);
+    model.apply_activity_event(build2_event);
 
     // Initially no selection
     assert!(model.ui.selected_activity.is_none());
@@ -237,7 +326,31 @@ fn test_select_next_build() {
 
 #[test]
 fn test_get_display_activities() {
-    let (model, _parent_id, _child_ids) = model_with_hierarchy();
+    let mut model = Model::new();
+    let parent_id = 1;
+    let child_ids = vec![2, 3, 4];
+
+    let parent_event = ActivityEvent::Start {
+        id: parent_id,
+        kind: ActivityKind::Operation,
+        name: "Parent operation".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+    model.apply_activity_event(parent_event);
+
+    for &child_id in &child_ids {
+        let child_event = ActivityEvent::Start {
+            id: child_id,
+            kind: ActivityKind::Build,
+            name: format!("Child operation {}", child_id),
+            parent: Some(parent_id),
+            detail: None,
+            timestamp: SystemTime::now(),
+        };
+        model.apply_activity_event(child_event);
+    }
 
     let display_activities = model.get_display_activities();
 

@@ -3,19 +3,11 @@
 //! These tests verify that when events are fed into the model,
 //! the TUI renders the expected output.
 
-use devenv_tui::{Model, TaskDisplayStatus};
+use devenv_tui::Model;
+use devenv_activity::{ActivityEvent, ActivityKind, ProgressState, ProgressUnit};
+use std::time::SystemTime;
 
-use crate::test_utils::builders::ActivityBuilder;
 use crate::test_utils::render::render_to_string;
-
-/// Helper to add an activity to the model.
-fn add_activity(model: &mut Model, activity: devenv_tui::Activity) {
-    let id = activity.id;
-    if activity.parent_id.is_none() {
-        model.root_activities.push(id);
-    }
-    model.activities.insert(id, activity);
-}
 
 /// Test that an empty model renders correctly.
 #[test]
@@ -30,13 +22,24 @@ fn test_empty_model() {
 fn test_single_build_activity() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Building hello-world")
-        .short_name("hello-world")
-        .build_activity_with_phase("buildPhase")
-        .build();
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "Building hello-world".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(event);
+
+    let phase_event = ActivityEvent::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(phase_event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -47,13 +50,28 @@ fn test_single_build_activity() {
 fn test_download_with_progress() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Downloading nixpkgs")
-        .short_name("nixpkgs")
-        .download_activity(Some(5000), Some(10000))
-        .build();
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Fetch,
+        name: "Downloading nixpkgs".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(event);
+
+    let progress_event = ActivityEvent::Progress {
+        id: 1,
+        progress: ProgressState::Determinate {
+            current: 5000,
+            total: 10000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(progress_event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -64,13 +82,16 @@ fn test_download_with_progress() {
 fn test_task_running() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Running tests")
-        .short_name("tests")
-        .task_activity(TaskDisplayStatus::Running)
-        .build();
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Task,
+        name: "Running tests".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -81,27 +102,54 @@ fn test_task_running() {
 fn test_multiple_activities() {
     let mut model = Model::new();
 
-    let build = ActivityBuilder::new(1)
-        .name("Building package-a")
-        .short_name("package-a")
-        .build_activity_with_phase("buildPhase")
-        .build();
+    let build_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Build,
+        name: "Building package-a".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    let download = ActivityBuilder::new(2)
-        .name("Downloading package-b")
-        .short_name("package-b")
-        .download_activity(Some(2500), Some(5000))
-        .build();
+    let build_phase_event = ActivityEvent::Phase {
+        id: 1,
+        phase: "buildPhase".to_string(),
+        timestamp: SystemTime::now(),
+    };
 
-    let task = ActivityBuilder::new(3)
-        .name("Running setup")
-        .short_name("setup")
-        .task_activity(TaskDisplayStatus::Running)
-        .build();
+    let download_event = ActivityEvent::Start {
+        id: 2,
+        kind: ActivityKind::Fetch,
+        name: "Downloading package-b".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, build);
-    add_activity(&mut model, download);
-    add_activity(&mut model, task);
+    let download_progress_event = ActivityEvent::Progress {
+        id: 2,
+        progress: ProgressState::Determinate {
+            current: 2500,
+            total: 5000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: SystemTime::now(),
+    };
+
+    let task_event = ActivityEvent::Start {
+        id: 3,
+        kind: ActivityKind::Task,
+        name: "Running setup".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(build_event);
+    model.apply_activity_event(build_phase_event);
+    model.apply_activity_event(download_event);
+    model.apply_activity_event(download_progress_event);
+    model.apply_activity_event(task_event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -112,13 +160,24 @@ fn test_multiple_activities() {
 fn test_task_success() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Build completed")
-        .short_name("build")
-        .task_activity(TaskDisplayStatus::Success)
-        .build();
+    let start_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Task,
+        name: "Build completed".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(start_event);
+
+    let complete_event = ActivityEvent::Complete {
+        id: 1,
+        outcome: devenv_activity::ActivityOutcome::Success,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -129,13 +188,24 @@ fn test_task_success() {
 fn test_task_failed() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Tests failed")
-        .short_name("tests")
-        .task_activity(TaskDisplayStatus::Failed)
-        .build();
+    let start_event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Task,
+        name: "Tests failed".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(start_event);
+
+    let complete_event = ActivityEvent::Complete {
+        id: 1,
+        outcome: devenv_activity::ActivityOutcome::Failed,
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(complete_event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -146,13 +216,16 @@ fn test_task_failed() {
 fn test_evaluating_activity() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Evaluating flake")
-        .short_name("flake")
-        .evaluating_activity()
-        .build();
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Evaluate,
+        name: "Evaluating flake".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -163,13 +236,16 @@ fn test_evaluating_activity() {
 fn test_query_activity() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Querying cache")
-        .short_name("cache")
-        .query_activity_with_substituter("https://cache.nixos.org")
-        .build();
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Operation,
+        name: "Querying cache".to_string(),
+        parent: None,
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -180,13 +256,16 @@ fn test_query_activity() {
 fn test_fetch_tree_activity() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Fetching github:NixOS/nixpkgs")
-        .short_name("nixpkgs")
-        .fetch_tree_activity()
-        .build();
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Fetch,
+        name: "Fetching github:NixOS/nixpkgs".to_string(),
+        parent: None,
+        detail: None,
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);
@@ -197,13 +276,28 @@ fn test_fetch_tree_activity() {
 fn test_download_with_substituter() {
     let mut model = Model::new();
 
-    let activity = ActivityBuilder::new(1)
-        .name("Downloading package")
-        .short_name("package")
-        .download_activity_with_substituter(Some(1000), Some(2000), "https://cache.nixos.org")
-        .build();
+    let event = ActivityEvent::Start {
+        id: 1,
+        kind: ActivityKind::Fetch,
+        name: "Downloading package".to_string(),
+        parent: None,
+        detail: Some("https://cache.nixos.org".to_string()),
+        timestamp: SystemTime::now(),
+    };
 
-    add_activity(&mut model, activity);
+    model.apply_activity_event(event);
+
+    let progress_event = ActivityEvent::Progress {
+        id: 1,
+        progress: ProgressState::Determinate {
+            current: 1000,
+            total: 2000,
+            unit: Some(ProgressUnit::Bytes),
+        },
+        timestamp: SystemTime::now(),
+    };
+
+    model.apply_activity_event(progress_event);
 
     let output = render_to_string(&model, 80);
     insta::assert_snapshot!(output);

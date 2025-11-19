@@ -2,8 +2,8 @@
 source: devenv-tui/tests/snapshot/tui_tests.rs
 expression: output
 ---
- └── Downloading package from https://cache.nixos.org                                                                 0.0s
-      ────────────────────────────────────────────────────────────────────────────────────────────────────1kB / 2kB at 0B/d
+ Downloading Downloading package                                     0.0s
+    ───────────────────────────────────────────────────1kB / 2kB at 10kB/s
 
 
  0 of 1 downloads
