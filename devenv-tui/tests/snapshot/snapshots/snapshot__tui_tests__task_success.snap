@@ -2,4 +2,4 @@
 source: devenv-tui/tests/snapshot/tui_tests.rs
 expression: output
 ---
- └──  ✅ Build completed 0.0s
+

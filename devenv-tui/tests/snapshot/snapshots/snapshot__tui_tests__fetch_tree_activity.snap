@@ -2,4 +2,8 @@
 source: devenv-tui/tests/snapshot/tui_tests.rs
 expression: output
 ---
- └── Fetching Fetching github:NixOS/nixpkgs 0.0s
+ ⠋ Downloading Fetching github:NixOS/nixpkgs 0.0s
+
+
+
+ 0 of 1 downloads

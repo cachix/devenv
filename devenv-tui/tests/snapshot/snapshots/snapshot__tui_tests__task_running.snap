@@ -2,4 +2,4 @@
 source: devenv-tui/tests/snapshot/tui_tests.rs
 expression: output
 ---
- └──  ⚡ Running tests 0.0s
+  ⚡ Running tests 0.0s

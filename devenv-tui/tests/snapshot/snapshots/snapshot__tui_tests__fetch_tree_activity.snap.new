@@ -1,6 +1,0 @@
----
-source: devenv-tui/tests/snapshot/tui_tests.rs
-assertion_line: 192
-expression: output
----
- ⠋ Fetching Fetching github:NixOS/nixpkgs 0.0s

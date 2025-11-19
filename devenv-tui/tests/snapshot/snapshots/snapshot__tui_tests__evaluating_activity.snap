@@ -2,4 +2,4 @@
 source: devenv-tui/tests/snapshot/tui_tests.rs
 expression: output
 ---
- └── Evaluating Evaluating flake 0 files 0.0s
+ ⠋ Evaluating Evaluating flake 0.0s
