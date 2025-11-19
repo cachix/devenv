@@ -8,7 +8,9 @@
   };
 
   config.lib = {
-    getInput = { name, url, attribute, follows ? [ ] }:
+    # Internal function to format input requirement messages.
+    # Underscore prefix signals this is not part of the public API.
+    _mkInputError = { name, url, attribute, follows ? [ ] }:
       let
         flags = lib.concatStringsSep " " (map (i: "--follows ${i}") follows);
         yaml_follows = lib.concatStringsSep "\n      " (map (i: "${i}:\n        follows: ${i}") follows);
@@ -39,7 +41,10 @@
                   ${if follows != [] then "inputs:\n      ${yaml_follows}" else ""}
           '';
       in
-        inputs.${name} or (throw "To use '${attribute}', ${command}\n\n");
+        "To use '${attribute}', ${command}";
+
+    getInput = args:
+      inputs.${args.name} or (throw "${config.lib._mkInputError args}\n\n");
 
     tryGetInput = { name, url, attribute, follows ? [ ] }:
       inputs.${name} or null;

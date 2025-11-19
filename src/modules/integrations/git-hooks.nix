@@ -26,25 +26,23 @@ let
   # Uses freeformType to accept any attributes (tools, hooks, etc.) without type errors.
   defaultModule = lib.types.submoduleWith {
     modules = [
-      ({ ... }: {
-        freeformType = lib.types.attrsOf lib.types.anything;
-        options = {
-          enable = lib.mkOption {
-            type = lib.types.bool;
-            description = ''
-              Whether to enable the pre-commit hooks module.
+      (
+        { ... }:
+        {
+          freeformType = lib.types.attrsOf lib.types.anything;
+          options = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              description = ''
+                Whether to enable the pre-commit hooks module.
 
-              When set to false, this disables the entire module.
-            '';
-            default = false;
+                When set to false, this disables the entire module.
+              '';
+              default = false;
+            };
           };
-          hooks = lib.mkOption {
-            type = lib.types.attrsOf lib.types.attrs;
-            description = "Configuration for individual pre-commit hooks.";
-            default = { };
-          };
-        };
-      })
+        }
+      )
     ];
   };
 
@@ -103,14 +101,7 @@ in
       assertions = [
         {
           assertion = !cfg.enable || git-hooks != null;
-          message = ''
-            The git-hooks input is required when using git-hooks.
-
-            Run the following command to add it:
-
-              $ devenv inputs add git-hooks github:cachix/git-hooks.nix --follows nixpkgs
-
-          '';
+          message = config.lib._mkInputError inputArgs;
         }
       ];
     }
