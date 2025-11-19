@@ -360,8 +360,14 @@ impl TaskState {
         // Track EOF status for stdout and stderr streams
         let mut stdout_closed = false;
         let mut stderr_closed = false;
+        let mut exit_status: Option<std::process::ExitStatus> = None;
 
         loop {
+            // If child has exited and both pipes are closed, we're done
+            if exit_status.is_some() && stdout_closed && stderr_closed {
+                break;
+            }
+
             tokio::select! {
                 result = stdout_reader.next_line(), if !stdout_closed => {
                     match result {
@@ -401,7 +407,7 @@ impl TaskState {
                         },
                     }
                 }
-                result = child.wait() => {
+                result = child.wait(), if exit_status.is_none() => {
                     match result {
                         Ok(status) => {
                             // Emit tracing event for command completion
@@ -417,18 +423,8 @@ impl TaskState {
                                 cache.update_file_state(&self.task.name, &path).await?;
                             }
 
-                            if status.success() {
-                                return Ok(TaskCompleted::Success(now.elapsed(), Self::get_outputs(&outputs_file).await));
-                            } else {
-                                return Ok(TaskCompleted::Failed(
-                                    now.elapsed(),
-                                    TaskFailure {
-                                        stdout: stdout_lines,
-                                        stderr: stderr_lines,
-                                        error: format!("Task exited with status: {status}"),
-                                    },
-                                ));
-                            }
+                            // Store exit status and continue draining pipes
+                            exit_status = Some(status);
                         },
                         Err(e) => {
                             error!("{}> Error waiting for command: {}", self.task.name, e);
@@ -472,6 +468,24 @@ impl TaskState {
                     return Ok(TaskCompleted::Cancelled(Some(now.elapsed())));
                 }
             }
+        }
+
+        // Return based on the stored exit status
+        let status = exit_status.expect("Loop exited without exit status");
+        if status.success() {
+            Ok(TaskCompleted::Success(
+                now.elapsed(),
+                Self::get_outputs(&outputs_file).await,
+            ))
+        } else {
+            Ok(TaskCompleted::Failed(
+                now.elapsed(),
+                TaskFailure {
+                    stdout: stdout_lines,
+                    stderr: stderr_lines,
+                    error: format!("Task exited with status: {status}"),
+                },
+            ))
         }
     }
 }
