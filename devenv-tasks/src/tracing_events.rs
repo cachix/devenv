@@ -3,7 +3,15 @@
 //! This module provides helper functions to emit consistent tracing events
 //! that can be captured by devenv-tui's tracing layer for real-time display.
 //!
-//! Uses the standardized tracing interface defined in devenv_tui::tracing_interface
+//! TODO: This module needs to be redesigned to use the Activity API from devenv-activity.
+//! Current usage of operation_fields and manual span creation should be replaced with:
+//! - Activity::task(name) for task activities
+//! - activity.phase(phase) for status changes
+//! - activity.progress(current, total) for progress updates
+//! - activity.log(line) / activity.error(line) for command output
+//! However, this requires refactoring how these helpers are used throughout devenv-tasks,
+//! since Activity guards need to be stored and managed by the caller, not created
+//! transiently in helper functions.
 
 use devenv_tui::tracing_interface::{operation_fields, progress_events, status_events};
 use tracing::{debug, error, info, info_span, warn};

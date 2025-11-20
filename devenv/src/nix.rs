@@ -1,5 +1,6 @@
 use crate::{devenv, nix_log_bridge::NixLogBridge, util};
 use async_trait::async_trait;
+use devenv_activity::{LogLevel, message};
 use devenv_core::{
     cachix::{
         CacheMetadata, CachixCacheInfo, CachixConfig, CachixManager, StorePing,
@@ -890,9 +891,9 @@ impl Nix {
                 "sudo launchctl kickstart -k system/org.nixos.nix-daemon"
             };
 
-            info!(
-                { operation_fields::TYPE } = operation_types::DEVENV,
-                { operation_fields::NAME } = format!("Using Cachix caches: {}", caches.caches.pull.join(", ")),
+            message(
+                LogLevel::Info,
+                format!("Using Cachix caches: {}", caches.caches.pull.join(", "))
             );
             if !new_known_keys.is_empty() {
                 for (name, pubkey) in new_known_keys.iter() {

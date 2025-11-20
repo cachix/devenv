@@ -1027,6 +1027,23 @@ dependencies = [
 
 [[package]]
 name = "crossterm"
+version = "0.28.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "829d955a0bb380ef178a640b91779e3987da38c9aea133b20614cfed8cdea9c6"
+dependencies = [
+ "bitflags 2.9.4",
+ "crossterm_winapi",
+ "futures-core",
+ "mio 1.0.4",
+ "parking_lot",
+ "rustix 0.38.44",
+ "signal-hook",
+ "signal-hook-mio",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
@@ -1037,7 +1054,7 @@ dependencies = [
  "document-features",
  "mio 1.0.4",
  "parking_lot",
- "rustix",
+ "rustix 1.1.2",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -1360,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-activity"
-version = "1.10.1"
+version = "1.11.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1513,7 +1530,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tui"
-version = "1.10.1"
+version = "1.11.2"
 dependencies = [
  "anyhow",
  "assert_matches",

@@ -4,6 +4,7 @@ use devenv::{
     cli::{Cli, Commands, ContainerCommand, InputsCommand, ProcessesCommand, TasksCommand},
     log,
 };
+use devenv_activity::{LogLevel, message};
 use devenv_core::config;
 use devenv_tui::tracing_interface::{operation_fields, operation_types};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
@@ -129,22 +130,21 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
             //   `devenv container <name>` is now `devenv container build <name>`
             let command = if let Some(name) = name {
                 if copy {
-                    warn!(
-                        { operation_fields::TYPE } = operation_types::DEVENV,
-                        { operation_fields::NAME } =
-                            "The --copy flag is deprecated. Use `devenv container copy` instead.",
+                    message(
+                        LogLevel::Warn,
+                        "The --copy flag is deprecated. Use `devenv container copy` instead.",
                     );
                     ContainerCommand::Copy { name }
                 } else if docker_run {
-                    warn!(
-                        { operation_fields::TYPE } = operation_types::DEVENV,
-                        { operation_fields::NAME } = "The --docker-run flag is deprecated. Use `devenv container run` instead.",
+                    message(
+                        LogLevel::Warn,
+                        "The --docker-run flag is deprecated. Use `devenv container run` instead.",
                     );
                     ContainerCommand::Run { name }
                 } else {
-                    warn!(
-                        { operation_fields::TYPE } = operation_types::DEVENV,
-                        { operation_fields::NAME } = "Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead.",
+                    message(
+                        LogLevel::Warn,
+                        "Calling `devenv container` without a subcommand is deprecated. Use `devenv container build {name}` instead.",
                     );
                     ContainerCommand::Build { name }
                 }

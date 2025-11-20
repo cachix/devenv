@@ -1,14 +1,13 @@
- use super::{
-     cli, config,
-     log::{HumanReadableDuration, LogFormat},
-     nix_args::{NixArgs, SecretspecData},
-     nix_backend, tasks, util,
- };
+use super::{
+    log::{HumanReadableDuration, LogFormat},
+    tasks, util,
+};
 use ::nix::sys::signal;
 use ::nix::unistd::Pid;
 use clap::crate_version;
 use cli_table::Table;
 use cli_table::{WithTitle, print_stderr};
+use devenv_activity::Activity;
 use devenv_core::{
     cachix::{CachixManager, CachixPaths},
     cli::GlobalOptions,
@@ -16,9 +15,6 @@ use devenv_core::{
     nix_args::{NixArgs, SecretspecData},
     nix_backend::{DevenvPaths, NixBackend, Options},
 };
-#[cfg(feature = "snix")]
-use devenv_snix_backend;
-+use devenv_tui::tracing_interface::{operation_fields, operation_types};
 use include_dir::{Dir, include_dir};
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use once_cell::sync::Lazy;
@@ -41,7 +37,7 @@ use tokio::fs::{self, File};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process;
 use tokio::sync::{OnceCell, RwLock, Semaphore};
-use tracing::{Instrument, debug, error, info, info_span, instrument, trace, warn};
+use tracing::{Instrument, debug, error, info, instrument, trace, warn};
 
 // templates
 const REQUIRED_FILES: [&str; 4] = ["devenv.nix", "devenv.yaml", ".envrc", ".gitignore"];
@@ -450,10 +446,7 @@ impl Devenv {
     /// On successful exec, this function never returns.
     pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
         let shell_cmd = self.prepare_shell(&cmd, args).await?;
-        info!(
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = "Entering shell",
-        );
+        devenv_activity::message(devenv_activity::LogLevel::Info, "Entering shell");
         let err = shell_cmd.into_std().exec();
 
         let cmd_context = match &cmd {
@@ -471,11 +464,7 @@ impl Devenv {
     /// to return control to the caller with the command's output.
     pub async fn run_in_shell(&self, cmd: String, args: &[String]) -> Result<Output> {
         let mut shell_cmd = self.prepare_shell(&Some(cmd), args).await?;
-        let span = info_span!(
-            "running_in_shell",
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = "Running in shell"
-        );
+        let activity = Activity::operation("Running in shell");
         // Note that tokio's `output()` always configures stdout/stderr as pipes.
         // Use `spawn` + `wait_with_output` instead.
         let proc = shell_cmd
@@ -485,7 +474,7 @@ impl Devenv {
             .spawn()
             .into_diagnostic()?;
         async move { proc.wait_with_output().await.into_diagnostic() }
-            .instrument(span)
+            .instrument(activity.span())
             .await
     }
 
@@ -497,12 +486,11 @@ impl Devenv {
             None => "Updating devenv.lock".to_string(),
         };
 
-        let span = info_span!(
-            "update",
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = msg.as_str()
-        );
-        self.nix.update(input_name).instrument(span).await?;
+        let activity = Activity::operation(&msg);
+        self.nix
+            .update(input_name)
+            .instrument(activity.span())
+            .await?;
 
         // Show new changelogs (if any)
         let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
@@ -562,11 +550,7 @@ impl Devenv {
     ) -> Result<()> {
         let spec = self.container_build(name).await?;
 
-        let span = info_span!(
-            "copying_container",
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = "Copying container"
-        );
+        let activity = Activity::operation("Copying container");
         async move {
             let sanitized_name = sanitize_container_name(name);
             let gc_root = self
@@ -605,7 +589,7 @@ impl Devenv {
                 Ok(())
             }
         }
-        .instrument(span)
+        .instrument(activity.span())
         .await
     }
 
@@ -621,9 +605,9 @@ impl Devenv {
         self.container_copy(name, copy_args, Some("docker-daemon:"))
             .await?;
 
-        info!(
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = format!("Running container {name}"),
+        devenv_activity::message(
+            devenv_activity::LogLevel::Info,
+            format!("Running container {name}"),
         );
 
         let sanitized_name = sanitize_container_name(name);
@@ -655,15 +639,11 @@ impl Devenv {
 
         let (to_gc, removed_symlinks) = {
             // TODO: No newline
-            let span = info_span!(
-                "cleanup_symlinks",
-                { operation_fields::TYPE } = operation_types::DEVENV,
-                { operation_fields::NAME } = format!(
-                    "Removing non-existing symlinks in {}",
-                    &self.devenv_home_gc.display()
-                )
-            );
-            span.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
+            let activity = Activity::operation(format!(
+                "Removing non-existing symlinks in {}",
+                &self.devenv_home_gc.display()
+            ));
+            activity.in_scope(|| cleanup_symlinks(&self.devenv_home_gc))
         };
         let to_gc_len = to_gc.len();
 
@@ -674,15 +654,11 @@ impl Devenv {
         );
 
         {
-            let span = info_span!(
-                "nix_gc",
-                { operation_fields::TYPE } = operation_types::DEVENV,
-                { operation_fields::NAME } = "Running garbage collection"
-            );
+            let activity = Activity::operation("Running garbage collection");
             info!(
                 "If you'd like this to run faster, leave a thumbs up at https://github.com/NixOS/nix/issues/7239"
             );
-            self.nix.gc(to_gc).instrument(span).await?;
+            self.nix.gc(to_gc).instrument(activity.span()).await?;
         }
 
         let (after_gc, _) = cleanup_symlinks(&self.devenv_home_gc);
@@ -801,15 +777,11 @@ impl Devenv {
 
     async fn load_tasks(&self) -> Result<Vec<tasks::TaskConfig>> {
         let tasks_json_file = {
-            let span = info_span!(
-                "load_tasks",
-                { operation_fields::TYPE } = operation_types::DEVENV,
-                { operation_fields::NAME } = "Evaluating tasks"
-            );
+            let activity = Activity::operation("Evaluating tasks");
             let gc_root = self.devenv_dot_gc.join("task-config");
             self.nix
                 .build(&["devenv.config.task.config"], None, Some(&gc_root))
-                .instrument(span)
+                .instrument(activity.span())
                 .await?
         };
         // parse tasks config
@@ -999,16 +971,12 @@ impl Devenv {
 
         // collect tests
         let test_script = {
-            let span = info_span!(
-                "test",
-                { operation_fields::TYPE } = operation_types::DEVENV,
-                { operation_fields::NAME } = "Building tests"
-            );
+            let activity = Activity::operation("Building tests");
             let gc_root = self.devenv_dot_gc.join("test");
             let test_script = self
                 .nix
                 .build(&["devenv.config.test"], None, Some(&gc_root))
-                .instrument(span)
+                .instrument(activity.span())
                 .await?;
             test_script[0].to_string_lossy().to_string()
         };
@@ -1027,13 +995,9 @@ impl Devenv {
         // Disable the spinner for tests.
         // Tests can arbitrarily write to stdout/stderr at the moment.
         // Until that is changed, the spinner must be disabled.
-        let span = info_span!(
-            "test",
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = "Running tests",
-            devenv.no_spinner = true,
-            test_script = %test_script
-        );
+        let activity = Activity::operation("Running tests");
+        // TODO: Activity API doesn't currently support custom fields like devenv.no_spinner
+        // and test_script. Consider adding support for metadata/detail fields.
         let result = async {
             process::Command::new(&test_script)
                 .env_clear()
@@ -1046,7 +1010,7 @@ impl Devenv {
                 .into_diagnostic()
                 .wrap_err("Failed to get output from test process")
         }
-        .instrument(span)
+        .instrument(activity.span())
         .await?;
 
         if self.has_processes().await? {
@@ -1070,11 +1034,7 @@ impl Devenv {
     }
 
     pub async fn build(&self, attributes: &[String]) -> Result<()> {
-        let span = info_span!(
-            "build",
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = "Building"
-        );
+        let activity = Activity::operation("Building");
         async move {
             self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
@@ -1117,7 +1077,7 @@ impl Devenv {
             }
             Ok(())
         }
-        .instrument(span)
+        .instrument(activity.span())
         .await
     }
 
@@ -1132,11 +1092,7 @@ impl Devenv {
             bail!("No processes defined");
         }
 
-        let span = info_span!(
-            "build_processes",
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = "Building processes"
-        );
+        let activity = Activity::operation("Building processes");
         let proc_script_string = async {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
             let paths = self
@@ -1146,14 +1102,10 @@ impl Devenv {
             let proc_script_string = paths[0].to_string_lossy().to_string();
             Ok::<String, miette::Report>(proc_script_string)
         }
-        .instrument(span)
+        .instrument(activity.span())
         .await?;
 
-        let span = info_span!(
-            "up",
-            { operation_fields::TYPE } = operation_types::DEVENV,
-            { operation_fields::NAME } = "Starting processes"
-        );
+        let activity = Activity::operation("Starting processes");
         async {
             let processes = processes.join(" ");
 
@@ -1264,7 +1216,7 @@ impl Devenv {
             }
             Ok(())
         }
-        .instrument(span)
+        .instrument(activity.span())
         .await
     }
 
