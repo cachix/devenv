@@ -10,6 +10,6 @@
   config = lib.mkIf config.difftastic.enable {
     packages = [ pkgs.difftastic ];
 
-    env.GIT_EXTERNAL_DIFF = "difft";
+    git.diffTool = "difftastic";
   };
 }
