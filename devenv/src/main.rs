@@ -70,6 +70,30 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
             })?;
     }
 
+    // If --from is provided, create a new input and add it to imports
+    if let Some(ref from) = cli.global_options.from {
+        // Convert to absolute path if it's a local filesystem path
+        let url = if std::path::Path::new(from).exists() {
+            // It's a local path - prefix with "path:" and make it absolute
+            let abs_path =
+                std::fs::canonicalize(from).unwrap_or_else(|_| std::path::PathBuf::from(from));
+            format!("path:{}", abs_path.display())
+        } else {
+            // It's a flake input reference (e.g., "nixpkgs", "github:org/repo")
+            from.clone()
+        };
+
+        let from_input = devenv_core::config::Input {
+            url: Some(url),
+            flake: true,
+            follows: None,
+            inputs: std::collections::BTreeMap::new(),
+            overlays: Vec::new(),
+        };
+        config.inputs.insert("from".to_string(), from_input);
+        config.imports.push("from".to_string());
+    }
+
     let mut options = devenv::DevenvOptions {
         config,
         global_options: Some(cli.global_options),

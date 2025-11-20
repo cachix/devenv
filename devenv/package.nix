@@ -2,13 +2,11 @@
 , version
 , cargoLock
 , cargoProfile ? "release"
-
 , lib
 , stdenv
 , makeBinaryWrapper
 , installShellFiles
 , rustPlatform
-, devenv-nix
 , cachix
 , gitMinimal
 , openssl
@@ -16,6 +14,9 @@
 , protobuf
 , pkg-config
 , glibcLocalesUtf8
+, nix
+, llvmPackages
+, boehmgc
 }:
 
 rustPlatform.buildRustPackage {
@@ -29,10 +30,18 @@ rustPlatform.buildRustPackage {
     makeBinaryWrapper
     pkg-config
     protobuf
+    rustPlatform.bindgenHook
   ];
 
   buildInputs = [
     openssl
+    nix.libs.nix-expr-c
+    nix.libs.nix-store-c
+    nix.libs.nix-util-c
+    nix.libs.nix-flake-c
+    nix.libs.nix-cmd-c
+    boehmgc
+    llvmPackages.clang-unwrapped
   ]
   # secretspec
   ++ lib.optional (stdenv.isLinux) dbus;
@@ -64,6 +73,9 @@ rustPlatform.buildRustPackage {
     popd
   '';
 
+  # Skip devenv-nix-backend tests in sandbox due to store permission restrictions
+  cargoTestFlags = [ "--workspace" "--exclude" "devenv-nix-backend" ];
+
   postInstall =
     let
       setDefaultLocaleArchive = lib.optionalString (glibcLocalesUtf8 != null) ''
@@ -73,13 +85,11 @@ rustPlatform.buildRustPackage {
     ''
       wrapProgram $out/bin/devenv \
         --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
-        --set DEVENV_NIX ${devenv-nix} \
         ${setDefaultLocaleArchive} \
 
       # TODO: problematic for our library...
       wrapProgram $out/bin/devenv-run-tests \
         --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
-        --set DEVENV_NIX ${devenv-nix} \
         ${setDefaultLocaleArchive} \
 
       # Generate manpages

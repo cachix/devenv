@@ -36,3 +36,35 @@ else
     echo "✗ Profile error handling failed: $error_output"
     exit 1
 fi
+
+# Test --from flag with absolute path
+echo "Testing --from with absolute path..."
+from_test_dir="$(cd from-test && pwd)"
+output=$(devenv --from "$from_test_dir" info)
+echo "$output" | grep -q "languages.rust" || exit 1
+! echo "$output" | grep -q "python3" || exit 1
+echo "✓ --from with absolute path works and doesn't load local devenv.nix"
+
+# Test --from flag with relative path
+echo "Testing --from with relative path..."
+output=$(devenv --from ./from-test info)
+echo "$output" | grep -q "languages.rust" || exit 1
+! echo "$output" | grep -q "python3" || exit 1
+echo "✓ --from with relative path works and doesn't load local devenv.nix"
+
+# Test that --from allows building without local devenv.nix
+echo "Testing --from without local devenv.nix..."
+mkdir -p test-from-only
+cd test-from-only
+output=$(devenv --from "$from_test_dir" info)
+echo "$output" | grep -q "languages.rust" || exit 1
+cd ..
+rm -rf test-from-only
+echo "✓ --from works without local devenv.nix"
+
+# Test -f short form
+echo "Testing -f short form..."
+output=$(devenv -f ./from-test info)
+echo "$output" | grep -q "languages.rust" || exit 1
+! echo "$output" | grep -q "python3" || exit 1
+echo "✓ -f short form works"

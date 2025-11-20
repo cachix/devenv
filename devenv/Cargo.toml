@@ -15,6 +15,7 @@ devenv-eval-cache.workspace = true
 devenv-tasks.workspace = true
 devenv-cache-core.workspace = true
 devenv-snix-backend = { workspace = true, optional = true }
+devenv-nix-backend.workspace = true
 http-client-tls.workspace = true
 nix-conf-parser.workspace = true
 

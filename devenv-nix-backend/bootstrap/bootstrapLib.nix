@@ -1,0 +1,612 @@
+# Shared library functions for devenv evaluation
+{ inputs }:
+
+rec {
+  # Helper to get overlays for a given input
+  getOverlays =
+    inputName: inputAttrs:
+    let
+      lib = inputs.nixpkgs.lib;
+    in
+    map
+      (
+        overlay:
+        let
+          input =
+            inputs.${inputName} or (throw "No such input `${inputName}` while trying to configure overlays.");
+        in
+          input.overlays.${overlay}
+            or (throw "Input `${inputName}` has no overlay called `${overlay}`. Supported overlays: ${lib.concatStringsSep ", " (builtins.attrNames input.overlays)}")
+      ) inputAttrs.overlays or [ ];
+
+  # Generate cli-options configuration from key:type/value pairs
+  # Input: list of [key_with_type, value] pairs
+  # Example: ["languages.rust.version:string" "1.70.0" "languages.python.version:string" "3.11"]
+  # Supported types: string, int, float, bool, path, pkg, pkgs
+  mkCliOptions =
+    options:
+    let
+      lib = inputs.nixpkgs.lib;
+      supportedTypes = [
+        "string"
+        "int"
+        "float"
+        "bool"
+        "path"
+        "pkg"
+        "pkgs"
+      ];
+
+      # Process pairs of [key:type, value]
+      processOption =
+        chunk:
+        let
+          keyParts = lib.splitString ":" chunk.key;
+          path = builtins.elemAt keyParts 0;
+          type_name = builtins.elemAt keyParts 1;
+
+          # Validate type is in supported list
+          typeValid = builtins.elem type_name supportedTypes;
+
+          # Format value based on type
+          formattedValue =
+            if !typeValid then
+              throw "Unsupported type: '${type_name}'. Supported types: ${builtins.concatStringsSep ", " supportedTypes}"
+            else if type_name == "string" then
+              ''"${chunk.value}''
+            else if
+              builtins.elem type_name [
+                "int"
+                "float"
+                "bool"
+              ]
+            then
+              chunk.value
+            else if type_name == "path" then
+              "./${chunk.value}"
+            else if type_name == "pkg" then
+              "pkgs.${chunk.value}"
+            else if type_name == "pkgs" then
+              let
+                items = builtins.map (item: "pkgs.${item}") (builtins.split " " chunk.value);
+              in
+              "[ ${builtins.concatStringsSep " " items} ]"
+            else
+              chunk.value;
+
+          # Use lib.mkForce for all types except pkgs
+          finalValue = if type_name == "pkgs" then formattedValue else "lib.mkForce ${formattedValue}";
+        in
+        {
+          inherit path finalValue;
+        };
+
+      # Convert flat list to pairs
+      pairList = lib.lists.chunksOf 2 options;
+
+      # Map chunks to objects with key and value
+      optionPairs = map
+        (chunk: {
+          key = builtins.elemAt chunk 0;
+          value = builtins.elemAt chunk 1;
+        })
+        pairList;
+
+      # Process all options and build attribute set
+      processedOptions = map processOption optionPairs;
+
+      # Convert processed options to final attribute set
+      toNixConfig =
+        processed:
+        builtins.listToAttrs (
+          map
+            (opt: {
+              name = opt.path;
+              value = opt.finalValue;
+            })
+            processed
+        );
+    in
+    if options == [ ] then
+      { }
+    else
+      {
+        config =
+          { pkgs
+          , lib
+          , config
+          , ...
+          }:
+          toNixConfig processedOptions;
+      };
+
+  # Main function to create devenv configuration for a specific system with profiles support
+  # This is the full-featured version used by default.nix
+  mkDevenvForSystem =
+    { version
+    , system
+    , devenv_root
+    , git_root ? null
+    , devenv_dotfile
+    , devenv_dotfile_path
+    , devenv_tmpdir
+    , devenv_runtime
+    , devenv_istesting ? false
+    , devenv_direnvrc_latest_version
+    , container_name ? null
+    , active_profiles ? [ ]
+    , hostname
+    , username
+    , cli_options ? [ ]
+    , skip_local_src ? false
+    , secretspec ? null
+    , devenv_config ? { }
+    }:
+    let
+      inherit (inputs) nixpkgs;
+      lib = nixpkgs.lib;
+      targetSystem = system;
+
+      # Helper to get platform-specific or fallback config values
+      getPlatformConfig = field: fallback:
+        devenv_config.nixpkgs.per-platform."${targetSystem}".${field}
+          or devenv_config.nixpkgs.${field}
+          or fallback;
+
+      # devenv configuration is passed from the Rust backend
+      overlays = lib.flatten (lib.mapAttrsToList getOverlays (devenv_config.inputs or { }));
+      permittedUnfreePackages =
+        getPlatformConfig "permittedUnfreePackages" [ ];
+
+      pkgsBootstrap = import nixpkgs {
+        system = targetSystem;
+        config = {
+          allowUnfree =
+            getPlatformConfig "allowUnfree" (devenv_config.allowUnfree or false);
+          allowBroken =
+            getPlatformConfig "allowBroken" (devenv_config.allowBroken or false);
+          cudaSupport =
+            getPlatformConfig "cudaSupport" false;
+          cudaCapabilities =
+            getPlatformConfig "cudaCapabilities" [ ];
+          permittedInsecurePackages =
+            getPlatformConfig "permittedInsecurePackages" (devenv_config.permittedInsecurePackages or [ ]);
+          allowUnfreePredicate =
+            if (permittedUnfreePackages != [ ]) then
+              (pkg: builtins.elem (lib.getName pkg) permittedUnfreePackages)
+            else
+              (_: false);
+        };
+        inherit overlays;
+      };
+
+      # Helper to import a path, trying .nix first then /devenv.nix
+      tryImport =
+        resolvedPath: basePath:
+        if lib.hasSuffix ".nix" basePath then
+          import resolvedPath
+        else
+          let
+            devenvpath = resolvedPath + "/devenv.nix";
+          in
+          if builtins.pathExists devenvpath then
+            import devenvpath
+          else
+            throw (basePath + "/devenv.nix file does not exist");
+
+      importModule =
+        path:
+        if lib.hasPrefix "path:" path then
+        # path: prefix indicates a local filesystem path - strip it and import directly
+          let
+            actualPath = builtins.substring 5 999999 path;
+          in
+          tryImport (/. + actualPath) path
+        else if lib.hasPrefix "/" path then
+        # Absolute path - import directly (avoids input resolution and NAR hash computation)
+          tryImport (/. + path) path
+        else if lib.hasPrefix "./" path then
+        # Relative paths are relative to devenv_root, not bootstrap directory
+          let
+            relPath = builtins.substring 1 255 path;
+          in
+          tryImport (/. + devenv_root + relPath) path
+        else if lib.hasPrefix "../" path then
+        # Parent relative paths also relative to devenv_root
+          tryImport (/. + devenv_root + "/${path}") path
+        else
+          let
+            paths = lib.splitString "/" path;
+            name = builtins.head paths;
+            input = inputs.${name} or (throw "Unknown input ${name}");
+            subpath = "/${lib.concatStringsSep "/" (builtins.tail paths)}";
+            devenvpath = input + subpath;
+          in
+          tryImport devenvpath path;
+
+      # Phase 1: Base evaluation to extract profile definitions
+      baseProject = lib.evalModules {
+        specialArgs = inputs // {
+          inherit inputs secretspec;
+        };
+        modules = [
+          (
+            { config, ... }:
+            {
+              _module.args.pkgs = pkgsBootstrap.appendOverlays (config.overlays or [ ]);
+            }
+          )
+          (inputs.devenv.modules + /top-level.nix)
+          (
+            { options, ... }:
+            {
+              config.devenv = lib.mkMerge [
+                {
+                  cliVersion = version;
+                  root = devenv_root;
+                  dotfile = devenv_dotfile;
+                }
+                (lib.optionalAttrs (builtins.hasAttr "tmpdir" options.devenv) {
+                  tmpdir = devenv_tmpdir;
+                })
+                (lib.optionalAttrs (builtins.hasAttr "isTesting" options.devenv) {
+                  isTesting = devenv_istesting;
+                })
+                (lib.optionalAttrs (builtins.hasAttr "runtime" options.devenv) {
+                  runtime = devenv_runtime;
+                })
+                (lib.optionalAttrs (builtins.hasAttr "direnvrcLatestVersion" options.devenv) {
+                  direnvrcLatestVersion = devenv_direnvrc_latest_version;
+                })
+              ];
+            }
+          )
+          (
+            { options, ... }:
+            {
+              config = lib.mkMerge [
+                (lib.optionalAttrs (builtins.hasAttr "git" options) {
+                  git.root = git_root;
+                })
+              ];
+            }
+          )
+          (lib.optionalAttrs (container_name != null) {
+            container.isBuilding = lib.mkForce true;
+            containers.${container_name}.isBuilding = true;
+          })
+        ]
+        ++ (map importModule (devenv_config.imports or [ ]))
+        ++ (if !skip_local_src then [
+          # Load local devenv.nix from project root
+          (importModule (devenv_root + "/devenv.nix"))
+        ] else [ ])
+        ++ [
+          (devenv_config.devenv or { })
+          (
+            let localPath = devenv_root + "/devenv.local.nix"; in
+            if builtins.pathExists localPath then import localPath else { }
+          )
+          (mkCliOptions cli_options)
+        ];
+      };
+
+      # Phase 2: Extract and apply profiles using extendModules with priority overrides
+      project =
+        let
+          # Build ordered list of profile names: hostname -> user -> manual
+          manualProfiles = active_profiles;
+          currentHostname = hostname;
+          currentUsername = username;
+          hostnameProfiles = lib.optional
+            (
+              currentHostname != null
+              && currentHostname != ""
+              && builtins.hasAttr currentHostname (baseProject.config.profiles.hostname or { })
+            ) "hostname.${currentHostname}";
+          userProfiles = lib.optional
+            (
+              currentUsername != null
+              && currentUsername != ""
+              && builtins.hasAttr currentUsername (baseProject.config.profiles.user or { })
+            ) "user.${currentUsername}";
+
+          # Ordered list of profiles to activate
+          orderedProfiles = hostnameProfiles ++ userProfiles ++ manualProfiles;
+
+          # Resolve profile extends with cycle detection
+          resolveProfileExtends =
+            profileName: visited:
+            if builtins.elem profileName visited then
+              throw "Circular dependency detected in profile extends: ${lib.concatStringsSep " -> " visited} -> ${profileName}"
+            else
+              let
+                profile = getProfileConfig profileName;
+                extends = profile.extends or [ ];
+                newVisited = visited ++ [ profileName ];
+                extendedProfiles = lib.flatten (map (name: resolveProfileExtends name newVisited) extends);
+              in
+              extendedProfiles ++ [ profileName ];
+
+          # Get profile configuration by name from baseProject
+          getProfileConfig =
+            profileName:
+            if lib.hasPrefix "hostname." profileName then
+              let
+                name = lib.removePrefix "hostname." profileName;
+              in
+              baseProject.config.profiles.hostname.${name}
+            else if lib.hasPrefix "user." profileName then
+              let
+                name = lib.removePrefix "user." profileName;
+              in
+              baseProject.config.profiles.user.${name}
+            else
+              let
+                availableProfiles = builtins.attrNames (baseProject.config.profiles or { });
+                hostnameProfiles = map (n: "hostname.${n}") (
+                  builtins.attrNames (baseProject.config.profiles.hostname or { })
+                );
+                userProfiles = map (n: "user.${n}") (builtins.attrNames (baseProject.config.profiles.user or { }));
+                allAvailableProfiles = availableProfiles ++ hostnameProfiles ++ userProfiles;
+              in
+                baseProject.config.profiles.${profileName}
+                  or (throw "Profile '${profileName}' not found. Available profiles: ${lib.concatStringsSep ", " allAvailableProfiles}");
+
+          # Fold over ordered profiles to build final list with extends
+          expandedProfiles = lib.foldl'
+            (
+              acc: profileName:
+                let
+                  allProfileNames = resolveProfileExtends profileName [ ];
+                in
+                acc ++ allProfileNames
+            ) [ ]
+            orderedProfiles;
+
+          # Map over expanded profiles and apply priorities
+          allPrioritizedModules = lib.imap0
+            (
+              index: profileName:
+                let
+                  profilePriority = (lib.modules.defaultOverridePriority - 1) - index;
+                  profileConfig = getProfileConfig profileName;
+
+                  typeNeedsOverride =
+                    type:
+                    if type == null then
+                      false
+                    else
+                      let
+                        typeName = type.name or type._type or "";
+
+                        isLeafType = builtins.elem typeName [
+                          "str"
+                          "int"
+                          "bool"
+                          "enum"
+                          "path"
+                          "package"
+                          "float"
+                          "anything"
+                        ];
+                      in
+                      if isLeafType then
+                        true
+                      else if typeName == "nullOr" then
+                        let
+                          innerType =
+                            type.elemType
+                              or (if type ? nestedTypes && type.nestedTypes ? elemType then type.nestedTypes.elemType else null);
+                        in
+                        if innerType != null then typeNeedsOverride innerType else false
+                      else
+                        false;
+
+                  pathNeedsOverride =
+                    optionPath:
+                    let
+                      directOption = lib.attrByPath optionPath null baseProject.options;
+                    in
+                    if directOption != null && lib.isOption directOption then
+                      typeNeedsOverride directOption.type
+                    else if optionPath != [ ] then
+                      let
+                        parentPath = lib.init optionPath;
+                        parentOption = lib.attrByPath parentPath null baseProject.options;
+                      in
+                      if parentOption != null && lib.isOption parentOption then
+                        let
+                          freeformType = parentOption.type.freeformType or parentOption.type.nestedTypes.freeformType or null;
+                          elementType =
+                            if freeformType ? elemType then
+                              freeformType.elemType
+                            else if freeformType ? nestedTypes && freeformType.nestedTypes ? elemType then
+                              freeformType.nestedTypes.elemType
+                            else
+                              freeformType;
+                        in
+                        typeNeedsOverride elementType
+                      else
+                        false
+                    else
+                      false;
+
+                  applyModuleOverride =
+                    config:
+                    if builtins.isFunction config then
+                      let
+                        wrapper = args: applyOverrideRecursive (config args) [ ];
+                      in
+                      lib.mirrorFunctionArgs config wrapper
+                    else
+                      applyOverrideRecursive config [ ];
+
+                  applyOverrideRecursive =
+                    config: optionPath:
+                    if lib.isAttrs config && config ? _type then
+                      config
+                    else if lib.isAttrs config then
+                      lib.mapAttrs (name: value: applyOverrideRecursive value (optionPath ++ [ name ])) config
+                    else if pathNeedsOverride optionPath then
+                      lib.mkOverride profilePriority config
+                    else
+                      config;
+
+                  prioritizedConfig = (
+                    profileConfig.module
+                    // {
+                      imports = lib.map
+                        (
+                          importItem:
+                          importItem
+                          // {
+                            imports = lib.map (nestedImport: applyModuleOverride nestedImport) (importItem.imports or [ ]);
+                          }
+                        )
+                        (profileConfig.module.imports or [ ]);
+                    }
+                  );
+                in
+                prioritizedConfig
+            )
+            expandedProfiles;
+        in
+        if allPrioritizedModules == [ ] then
+          baseProject
+        else
+          baseProject.extendModules { modules = allPrioritizedModules; };
+
+      config = project.config;
+
+      # Apply config overlays to pkgs
+      pkgs = pkgsBootstrap.appendOverlays (config.overlays or [ ]);
+
+      options = pkgs.nixosOptionsDoc {
+        options = builtins.removeAttrs project.options [ "_module" ];
+        warningsAreErrors = false;
+        transformOptions =
+          let
+            isDocType =
+              v:
+              builtins.elem v [
+                "literalDocBook"
+                "literalExpression"
+                "literalMD"
+                "mdDoc"
+              ];
+          in
+          lib.attrsets.mapAttrs (
+            _: v:
+              if v ? _type && isDocType v._type then
+                v.text
+              else if v ? _type && v._type == "derivation" then
+                v.name
+              else
+                v
+          );
+      };
+
+      build =
+        options: config:
+        lib.concatMapAttrs
+          (
+            name: option:
+            if lib.isOption option then
+              let
+                typeName = option.type.name or "";
+              in
+              if
+                builtins.elem typeName [
+                  "output"
+                  "outputOf"
+                ]
+              then
+                {
+                  ${name} = config.${name};
+                }
+              else
+                { }
+            else if builtins.isAttrs option && !lib.isDerivation option then
+              let
+                v = build option config.${name};
+              in
+              if v != { } then { ${name} = v; } else { }
+            else
+              { }
+          )
+          options;
+    in
+    {
+      inherit
+        pkgs
+        config
+        options
+        project
+        ;
+      bash = pkgs.bash;
+      shell = config.shell;
+      optionsJSON = options.optionsJSON;
+      info = config.info;
+      ci = config.ciDerivation;
+      build = build options config;
+      # Backwards compatibility: wrap config in devenv attribute for code expecting devenv.config.*
+      devenv.config = config;
+    };
+
+  # Simplified devenv evaluation for inputs
+  # This is a lightweight version suitable for evaluating an input's devenv.nix
+  mkDevenvForInput =
+    {
+      # The input to evaluate (must have outPath and sourceInfo)
+      input
+    , # All resolved inputs (for specialArgs)
+      allInputs
+    , # System to evaluate for
+      system ? builtins.currentSystem
+    , # Nixpkgs to use (defaults to allInputs.nixpkgs)
+      nixpkgs ? allInputs.nixpkgs or (throw "nixpkgs input required")
+    , # Devenv modules (defaults to allInputs.devenv)
+      devenv ? allInputs.devenv or (throw "devenv input required")
+    ,
+    }:
+    let
+      devenvPath = input.outPath + "/devenv.nix";
+      hasDevenv = builtins.pathExists devenvPath;
+    in
+    if !hasDevenv then
+      throw ''
+        Input does not have a devenv.nix file.
+        Expected file at: ${devenvPath}
+
+        To use this input's devenv configuration, the input must provide a devenv.nix file.
+      ''
+    else
+      let
+        pkgs = import nixpkgs {
+          inherit system;
+          config = { };
+        };
+        lib = pkgs.lib;
+
+        project = lib.evalModules {
+          specialArgs = allInputs // {
+            inputs = allInputs;
+            secretspec = null;
+          };
+          modules = [
+            ({ config, ... }: {
+              _module.args.pkgs = pkgs.appendOverlays (config.overlays or [ ]);
+            })
+            (devenv.outPath + "/src/modules/top-level.nix")
+            (import devenvPath)
+          ];
+        };
+      in
+      {
+        inherit pkgs;
+        config = project.config;
+        options = project.options;
+        inherit project;
+      };
+}

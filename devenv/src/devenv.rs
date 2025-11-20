@@ -56,8 +56,6 @@ pub static DIRENVRC_VERSION: Lazy<u8> = Lazy::new(|| {
         .and_then(|version| version.parse().ok())
         .unwrap_or(0)
 });
-// project vars
-pub(crate) const DEVENV_FLAKE: &str = ".devenv.flake.nix";
 
 #[derive(Debug)]
 pub struct DevenvOptions {
@@ -206,15 +204,14 @@ impl Devenv {
 
         let nix: Box<dyn NixBackend> = match backend_type {
             NixBackendType::Nix => Box::new(
-                crate::nix::Nix::new(
+                devenv_nix_backend::nix_backend::NixRustBackend::new(
+                    paths,
                     options.config.clone(),
                     global_options.clone(),
-                    paths,
-                    secretspec_resolved.clone(),
                     cachix_manager.clone(),
-                    Some(eval_cache_pool.clone()),
+                    options.shutdown.clone(),
+                    None,
                 )
-                .await
                 .expect("Failed to initialize Nix backend"),
             ),
             #[cfg(feature = "snix")]
@@ -477,7 +474,7 @@ impl Devenv {
     }
 
     pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
-        self.assemble(false).await?;
+        // No need to assemble() for update - we only need to update the lock file
 
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
@@ -1092,7 +1089,7 @@ impl Devenv {
             let gc_root = self.devenv_dot_gc.join("procfilescript");
             let paths = self
                 .nix
-                .build(&["procfileScript"], None, Some(&gc_root))
+                .build(&["config.procfileScript"], None, Some(&gc_root))
                 .await?;
             let proc_script_string = paths[0].to_string_lossy().to_string();
             Ok::<String, miette::Report>(proc_script_string)
@@ -1310,8 +1307,11 @@ impl Devenv {
 
         let _permit = self.assemble_lock.acquire().await.unwrap();
 
-        // Skip devenv.nix existence check if --option is provided
-        if self.global_options.option.is_empty() && !self.devenv_root.join("devenv.nix").exists() {
+        // Skip devenv.nix existence check if --option or --from is provided
+        if self.global_options.option.is_empty()
+            && self.global_options.from.is_none()
+            && !self.devenv_root.join("devenv.nix").exists()
+        {
             bail!(indoc::indoc! {"
             File devenv.nix does not exist. To get started, run:
 
@@ -1472,12 +1472,11 @@ impl Devenv {
         };
 
         // Create the Nix arguments struct
-        let project_input_ref = format!("path:{}", self.devenv_root.display());
         let args = NixArgs {
             version: crate_version!(),
             system: &self.global_options.system,
             devenv_root: &self.devenv_root,
-            project_input_ref: &project_input_ref,
+            skip_local_src: self.global_options.from.is_some(),
             devenv_dotfile: &self.devenv_dotfile,
             devenv_dotfile_path: &dotfile_relative_path,
             devenv_tmpdir: &self.devenv_tmp,
@@ -1490,6 +1489,7 @@ impl Devenv {
             username: username.as_deref(),
             git_root: git_root.as_deref(),
             secretspec: secretspec_data.as_ref(),
+            devenv_config: &config,
         };
 
         // Initialise the backend (generates flake and other backend-specific files)

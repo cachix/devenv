@@ -8,7 +8,7 @@ inputs:
     url: path:.?dir=src/modules
 
   nix:
-    url: github:cachix/nix/devenv-2.30.6
+    url: github:cachix/nix/devenv-2.32
 
   git-hooks:
     url: github:cachix/git-hooks.nix
@@ -30,3 +30,4 @@ inputs:
 imports:
   - devenv-claude-agents
   - ./docs
+  - ./devenv-nix-backend
