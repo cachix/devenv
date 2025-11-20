@@ -137,3 +137,55 @@ string
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
+
+
+### services\.mongodb\.replication\.enable
+
+
+
+Whether to enable MongoDB replication with a 1-node replica-set…
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
+
+
+
+### services\.mongodb\.replication\.replSet
+
+
+
+Replica-set name
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "rs0" `
+
+
+
+*Example:*
+` "rs0" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/mongodb\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/mongodb.nix)
