@@ -26,7 +26,7 @@
     };
   };
   inputs.nix = {
-    url = "github:cachix/nix/devenv-2.30.6";
+    url = "github:cachix/nix/devenv-2.32";
     inputs = {
       nixpkgs.follows = "nixpkgs";
       flake-compat.follows = "flake-compat";
@@ -70,7 +70,7 @@
           overlays = [
             (final: prev: {
               inherit (inputs.cachix.packages.${system}) cachix;
-              devenv-nix = inputs.nix.packages.${system}.nix-cli;
+              nix = inputs.nix.packages.${system}.nix;
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };

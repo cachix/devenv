@@ -1,0 +1,13 @@
+# Rust
+/target
+.cargo
+
+# devenv generated files
+.devenv*
+result*
+
+# Claude Code settings
+.claude/
+
+# git hooks
+.pre-commit-config.yaml
