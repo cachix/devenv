@@ -1,0 +1,37 @@
+[package]
+name = "devenv-nix-backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+miette.workspace = true
+regex.workspace = true
+serde.workspace = true
+ser_nix.workspace = true
+include_dir.workspace = true
+tracing.workspace = true
+secretspec.workspace = true
+once_cell.workspace = true
+tokio.workspace = true
+tokio-shutdown.workspace = true
+uuid.workspace = true
+
+devenv-core.workspace = true
+devenv-eval-cache.workspace = true
+devenv-activity.workspace = true
+
+# Dependencies to nix-bindings-rust crates
+nix-bindings-flake.workspace = true
+nix-bindings-expr.workspace = true
+nix-bindings-store.workspace = true
+nix-bindings-util.workspace = true
+nix-bindings-fetchers.workspace = true
+nix-cmd.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio.workspace = true

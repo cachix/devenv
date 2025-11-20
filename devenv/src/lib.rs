@@ -2,7 +2,6 @@ pub mod changelog;
 pub mod cli;
 mod devenv;
 pub mod mcp;
-pub(crate) mod nix;
 pub mod nix_log_bridge;
 pub mod tracing;
 mod util;

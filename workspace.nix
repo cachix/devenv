@@ -22,6 +22,7 @@ let
           ./devenv-cache-core
           ./devenv-core
           ./devenv-snix-backend
+          ./devenv-nix-backend
           ./devenv-run-tests
           ./devenv-tasks
           ./devenv-tui
@@ -41,6 +42,7 @@ let
     lockFile = "${src}/Cargo.lock";
     outputHashes = {
       "nix-compat-0.1.0" = "sha256-ehkc7ug0HkTHKxx9tQi/9vkOtQry9HdiX9UxBUvjYRY=";
+      "nix-bindings-bindgen-raw-0.1.0" = "sha256-G2gdYNT6UmikJB8VX5YJRofxZoHofK8Lj2pANHuorNw=";
       "secretspec-0.4.1" = "sha256-WoMl7KkTsIK3RFk3nDFpUdKj8R3f7rnYNuE6bxZLazE=";
       "ser_nix-0.1.2" = "sha256-CO8jF9ffG1dIk3ehQ7QiNM74xwaNID8YpSlr8zHLDyY=";
       "wu-manber-0.1.0" = "sha256-7YIttaQLfFC/32utojh2DyOHVsZiw8ul/z0lvOhAE/4=";

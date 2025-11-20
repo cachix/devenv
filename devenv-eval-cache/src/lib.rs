@@ -11,8 +11,7 @@ pub use op::Op;
 
 /// Integration tests for caching behavior with Nix evaluation.
 ///
-/// These tests require the `integration-tests` feature flag and the `DEVENV_NIX`
-/// environment variable pointing to a Nix installation directory.
+/// These tests require the `integration-tests` feature flag.
 ///
 /// These tests do *not* cover flake-related edge-cases.
 /// For example, this will not catch path resolution issues due to evaluation
@@ -23,7 +22,7 @@ pub use op::Op;
 ///
 /// To run these tests:
 /// ```bash
-/// DEVENV_NIX=/path/to/nix cargo test --features integration-tests
+/// cargo test --features integration-tests
 /// ```
 ///
 /// The tests cover:
@@ -41,15 +40,6 @@ mod integration_tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
-
-    fn get_nix_binary() -> Result<String, Box<dyn std::error::Error>> {
-        match env::var("DEVENV_NIX") {
-            Ok(path) => Ok(format!("{path}/bin/nix")),
-            Err(_) => Err("DEVENV_NIX environment variable not set. \
-                Please set DEVENV_NIX to point to the store path of the custom Nix build. \
-                Example: DEVENV_NIX=/nix/store/...-nix-devenv-2.30.0... cargo test --features integration-tests".to_string().into())
-        }
-    }
 
     fn create_test_file(dir: &Path, name: &str, content: &str) -> Result<PathBuf, std::io::Error> {
         let file_path = dir.join(name);

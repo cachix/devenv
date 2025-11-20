@@ -6,8 +6,8 @@
   };
 
   enterTest = ''
-    if [ -z "$DEVENV_NIX" ]; then
-      echo "DEVENV_NIX is not set"
+    if [ -z "$DATABASE_URL" ]; then
+      echo "DATABASE_URL is not set"
       exit 1
     fi
 

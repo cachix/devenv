@@ -4,6 +4,7 @@
 //! when assembling the devenv environment. The struct is serialized to Nix syntax
 //! using the `ser_nix` crate and inserted into the flake template.
 
+use crate::config::Config;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -34,8 +35,8 @@ pub struct NixArgs<'a> {
     /// Serialized as a Nix path literal by ser_nix
     pub devenv_root: &'a Path,
 
-    /// Project input reference as string
-    pub project_input_ref: &'a str,
+    /// Whether to skip loading the local devenv.nix (used when --from is provided)
+    pub skip_local_src: bool,
 
     /// Absolute path to the devenv dotfile directory (.devenv)
     /// Serialized as a Nix path literal by ser_nix
@@ -78,6 +79,10 @@ pub struct NixArgs<'a> {
 
     /// SecretSpec resolved data (profile, provider, secrets)
     pub secretspec: Option<&'a SecretspecData>,
+
+    /// devenv.yaml configuration (inputs, imports, nixpkgs settings, etc.)
+    /// Serialized by ser_nix into a Nix attrset
+    pub devenv_config: &'a Config,
 }
 
 #[cfg(test)]
@@ -108,12 +113,12 @@ mod tests {
         let profiles = vec!["frontend".to_string(), "backend".to_string()];
         let username = Some("testuser");
 
-        let project_input_ref = format!("path:{}", root.display());
+        let test_config = Config::default();
         let args = NixArgs {
             version,
             system,
             devenv_root: &root,
-            project_input_ref: &project_input_ref,
+            skip_local_src: false,
             devenv_dotfile: &dotfile,
             devenv_dotfile_path: &dotfile_path,
             devenv_tmpdir: &tmpdir,
@@ -126,6 +131,7 @@ mod tests {
             username,                  // Some value
             git_root: Some(&git_root), // Some value with Path type
             secretspec: None,          // None value
+            devenv_config: &test_config,
         };
 
         let serialized = ser_nix::to_string(&args).expect("Failed to serialize NixArgs");
@@ -140,8 +146,8 @@ mod tests {
             "system key-value pair not found"
         );
         assert!(
-            serialized.contains(&format!("project_input_ref = \"{}\"", project_input_ref)),
-            "project_input_ref key-value pair not found"
+            contains_key_value(&serialized, "skip_local_src", "false"),
+            "skip_local_src key-value pair not found"
         );
         assert!(
             contains_key_value(&serialized, "devenv_istesting", "false"),

@@ -265,6 +265,14 @@ pub struct GlobalOptions {
         long_help = "Activate one or more profiles defined in devenv.nix.\n\nProfiles allow you to define different configurations that can be merged with your base configuration.\n\nSee https://devenv.sh/profiles for more information.\n\nExamples:\n  --profile python-3.14\n  --profile backend --profile fast-startup"
     )]
     pub profile: Vec<String>,
+
+    #[arg(
+        long,
+        global = true,
+        help = "Source for devenv.nix (flake input reference or path)",
+        long_help = "Source for devenv.nix.\n\nCan be either a filesystem path or a flake input reference.\n\nExamples:\n  --from myinput\n  --from myinput/subdir\n  --from /absolute/path/to/project"
+    )]
+    pub from: Option<String>,
 }
 
 impl Default for GlobalOptions {
@@ -293,6 +301,7 @@ impl Default for GlobalOptions {
             override_input: vec![],
             option: vec![],
             profile: vec![],
+            from: None,
         }
     }
 }
