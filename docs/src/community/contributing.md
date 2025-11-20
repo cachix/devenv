@@ -33,6 +33,8 @@ We have a rule that new features need to come with documentation and tests (`dev
 
 4. `<PATH-TO-DEVENV-SOURCE-CODE>/result/bin/devenv update`
 
+    Now, that `devenv.yaml` is pointing to the local version of `src/modules`, changes made in `src/modules` will be picked up immediately on next shell activation. (No need to rebuild the binary.)
+
 ## Repository structure
 
 - The `devenv` CLI is in `devenv/src/main.rs`.
