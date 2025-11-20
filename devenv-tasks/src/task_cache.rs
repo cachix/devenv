@@ -7,7 +7,7 @@ use devenv_cache_core::{
     file::TrackedFile,
     time,
 };
-use glob::glob;
+use glob::{glob_with, MatchOptions};
 use serde_json::Value;
 use sqlx::Row;
 use std::path::PathBuf;
@@ -15,16 +15,30 @@ use std::time::SystemTime;
 use tracing::{debug, warn};
 
 /// Expand glob patterns into actual file paths
+///
+/// The expansion uses strict matching rules:
+/// - `case_sensitive: true` – patterns are case-sensitive (e.g. `*.RS` will not match `main.rs`)
+/// - `require_literal_separator: true` – path separators must appear literally in the pattern
+///   (e.g. `src**/*.rs` is invalid and will not match anything)
+/// - `require_literal_leading_dot: true` – a leading dot must be written explicitly
+///   (e.g. `*` will not match `.hidden`, you must use `.*` or `.hidden` directly)
 pub fn expand_glob_patterns(patterns: &[String]) -> Vec<String> {
     patterns
         .iter()
         .flat_map(|pattern| {
-            glob(pattern)
-                .ok()
-                .into_iter()
-                .flatten()
-                .filter_map(|path| path.ok())
-                .filter_map(|path| path.to_str().map(String::from))
+            glob_with(
+                pattern,
+                MatchOptions {
+                    case_sensitive: true,
+                    require_literal_separator: true,
+                    require_literal_leading_dot: true,
+                },
+            )
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|path| path.ok())
+            .filter_map(|path| path.to_str().map(String::from))
         })
         .collect()
 }
