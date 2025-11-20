@@ -43,6 +43,144 @@ use tracing_subscriber::Layer;
 // Re-export for convenience
 pub use tracing_subscriber::Registry;
 
+// ---------------------------------------------------------------------------
+// Timestamp Serialization
+// ---------------------------------------------------------------------------
+
+mod timestamp_format {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let duration = time
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::from_secs(0));
+        let secs = duration.as_secs();
+        let nanos = duration.subsec_nanos();
+
+        let total_secs = secs as i64;
+        let total_nanos = nanos;
+
+        let dt_secs = total_secs;
+        let dt_nanos = total_nanos as i64;
+
+        let year = 1970 + (dt_secs / 31_557_600);
+        let remaining = dt_secs % 31_557_600;
+        let days = remaining / 86400;
+        let day_secs = remaining % 86400;
+        let hours = day_secs / 3600;
+        let minutes = (day_secs % 3600) / 60;
+        let seconds = day_secs % 60;
+
+        let (month, day) = days_to_month_day(days as u32, is_leap_year(year));
+
+        let timestamp = format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:09}Z",
+            year, month, day, hours, minutes, seconds, dt_nanos
+        );
+
+        serializer.serialize_str(&timestamp)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        parse_rfc3339(&s).map_err(serde::de::Error::custom)
+    }
+
+    fn is_leap_year(year: i64) -> bool {
+        (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    }
+
+    fn days_to_month_day(mut days: u32, leap: bool) -> (u32, u32) {
+        let days_in_month = if leap {
+            [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        } else {
+            [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        };
+
+        for (i, &dim) in days_in_month.iter().enumerate() {
+            if days < dim {
+                return ((i + 1) as u32, days + 1);
+            }
+            days -= dim;
+        }
+        (12, 31)
+    }
+
+    fn parse_rfc3339(s: &str) -> Result<SystemTime, String> {
+        let parts: Vec<&str> = s.split('T').collect();
+        if parts.len() != 2 {
+            return Err("Invalid RFC3339 format".to_string());
+        }
+
+        let date_parts: Vec<&str> = parts[0].split('-').collect();
+        if date_parts.len() != 3 {
+            return Err("Invalid date format".to_string());
+        }
+
+        let year: i32 = date_parts[0]
+            .parse()
+            .map_err(|_| "Invalid year".to_string())?;
+        let month: u32 = date_parts[1]
+            .parse()
+            .map_err(|_| "Invalid month".to_string())?;
+        let day: u32 = date_parts[2]
+            .parse()
+            .map_err(|_| "Invalid day".to_string())?;
+
+        let time_and_tz = parts[1].trim_end_matches('Z');
+        let time_parts: Vec<&str> = time_and_tz.split(':').collect();
+        if time_parts.len() < 2 {
+            return Err("Invalid time format".to_string());
+        }
+
+        let hour: u32 = time_parts[0]
+            .parse()
+            .map_err(|_| "Invalid hour".to_string())?;
+        let minute: u32 = time_parts[1]
+            .parse()
+            .map_err(|_| "Invalid minute".to_string())?;
+
+        let (second, _nanos) = if time_parts.len() > 2 {
+            let sec_parts: Vec<&str> = time_parts[2].split('.').collect();
+            let sec: u32 = sec_parts[0]
+                .parse()
+                .map_err(|_| "Invalid second".to_string())?;
+            let nanos = if sec_parts.len() > 1 {
+                let nanos_str = format!("{:0<9}", sec_parts[1]);
+                nanos_str[..9]
+                    .parse()
+                    .map_err(|_| "Invalid nanoseconds".to_string())?
+            } else {
+                0
+            };
+            (sec, nanos)
+        } else {
+            (0, 0)
+        };
+
+        let days_since_epoch = days_from_civil(year, month, day);
+        let secs = days_since_epoch as u64 * 86400 + hour as u64 * 3600 + minute as u64 * 60 + second as u64;
+
+        Ok(UNIX_EPOCH + Duration::from_secs(secs))
+    }
+
+    fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+        let y = year as i64 - if month <= 2 { 1 } else { 0 };
+        let era = if y >= 0 { y } else { y - 399 } / 400;
+        let yoe = (y - era * 400) as u32;
+        let doy = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        era * 146097 + doe as i64 - 719468
+    }
+}
+
 // Thread-local for passing ActivityData to the layer during span creation
 thread_local! {
     static ACTIVITY_DATA: RefCell<Option<ActivityData>> = const { RefCell::new(None) };
@@ -59,7 +197,7 @@ thread_local! {
 
 /// All activity events - single source of truth
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum ActivityEvent {
     /// Activity started
     Start {
@@ -70,6 +208,7 @@ pub enum ActivityEvent {
         parent: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
+        #[serde(with = "timestamp_format")]
         timestamp: SystemTime,
     },
 
@@ -77,6 +216,7 @@ pub enum ActivityEvent {
     Complete {
         id: u64,
         outcome: ActivityOutcome,
+        #[serde(with = "timestamp_format")]
         timestamp: SystemTime,
     },
 
@@ -84,6 +224,7 @@ pub enum ActivityEvent {
     Progress {
         id: u64,
         progress: ProgressState,
+        #[serde(with = "timestamp_format")]
         timestamp: SystemTime,
     },
 
@@ -91,6 +232,7 @@ pub enum ActivityEvent {
     Phase {
         id: u64,
         phase: String,
+        #[serde(with = "timestamp_format")]
         timestamp: SystemTime,
     },
 
@@ -100,6 +242,7 @@ pub enum ActivityEvent {
         line: String,
         #[serde(default)]
         is_error: bool,
+        #[serde(with = "timestamp_format")]
         timestamp: SystemTime,
     },
 
@@ -107,13 +250,14 @@ pub enum ActivityEvent {
     Message {
         level: LogLevel,
         text: String,
+        #[serde(with = "timestamp_format")]
         timestamp: SystemTime,
     },
 }
 
 /// Explicit progress representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ProgressState {
     /// Known total amount
     Determinate {
@@ -131,7 +275,8 @@ pub enum ProgressState {
 }
 
 /// Unit of progress measurement
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ProgressUnit {
     Bytes,
     Files,
@@ -140,6 +285,7 @@ pub enum ProgressUnit {
 
 /// Generic kinds that map to any build tool
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum ActivityKind {
     /// Building/compiling (Nix builds, compilation)
     Build,
@@ -186,6 +332,7 @@ impl std::str::FromStr for ActivityKind {
 
 /// Outcome of an activity
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum ActivityOutcome {
     #[default]
     Success,
@@ -195,6 +342,7 @@ pub enum ActivityOutcome {
 
 /// Log level for standalone messages
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Error,
     Warn,
@@ -1056,6 +1204,323 @@ mod tests {
                 assert_eq!(name, "test");
             }
             _ => panic!("Expected Start event"),
+        }
+    }
+
+    #[test]
+    fn test_activity_event_start_json_structure() {
+        let event = ActivityEvent::Start {
+            id: 123,
+            kind: ActivityKind::Build,
+            name: "test-package".to_string(),
+            parent: Some(456),
+            detail: Some("building".to_string()),
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+
+        let json_str = serde_json::to_string(&event).unwrap();
+        let expected = r#"{"type":"start","id":123,"kind":"build","name":"test-package","parent":456,"detail":"building","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+        assert_eq!(json_str, expected);
+
+        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+        match roundtrip {
+            ActivityEvent::Start {
+                id,
+                kind,
+                name,
+                parent,
+                detail,
+                ..
+            } => {
+                assert_eq!(id, 123);
+                assert_eq!(kind, ActivityKind::Build);
+                assert_eq!(name, "test-package");
+                assert_eq!(parent, Some(456));
+                assert_eq!(detail, Some("building".to_string()));
+            }
+            _ => panic!("Expected Start event"),
+        }
+    }
+
+    #[test]
+    fn test_activity_event_start_optional_fields_omitted() {
+        let event = ActivityEvent::Start {
+            id: 123,
+            kind: ActivityKind::Fetch,
+            name: "test".to_string(),
+            parent: None,
+            detail: None,
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+
+        let json_str = serde_json::to_string(&event).unwrap();
+        let expected = r#"{"type":"start","id":123,"kind":"fetch","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+        assert_eq!(json_str, expected);
+    }
+
+    #[test]
+    fn test_activity_event_complete_json_structure() {
+        let test_cases = [
+            (ActivityOutcome::Success, r#"{"type":"complete","id":789,"outcome":"success","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ActivityOutcome::Failed, r#"{"type":"complete","id":789,"outcome":"failed","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ActivityOutcome::Cancelled, r#"{"type":"complete","id":789,"outcome":"cancelled","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+        ];
+
+        for (outcome, expected) in test_cases {
+            let event = ActivityEvent::Complete {
+                id: 789,
+                outcome,
+                timestamp: SystemTime::UNIX_EPOCH,
+            };
+
+            let json_str = serde_json::to_string(&event).unwrap();
+            assert_eq!(json_str, expected);
+
+            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+            match roundtrip {
+                ActivityEvent::Complete {
+                    id,
+                    outcome: rt_outcome,
+                    ..
+                } => {
+                    assert_eq!(id, 789);
+                    assert_eq!(rt_outcome, outcome);
+                }
+                _ => panic!("Expected Complete event"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_activity_event_progress_determinate_json_structure() {
+        let event = ActivityEvent::Progress {
+            id: 999,
+            progress: ProgressState::Determinate {
+                current: 50,
+                total: 100,
+                unit: Some(ProgressUnit::Bytes),
+            },
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+
+        let json_str = serde_json::to_string(&event).unwrap();
+        let expected = r#"{"type":"progress","id":999,"progress":{"kind":"determinate","current":50,"total":100,"unit":"bytes"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+        assert_eq!(json_str, expected);
+
+        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+        match roundtrip {
+            ActivityEvent::Progress { id, progress, .. } => {
+                assert_eq!(id, 999);
+                match progress {
+                    ProgressState::Determinate {
+                        current,
+                        total,
+                        unit,
+                    } => {
+                        assert_eq!(current, 50);
+                        assert_eq!(total, 100);
+                        assert_eq!(unit, Some(ProgressUnit::Bytes));
+                    }
+                    _ => panic!("Expected Determinate progress"),
+                }
+            }
+            _ => panic!("Expected Progress event"),
+        }
+    }
+
+    #[test]
+    fn test_activity_event_progress_indeterminate_json_structure() {
+        let event = ActivityEvent::Progress {
+            id: 888,
+            progress: ProgressState::Indeterminate {
+                current: 42,
+                unit: Some(ProgressUnit::Items),
+            },
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+
+        let json_str = serde_json::to_string(&event).unwrap();
+        let expected = r#"{"type":"progress","id":888,"progress":{"kind":"indeterminate","current":42,"unit":"items"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+        assert_eq!(json_str, expected);
+
+        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+        match roundtrip {
+            ActivityEvent::Progress { id, progress, .. } => {
+                assert_eq!(id, 888);
+                match progress {
+                    ProgressState::Indeterminate { current, unit } => {
+                        assert_eq!(current, 42);
+                        assert_eq!(unit, Some(ProgressUnit::Items));
+                    }
+                    _ => panic!("Expected Indeterminate progress"),
+                }
+            }
+            _ => panic!("Expected Progress event"),
+        }
+    }
+
+    #[test]
+    fn test_activity_event_phase_json_structure() {
+        let event = ActivityEvent::Phase {
+            id: 111,
+            phase: "configure".to_string(),
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+
+        let json_str = serde_json::to_string(&event).unwrap();
+        let expected = r#"{"type":"phase","id":111,"phase":"configure","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+        assert_eq!(json_str, expected);
+
+        let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+        match roundtrip {
+            ActivityEvent::Phase { id, phase, .. } => {
+                assert_eq!(id, 111);
+                assert_eq!(phase, "configure");
+            }
+            _ => panic!("Expected Phase event"),
+        }
+    }
+
+    #[test]
+    fn test_activity_event_log_json_structure() {
+        let event = ActivityEvent::Log {
+            id: 222,
+            line: "Building target...".to_string(),
+            is_error: false,
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+
+        let json_str = serde_json::to_string(&event).unwrap();
+        let expected = r#"{"type":"log","id":222,"line":"Building target...","is_error":false,"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+        assert_eq!(json_str, expected);
+
+        let error_event = ActivityEvent::Log {
+            id: 333,
+            line: "Error: compilation failed".to_string(),
+            is_error: true,
+            timestamp: SystemTime::UNIX_EPOCH,
+        };
+
+        let error_json_str = serde_json::to_string(&error_event).unwrap();
+        let expected_error = r#"{"type":"log","id":333,"line":"Error: compilation failed","is_error":true,"timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+        assert_eq!(error_json_str, expected_error);
+    }
+
+    #[test]
+    fn test_activity_event_log_is_error_defaults_to_false() {
+        let json_str = r#"{"type":"log","id":444,"line":"some log","timestamp":"1970-01-01T00:00:00.000000000Z"}"#;
+
+        let event: ActivityEvent = serde_json::from_str(json_str).unwrap();
+        match event {
+            ActivityEvent::Log { is_error, .. } => {
+                assert_eq!(is_error, false);
+            }
+            _ => panic!("Expected Log event"),
+        }
+    }
+
+    #[test]
+    fn test_activity_event_message_json_structure() {
+        let test_cases = [
+            (LogLevel::Error, r#"{"type":"message","level":"error","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (LogLevel::Warn, r#"{"type":"message","level":"warn","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (LogLevel::Info, r#"{"type":"message","level":"info","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (LogLevel::Debug, r#"{"type":"message","level":"debug","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (LogLevel::Trace, r#"{"type":"message","level":"trace","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+        ];
+
+        for (level, expected) in test_cases {
+            let event = ActivityEvent::Message {
+                level,
+                text: "Test message".to_string(),
+                timestamp: SystemTime::UNIX_EPOCH,
+            };
+
+            let json_str = serde_json::to_string(&event).unwrap();
+            assert_eq!(json_str, expected);
+
+            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+            match roundtrip {
+                ActivityEvent::Message {
+                    level: rt_level,
+                    text,
+                    ..
+                } => {
+                    assert_eq!(rt_level, level);
+                    assert_eq!(text, "Test message");
+                }
+                _ => panic!("Expected Message event"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_all_activity_kinds_serialize() {
+        let test_cases = [
+            (ActivityKind::Build, r#"{"type":"start","id":1,"kind":"build","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ActivityKind::Fetch, r#"{"type":"start","id":1,"kind":"fetch","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ActivityKind::Evaluate, r#"{"type":"start","id":1,"kind":"evaluate","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ActivityKind::Task, r#"{"type":"start","id":1,"kind":"task","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ActivityKind::Command, r#"{"type":"start","id":1,"kind":"command","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ActivityKind::Operation, r#"{"type":"start","id":1,"kind":"operation","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+        ];
+
+        for (kind, expected) in test_cases {
+            let event = ActivityEvent::Start {
+                id: 1,
+                kind: kind.clone(),
+                name: "test".to_string(),
+                parent: None,
+                detail: None,
+                timestamp: SystemTime::UNIX_EPOCH,
+            };
+
+            let json_str = serde_json::to_string(&event).unwrap();
+            assert_eq!(json_str, expected);
+
+            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+            match roundtrip {
+                ActivityEvent::Start {
+                    kind: rt_kind, ..
+                } => {
+                    assert_eq!(rt_kind, kind);
+                }
+                _ => panic!("Expected Start event"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_progress_unit_serialization() {
+        let test_cases = [
+            (ProgressUnit::Bytes, r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"bytes"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ProgressUnit::Files, r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"files"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (ProgressUnit::Items, r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"items"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+        ];
+
+        for (unit, expected) in test_cases {
+            let event = ActivityEvent::Progress {
+                id: 1,
+                progress: ProgressState::Indeterminate {
+                    current: 10,
+                    unit: Some(unit),
+                },
+                timestamp: SystemTime::UNIX_EPOCH,
+            };
+
+            let json_str = serde_json::to_string(&event).unwrap();
+            assert_eq!(json_str, expected);
+
+            let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
+            match roundtrip {
+                ActivityEvent::Progress { progress, .. } => match progress {
+                    ProgressState::Indeterminate { unit: rt_unit, .. } => {
+                        assert_eq!(rt_unit, Some(unit));
+                    }
+                    _ => panic!("Expected Indeterminate progress"),
+                },
+                _ => panic!("Expected Progress event"),
+            }
         }
     }
 
