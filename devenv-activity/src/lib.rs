@@ -5,9 +5,33 @@
 //! - Supports multiple consumers via tracing's layer system
 //! - Provides automatic context propagation via span hierarchy
 //! - Offers zero-cost filtering via tracing's infrastructure
+//!
+//! ## Usage
+//!
+//! Activities automatically deref to `Span`, giving you access to all span methods:
+//!
+//! ```ignore
+//! use tracing::Instrument;
+//! use devenv_activity::Activity;
+//!
+//! // Create an activity
+//! let activity = Activity::build("my-task");
+//!
+//! // Use span methods via Deref
+//! activity.in_scope(|| {
+//!     // Code runs with activity context
+//! });
+//!
+//! // Instrument async code
+//! async_fn().instrument(activity.span()).await;
+//!
+//! // Enter/exit manually
+//! let _guard = activity.enter();
+//! ```
 
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use std::time::SystemTime;
 use tokio::sync::mpsc;
@@ -354,6 +378,13 @@ impl Activity {
         self.id
     }
 
+    /// Get a cloned span for this activity.
+    ///
+    /// Useful when you need to pass a span by value, such as to `.instrument()`.
+    pub fn span(&self) -> Span {
+        self.span.clone()
+    }
+
     /// Mark as failed
     pub fn fail(&self) {
         self.set_outcome(ActivityOutcome::Failed);
@@ -447,6 +478,23 @@ impl Activity {
             log_line = %line_str,
             log_is_error = true,
         );
+    }
+}
+
+impl Deref for Activity {
+    type Target = Span;
+
+    fn deref(&self) -> &Self::Target {
+        &self.span
+    }
+}
+
+impl Clone for Activity {
+    fn clone(&self) -> Self {
+        Self {
+            span: self.span.clone(),
+            id: self.id,
+        }
     }
 }
 
@@ -1006,6 +1054,104 @@ mod tests {
             ActivityEvent::Start { id, name, .. } => {
                 assert_eq!(id, 123);
                 assert_eq!(name, "test");
+            }
+            _ => panic!("Expected Start event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_deref_to_span() {
+        use tracing::Instrument;
+
+        let (mut rx, _guard) = setup_test();
+
+        async fn example_async_work() -> u32 {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            42
+        }
+
+        let activity = Activity::build("async-task");
+        let parent_id = activity.id();
+
+        // Use .span() to get a span for .instrument()
+        let result = example_async_work().instrument(activity.span()).await;
+        assert_eq!(result, 42);
+
+        // Verify the activity was created
+        let start = rx.recv().await.unwrap();
+        match start {
+            ActivityEvent::Start { id, name, .. } => {
+                assert_eq!(id, parent_id);
+                assert_eq!(name, "async-task");
+            }
+            _ => panic!("Expected Start event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_in_scope_via_deref() {
+        let (mut rx, _guard) = setup_test();
+
+        let activity = Activity::build("scoped-task");
+        let parent_id = activity.id();
+
+        // Deref allows us to use span's in_scope() directly
+        let result = activity.in_scope(|| {
+            // Create nested activity within scope
+            let _nested = Activity::fetch("scoped-fetch");
+            42
+        });
+        assert_eq!(result, 42);
+
+        // Verify parent start
+        let start = rx.recv().await.unwrap();
+        match start {
+            ActivityEvent::Start { id, name, .. } => {
+                assert_eq!(id, parent_id);
+                assert_eq!(name, "scoped-task");
+            }
+            _ => panic!("Expected Start event"),
+        }
+
+        // Verify nested activity has parent set
+        let nested_start = rx.recv().await.unwrap();
+        match nested_start {
+            ActivityEvent::Start { parent, name, .. } => {
+                assert_eq!(parent, Some(parent_id));
+                assert_eq!(name, "scoped-fetch");
+            }
+            _ => panic!("Expected Start event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_enter_via_deref() {
+        let (mut rx, _guard) = setup_test();
+
+        let activity = Activity::build("entered-task");
+        let parent_id = activity.id();
+
+        // Deref allows us to use span's enter() directly
+        {
+            let _guard = activity.enter();
+            // Create nested activity while entered
+            let _nested = Activity::fetch("nested-in-guard");
+        }
+
+        // Verify parent start
+        let start = rx.recv().await.unwrap();
+        match start {
+            ActivityEvent::Start { id, .. } => {
+                assert_eq!(id, parent_id);
+            }
+            _ => panic!("Expected Start event"),
+        }
+
+        // Verify nested activity has parent set
+        let nested_start = rx.recv().await.unwrap();
+        match nested_start {
+            ActivityEvent::Start { parent, .. } => {
+                assert_eq!(parent, Some(parent_id));
             }
             _ => panic!("Expected Start event"),
         }
