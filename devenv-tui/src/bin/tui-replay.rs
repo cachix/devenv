@@ -357,8 +357,7 @@ async fn main() -> Result<()> {
     devenv_tui::spawn_activity_forwarder(activity_rx, tui_handle.activity_tx());
 
     use tracing_subscriber::prelude::*;
-    tracing_subscriber::registry()
-        .init();
+    tracing_subscriber::registry().init();
 
     let shutdown = Shutdown::new();
     run_replay(tui_handle, shutdown).await?;

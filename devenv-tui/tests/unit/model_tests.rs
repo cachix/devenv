@@ -1,5 +1,5 @@
-use devenv_tui::{LogLevel, LogMessage, LogSource, Model, TaskDisplayStatus};
 use devenv_activity::{ActivityEvent, ActivityKind, ActivityOutcome, ProgressState, ProgressUnit};
+use devenv_tui::{LogLevel, LogMessage, LogSource, Model, TaskDisplayStatus};
 use std::collections::HashMap;
 use std::time::SystemTime;
 

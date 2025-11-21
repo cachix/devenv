@@ -1,6 +1,10 @@
 use std::{collections::HashSet, fmt, sync::RwLock};
-use tracing::{field::{Field, Visit}, span, Event, Subscriber};
-use tracing_subscriber::{fmt::FormatFields, registry::LookupSpan, Layer, layer};
+use tracing::{
+    Event, Subscriber,
+    field::{Field, Visit},
+    span,
+};
+use tracing_subscriber::{Layer, fmt::FormatFields, layer, registry::LookupSpan};
 
 // Re-export
 pub(crate) use tracing_indicatif::IndicatifLayer;
@@ -104,4 +108,3 @@ where
         self.inner.on_event(event, ctx);
     }
 }
-

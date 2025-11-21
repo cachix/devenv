@@ -1,9 +1,17 @@
 use super::span_timings::SpanTimings;
 
 use console::style;
-use tracing::{span, Event, Subscriber, field::Field};
-use tracing_subscriber::{layer, registry::LookupSpan, field::Visit, fmt::{FormatEvent, FmtContext, FormatFields, format::Writer}};
-use std::{fmt, sync::atomic::{AtomicBool, Ordering}};
+use std::{
+    fmt,
+    sync::atomic::{AtomicBool, Ordering},
+};
+use tracing::{Event, Subscriber, field::Field, span};
+use tracing_subscriber::{
+    field::Visit,
+    fmt::{FmtContext, FormatEvent, FormatFields, format::Writer},
+    layer,
+    registry::LookupSpan,
+};
 
 /// Capture additional context during a span.
 #[derive(Debug)]
@@ -58,7 +66,6 @@ macro_rules! with_event_from_span {
         $code
     };
 }
-
 
 /// Custom field formatter that extracts just the devenv.user_message value
 pub struct DevenvFieldFormatter;
@@ -353,4 +360,3 @@ where
         Ok(())
     }
 }
-

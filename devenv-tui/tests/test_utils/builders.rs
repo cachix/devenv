@@ -138,9 +138,7 @@ impl ActivityBuilder {
     }
 
     pub fn query_activity(self) -> Self {
-        self.variant(ActivityVariant::Query(QueryActivity {
-            substituter: None,
-        }))
+        self.variant(ActivityVariant::Query(QueryActivity { substituter: None }))
     }
 
     pub fn query_activity_with_substituter(self, substituter: impl Into<String>) -> Self {

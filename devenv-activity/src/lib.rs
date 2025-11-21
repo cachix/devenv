@@ -35,7 +35,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 use tokio::sync::mpsc;
-use tracing::{span, Level, Span};
+use tracing::{Level, Span, span};
 
 // Re-export for convenience
 pub use tracing_subscriber::Registry;
@@ -283,13 +283,7 @@ impl Activity {
         parent: Option<u64>,
         detail: Option<String>,
     ) -> Self {
-        // Create the tracing span - on_new_span fires synchronously and retrieves the data
-        // Only include activity_id as a field for basic tracing visibility
-        let span = span!(
-            Level::TRACE,
-            "activity",
-            activity_id = id,
-        );
+        let span = span!(Level::TRACE, "activity", activity_id = id,);
 
         // Push to activity stack for parent tracking
         ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
@@ -474,7 +468,10 @@ mod tests {
     use tracing_subscriber::layer::SubscriberExt;
 
     /// Helper to set up the subscriber with both layers
-    fn setup_test() -> (mpsc::UnboundedReceiver<ActivityEvent>, tracing::subscriber::DefaultGuard) {
+    fn setup_test() -> (
+        mpsc::UnboundedReceiver<ActivityEvent>,
+        tracing::subscriber::DefaultGuard,
+    ) {
         let (tx, rx) = mpsc::unbounded_channel();
         let activity_layer = ActivityLayer::new();
         let forwarder = ActivityEventForwarder::new(tx);
@@ -599,9 +596,7 @@ mod tests {
         // Get Log events
         let log1 = rx.recv().await.unwrap();
         match log1 {
-            ActivityEvent::Log {
-                line, is_error, ..
-            } => {
+            ActivityEvent::Log { line, is_error, .. } => {
                 assert_eq!(line, "Building...");
                 assert!(!is_error);
             }
@@ -610,9 +605,7 @@ mod tests {
 
         let log2 = rx.recv().await.unwrap();
         match log2 {
-            ActivityEvent::Log {
-                line, is_error, ..
-            } => {
+            ActivityEvent::Log { line, is_error, .. } => {
                 assert_eq!(line, "Error occurred");
                 assert!(is_error);
             }
@@ -764,9 +757,18 @@ mod tests {
     #[test]
     fn test_activity_event_complete_json_structure() {
         let test_cases = [
-            (ActivityOutcome::Success, r#"{"type":"complete","id":789,"outcome":"success","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ActivityOutcome::Failed, r#"{"type":"complete","id":789,"outcome":"failed","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ActivityOutcome::Cancelled, r#"{"type":"complete","id":789,"outcome":"cancelled","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (
+                ActivityOutcome::Success,
+                r#"{"type":"complete","id":789,"outcome":"success","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ActivityOutcome::Failed,
+                r#"{"type":"complete","id":789,"outcome":"failed","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ActivityOutcome::Cancelled,
+                r#"{"type":"complete","id":789,"outcome":"cancelled","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
         ];
 
         for (outcome, expected) in test_cases {
@@ -925,11 +927,26 @@ mod tests {
     #[test]
     fn test_activity_event_message_json_structure() {
         let test_cases = [
-            (LogLevel::Error, r#"{"type":"message","level":"error","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (LogLevel::Warn, r#"{"type":"message","level":"warn","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (LogLevel::Info, r#"{"type":"message","level":"info","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (LogLevel::Debug, r#"{"type":"message","level":"debug","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (LogLevel::Trace, r#"{"type":"message","level":"trace","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (
+                LogLevel::Error,
+                r#"{"type":"message","level":"error","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                LogLevel::Warn,
+                r#"{"type":"message","level":"warn","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                LogLevel::Info,
+                r#"{"type":"message","level":"info","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                LogLevel::Debug,
+                r#"{"type":"message","level":"debug","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                LogLevel::Trace,
+                r#"{"type":"message","level":"trace","text":"Test message","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
         ];
 
         for (level, expected) in test_cases {
@@ -960,12 +977,30 @@ mod tests {
     #[test]
     fn test_all_activity_kinds_serialize() {
         let test_cases = [
-            (ActivityKind::Build, r#"{"type":"start","id":1,"kind":"build","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ActivityKind::Fetch, r#"{"type":"start","id":1,"kind":"fetch","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ActivityKind::Evaluate, r#"{"type":"start","id":1,"kind":"evaluate","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ActivityKind::Task, r#"{"type":"start","id":1,"kind":"task","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ActivityKind::Command, r#"{"type":"start","id":1,"kind":"command","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ActivityKind::Operation, r#"{"type":"start","id":1,"kind":"operation","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (
+                ActivityKind::Build,
+                r#"{"type":"start","id":1,"kind":"build","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ActivityKind::Fetch,
+                r#"{"type":"start","id":1,"kind":"fetch","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ActivityKind::Evaluate,
+                r#"{"type":"start","id":1,"kind":"evaluate","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ActivityKind::Task,
+                r#"{"type":"start","id":1,"kind":"task","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ActivityKind::Command,
+                r#"{"type":"start","id":1,"kind":"command","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ActivityKind::Operation,
+                r#"{"type":"start","id":1,"kind":"operation","name":"test","timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
         ];
 
         for (kind, expected) in test_cases {
@@ -983,9 +1018,7 @@ mod tests {
 
             let roundtrip: ActivityEvent = serde_json::from_str(&json_str).unwrap();
             match roundtrip {
-                ActivityEvent::Start {
-                    kind: rt_kind, ..
-                } => {
+                ActivityEvent::Start { kind: rt_kind, .. } => {
                     assert_eq!(rt_kind, kind);
                 }
                 _ => panic!("Expected Start event"),
@@ -996,9 +1029,18 @@ mod tests {
     #[test]
     fn test_progress_unit_serialization() {
         let test_cases = [
-            (ProgressUnit::Bytes, r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"bytes"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ProgressUnit::Files, r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"files"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
-            (ProgressUnit::Items, r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"items"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#),
+            (
+                ProgressUnit::Bytes,
+                r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"bytes"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ProgressUnit::Files,
+                r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"files"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
+            (
+                ProgressUnit::Items,
+                r#"{"type":"progress","id":1,"progress":{"kind":"indeterminate","current":10,"unit":"items"},"timestamp":"1970-01-01T00:00:00.000000000Z"}"#,
+            ),
         ];
 
         for (unit, expected) in test_cases {

@@ -1,4 +1,4 @@
-use devenv_tui::{view::view, Model};
+use devenv_tui::{Model, view::view};
 use iocraft::prelude::*;
 
 /// Render the TUI view to a string with a fixed width for reproducible snapshots.

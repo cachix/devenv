@@ -18,5 +18,3 @@ impl std::fmt::Display for HumanReadableDuration {
         write!(f, "{:.0}s", t * 1000.0)
     }
 }
-
-

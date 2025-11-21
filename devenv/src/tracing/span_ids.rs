@@ -1,6 +1,6 @@
 use serde::Serialize;
-use tracing_subscriber::{layer, registry::LookupSpan, Layer };
 use tracing::{Subscriber, span};
+use tracing_subscriber::{Layer, layer, registry::LookupSpan};
 
 /// Span ID information for JSON serialization
 #[derive(Debug, Clone, Serialize)]

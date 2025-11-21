@@ -2,14 +2,14 @@ use json_subscriber::JsonLayer;
 use std::fs::File;
 use std::io::{self, IsTerminal};
 use std::path::Path;
-use std::sync::{Arc, };
+use std::sync::Arc;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{
-    EnvFilter,
-    prelude::*,
-};
+use tracing_subscriber::{EnvFilter, prelude::*};
 
-use crate::tracing::{SpanIdLayer, SpanAttributesLayer, SpanAttributes, SpanIds, DevenvLayer, DevenvFormat, DevenvFieldFormatter, IndicatifLayer, DevenvIndicatifFilter};
+use crate::tracing::{
+    DevenvFieldFormatter, DevenvFormat, DevenvIndicatifFilter, DevenvLayer, IndicatifLayer,
+    SpanAttributes, SpanAttributesLayer, SpanIdLayer, SpanIds,
+};
 
 pub(crate) use crate::tracing::HumanReadableDuration;
 
@@ -241,5 +241,3 @@ pub fn init_tracing(
         }
     }
 }
-
-

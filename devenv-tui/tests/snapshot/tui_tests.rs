@@ -3,8 +3,8 @@
 //! These tests verify that when events are fed into the model,
 //! the TUI renders the expected output.
 
-use devenv_tui::Model;
 use devenv_activity::{ActivityEvent, ActivityKind, ProgressState, ProgressUnit};
+use devenv_tui::Model;
 use std::time::SystemTime;
 
 use crate::test_utils::render::render_to_string;

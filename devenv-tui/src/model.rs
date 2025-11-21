@@ -183,10 +183,7 @@ impl Model {
                 self.handle_activity_phase(id, phase);
             }
             ActivityEvent::Log {
-                id,
-                line,
-                is_error,
-                ..
+                id, line, is_error, ..
             } => {
                 self.handle_activity_log(id, line, is_error);
             }

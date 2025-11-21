@@ -51,7 +51,6 @@ fn load_trace_file(filename: &str) -> Result<Vec<HashMap<String, String>>, std::
     Ok(events)
 }
 
-
 #[test]
 fn test_load_simple_build_trace() {
     let events = load_trace_file("simple_build.jsonl").expect("Failed to load trace file");
@@ -70,9 +69,7 @@ fn test_load_simple_build_trace() {
     assert!(has_build_phase, "Should have build phase events");
 
     let has_progress = events.iter().any(|e| {
-        e.get("activity_id").is_some()
-            && e.get("done").is_some()
-            && e.get("expected").is_some()
+        e.get("activity_id").is_some() && e.get("done").is_some() && e.get("expected").is_some()
     });
     assert!(has_progress, "Should have progress events");
 }
@@ -185,9 +182,7 @@ fn test_parse_nix_progress_from_trace() {
     let progress_events: Vec<_> = events
         .iter()
         .filter(|e| {
-            e.get("activity_id").is_some()
-                && e.get("done").is_some()
-                && e.get("expected").is_some()
+            e.get("activity_id").is_some() && e.get("done").is_some() && e.get("expected").is_some()
         })
         .collect();
 
@@ -210,19 +205,11 @@ fn test_parse_nix_progress_from_trace() {
 fn test_parse_build_phase_from_trace() {
     let events = load_trace_file("simple_build.jsonl").expect("Failed to load trace file");
 
-    let phase_events: Vec<_> = events
-        .iter()
-        .filter(|e| e.get("phase").is_some())
-        .collect();
+    let phase_events: Vec<_> = events.iter().filter(|e| e.get("phase").is_some()).collect();
 
     assert!(!phase_events.is_empty());
 
-    let known_phases = vec![
-        "configurePhase",
-        "buildPhase",
-        "installPhase",
-        "fixupPhase",
-    ];
+    let known_phases = vec!["configurePhase", "buildPhase", "installPhase", "fixupPhase"];
 
     for event in phase_events {
         let phase = event.get("phase").unwrap();

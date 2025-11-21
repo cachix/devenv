@@ -1,8 +1,11 @@
 use serde::Serialize;
-use std::{fmt, collections::HashMap};
-use tracing::{span, field::{Field, Visit}, Subscriber};
+use std::{collections::HashMap, fmt};
+use tracing::{
+    Subscriber,
+    field::{Field, Visit},
+    span,
+};
 use tracing_subscriber::{Layer, layer, registry::LookupSpan};
-
 
 /// Stores span attributes for serialization
 #[derive(Debug, Clone, Serialize)]

@@ -42,11 +42,7 @@ impl UiEvent {
             UiEvent::Tick => {
                 // Update spinner animation
                 let now = std::time::Instant::now();
-                if now
-                    .duration_since(model.ui.last_spinner_update)
-                    .as_millis()
-                    >= 50
-                {
+                if now.duration_since(model.ui.last_spinner_update).as_millis() >= 50 {
                     model.ui.spinner_frame = (model.ui.spinner_frame + 1) % 10;
                     model.ui.last_spinner_update = now;
                 }
