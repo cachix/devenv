@@ -358,8 +358,6 @@ async fn main() -> Result<()> {
 
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry()
-        .with(activity_handle.activity_layer())
-        .with(activity_handle.forwarder_layer())
         .init();
 
     let shutdown = Shutdown::new();
