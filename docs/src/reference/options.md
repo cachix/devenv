@@ -1749,156 +1749,6 @@ list of string
 
 
 
-## configurations
-
-
-
-Configurations for NixOS, home-manager, and nix-darwin.
-
-
-
-*Type:*
-attribute set of (submodule)
-
-
-
-*Default:*
-` { } `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
-
-
-
-## configurations.\<name>.home-manager
-
-
-
-Home Manager configuration for the configuration.
-
-
-
-*Type:*
-null or unspecified value
-
-
-
-*Default:*
-` null `
-
-
-
-*Example:*
-
-```
-{
-  home.username = "jdoe";
-  home.homeDirectory = "/home/jdoe";
-  programs.git.enable = true;
-}
-
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
-
-
-
-## configurations.\<name>.nix-darwin
-
-
-
-nix-darwin configuration for the configuration.
-
-
-
-*Type:*
-null or unspecified value
-
-
-
-*Default:*
-` null `
-
-
-
-*Example:*
-
-```
-{ pkgs, ... }: {
-  environment.systemPackages = [
-    pkgs.vim
-  ];
-  services.nix-daemon.enable = true;
-}
-
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
-
-
-
-## configurations.\<name>.nixos
-
-
-
-NixOS configuration for the configuration.
-
-
-
-*Type:*
-null or unspecified value
-
-
-
-*Default:*
-` null `
-
-
-
-*Example:*
-
-```
-{
-  fileSystems."/".device = "/dev/sda1";
-  boot.loader.systemd-boot.enable = true;
-  services.openssh.enable = true;
-}
-
-```
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
-
-
-
-## configurations.\<name>.system
-
-
-
-System architecture for the configuration.
-
-
-
-*Type:*
-string
-
-
-
-*Default:*
-` pkgs.stdenv.system `
-
-
-
-*Example:*
-` "x86_64-linux" `
-
-*Declared by:*
- - [https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix](https://github.com/cachix/devenv/blob/main/src/modules/configurations.nix)
-
-
-
 ## container.isBuilding
 
 
@@ -2483,6 +2333,8 @@ null or string
 
 ## delta.enable
 
+
+
 Integrate delta into git: https://dandavison.github.io/delta/.
 
 
@@ -2595,8 +2447,6 @@ string
 
 
 ## devcontainer.settings.overrideCommand
-
-
 
 Override the default command.
 
@@ -5381,6 +5231,8 @@ boolean
 
 ## git-hooks.hooks.cmake-format
 
+
+
 cmake-format hook
 
 
@@ -5499,8 +5351,6 @@ boolean
 
 
 ## git-hooks.hooks.convco.description
-
-
 
 Description of the hook. Used for metadata purposes only.
 
@@ -7407,6 +7257,8 @@ submodule
 
 ## git-hooks.hooks.isort.enable
 
+
+
 Whether to enable this pre-commit hook.
 
 
@@ -7504,8 +7356,6 @@ submodule
 
 
 ## git-hooks.hooks.lacheck.enable
-
-
 
 Whether to enable this pre-commit hook.
 
@@ -18494,6 +18344,156 @@ package
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
+
+
+## machines
+
+
+
+Machines for NixOS, home-manager, and nix-darwin.
+
+
+
+*Type:*
+attribute set of (submodule)
+
+
+
+*Default:*
+` { } `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.home-manager
+
+
+
+Home Manager configuration for the machine.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  home.username = "jdoe";
+  home.homeDirectory = "/home/jdoe";
+  programs.git.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.nix-darwin
+
+
+
+nix-darwin configuration for the machine.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{ pkgs, ... }: {
+  environment.systemPackages = [
+    pkgs.vim
+  ];
+  services.nix-daemon.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.nixos
+
+
+
+NixOS configuration for the machine.
+
+
+
+*Type:*
+null or unspecified value
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+
+```
+{
+  fileSystems."/".device = "/dev/sda1";
+  boot.loader.systemd-boot.enable = true;
+  services.openssh.enable = true;
+}
+
+```
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
+
+
+
+## machines.\<name>.system
+
+
+
+System architecture for the machine.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` pkgs.stdenv.system `
+
+
+
+*Example:*
+` "x86_64-linux" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/machines.nix](https://github.com/cachix/devenv/blob/main/src/modules/machines.nix)
 
 
 
