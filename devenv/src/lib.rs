@@ -1,3 +1,4 @@
+pub mod changelog;
 pub mod cli;
 mod devenv;
 pub mod log;

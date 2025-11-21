@@ -42,6 +42,7 @@ ser_nix.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 tempfile.workspace = true
+termimad.workspace = true
 tokio.workspace = true
 tokio-shutdown.workspace = true
 tracing.workspace = true
@@ -58,6 +59,8 @@ shell-escape.workspace = true
 rmcp.workspace = true
 rmcp-macros.workspace = true
 async-trait.workspace = true
+blake3.workspace = true
+chrono.workspace = true
 secretspec.workspace = true
 secrecy.workspace = true
 
