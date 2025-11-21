@@ -1,10 +1,9 @@
-{
-  inputs,
-  pkgs,
-  lib,
-  config,
-  options,
-  ...
+{ inputs
+, pkgs
+, lib
+, config
+, options
+, ...
 }:
 {
   env = {
@@ -156,6 +155,7 @@
     '';
   };
 
+  git-hooks.package = pkgs.prek;
   git-hooks.hooks = {
     nixpkgs-fmt.enable = true;
     rustfmt.enable = true;
