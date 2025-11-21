@@ -1,11 +1,11 @@
 { pkgs, config, lib, self, ... }:
 
 let
-  configurationOptions = lib.types.submodule ({ name, config, ... }: {
+  machineOptions = lib.types.submodule ({ name, config, ... }: {
     options = {
       system = lib.mkOption {
         type = lib.types.str;
-        description = "System architecture for the configuration.";
+        description = "System architecture for the machine.";
         default = pkgs.stdenv.system;
         defaultText = lib.literalExpression "pkgs.stdenv.system";
         example = "x86_64-linux";
@@ -13,7 +13,7 @@ let
 
       nixos = lib.mkOption {
         type = lib.types.nullOr lib.types.unspecified;
-        description = "NixOS configuration for the configuration.";
+        description = "NixOS configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
           {
@@ -26,7 +26,7 @@ let
 
       home-manager = lib.mkOption {
         type = lib.types.nullOr lib.types.unspecified;
-        description = "Home Manager configuration for the configuration.";
+        description = "Home Manager configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
           {
@@ -39,7 +39,7 @@ let
 
       nix-darwin = lib.mkOption {
         type = lib.types.nullOr lib.types.unspecified;
-        description = "nix-darwin configuration for the configuration.";
+        description = "nix-darwin configuration for the machine.";
         default = null;
         example = lib.literalExpression ''
           { pkgs, ... }: {
@@ -54,11 +54,15 @@ let
   });
 in
 {
+  imports = [
+    (lib.mkRenamedOptionModule [ "configurations" ] [ "machines" ])
+  ];
+
   options = {
-    configurations = lib.mkOption {
-      type = lib.types.attrsOf configurationOptions;
+    machines = lib.mkOption {
+      type = lib.types.attrsOf machineOptions;
       default = { };
-      description = "Configurations for NixOS, home-manager, and nix-darwin.";
+      description = "Machines for NixOS, home-manager, and nix-darwin.";
     };
   };
 }

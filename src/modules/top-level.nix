@@ -275,7 +275,7 @@ in
     ./containers.nix
     ./debug.nix
     ./lib.nix
-    ./configurations.nix
+    ./machines.nix
     ./tests.nix
     ./cachix.nix
     ./tasks.nix
