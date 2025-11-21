@@ -101,6 +101,76 @@
     </div>
 </div>
 
+<!-- Instant Caching Section -->
+<div class="overflow-hidden py-14">
+    <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
+        <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+            <div class="px-4 lg:px-0 order-last lg:order-first">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
+                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+                        <div class="overflow-hidden bg-gray-900">
+                            <div class="flex bg-gray-800/40">
+                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                                    <div class="px-4 text-gray-200">
+                                        Terminal
+                                    </div>
+                                </div>
+                            </div>
+
+                            <pre class="text-white text-sm"><code class="language-shell">$ time devenv shell -- exit
+• Building shell ...
+real    0m4.832s
+
+$ time devenv shell -- exit
+• Using cached shell.
+real    0m0.047s
+</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-4 order-first lg:order-last text-gray-600 dark:text-gray-300">
+                <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+                        Instant environments with caching
+                    </h2>
+
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        Activate your environment in <strong>under 100ms</strong> with
+                        <a href="/blog/2024/10/03/devenv-13-instant-developer-environments-with-nix-caching/" class="link font-semibold">precise Nix evaluation caching</a>.
+                    </p>
+
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Smart invalidation
+                            </dt>
+
+                            <dd class="inline">
+                                Automatically detects all files accessed during evaluation.
+                                Cache is automatically invalidated when any tracked file changes.
+                                Only re-evaluates what's necessary, keeping your workflow fast.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Zero configuration
+                            </dt>
+
+                            <dd class="inline">
+                                Works out of the box with no setup required.
+                                No daemons, no manual file watching, just instant environments.
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
@@ -849,21 +919,34 @@ $
                             <div class="flex bg-gray-800/40">
                                 <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
                                     <div class="px-4 text-gray-200">
-                                        devenv.yaml
+                                        frontend/devenv.yaml
                                     </div>
                                 </div>
                             </div>
 
-                            <pre class="text-white text-sm"><code class="language-yaml">inputs:
+                            <pre class="text-white text-sm"><code class="language-yaml">imports:
+  - /nix           # Shared config from git root
+</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+                        <div class="flex bg-gray-800/40">
+                            <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                                <div class="px-4 text-gray-200">
+                                    devenv.yaml
+                                </div>
+                            </div>
+                        </div>
+
+                        <pre class="text-white text-sm"><code class="language-yaml">inputs:
   myorg-devenv:
     url: github:myorg/myorg-devenv
 imports:
   - ./frontend
   - ./backend
-  - myorg-devenv/service1
-  - myorg-devenv/service2
+  - myorg-devenv/shared-service
 </code></pre>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -876,7 +959,8 @@ imports:
 
                     <p class="mt-6 text-xl font-medium leading-8">
                         <a class="link font-semibold" href="/composing-using-imports/">Compose multiple environments</a>
-                        into a single environment.
+                        into a single environment with
+                        <a href="/blog/2025/10/07/devenv-110-monorepo-nix-support-with-devenv-yaml-imports/" class="link font-semibold">first-class monorepo support</a>.
                     </p>
 
                     <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
@@ -886,8 +970,9 @@ imports:
                             </dt>
 
                             <dd class="inline">
-                                For monorepos, define environments per folder and import them 
+                                For monorepos, define environments per folder and import them
                                 to merge into a single unified environment.
+                                Use <code class="inline-code">/</code> to reference from git root.
                             </dd>
                         </div>
 
@@ -899,10 +984,17 @@ imports:
                             <dd class="inline">
                                 For polyrepos, define environments per repository and import them
                                 to merge into a single unified environment.
-                                <p class="mt-2">
-                                    Start with a central repository containing shared configuration
-                                    until your team is comfortable maintaining their own environments.
-                                </p>
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Git root variable
+                            </dt>
+
+                            <dd class="inline">
+                                Use <code class="inline-code">${config.git.root}</code> for
+                                consistent path references in tasks and processes.
                             </dd>
                         </div>
                     </dl>
@@ -1005,6 +1097,197 @@ imports:
 }
 </code></pre>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ad-hoc Environments Section -->
+<div class="overflow-hidden py-14">
+    <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
+        <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+            <div class="px-4 lg:px-0">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
+                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+                        <div class="overflow-hidden bg-gray-900">
+                            <div class="flex bg-gray-800/40">
+                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                                    <div class="px-4 text-gray-200">
+                                        Ad-hoc environments
+                                    </div>
+                                </div>
+                            </div>
+
+                            <pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$"># Instant Python environment
+devenv --option languages.python.enable:bool true \
+       --option packages:pkgs "ncdu git ripgrep" \
+       shell
+
+# Quick Elixir REPL
+devenv -O languages.elixir.enable:bool true shell iex
+
+# CI matrix testing
+devenv -O languages.python.enable:bool true \
+       -O languages.python.version:string "3.11" \
+       test
+</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-4 text-gray-600 dark:text-gray-300">
+                <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+                        Ad-hoc environments
+                    </h2>
+
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        Create temporary environments directly from the command line with
+                        <a href="/blog/2025/04/25/devenv-16-extensible-ad-hoc-nix-environments/" class="link font-semibold">no configuration required</a>.
+                        Perfect for experiments and CI pipelines.
+                    </p>
+
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Quick experiments
+                            </dt>
+
+                            <dd class="inline">
+                                Test languages or tools without creating configuration files.
+                                Just run a single command and start coding.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                CI/CD matrices
+                            </dt>
+
+                            <dd class="inline">
+                                Easily test across multiple language versions or configurations
+                                using GitHub Actions matrices or similar CI tools.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Override existing config
+                            </dt>
+
+                            <dd class="inline">
+                                Temporarily modify your existing <code class="inline-code">devenv.nix</code>
+                                settings without changing any files.
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SecretSpec Section -->
+<div class="overflow-hidden py-14">
+    <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
+        <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+            <div class="px-4 text-gray-600 dark:text-gray-300">
+                <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+                        Secrets management
+                    </h2>
+
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        Declarative secrets with
+                        <a href="/blog/2025/07/21/announcing-secretspec-declarative-secrets-management/" class="link font-semibold">SecretSpec</a>
+                        - no more <code class="inline-code">.env</code> files
+                    </p>
+
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Declare once, use anywhere
+                            </dt>
+
+                            <dd class="inline">
+                                Define secrets in <code class="inline-code">secretspec.toml</code> and
+                                retrieve from system Keychain, 1Password, LastPass, dotenv, or environment variables.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Profile-based configuration
+                            </dt>
+
+                            <dd class="inline">
+                                Different requirements per environment - local defaults in development,
+                                strict validation in production, no code changes needed.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Runtime safety
+                            </dt>
+
+                            <dd class="inline">
+                                Secrets are retrieved at runtime from your chosen provider.
+                                Never stored in config files, preventing accidental commits.
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="px-4 lg:px-0">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
+                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+                        <div class="overflow-hidden bg-gray-900">
+                            <div class="flex bg-gray-800/40">
+                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                                    <div class="px-4 text-gray-200">
+                                        secretspec.toml
+                                    </div>
+                                </div>
+                            </div>
+
+                            <pre class="text-white text-sm"><code class="language-toml">[project]
+name = "my-app"
+
+[profiles.default]
+KEYCLOAK_ADMIN_PASSWORD = {
+  description = "Keycloak admin password",
+  required = true,
+  as_path = true
+}
+
+[profiles.development]
+KEYCLOAK_ADMIN_PASSWORD = { default = "admin" }</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+                        <div class="flex bg-gray-800/40">
+                            <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                                <div class="px-4 text-gray-200">
+                                    devenv.nix
+                                </div>
+                            </div>
+                        </div>
+
+                        <pre class="text-white text-sm"><code class="language-nix">{ config, ... }: {
+  secretspec.enable = true;
+
+  services.keycloak = {
+    enable = true;
+    settings.KC_BOOTSTRAP_ADMIN_PASSWORD._secret =
+      config.secretspec.secrets.KEYCLOAK_ADMIN_PASSWORD;
+  };
+}</code></pre>
                     </div>
                 </div>
             </div>
