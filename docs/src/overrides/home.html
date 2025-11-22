@@ -1007,6 +1007,111 @@ imports:
 <div class="overflow-hidden py-14">
     <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
         <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
+            <div class="px-4 lg:px-0 order-last lg:order-first">
+                <div class="relative isolate overflow-hidden rounded-md sm:mx-auto sm:max-w-2xl lg:mx-0 lg:max-w-none dark:border dark:border-devenv-blue dark:rounded-md">
+                    <div class="mx-auto max-w-2xl sm:mx-0 sm:max-w-none">
+                        <div class="overflow-hidden bg-gray-900">
+                            <div class="flex bg-gray-800/40">
+                                <div class="flex items-center text-sm font-medium leading-6 border-b border-r border-b-white/20 border-r-white/10 bg-white/5 h-8">
+                                    <div class="px-4 text-gray-200">
+                                        devenv.nix
+                                    </div>
+                                </div>
+                            </div>
+
+                            <pre class="text-white text-sm"><code class="language-nix">{ pkgs, config, ... }: {
+  profiles = {
+    backend.module = {
+      services.postgres.enable = true;
+      services.redis.enable = true;
+    };
+
+    frontend.module = {
+      languages.javascript.enable = true;
+      processes.dev-server.exec = "npm run dev";
+    };
+
+    fullstack.extends = [ "backend" "frontend" ];
+
+    hostname."ci-server".module = {
+      env.CI = "true";
+    };
+
+    user."alice".module = {
+      packages = [ pkgs.gh ];
+    };
+  };
+}
+</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="overflow-hidden bg-gray-900 border-t border-t-white/20">
+                        <pre class="text-white text-sm"><code class="language-shell" data-shell-prefix="$">devenv --profile backend shell
+...
+</code><code class="language-shell" data-shell-prefix="$">devenv --profile fullstack up
+...
+
+</code></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-4 order-first lg:order-last text-gray-600 dark:text-gray-300">
+                <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
+                    <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
+                        Organize with profiles
+                    </h2>
+
+                    <p class="mt-6 text-xl font-medium leading-8">
+                        <a href="/profiles/" class="link font-semibold">Define profiles</a>
+                        to selectively activate parts of your environment for different workflows.
+                    </p>
+
+                    <dl class="mt-10 max-w-xl space-y-8 text-base leading-7 lg:max-w-none">
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Selective activation
+                            </dt>
+
+                            <dd class="inline">
+                                Work on frontend, backend, or both with
+                                <code class="inline-code">--profile</code> flags.
+                                Compose multiple profiles using <code class="inline-code">extends</code>.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Automatic activation
+                            </dt>
+
+                            <dd class="inline">
+                                Profiles can activate automatically based on hostname or username,
+                                perfect for team-specific or environment-specific configurations.
+                            </dd>
+                        </div>
+
+                        <div class="relative lg:pl-3">
+                            <dt class="block font-semibold text-gray-900 dark:text-white">
+                                Centralized best practices
+                            </dt>
+
+                            <dd class="inline">
+                                Create custom options in shared repositories to enforce
+                                team standards and reduce configuration duplication.
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="overflow-hidden py-14">
+    <div class="mx-auto max-w-7xl md:px-6 lg:px-8">
+        <div class="grid grid-cols-1 gap-x-8 gap-y-16 sm:gap-y-20 lg:grid-cols-2 lg:items-start">
             <div class="px-4 text-gray-600 dark:text-gray-300">
                 <div class="mx-auto max-w-2xl lg:mx-0 lg:max-w-lg">
                     <h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-4xl">
