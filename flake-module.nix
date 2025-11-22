@@ -50,7 +50,44 @@ devenvFlake: { flake-parts-lib, lib, inputs, ... }: {
         '';
         default = { };
       };
+      options.devenv.git-hooks = {
+        enable = mkOption {
+          type = types.bool;
+          default = inputs.git-hooks != null;
+          description = "Enable git-hooks git-hooks.";
+        };
+        shell = mkOption {
+          type = types.str;
+          default = "default";
+          description = "Shell name to read git-hooks git-hooks configuration from.";
+        };
+      };
+      options.devenv.treefmt = {
+        enable = mkOption {
+          type = types.bool;
+          default = inputs.treefmt-nix != null;
+          description = "Enable treefmt.";
+        };
+        shell = mkOption {
+          type = types.str;
+          default = "default";
+          description = "Shell name to read treefmt configuration from.";
+        };
+      }
       config.devShells = lib.mapAttrs (_name: devenv: devenv.shell) config.devenv.shells;
+
+
+      config.pre-commit.settings =
+          if config.devenv.git-hooks.enable && hasAttr config.devenv.git-hooks.shell config.devenv.shells then
+            config.devenv.shells.${config.devenv.git-hooks.shell}.git-hooks
+          else
+            { };
+
+      config.treefmt =
+          if config.devenv.treefmt.enable && hasAttr config.devenv.treefmt.shell config.devenv.shells then
+            config.devenv.shells.${config.devenv.treefmt.shell}.treefmt.config
+          else
+            { };
 
       # Deprecated packages
       # These were used to wire up commands in the devenv shim and are no longer necessary.
