@@ -39,7 +39,12 @@
                 <a href="/processes" class="link font-medium">Define processes</a> •
                 <a href="/services" class="link font-medium">Reuse services</a> •
                 <a href="/tests" class="link font-medium">Run tests</a> •
-                <a href="/git-hooks" class="link font-medium">Enforce git hooks</a>
+                <a href="/git-hooks" class="link font-medium">Enforce git hooks</a> •
+                <a href="/profiles/" class="link font-medium">Use profiles</a> •
+                <a href="/composing-using-imports/" class="link font-medium">Compose environments</a> •
+                <a href="/outputs/" class="link font-medium">Define outputs</a> •
+                <a href="/ad-hoc-developer-environments/" class="link font-medium">Ad-hoc environments</a> •
+                <a href="/blog/2025/07/21/announcing-secretspec-declarative-secrets-management/" class="link font-medium">Manage secrets</a>
             </p>
             <form class="flex max-sm:flex-col gap-4 mt-10" id="generate" onsubmit="if (document.querySelector('#generate input').value.trim() === '') { alert('Please enter what to generate'); return false; } window.location.href='https://devenv.new/?q=' + encodeURIComponent(document.querySelector('#generate input').value); return false;">
                 <input
