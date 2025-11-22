@@ -9,6 +9,7 @@ nav:
       - Basics: basics.md
       - Packages: packages.md
       - Scripts: scripts.md
+      - Creating Files: creating-files.md
       - Tasks: tasks.md
       - Languages:
         - Overview: languages.md
