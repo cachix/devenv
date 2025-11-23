@@ -219,13 +219,13 @@ in
       };
     };
     enterShell = ''
-      ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all
+      ${config.task.package}/bin/devenv-tasks run devenv:enterShell --mode all || exit $?
       if [ -f "$DEVENV_DOTFILE/load-exports" ]; then
         source "$DEVENV_DOTFILE/load-exports"
       fi
     '';
     enterTest = ''
-      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all
+      ${config.task.package}/bin/devenv-tasks run devenv:enterTest --mode all || exit $?
     '';
   };
 }
