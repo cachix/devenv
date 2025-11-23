@@ -392,8 +392,10 @@ impl TaskState {
                 result = stderr_reader.next_line(), if !stderr_closed => {
                     match result {
                         Ok(Some(line)) => {
-                            if self.verbosity == VerbosityLevel::Verbose || self.task.show_output || is_process {
+                            if self.verbosity == VerbosityLevel::Verbose || self.task.show_output {
                                 eprintln!("[{}] {}", self.task.name, line);
+                            } else if is_process {
+                                eprintln!("{}", line);
                             }
                             stderr_lines.push((std::time::Instant::now(), line));
                         },
