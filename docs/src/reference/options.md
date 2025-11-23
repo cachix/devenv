@@ -18326,6 +18326,33 @@ package
 
 
 
+## languages.zig.version
+
+
+
+The Zig version to use.
+This automatically sets the ` languages.zig.package ` and ` languages.zig.zls.package ` using [zig-overlay](https://github.com/mitchellh/zig-overlay).
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+
+
+*Example:*
+` "0.15.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix](https://github.com/cachix/devenv/blob/main/src/modules/languages/zig.nix)
+
+
+
 ## languages.zig.zls.package
 
 
