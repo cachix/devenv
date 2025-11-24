@@ -229,6 +229,7 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
                 devenv.inputs_add(&name, &url, &follows).await
             }
         },
+        Commands::Changelogs {} => devenv.changelogs().await,
 
         // hidden
         Commands::Assemble => devenv.assemble(false).await,

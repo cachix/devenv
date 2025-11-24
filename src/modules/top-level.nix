@@ -279,6 +279,7 @@ in
     ./tests.nix
     ./cachix.nix
     ./tasks.nix
+    ./changelogs.nix
     ./flake-compat.nix
   ]
   ++ (listEntries ./languages)

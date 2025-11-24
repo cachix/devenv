@@ -259,6 +259,15 @@ impl Devenv {
         self.devenv_dotfile.join("processes.pid")
     }
 
+    pub fn paths(&self) -> DevenvPaths {
+        DevenvPaths {
+            root: self.devenv_root.clone(),
+            dotfile: self.devenv_dotfile.clone(),
+            dot_gc: self.devenv_dot_gc.clone(),
+            home_gc: self.devenv_home_gc.clone(),
+        }
+    }
+
     pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
         let target = target.clone().unwrap_or_else(|| {
             std::fs::canonicalize(".").expect("Failed to get current directory")
@@ -320,6 +329,11 @@ impl Devenv {
             config.write().await?;
         }
         Ok(())
+    }
+
+    pub async fn changelogs(&self) -> Result<()> {
+        let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
+        changelog.show_all().await
     }
 
     pub async fn print_dev_env(&self, json: bool) -> Result<()> {
@@ -472,6 +486,13 @@ impl Devenv {
 
         let span = info_span!("update", devenv.user_message = msg);
         self.nix.update(input_name).instrument(span).await?;
+
+        // Show new changelogs (if any)
+        let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
+        if let Err(e) = changelog.show_new().await {
+            // Don't fail the update if changelogs fail to load
+            tracing::warn!("Failed to show changelogs: {}", e);
+        }
 
         Ok(())
     }
