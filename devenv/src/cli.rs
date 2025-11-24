@@ -126,6 +126,9 @@ pub enum Commands {
         command: InputsCommand,
     },
 
+    #[command(about = "Show relevant changelogs.")]
+    Changelogs {},
+
     #[command(about = "Launch an interactive environment for inspecting the devenv configuration.")]
     Repl {},
 

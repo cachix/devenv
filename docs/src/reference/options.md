@@ -1021,6 +1021,106 @@ list of string
 
 
 
+## changelogs
+
+
+
+List of changelog entries for this module.
+
+
+
+*Type:*
+list of (submodule)
+
+
+
+*Default:*
+` [ ] `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
+
+
+
+## changelogs.\*.date
+
+
+
+Date of the changelog entry in YYYY-MM-DD format.
+
+
+
+*Type:*
+string matching the pattern ^\[0-9]{4}-\[0-9]{2}-\[0-9]{2}$
+
+
+
+*Example:*
+` "2025-01-15" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
+
+
+
+## changelogs.\*.description
+
+
+
+Markdown description of the change.
+
+
+
+*Type:*
+string
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
+
+
+
+## changelogs.\*.title
+
+
+
+Title of the changelog entry.
+
+
+
+*Type:*
+string
+
+
+
+*Example:*
+` "git-hooks.package is now pkgs.prek" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
+
+
+
+## changelogs.\*.when
+
+
+
+Whether to include this changelog entry (useful for conditional changelogs).
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix](https://github.com/cachix/devenv/blob/main/src/modules/changelogs.nix)
+
+
+
 ## claude.code.enable
 
 
