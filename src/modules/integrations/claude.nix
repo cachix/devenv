@@ -49,14 +49,11 @@ let
         })
         hooks;
 
-  # Check if git-hooks task is defined (indicates git-hooks are enabled)
-  anyGitHooksEnabled = (config.tasks."devenv:git-hooks:run".exec or null) == "pre-commit run -a";
-
-  # Auto-format hook using pre-commit if any git-hooks are enabled
-  preCommitHook = lib.optional anyGitHooksEnabled {
+  # Auto-format hook using git-hooks if enabled
+  preCommitHook = lib.optional config.git-hooks.enable {
     matcher = "^(Edit|MultiEdit|Write)$";
     command = ''
-      cd "$DEVENV_ROOT" && pre-commit run
+      cd "$DEVENV_ROOT" && ${config.git-hooks.package.meta.mainProgram} run
     '';
   };
 
@@ -640,7 +637,7 @@ in
       ''
         Claude Code integration is enabled with automatic hooks and commands setup.
         Settings are configured at: ${cfg.settingsPath}
-        ${lib.optionalString anyGitHooksEnabled "- Auto-formatting: enabled via git-hooks (pre-commit)"}
+        ${lib.optionalString config.git-hooks.enable "- Auto-formatting: enabled via git-hooks (pre-commit)"}
         ${lib.optionalString (cfg.commands != { })
           "- Project commands: ${
             lib.concatStringsSep ", " (map (cmd: "/${cmd}") (lib.attrNames cfg.commands))
