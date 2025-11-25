@@ -900,7 +900,8 @@ impl Devenv {
             })?;
 
         // Run script and capture its environment exports
-        self.prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
+        let exit_status = self
+            .prepare_shell(&Some(script_path.to_string_lossy().into()), &[])
             .await?
             .stderr(Stdio::inherit())
             .stdout(Stdio::inherit())
@@ -911,6 +912,10 @@ impl Devenv {
             .await
             .into_diagnostic()
             .wrap_err("Failed to wait for environment capture script to complete")?;
+
+        if !exit_status.success() {
+            miette::bail!("Shell environment capture failed");
+        }
 
         // Parse the environment variables
         let file = File::open(&env_path)

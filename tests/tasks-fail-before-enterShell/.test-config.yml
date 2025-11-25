@@ -1,0 +1,2 @@
+# Run test outside the shell since we're testing shell entry failure
+use_shell: false
