@@ -757,6 +757,74 @@ impl Config {
             ))
         }
     }
+
+    /// Returns the merged nixpkgs configuration for a given system.
+    ///
+    /// Merges configuration with the following priority (highest to lowest):
+    /// 1. `nixpkgs.per_platform.{system}.{field}`
+    /// 2. `nixpkgs.{field}` (base nixpkgs config)
+    /// 3. Top-level `{field}` (for allow_unfree, allow_broken, permitted_insecure_packages)
+    /// 4. Default value
+    ///
+    /// This matches the logic in bootstrapLib.nix's getPlatformConfig helper.
+    pub fn nixpkgs_config(&self, system: &str) -> NixpkgsConfig {
+        // Start with defaults
+        let mut config = NixpkgsConfig::default();
+
+        // Apply top-level settings (lowest priority for these fields)
+        config.allow_unfree = self.allow_unfree;
+        config.allow_broken = self.allow_broken;
+        config.permitted_insecure_packages = self.permitted_insecure_packages.clone();
+
+        // Apply base nixpkgs config (overrides top-level)
+        if let Some(ref nixpkgs) = self.nixpkgs {
+            let base = &nixpkgs.config_;
+            if base.allow_unfree {
+                config.allow_unfree = true;
+            }
+            if base.allow_broken {
+                config.allow_broken = true;
+            }
+            if base.cuda_support {
+                config.cuda_support = true;
+            }
+            if !base.cuda_capabilities.is_empty() {
+                config.cuda_capabilities = base.cuda_capabilities.clone();
+            }
+            if !base.permitted_insecure_packages.is_empty() {
+                config.permitted_insecure_packages = base.permitted_insecure_packages.clone();
+            }
+            if !base.permitted_unfree_packages.is_empty() {
+                config.permitted_unfree_packages = base.permitted_unfree_packages.clone();
+            }
+
+            // Apply per-platform config (highest priority)
+            if let Some(platform_config) = nixpkgs.per_platform.get(system) {
+                if platform_config.allow_unfree {
+                    config.allow_unfree = true;
+                }
+                if platform_config.allow_broken {
+                    config.allow_broken = true;
+                }
+                if platform_config.cuda_support {
+                    config.cuda_support = true;
+                }
+                if !platform_config.cuda_capabilities.is_empty() {
+                    config.cuda_capabilities = platform_config.cuda_capabilities.clone();
+                }
+                if !platform_config.permitted_insecure_packages.is_empty() {
+                    config.permitted_insecure_packages =
+                        platform_config.permitted_insecure_packages.clone();
+                }
+                if !platform_config.permitted_unfree_packages.is_empty() {
+                    config.permitted_unfree_packages =
+                        platform_config.permitted_unfree_packages.clone();
+                }
+            }
+        }
+
+        config
+    }
 }
 
 #[cfg(test)]

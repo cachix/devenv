@@ -4,7 +4,7 @@
 //! when assembling the devenv environment. The struct is serialized to Nix syntax
 //! using the `ser_nix` crate and inserted into the flake template.
 
-use crate::config::Config;
+use crate::config::{Config, NixpkgsConfig};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -83,6 +83,11 @@ pub struct NixArgs<'a> {
     /// devenv.yaml configuration (inputs, imports, nixpkgs settings, etc.)
     /// Serialized by ser_nix into a Nix attrset
     pub devenv_config: &'a Config,
+
+    /// Pre-merged nixpkgs configuration for the target system.
+    /// This is computed by Config::nixpkgs_config() in Rust to avoid
+    /// duplicating the merging logic in Nix (bootstrapLib.nix).
+    pub nixpkgs_config: NixpkgsConfig,
 }
 
 #[cfg(test)]
@@ -114,6 +119,7 @@ mod tests {
         let username = Some("testuser");
 
         let test_config = Config::default();
+        let nixpkgs_config = test_config.nixpkgs_config(system);
         let args = NixArgs {
             version,
             system,
@@ -132,6 +138,7 @@ mod tests {
             git_root: Some(&git_root), // Some value with Path type
             secretspec: None,          // None value
             devenv_config: &test_config,
+            nixpkgs_config,
         };
 
         let serialized = ser_nix::to_string(&args).expect("Failed to serialize NixArgs");

@@ -141,39 +141,26 @@ rec {
     , skip_local_src ? false
     , secretspec ? null
     , devenv_config ? { }
+    , nixpkgs_config ? { }
     }:
     let
       inherit (inputs) nixpkgs;
       lib = nixpkgs.lib;
       targetSystem = system;
 
-      # Helper to get platform-specific or fallback config values
-      getPlatformConfig = field: fallback:
-        devenv_config.nixpkgs.per-platform."${targetSystem}".${field}
-          or devenv_config.nixpkgs.${field}
-          or fallback;
-
       # devenv configuration is passed from the Rust backend
       overlays = lib.flatten (lib.mapAttrsToList getOverlays (devenv_config.inputs or { }));
-      permittedUnfreePackages =
-        getPlatformConfig "permittedUnfreePackages" [ ];
 
+      # nixpkgs_config is pre-merged by Rust (Config::nixpkgs_config)
+      # Merge with allowUnfreePredicate (same logic as NIXPKGS_CONFIG in nix_backend.rs)
       pkgsBootstrap = import nixpkgs {
         system = targetSystem;
-        config = {
-          allowUnfree =
-            getPlatformConfig "allowUnfree" (devenv_config.allowUnfree or false);
-          allowBroken =
-            getPlatformConfig "allowBroken" (devenv_config.allowBroken or false);
-          cudaSupport =
-            getPlatformConfig "cudaSupport" false;
-          cudaCapabilities =
-            getPlatformConfig "cudaCapabilities" [ ];
-          permittedInsecurePackages =
-            getPlatformConfig "permittedInsecurePackages" (devenv_config.permittedInsecurePackages or [ ]);
+        config = nixpkgs_config // {
           allowUnfreePredicate =
-            if (permittedUnfreePackages != [ ]) then
-              (pkg: builtins.elem (lib.getName pkg) permittedUnfreePackages)
+            if nixpkgs_config.allowUnfree or false then
+              (_: true)
+            else if (nixpkgs_config.permittedUnfreePackages or [ ]) != [ ] then
+              (pkg: builtins.elem (lib.getName pkg) (nixpkgs_config.permittedUnfreePackages or [ ]))
             else
               (_: false);
         };
