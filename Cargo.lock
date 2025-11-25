@@ -1379,6 +1379,7 @@ dependencies = [
 name = "devenv-activity"
 version = "1.11.2"
 dependencies = [
+ "humantime",
  "serde",
  "serde_json",
  "tokio",

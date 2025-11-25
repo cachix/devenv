@@ -69,7 +69,9 @@ pub fn init_tracing(
 
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::from(level).into())
-        .from_env_lossy();
+        .from_env_lossy()
+        // Always include activity events for trace export
+        .add_directive("devenv::activity=trace".parse().unwrap());
 
     let stderr = io::stderr;
     let ansi = stderr().is_terminal();

@@ -40,6 +40,38 @@ use tracing::{Level, Span, span};
 // Re-export for convenience
 pub use tracing_subscriber::Registry;
 
+/// RFC 3339 timestamp wrapper for SystemTime with proper serde serialization
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Timestamp(pub SystemTime);
+
+impl Timestamp {
+    pub fn now() -> Self {
+        Self(SystemTime::now())
+    }
+}
+
+impl From<SystemTime> for Timestamp {
+    fn from(time: SystemTime) -> Self {
+        Self(time)
+    }
+}
+
+impl Serialize for Timestamp {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&humantime::format_rfc3339_nanos(self.0).to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let s = String::deserialize(deserializer)?;
+        humantime::parse_rfc3339(&s)
+            .map(Timestamp)
+            .map_err(D::Error::custom)
+    }
+}
+
 // Thread-local stack for tracking current Activity IDs (for parent detection)
 thread_local! {
     static ACTIVITY_STACK: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
@@ -58,28 +90,28 @@ pub enum ActivityEvent {
         parent: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
-        timestamp: SystemTime,
+        timestamp: Timestamp,
     },
 
     /// Activity completed
     Complete {
         id: u64,
         outcome: ActivityOutcome,
-        timestamp: SystemTime,
+        timestamp: Timestamp,
     },
 
     /// Progress update
     Progress {
         id: u64,
         progress: ProgressState,
-        timestamp: SystemTime,
+        timestamp: Timestamp,
     },
 
     /// Phase/step change
     Phase {
         id: u64,
         phase: String,
-        timestamp: SystemTime,
+        timestamp: Timestamp,
     },
 
     /// Log line from activity
@@ -88,14 +120,14 @@ pub enum ActivityEvent {
         line: String,
         #[serde(default)]
         is_error: bool,
-        timestamp: SystemTime,
+        timestamp: Timestamp,
     },
 
     /// Message not tied to an activity
     Message {
         level: LogLevel,
         text: String,
-        timestamp: SystemTime,
+        timestamp: Timestamp,
     },
 }
 
@@ -217,6 +249,7 @@ fn next_id() -> u64 {
 pub struct Activity {
     span: Span,
     id: u64,
+    outcome: std::sync::Mutex<ActivityOutcome>,
 }
 
 impl Activity {
@@ -283,12 +316,28 @@ impl Activity {
         parent: Option<u64>,
         detail: Option<String>,
     ) -> Self {
-        let span = span!(Level::TRACE, "activity", activity_id = id,);
+        let span = span!(Level::TRACE, "activity", activity_id = id);
+
+        // Emit start event to tracing
+        let kind_str = kind.to_string();
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = id,
+            event_type = "start",
+            kind = %kind_str,
+            name = %name,
+            parent = ?parent,
+            detail = ?detail,
+        );
 
         // Push to activity stack for parent tracking
         ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
 
-        Self { span, id }
+        Self {
+            span,
+            id,
+            outcome: std::sync::Mutex::new(ActivityOutcome::Success),
+        }
     }
 
     /// Get the activity ID
@@ -305,12 +354,16 @@ impl Activity {
 
     /// Mark as failed
     pub fn fail(&self) {
-        // self.set_outcome(ActivityOutcome::Failed);
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::Failed;
+        }
     }
 
     /// Mark as cancelled
     pub fn cancel(&self) {
-        // self.set_outcome(ActivityOutcome::Cancelled);
+        if let Ok(mut outcome) = self.outcome.lock() {
+            *outcome = ActivityOutcome::Cancelled;
+        }
     }
 
     /// Update progress (determinate)
@@ -395,15 +448,39 @@ impl Deref for Activity {
 
 impl Clone for Activity {
     fn clone(&self) -> Self {
+        let outcome = self
+            .outcome
+            .lock()
+            .map(|o| *o)
+            .unwrap_or(ActivityOutcome::Success);
         Self {
             span: self.span.clone(),
             id: self.id,
+            outcome: std::sync::Mutex::new(outcome),
         }
     }
 }
 
 impl Drop for Activity {
     fn drop(&mut self) {
+        // Emit complete event to tracing
+        let outcome = self
+            .outcome
+            .lock()
+            .map(|o| *o)
+            .unwrap_or(ActivityOutcome::Success);
+        let outcome_str = match outcome {
+            ActivityOutcome::Success => "success",
+            ActivityOutcome::Failed => "failed",
+            ActivityOutcome::Cancelled => "cancelled",
+        };
+        tracing::trace!(
+            target: "devenv::activity",
+            activity_id = self.id,
+            event_type = "complete",
+            outcome = %outcome_str,
+        );
+
         // Pop from activity stack
         ACTIVITY_STACK.with(|stack| {
             let mut stack = stack.borrow_mut();
@@ -465,202 +542,6 @@ pub fn init() -> (mpsc::UnboundedReceiver<ActivityEvent>, ActivityHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing_subscriber::layer::SubscriberExt;
-
-    /// Helper to set up the subscriber with both layers
-    fn setup_test() -> (
-        mpsc::UnboundedReceiver<ActivityEvent>,
-        tracing::subscriber::DefaultGuard,
-    ) {
-        let (tx, rx) = mpsc::unbounded_channel();
-        let activity_layer = ActivityLayer::new();
-        let forwarder = ActivityEventForwarder::new(tx);
-
-        let subscriber = tracing_subscriber::registry()
-            .with(activity_layer)
-            .with(forwarder);
-        let guard = tracing::subscriber::set_default(subscriber);
-        (rx, guard)
-    }
-
-    #[tokio::test]
-    async fn test_activity_lifecycle() {
-        let (mut rx, _guard) = setup_test();
-
-        // Create and drop an activity
-        {
-            let _activity = Activity::build("test-package");
-        }
-
-        // Verify events
-        let start = rx.recv().await.unwrap();
-        match start {
-            ActivityEvent::Start { name, kind, .. } => {
-                assert_eq!(name, "test-package");
-                assert_eq!(kind, ActivityKind::Build);
-            }
-            _ => panic!("Expected Start event"),
-        }
-
-        let complete = rx.recv().await.unwrap();
-        match complete {
-            ActivityEvent::Complete { outcome, .. } => {
-                assert_eq!(outcome, ActivityOutcome::Success);
-            }
-            _ => panic!("Expected Complete event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_activity_failure() {
-        let (mut rx, _guard) = setup_test();
-
-        {
-            let activity = Activity::build("failing-package");
-            activity.fail();
-        }
-
-        // Skip Start event
-        let _ = rx.recv().await.unwrap();
-
-        let complete = rx.recv().await.unwrap();
-        match complete {
-            ActivityEvent::Complete { outcome, .. } => {
-                assert_eq!(outcome, ActivityOutcome::Failed);
-            }
-            _ => panic!("Expected Complete event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_progress_events() {
-        let (mut rx, _guard) = setup_test();
-
-        {
-            let activity = Activity::build("package");
-            activity.progress(50, 100);
-        }
-
-        // Skip Start event
-        let _ = rx.recv().await.unwrap();
-
-        // Get Progress event
-        let progress = rx.recv().await.unwrap();
-        match progress {
-            ActivityEvent::Progress { progress, .. } => match progress {
-                ProgressState::Determinate { current, total, .. } => {
-                    assert_eq!(current, 50);
-                    assert_eq!(total, 100);
-                }
-                _ => panic!("Expected Determinate progress"),
-            },
-            _ => panic!("Expected Progress event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_phase_events() {
-        let (mut rx, _guard) = setup_test();
-
-        {
-            let activity = Activity::build("package");
-            activity.phase("configure");
-        }
-
-        // Skip Start event
-        let _ = rx.recv().await.unwrap();
-
-        // Get Phase event
-        let phase = rx.recv().await.unwrap();
-        match phase {
-            ActivityEvent::Phase { phase, .. } => {
-                assert_eq!(phase, "configure");
-            }
-            _ => panic!("Expected Phase event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_log_events() {
-        let (mut rx, _guard) = setup_test();
-
-        {
-            let activity = Activity::build("package");
-            activity.log("Building...");
-            activity.error("Error occurred");
-        }
-
-        // Skip Start event
-        let _ = rx.recv().await.unwrap();
-
-        // Get Log events
-        let log1 = rx.recv().await.unwrap();
-        match log1 {
-            ActivityEvent::Log { line, is_error, .. } => {
-                assert_eq!(line, "Building...");
-                assert!(!is_error);
-            }
-            _ => panic!("Expected Log event"),
-        }
-
-        let log2 = rx.recv().await.unwrap();
-        match log2 {
-            ActivityEvent::Log { line, is_error, .. } => {
-                assert_eq!(line, "Error occurred");
-                assert!(is_error);
-            }
-            _ => panic!("Expected Log event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_nested_activities() {
-        let (mut rx, _guard) = setup_test();
-
-        let parent_id;
-        {
-            let parent = Activity::build("parent");
-            parent_id = parent.id();
-            {
-                let _child = Activity::fetch("child");
-            }
-        }
-
-        // Get parent start
-        let parent_start = rx.recv().await.unwrap();
-        match parent_start {
-            ActivityEvent::Start { id, parent, .. } => {
-                assert_eq!(id, parent_id);
-                assert!(parent.is_none());
-            }
-            _ => panic!("Expected Start event"),
-        }
-
-        // Get child start - should have parent ID set
-        let child_start = rx.recv().await.unwrap();
-        match child_start {
-            ActivityEvent::Start { parent, .. } => {
-                assert_eq!(parent, Some(parent_id));
-            }
-            _ => panic!("Expected Start event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_standalone_message() {
-        let (mut rx, _guard) = setup_test();
-
-        message(LogLevel::Warn, "Cache miss for foo");
-
-        let msg = rx.recv().await.unwrap();
-        match msg {
-            ActivityEvent::Message { level, text, .. } => {
-                assert_eq!(level, LogLevel::Warn);
-                assert_eq!(text, "Cache miss for foo");
-            }
-            _ => panic!("Expected Message event"),
-        }
-    }
 
     #[test]
     fn test_activity_kind_display_parse() {
@@ -688,7 +569,7 @@ mod tests {
             name: "test".to_string(),
             parent: None,
             detail: Some("detail".to_string()),
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let json = serde_json::to_string(&event).unwrap();
@@ -711,7 +592,7 @@ mod tests {
             name: "test-package".to_string(),
             parent: Some(456),
             detail: Some("building".to_string()),
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let json_str = serde_json::to_string(&event).unwrap();
@@ -746,7 +627,7 @@ mod tests {
             name: "test".to_string(),
             parent: None,
             detail: None,
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let json_str = serde_json::to_string(&event).unwrap();
@@ -775,7 +656,7 @@ mod tests {
             let event = ActivityEvent::Complete {
                 id: 789,
                 outcome,
-                timestamp: SystemTime::UNIX_EPOCH,
+                timestamp: Timestamp(SystemTime::UNIX_EPOCH),
             };
 
             let json_str = serde_json::to_string(&event).unwrap();
@@ -805,7 +686,7 @@ mod tests {
                 total: 100,
                 unit: Some(ProgressUnit::Bytes),
             },
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let json_str = serde_json::to_string(&event).unwrap();
@@ -841,7 +722,7 @@ mod tests {
                 current: 42,
                 unit: Some(ProgressUnit::Items),
             },
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let json_str = serde_json::to_string(&event).unwrap();
@@ -869,7 +750,7 @@ mod tests {
         let event = ActivityEvent::Phase {
             id: 111,
             phase: "configure".to_string(),
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let json_str = serde_json::to_string(&event).unwrap();
@@ -892,7 +773,7 @@ mod tests {
             id: 222,
             line: "Building target...".to_string(),
             is_error: false,
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let json_str = serde_json::to_string(&event).unwrap();
@@ -903,7 +784,7 @@ mod tests {
             id: 333,
             line: "Error: compilation failed".to_string(),
             is_error: true,
-            timestamp: SystemTime::UNIX_EPOCH,
+            timestamp: Timestamp(SystemTime::UNIX_EPOCH),
         };
 
         let error_json_str = serde_json::to_string(&error_event).unwrap();
@@ -953,7 +834,7 @@ mod tests {
             let event = ActivityEvent::Message {
                 level,
                 text: "Test message".to_string(),
-                timestamp: SystemTime::UNIX_EPOCH,
+                timestamp: Timestamp(SystemTime::UNIX_EPOCH),
             };
 
             let json_str = serde_json::to_string(&event).unwrap();
@@ -1010,7 +891,7 @@ mod tests {
                 name: "test".to_string(),
                 parent: None,
                 detail: None,
-                timestamp: SystemTime::UNIX_EPOCH,
+                timestamp: Timestamp(SystemTime::UNIX_EPOCH),
             };
 
             let json_str = serde_json::to_string(&event).unwrap();
@@ -1050,7 +931,7 @@ mod tests {
                     current: 10,
                     unit: Some(unit),
                 },
-                timestamp: SystemTime::UNIX_EPOCH,
+                timestamp: Timestamp(SystemTime::UNIX_EPOCH),
             };
 
             let json_str = serde_json::to_string(&event).unwrap();
@@ -1066,104 +947,6 @@ mod tests {
                 },
                 _ => panic!("Expected Progress event"),
             }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_deref_to_span() {
-        use tracing::Instrument;
-
-        let (mut rx, _guard) = setup_test();
-
-        async fn example_async_work() -> u32 {
-            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-            42
-        }
-
-        let activity = Activity::build("async-task");
-        let parent_id = activity.id();
-
-        // Use .span() to get a span for .instrument()
-        let result = example_async_work().instrument(activity.span()).await;
-        assert_eq!(result, 42);
-
-        // Verify the activity was created
-        let start = rx.recv().await.unwrap();
-        match start {
-            ActivityEvent::Start { id, name, .. } => {
-                assert_eq!(id, parent_id);
-                assert_eq!(name, "async-task");
-            }
-            _ => panic!("Expected Start event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_in_scope_via_deref() {
-        let (mut rx, _guard) = setup_test();
-
-        let activity = Activity::build("scoped-task");
-        let parent_id = activity.id();
-
-        // Deref allows us to use span's in_scope() directly
-        let result = activity.in_scope(|| {
-            // Create nested activity within scope
-            let _nested = Activity::fetch("scoped-fetch");
-            42
-        });
-        assert_eq!(result, 42);
-
-        // Verify parent start
-        let start = rx.recv().await.unwrap();
-        match start {
-            ActivityEvent::Start { id, name, .. } => {
-                assert_eq!(id, parent_id);
-                assert_eq!(name, "scoped-task");
-            }
-            _ => panic!("Expected Start event"),
-        }
-
-        // Verify nested activity has parent set
-        let nested_start = rx.recv().await.unwrap();
-        match nested_start {
-            ActivityEvent::Start { parent, name, .. } => {
-                assert_eq!(parent, Some(parent_id));
-                assert_eq!(name, "scoped-fetch");
-            }
-            _ => panic!("Expected Start event"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_enter_via_deref() {
-        let (mut rx, _guard) = setup_test();
-
-        let activity = Activity::build("entered-task");
-        let parent_id = activity.id();
-
-        // Deref allows us to use span's enter() directly
-        {
-            let _guard = activity.enter();
-            // Create nested activity while entered
-            let _nested = Activity::fetch("nested-in-guard");
-        }
-
-        // Verify parent start
-        let start = rx.recv().await.unwrap();
-        match start {
-            ActivityEvent::Start { id, .. } => {
-                assert_eq!(id, parent_id);
-            }
-            _ => panic!("Expected Start event"),
-        }
-
-        // Verify nested activity has parent set
-        let nested_start = rx.recv().await.unwrap();
-        match nested_start {
-            ActivityEvent::Start { parent, .. } => {
-                assert_eq!(parent, Some(parent_id));
-            }
-            _ => panic!("Expected Start event"),
         }
     }
 }

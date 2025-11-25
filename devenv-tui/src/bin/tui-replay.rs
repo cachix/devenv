@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use devenv_activity::Timestamp;
 use devenv_activity::{ActivityEvent, ActivityKind, ActivityOutcome};
 use devenv_tui::TuiHandle;
 use serde::Deserialize;
@@ -7,7 +8,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
 use tracing::{info, warn};
@@ -243,7 +244,7 @@ impl EventProcessor {
             name,
             parent,
             detail,
-            timestamp: SystemTime::now(),
+            timestamp: Timestamp::now(),
         };
 
         model.apply_activity_event(activity_event);
@@ -270,7 +271,7 @@ impl EventProcessor {
             let activity_event = ActivityEvent::Phase {
                 id: activity_id,
                 phase: phase.clone(),
-                timestamp: SystemTime::now(),
+                timestamp: Timestamp::now(),
             };
             model.apply_activity_event(activity_event);
         }
@@ -318,7 +319,7 @@ impl EventProcessor {
         let activity_event = ActivityEvent::Progress {
             id: activity_id,
             progress,
-            timestamp: SystemTime::now(),
+            timestamp: Timestamp::now(),
         };
 
         model.apply_activity_event(activity_event);
@@ -341,7 +342,7 @@ impl EventProcessor {
             let activity_event = ActivityEvent::Complete {
                 id: activity_id,
                 outcome,
-                timestamp: SystemTime::now(),
+                timestamp: Timestamp::now(),
             };
             model.apply_activity_event(activity_event);
         }
