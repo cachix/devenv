@@ -573,6 +573,20 @@ impl Nix {
                 Ok(cachix_caches) => {
                     push_cache = cachix_caches.caches.push.clone();
 
+                    // Apply global settings (like netrc-file) first
+                    match self.cachix_manager.get_global_settings() {
+                        Ok(global_settings) => {
+                            for (key, value) in global_settings {
+                                final_args.push("--option".to_string());
+                                final_args.push(key);
+                                final_args.push(value);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to get global Cachix settings: {}", e);
+                        }
+                    }
+
                     // Get Nix settings from CachixManager and apply them
                     match self.cachix_manager.get_nix_settings(&cachix_caches).await {
                         Ok(settings) => {
