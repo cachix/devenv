@@ -28,7 +28,12 @@ impl TestNixArgs {
         }
     }
 
-    fn to_nix_args<'a>(&'a self, paths: &'a DevenvPaths, config: &'a Config) -> NixArgs<'a> {
+    fn to_nix_args<'a>(
+        &'a self,
+        paths: &'a DevenvPaths,
+        config: &'a Config,
+        nixpkgs_config: devenv_core::config::NixpkgsConfig,
+    ) -> NixArgs<'a> {
         NixArgs {
             version: "1.0.0",
             system: "x86_64-linux",
@@ -47,6 +52,7 @@ impl TestNixArgs {
             git_root: None,
             secretspec: None,
             devenv_config: config,
+            nixpkgs_config,
         }
     }
 }
@@ -133,7 +139,7 @@ async fn test_create_flake_inputs() {
 
     let test_args = TestNixArgs::new(&paths);
     backend
-        .assemble(&test_args.to_nix_args(&paths, &config))
+        .assemble(&test_args.to_nix_args(&paths, &config, config.nixpkgs_config("x86_64-linux")))
         .await
         .expect("Failed to assemble backend");
 

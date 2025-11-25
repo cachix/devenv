@@ -35,6 +35,7 @@ use nix_bindings_util::settings;
 use nix_cmd::ReplExitStatus;
 use once_cell::sync::OnceCell;
 use regex::Regex;
+use ser_nix;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -233,6 +234,10 @@ pub struct NixRustBackend {
     // Cached import expression: (import /path/to/default.nix { ... args ... })
     // Set once in assemble() and used directly in evaluations
     cached_import_expr: Arc<OnceCell<String>>,
+
+    // Temp files that must live as long as the backend (e.g., NIXPKGS_CONFIG)
+    #[allow(dead_code)]
+    _temp_files: Vec<tempfile::NamedTempFile>,
 }
 
 // SAFETY: This is unsafe and relies on several assumptions about the Nix C++ library:
@@ -331,7 +336,42 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to create fetchers settings")?;
 
-        // Create eval state with flake support
+        // Generate merged nixpkgs config and write to temp file for NIXPKGS_CONFIG env var
+        // Wrap in a let expression that adds allowUnfreePredicate (a Nix function)
+        // Note: NIXPKGS_CONFIG expects a file path, not inline Nix content
+        let nixpkgs_config = config.nixpkgs_config(&global_options.system);
+        let nixpkgs_config_base = ser_nix::to_string(&nixpkgs_config)
+            .map_err(|e| miette::miette!("Failed to serialize nixpkgs config: {}", e))?;
+        let nixpkgs_config_nix = format!(
+            r#"let cfg = {base}; in cfg // {{
+  allowUnfreePredicate =
+    if cfg.allowUnfree or false then
+      (_: true)
+    else if (cfg.permittedUnfreePackages or []) != [] then
+      (pkg: builtins.elem ((builtins.parseDrvName (pkg.name or pkg.pname or pkg)).name) (cfg.permittedUnfreePackages or []))
+    else
+      (_: false);
+}}"#,
+            base = nixpkgs_config_base
+        );
+
+        // Write nixpkgs config to a temp file (NIXPKGS_CONFIG expects a file path)
+        let mut temp_files = Vec::new();
+        let nixpkgs_config_file = tempfile::Builder::new()
+            .prefix("devenv-nixpkgs-config-")
+            .suffix(".nix")
+            .tempfile()
+            .map_err(|e| miette::miette!("Failed to create temp file for nixpkgs config: {}", e))?;
+        std::fs::write(nixpkgs_config_file.path(), &nixpkgs_config_nix)
+            .map_err(|e| miette::miette!("Failed to write nixpkgs config to temp file: {}", e))?;
+        let nixpkgs_config_path = nixpkgs_config_file
+            .path()
+            .to_str()
+            .ok_or_else(|| miette::miette!("Nixpkgs config path contains invalid UTF-8"))?
+            .to_string();
+        temp_files.push(nixpkgs_config_file);
+
+        // Create eval state with flake support and NIXPKGS_CONFIG
         let mut eval_state = EvalStateBuilder::new(store.clone())
             .to_miette()
             .wrap_err("Failed to create eval state builder")?
@@ -343,6 +383,9 @@ impl NixRustBackend {
             )
             .to_miette()
             .wrap_err("Failed to set base directory")?
+            .env_override("NIXPKGS_CONFIG", &nixpkgs_config_path)
+            .to_miette()
+            .wrap_err("Failed to set NIXPKGS_CONFIG environment override")?
             .flakes(&flake_settings)
             .to_miette()
             .wrap_err("Failed to configure flakes in eval state")?
@@ -378,6 +421,7 @@ impl NixRustBackend {
             cachix_caches: Arc::new(Mutex::new(None)),
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
+            _temp_files: temp_files,
         };
 
         // Register cleanup task with shutdown coordinator
