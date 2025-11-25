@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "async-trait",
  "blake3",
@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-cache-core"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "blake3",
  "miette",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-core"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "async-trait",
  "clap",
@@ -1367,7 +1367,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "blake3",
  "devenv-cache-core",
@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "astral-tokio-tar",
  "binaryornot",
@@ -1409,7 +1409,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "clap",
  "devenv",
@@ -1424,7 +1424,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-snix-backend"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "async-trait",
  "devenv-core",
@@ -1444,7 +1444,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "blake3",
  "clap",
@@ -4831,9 +4831,9 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.3.4"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29555dd059991c2f89f7f41e2df5cafb3f00f7535a26e0f91fc94cf15e55adb8"
+checksum = "60abc6d3a2caa681f7e74d1a601e73bf96c388037cb249481e85d66ff5e5dacd"
 dependencies = [
  "clap",
  "colored",
@@ -6152,7 +6152,7 @@ dependencies = [
 
 [[package]]
 name = "tokio-shutdown"
-version = "1.10.1"
+version = "1.11.0"
 dependencies = [
  "futures",
  "nix 0.30.1",
