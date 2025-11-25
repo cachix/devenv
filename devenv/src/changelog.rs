@@ -1,5 +1,5 @@
 use blake3;
-use devenv_core::{DevenvPaths, NixBackend};
+use devenv_core::{DevenvPaths, NixBackend, Options};
 use miette::{IntoDiagnostic, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -49,7 +49,9 @@ impl<'a> Changelog<'a> {
             Ok(changelogs) => changelogs,
             Err(_) => {
                 // Changelog module might not exist in older devenv versions
-                // Silently skip
+                tracing::warn!(
+                    "Changelog not available. Update devenv modules for changelog support."
+                );
                 return Ok(());
             }
         };
@@ -77,7 +79,15 @@ impl<'a> Changelog<'a> {
     }
 
     pub async fn show_all(&self) -> Result<()> {
-        let all_changelogs = self.load_changelogs().await?;
+        let all_changelogs = match self.load_changelogs().await {
+            Ok(changelogs) => changelogs,
+            Err(_) => {
+                tracing::warn!(
+                    "Changelog not available. Update devenv modules for changelog support."
+                );
+                return Ok(());
+            }
+        };
         self.display_changelogs(&all_changelogs)?;
         Ok(())
     }
@@ -85,8 +95,19 @@ impl<'a> Changelog<'a> {
     async fn load_changelogs(&self) -> Result<Vec<ChangelogEntry>> {
         let changelog_json_file = {
             let gc_root = self.dot_gc.join("changelog-json");
+            // Use logging: false and bail_on_error: false to suppress nix output
+            // when changelog attribute doesn't exist (older devenv modules)
+            let options = Options {
+                logging: false,
+                bail_on_error: false,
+                ..Default::default()
+            };
             self.nix
-                .build(&["devenv.config.changelog.json"], None, Some(&gc_root))
+                .build(
+                    &["devenv.config.changelog.json"],
+                    Some(options),
+                    Some(&gc_root),
+                )
                 .await?
         };
 

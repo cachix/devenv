@@ -529,7 +529,7 @@ impl Nix {
                 None => "without an exit code".to_string(),
             };
 
-            if !options.logging {
+            if !options.logging && options.bail_on_error {
                 error!(
                     "Command produced the following output:\n{}\n{}",
                     String::from_utf8_lossy(&result.stdout),
