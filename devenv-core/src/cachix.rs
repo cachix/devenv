@@ -82,8 +82,8 @@ impl CachixManager {
     pub async fn get_nix_settings(
         &self,
         cachix_caches: &CachixCacheInfo,
-    ) -> Result<HashMap<String, String>> {
-        let mut settings = HashMap::new();
+    ) -> Result<BTreeMap<String, String>> {
+        let mut settings = BTreeMap::new();
 
         // Configure pull caches (substituters and trusted keys)
         if !cachix_caches.caches.pull.is_empty() {
