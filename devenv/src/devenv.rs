@@ -1472,6 +1472,7 @@ impl Devenv {
         };
 
         // Create the Nix arguments struct
+        let nixpkgs_config = config.nixpkgs_config(&self.global_options.system);
         let args = NixArgs {
             version: crate_version!(),
             system: &self.global_options.system,
@@ -1490,6 +1491,7 @@ impl Devenv {
             git_root: git_root.as_deref(),
             secretspec: secretspec_data.as_ref(),
             devenv_config: &config,
+            nixpkgs_config,
         };
 
         // Initialise the backend (generates flake and other backend-specific files)

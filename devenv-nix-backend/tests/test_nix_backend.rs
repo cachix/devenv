@@ -85,7 +85,12 @@ impl TestNixArgs {
         }
     }
 
-    fn to_nix_args<'a>(&'a self, paths: &'a DevenvPaths, config: &'a Config) -> NixArgs<'a> {
+    fn to_nix_args<'a>(
+        &'a self,
+        paths: &'a DevenvPaths,
+        config: &'a Config,
+        nixpkgs_config: devenv_core::config::NixpkgsConfig,
+    ) -> NixArgs<'a> {
         NixArgs {
             version: "1.0.0",
             system: "x86_64-linux",
@@ -104,6 +109,7 @@ impl TestNixArgs {
             git_root: None,
             secretspec: None,
             devenv_config: config,
+            nixpkgs_config,
         }
     }
 }
@@ -195,7 +201,7 @@ async fn test_backend_assemble() {
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
 
     let test_args = TestNixArgs::new(&paths);
-    let nix_args = test_args.to_nix_args(&paths, &config);
+    let nix_args = test_args.to_nix_args(&paths, &config, config.nixpkgs_config("x86_64-linux"));
     let result = backend.assemble(&nix_args).await;
 
     assert!(
@@ -216,7 +222,11 @@ async fn test_backend_update_all_inputs() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -240,7 +250,11 @@ async fn test_backend_update_specific_input() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -267,7 +281,11 @@ async fn test_backend_eval_expression() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -307,7 +325,11 @@ async fn test_backend_eval_multiple_attributes() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -344,7 +366,11 @@ async fn test_backend_build_package() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -372,7 +398,11 @@ async fn test_backend_build_with_gc_root() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -403,7 +433,11 @@ async fn test_backend_dev_env() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -438,7 +472,11 @@ async fn test_backend_metadata() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -471,7 +509,11 @@ async fn test_backend_gc() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -500,7 +542,11 @@ async fn test_backend_search_simple() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -559,7 +605,11 @@ async fn test_backend_search_case_insensitive() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -598,7 +648,11 @@ async fn test_backend_search_regex_special_chars() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -631,7 +685,11 @@ async fn test_backend_search_empty_results() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -698,7 +756,11 @@ async fn test_metadata_standalone() {
     println!("Created backend");
 
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
     println!("Backend assembled");
@@ -722,7 +784,11 @@ async fn test_metadata_after_update() {
     println!("Created backend");
 
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
     println!("Backend assembled");
@@ -751,7 +817,11 @@ async fn test_full_backend_workflow() {
 
     // 2. Initialize
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
     println!("Backend assembled");
@@ -803,7 +873,11 @@ async fn test_backend_update_with_input_overrides() {
 
     let (temp_dir, backend, paths, config) = setup_isolated_test_env(yaml, None, global_options);
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -850,7 +924,11 @@ async fn test_backend_update_with_multiple_overrides() {
 
     let (temp_dir, backend, paths, config) = setup_isolated_test_env(yaml, None, global_options);
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -887,7 +965,11 @@ async fn test_eval_nonexistent_attribute() {
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -922,7 +1004,11 @@ async fn test_build_nonexistent_attribute() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -966,7 +1052,11 @@ async fn test_build_with_syntax_error_in_nix() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, Some(broken_nix), GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1004,7 +1094,11 @@ async fn test_metadata_with_corrupted_lock_file() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1046,7 +1140,11 @@ async fn test_gc_with_invalid_store_paths() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1206,7 +1304,11 @@ async fn test_update_with_invalid_override_input() {
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1245,7 +1347,11 @@ async fn test_eval_empty_attributes_array() {
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1282,7 +1388,11 @@ async fn test_build_empty_attributes_array() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1320,7 +1430,11 @@ async fn test_dev_env_bash_output_format() {
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1348,7 +1462,11 @@ async fn test_dev_env_multiple_calls_same_gc_root() {
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1377,7 +1495,11 @@ async fn test_dev_env_gc_root_already_exists_as_file() {
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1404,7 +1526,11 @@ async fn test_build_gc_root_already_exists() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1454,7 +1580,11 @@ async fn test_update_lock_file_already_exists() {
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1518,7 +1648,11 @@ async fn test_metadata_before_any_update() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1558,7 +1692,11 @@ async fn test_build_attribute_with_leading_dot_hash() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1598,7 +1736,11 @@ async fn test_build_after_update_uses_new_lock() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1642,7 +1784,11 @@ async fn test_get_bash_returns_valid_path() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1682,7 +1828,11 @@ async fn test_get_bash_caching_with_gc_root() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1726,7 +1876,11 @@ async fn test_get_bash_with_refresh_cached_output() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1766,7 +1920,11 @@ async fn test_get_bash_returns_executable() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1816,7 +1974,11 @@ async fn test_search_matches_description_field() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1870,7 +2032,11 @@ async fn test_search_with_very_long_query() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1917,7 +2083,11 @@ async fn test_search_with_unicode_characters() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -1962,7 +2132,11 @@ async fn test_search_depth_limitation() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2014,7 +2188,11 @@ async fn test_gc_with_actual_nix_store_paths() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2070,7 +2248,11 @@ async fn test_gc_with_protected_gc_roots() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2136,7 +2318,11 @@ async fn test_gc_computes_closure_correctly() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2186,7 +2372,11 @@ async fn test_gc_reports_bytes_freed() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2237,7 +2427,11 @@ async fn test_gc_with_mixed_store_and_temp_paths() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2328,7 +2522,11 @@ async fn test_workflow_build_then_incremental_update() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2377,7 +2575,11 @@ async fn test_workflow_multiple_builds_different_gc_roots() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2473,7 +2675,11 @@ inputs:
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2549,7 +2755,11 @@ inputs:
     )
     .expect("Failed to create backend");
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2614,7 +2824,11 @@ async fn test_build_multiple_attributes_single_call() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, None, GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2668,7 +2882,11 @@ async fn test_eval_state_mutex_under_concurrent_eval() {
         .expect("Failed to create backend"),
     );
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2714,7 +2932,11 @@ async fn test_concurrent_build_operations() {
     let (temp_dir, backend, paths, config) =
         setup_isolated_test_env(yaml, Some(devenv_nix), GlobalOptions::default());
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble");
 
@@ -2839,7 +3061,11 @@ inputs:
 
     // Assemble (initializes cachix daemon)
     backend
-        .assemble(&TestNixArgs::new(&paths).to_nix_args(&paths, &config))
+        .assemble(&TestNixArgs::new(&paths).to_nix_args(
+            &paths,
+            &config,
+            config.nixpkgs_config("x86_64-linux"),
+        ))
         .await
         .expect("Failed to assemble backend");
 
