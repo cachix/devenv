@@ -1,4 +1,5 @@
 use super::{
+    CommandResult,
     log::{HumanReadableDuration, LogFormat},
     tasks, util,
 };
@@ -25,7 +26,7 @@ use similar::{ChangeTag, TextDiff};
 use sqlx::SqlitePool;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
-use std::os::unix::{fs::PermissionsExt, process::CommandExt};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
 use std::sync::{
@@ -270,7 +271,7 @@ impl Devenv {
         }
     }
 
-    pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
+    pub fn init(&self, target: &Option<PathBuf>) -> Result<CommandResult> {
         let target = target.clone().unwrap_or_else(|| {
             std::fs::canonicalize(".").expect("Failed to get current directory")
         });
@@ -313,7 +314,7 @@ impl Devenv {
 
         // check if direnv executable is available
         let Ok(direnv) = which::which("direnv") else {
-            return Ok(());
+            return Ok(CommandResult::done());
         };
 
         // run direnv allow
@@ -321,16 +322,21 @@ impl Devenv {
             .arg("allow")
             .current_dir(&target)
             .spawn();
-        Ok(())
+        Ok(CommandResult::done())
     }
 
-    pub async fn inputs_add(&self, name: &str, url: &str, follows: &[String]) -> Result<()> {
+    pub async fn inputs_add(
+        &self,
+        name: &str,
+        url: &str,
+        follows: &[String],
+    ) -> Result<CommandResult> {
         {
             let mut config = self.config.write().await;
             config.add_input(name, url, follows)?;
             config.write().await?;
         }
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
     pub async fn changelogs(&self) -> Result<()> {
@@ -338,13 +344,13 @@ impl Devenv {
         changelog.show_all().await
     }
 
-    pub async fn print_dev_env(&self, json: bool) -> Result<()> {
+    pub async fn print_dev_env(&self, json: bool) -> Result<CommandResult> {
         let env = self.get_dev_environment(json).await?;
         print!(
             "{}",
             String::from_utf8(env.output).expect("Failed to convert env to utf-8")
         );
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
     #[instrument(skip(self))]
@@ -429,31 +435,29 @@ impl Devenv {
         Ok(shell_cmd)
     }
 
-    /// Launch an interactive shell (uses exec, never returns).
-    pub async fn shell(&self) -> Result<()> {
-        self.exec_in_shell(None, &[]).await
+    /// Prepare to launch an interactive shell.
+    /// Returns a CommandResult::Exec that should be executed after cleanup.
+    pub async fn shell(&self) -> Result<CommandResult> {
+        self.prepare_exec(None, &[]).await
     }
 
-    /// Execute a command by replacing the current process using exec.
+    /// Prepare a command for exec.
     ///
     /// This method accepts `Option<String>` for the command to support both:
-    /// - Interactive shell: `exec_in_shell(None, &[])`
-    /// - Command execution: `exec_in_shell(Some(cmd), args)`
+    /// - Interactive shell: `prepare_exec(None, &[])`
+    /// - Command execution: `prepare_exec(Some(cmd), args)`
     ///
-    /// **Important**: This function never returns `Ok(())` on success because `exec()`
-    /// replaces the current process. The `Result<()>` return type only represents
-    /// potential errors during setup or if `exec()` fails to start the new process.
-    /// On successful exec, this function never returns.
-    pub async fn exec_in_shell(&self, cmd: Option<String>, args: &[String]) -> Result<()> {
+    /// Returns a CommandResult::Exec containing the prepared command.
+    /// The caller is responsible for executing it at the appropriate time
+    /// (after TUI cleanup, terminal restore, etc.).
+    pub async fn prepare_exec(
+        &self,
+        cmd: Option<String>,
+        args: &[String],
+    ) -> Result<CommandResult> {
         let shell_cmd = self.prepare_shell(&cmd, args).await?;
         devenv_activity::message(devenv_activity::LogLevel::Info, "Entering shell");
-        let err = shell_cmd.into_std().exec();
-
-        let cmd_context = match &cmd {
-            Some(c) => format!("command '{c}'"),
-            None => "interactive shell".to_string(),
-        };
-        bail!("Failed to exec into shell with {}: {}", cmd_context, err);
+        Ok(CommandResult::Exec(shell_cmd.into_std()))
     }
 
     /// Run a command and return the output.
@@ -478,8 +482,8 @@ impl Devenv {
             .await
     }
 
-    pub async fn update(&self, input_name: &Option<String>) -> Result<()> {
-        self.assemble(false).await?;
+    pub async fn update(&self, input_name: &Option<String>) -> Result<CommandResult> {
+        let _ = self.assemble(false).await?;
 
         let msg = match input_name {
             Some(input_name) => format!("Updating devenv.lock with input {input_name}"),
@@ -499,7 +503,7 @@ impl Devenv {
             tracing::warn!("Failed to show changelogs: {}", e);
         }
 
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
     #[instrument(
@@ -507,11 +511,11 @@ impl Devenv {
         skip(self),
         fields(devenv.user_message = format!("Building {name} container"))
     )]
-    pub async fn container_build(&mut self, name: &str) -> Result<String> {
+    pub async fn container_build(&mut self, name: &str) -> Result<CommandResult<String>> {
         // This container name is passed to the flake as an argument and tells the module system
         // that we're 1. building a container 2. which container we're building.
         self.container_name = Some(name.to_string());
-        self.assemble(false).await?;
+        let _ = self.assemble(false).await?;
 
         let sanitized_name = sanitize_container_name(name);
         let gc_root = self
@@ -538,8 +542,8 @@ impl Devenv {
                 Some(&gc_root),
             )
             .await?;
-        let container_store_path = &paths[0].to_string_lossy();
-        Ok(container_store_path.to_string())
+        let container_store_path = paths[0].to_string_lossy().to_string();
+        Ok(CommandResult::Done(container_store_path))
     }
 
     pub async fn container_copy(
@@ -547,8 +551,8 @@ impl Devenv {
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
-    ) -> Result<()> {
-        let spec = self.container_build(name).await?;
+    ) -> Result<CommandResult> {
+        let spec = self.container_build(name).await?.unwrap();
 
         let activity = Activity::operation("Copying container");
         async move {
@@ -586,7 +590,7 @@ impl Devenv {
             if !status.success() {
                 bail!("Failed to copy container")
             } else {
-                Ok(())
+                Ok(CommandResult::Done(()))
             }
         }
         .instrument(activity.span())
@@ -598,7 +602,7 @@ impl Devenv {
         name: &str,
         copy_args: &[String],
         registry: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CommandResult> {
         if registry.is_some() {
             warn!("Ignoring --registry flag when running container");
         };
@@ -623,18 +627,16 @@ impl Devenv {
             )
             .await?;
 
-        let err = process::Command::new(&paths[0]).into_std().exec();
-
-        // If exec fails, we return an error.
-        bail!("Failed to run container: {}", err);
+        Ok(CommandResult::Exec(std::process::Command::new(&paths[0])))
     }
 
-    pub async fn repl(&self) -> Result<()> {
-        self.assemble(false).await?;
-        self.nix.repl().await
+    pub async fn repl(&self) -> Result<CommandResult> {
+        let _ = self.assemble(false).await?;
+        self.nix.repl().await?;
+        Ok(CommandResult::Done(()))
     }
 
-    pub async fn gc(&self) -> Result<()> {
+    pub async fn gc(&self) -> Result<CommandResult> {
         let start = std::time::Instant::now();
 
         let (to_gc, removed_symlinks) = {
@@ -670,7 +672,7 @@ impl Devenv {
             to_gc_len - after_gc.len(),
             (end - start).as_secs_f32()
         );
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
     #[instrument(
@@ -679,8 +681,8 @@ impl Devenv {
             devenv.user_message = "Searching options and packages",
         )
     )]
-    pub async fn search(&self, name: &str) -> Result<()> {
-        self.assemble(false).await?;
+    pub async fn search(&self, name: &str) -> Result<CommandResult> {
+        let _ = self.assemble(false).await?;
 
         // Run both searches concurrently
         let (options_results, package_results) =
@@ -700,7 +702,7 @@ impl Devenv {
         info!(
             "Found {package_results_count} packages and {results_options_count} options for '{name}'."
         );
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
     async fn search_options(&self, name: &str) -> Result<Vec<DevenvOptionResult>> {
@@ -798,8 +800,8 @@ impl Devenv {
         roots: Vec<String>,
         run_mode: devenv_tasks::RunMode,
         show_output: bool,
-    ) -> Result<()> {
-        self.assemble(false).await?;
+    ) -> Result<CommandResult> {
+        let _ = self.assemble(false).await?;
         if roots.is_empty() {
             bail!("No tasks specified.");
         }
@@ -868,23 +870,23 @@ impl Devenv {
             "{}",
             serde_json::to_string(&outputs).expect("parsing of outputs failed")
         );
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
-    pub async fn tasks_list(&self) -> Result<()> {
-        self.assemble(false).await?;
+    pub async fn tasks_list(&self) -> Result<CommandResult> {
+        let _ = self.assemble(false).await?;
 
         let tasks = self.load_tasks().await?;
 
         if tasks.is_empty() {
             println!("No tasks defined.");
-            return Ok(());
+            return Ok(CommandResult::Done(()));
         }
 
         // Print the task tree
         print_tasks_tree(&tasks);
 
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
     async fn capture_shell_environment(&self) -> Result<HashMap<String, String>> {
@@ -966,8 +968,8 @@ impl Devenv {
         Ok(envs)
     }
 
-    pub async fn test(&self) -> Result<()> {
-        self.assemble(true).await?;
+    pub async fn test(&self) -> Result<CommandResult> {
+        let _ = self.assemble(true).await?;
 
         // collect tests
         let test_script = {
@@ -989,6 +991,7 @@ impl Devenv {
                 detach: true,
                 log_to_file: false,
             };
+            // up() with detach returns Done, not Exec
             self.up(vec![], &options).await?;
         }
 
@@ -1022,21 +1025,21 @@ impl Devenv {
             bail!("Tests failed");
         } else {
             info!("Tests passed :)");
-            Ok(())
+            Ok(CommandResult::Done(()))
         }
     }
 
-    pub async fn info(&self) -> Result<()> {
-        self.assemble(false).await?;
+    pub async fn info(&self) -> Result<CommandResult> {
+        let _ = self.assemble(false).await?;
         let output = self.nix.metadata().await?;
         println!("{output}");
-        Ok(())
+        Ok(CommandResult::Done(()))
     }
 
-    pub async fn build(&self, attributes: &[String]) -> Result<()> {
+    pub async fn build(&self, attributes: &[String]) -> Result<CommandResult<Vec<PathBuf>>> {
         let activity = Activity::operation("Building");
         async move {
-            self.assemble(false).await?;
+            let _ = self.assemble(false).await?;
             let attributes: Vec<String> = if attributes.is_empty() {
                 // construct dotted names of all attributes that we need to build
                 let build_output = self.nix.eval(&["build"]).await?;
@@ -1072,10 +1075,7 @@ impl Devenv {
                     None,
                 )
                 .await?;
-            for path in paths {
-                println!("{}", path.display());
-            }
-            Ok(())
+            Ok(CommandResult::Done(paths))
         }
         .instrument(activity.span())
         .await
@@ -1085,8 +1085,8 @@ impl Devenv {
         &self,
         processes: Vec<String>,
         options: &'a ProcessOptions<'a>,
-    ) -> Result<()> {
-        self.assemble(false).await?;
+    ) -> Result<CommandResult> {
+        let _ = self.assemble(false).await?;
         if !self.has_processes().await? {
             error!("No 'processes' option defined: https://devenv.sh/processes/");
             bail!("No processes defined");
@@ -1210,17 +1210,16 @@ impl Devenv {
                     info!("See logs:  $ tail -f {}", self.processes_log().display());
                 }
                 info!("Stop:      $ devenv processes stop");
+                Ok(CommandResult::Done(()))
             } else {
-                let err = cmd.into_std().exec();
-                bail!(err);
+                Ok(CommandResult::Exec(cmd.into_std()))
             }
-            Ok(())
         }
         .instrument(activity.span())
         .await
     }
 
-    pub async fn down(&self) -> Result<()> {
+    pub async fn down(&self) -> Result<CommandResult> {
         if !PathBuf::from(&self.processes_pid()).exists() {
             bail!("No processes running");
         }
@@ -1305,12 +1304,12 @@ impl Devenv {
         fs::remove_file(self.processes_pid())
             .await
             .expect("Failed to remove PROCESSES_PID");
-        Ok(())
+        Ok(CommandResult::done())
     }
 
-    pub async fn assemble(&self, is_testing: bool) -> Result<()> {
+    pub async fn assemble(&self, is_testing: bool) -> Result<CommandResult> {
         if self.assembled.load(Ordering::Acquire) {
-            return Ok(());
+            return Ok(CommandResult::done());
         }
 
         let _permit = self.assemble_lock.acquire().await.unwrap();
@@ -1501,12 +1500,12 @@ impl Devenv {
         self.nix.assemble(&args).await?;
 
         self.assembled.store(true, Ordering::Release);
-        Ok(())
+        Ok(CommandResult::done())
     }
 
     #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]
     pub async fn get_dev_environment(&self, json: bool) -> Result<DevEnv> {
-        self.assemble(false).await?;
+        let _ = self.assemble(false).await?;
 
         let gc_root = self.devenv_dot_gc.join("shell");
         let span = tracing::debug_span!("evaluating_dev_env");

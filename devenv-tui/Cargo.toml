@@ -21,6 +21,7 @@ async-trait = { workspace = true }
 
 # TUI library
 iocraft = { version = "0.7.10" }
+crossterm = "0.28"
 
 # Tracing integration
 tracing = { workspace = true }

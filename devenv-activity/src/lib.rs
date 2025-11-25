@@ -33,9 +33,20 @@ use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 use std::time::SystemTime;
 use tokio::sync::mpsc;
 use tracing::{Level, Span, span};
+
+// Global sender for activity events (installed by ActivityHandle::install())
+static ACTIVITY_SENDER: OnceLock<mpsc::UnboundedSender<ActivityEvent>> = OnceLock::new();
+
+/// Send an activity event to the registered channel (if any)
+fn send_activity_event(event: ActivityEvent) {
+    if let Some(tx) = ACTIVITY_SENDER.get() {
+        let _ = tx.send(event);
+    }
+}
 
 // Re-export for convenience
 pub use tracing_subscriber::Registry;
@@ -330,6 +341,16 @@ impl Activity {
             detail = ?detail,
         );
 
+        // Send to channel if installed
+        send_activity_event(ActivityEvent::Start {
+            id,
+            kind: kind.clone(),
+            name: name.clone(),
+            parent,
+            detail: detail.clone(),
+            timestamp: Timestamp::now(),
+        });
+
         // Push to activity stack for parent tracking
         ACTIVITY_STACK.with(|stack| stack.borrow_mut().push(id));
 
@@ -376,6 +397,16 @@ impl Activity {
             progress_current = current,
             progress_total = total,
         );
+
+        send_activity_event(ActivityEvent::Progress {
+            id: self.id,
+            progress: ProgressState::Determinate {
+                current,
+                total,
+                unit: None,
+            },
+            timestamp: Timestamp::now(),
+        });
     }
 
     /// Update progress with byte unit
@@ -389,6 +420,16 @@ impl Activity {
             progress_total = total,
             progress_unit = "bytes",
         );
+
+        send_activity_event(ActivityEvent::Progress {
+            id: self.id,
+            progress: ProgressState::Determinate {
+                current,
+                total,
+                unit: Some(ProgressUnit::Bytes),
+            },
+            timestamp: Timestamp::now(),
+        });
     }
 
     /// Update progress (indeterminate)
@@ -400,6 +441,15 @@ impl Activity {
             progress_kind = "indeterminate",
             progress_current = current,
         );
+
+        send_activity_event(ActivityEvent::Progress {
+            id: self.id,
+            progress: ProgressState::Indeterminate {
+                current,
+                unit: None,
+            },
+            timestamp: Timestamp::now(),
+        });
     }
 
     /// Update phase
@@ -411,6 +461,12 @@ impl Activity {
             activity_id = self.id,
             phase = %phase_str,
         );
+
+        send_activity_event(ActivityEvent::Phase {
+            id: self.id,
+            phase: phase_str,
+            timestamp: Timestamp::now(),
+        });
     }
 
     /// Log a line
@@ -423,6 +479,13 @@ impl Activity {
             log_line = %line_str,
             log_is_error = false,
         );
+
+        send_activity_event(ActivityEvent::Log {
+            id: self.id,
+            line: line_str,
+            is_error: false,
+            timestamp: Timestamp::now(),
+        });
     }
 
     /// Log an error
@@ -435,6 +498,13 @@ impl Activity {
             log_line = %line_str,
             log_is_error = true,
         );
+
+        send_activity_event(ActivityEvent::Log {
+            id: self.id,
+            line: line_str,
+            is_error: true,
+            timestamp: Timestamp::now(),
+        });
     }
 }
 
@@ -481,6 +551,13 @@ impl Drop for Activity {
             outcome = %outcome_str,
         );
 
+        // Send to channel if installed
+        send_activity_event(ActivityEvent::Complete {
+            id: self.id,
+            outcome,
+            timestamp: Timestamp::now(),
+        });
+
         // Pop from activity stack
         ACTIVITY_STACK.with(|stack| {
             let mut stack = stack.borrow_mut();
@@ -510,25 +587,38 @@ pub fn message(level: LogLevel, text: impl Into<String>) {
         message_level = level_str,
         message_text = %text_str,
     );
+
+    send_activity_event(ActivityEvent::Message {
+        level,
+        text: text_str,
+        timestamp: Timestamp::now(),
+    });
 }
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 
-/// Handle for creating activity tracing layers
+/// Handle for registering the activity event channel
 pub struct ActivityHandle {
     tx: mpsc::UnboundedSender<ActivityEvent>,
 }
 
+impl ActivityHandle {
+    /// Install this handle's sender as the global activity event channel.
+    /// After calling this, all Activity events will be sent to this channel.
+    pub fn install(self) {
+        let _ = ACTIVITY_SENDER.set(self.tx);
+    }
+}
+
 /// Initialize the activity system.
-/// Returns receiver for TUI and a handle for creating layers.
+/// Returns receiver for TUI and a handle for installing the channel.
 ///
 /// Usage:
 /// ```rust,ignore
-/// let (rx, activity) = devenv_activity::init();
-/// Registry::default()
-///     .with(activity.activity_layer())
-///     .with(activity.forwarder_layer())
+/// let (rx, handle) = devenv_activity::init();
+/// handle.install();  // Activities now send to this channel
+/// // Pass rx to TUI
 /// ```
 pub fn init() -> (mpsc::UnboundedReceiver<ActivityEvent>, ActivityHandle) {
     let (tx, rx) = mpsc::unbounded_channel();

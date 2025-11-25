@@ -2,7 +2,6 @@ use json_subscriber::JsonLayer;
 use std::fs::File;
 use std::io::{self, IsTerminal};
 use std::path::Path;
-use std::sync::Arc;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{EnvFilter, prelude::*};
 
@@ -53,16 +52,10 @@ where
 }
 
 pub fn init_tracing_default() {
-    let shutdown = tokio_shutdown::Shutdown::new();
-    init_tracing(Level::default(), LogFormat::default(), None, shutdown);
+    init_tracing(Level::default(), LogFormat::default(), None);
 }
 
-pub fn init_tracing(
-    level: Level,
-    log_format: LogFormat,
-    trace_export_file: Option<&Path>,
-    shutdown: Arc<tokio_shutdown::Shutdown>,
-) {
+pub fn init_tracing(level: Level, log_format: LogFormat, trace_export_file: Option<&Path>) {
     let devenv_layer = DevenvLayer::new();
     let span_id_layer = SpanIdLayer;
     let span_attrs_layer = SpanAttributesLayer;
@@ -220,26 +213,22 @@ pub fn init_tracing(
             }
         }
         LogFormat::Tui => {
-            // Initialize TUI with proper shutdown coordination
-            let tui_handle = devenv_tui::TuiHandle::init();
-
-            // Create activity layers that forward to TUI
-            let activity_tx = tui_handle.activity_tx();
-
-            // Spawn TUI app in background
-            let shutdown_clone = shutdown.clone();
-            let tui_handle_clone = tui_handle.clone();
-            tokio::spawn(async move {
-                let _ = devenv_tui::app::run_app(tui_handle_clone, shutdown_clone).await;
-            });
-
-            // Register layers including activity layers
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(devenv_layer)
-                .with(span_id_layer)
-                .with(span_attrs_layer)
-                .init();
+            // TUI displays activities via channel, not tracing output.
+            // Only set up file export if requested.
+            match export_file {
+                Some(file) => {
+                    let file_layer = create_json_export_layer(file);
+                    tracing_subscriber::registry()
+                        .with(span_id_layer)
+                        .with(span_attrs_layer)
+                        .with(filter)
+                        .with(file_layer)
+                        .init();
+                }
+                None => {
+                    // No tracing output needed - TUI handles display
+                }
+            }
         }
     }
 }

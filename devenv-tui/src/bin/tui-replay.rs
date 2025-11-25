@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use devenv_activity::Timestamp;
 use devenv_activity::{ActivityEvent, ActivityKind, ActivityOutcome};
-use devenv_tui::TuiHandle;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
 use tokio::time::sleep;
 use tokio_shutdown::Shutdown;
 use tracing::{info, warn};
@@ -178,20 +178,27 @@ impl TraceStream {
     }
 }
 
+/// Converts trace events to ActivityEvents and sends them via channel
 struct EventProcessor {
     span_tracker: SpanTracker,
     seen_spans: HashMap<String, bool>,
+    tx: mpsc::UnboundedSender<ActivityEvent>,
 }
 
 impl EventProcessor {
-    fn new() -> Self {
+    fn new(tx: mpsc::UnboundedSender<ActivityEvent>) -> Self {
         Self {
             span_tracker: SpanTracker::new(),
             seen_spans: HashMap::new(),
+            tx,
         }
     }
 
-    fn process(&mut self, event: &TraceEvent, model: &mut devenv_tui::Model) {
+    fn send(&self, event: ActivityEvent) {
+        let _ = self.tx.send(event);
+    }
+
+    fn process(&mut self, event: &TraceEvent) {
         let Some(span_id) = &event.span_id else {
             return;
         };
@@ -200,13 +207,13 @@ impl EventProcessor {
 
         if is_new_span {
             self.seen_spans.insert(span_id.clone(), true);
-            self.handle_span_creation(event, model);
+            self.handle_span_creation(event);
         } else {
-            self.handle_event_update(event, model);
+            self.handle_event_update(event);
         }
     }
 
-    fn handle_span_creation(&mut self, event: &TraceEvent, model: &mut devenv_tui::Model) {
+    fn handle_span_creation(&mut self, event: &TraceEvent) {
         let Some(span_id) = &event.span_id else {
             return;
         };
@@ -238,19 +245,17 @@ impl EventProcessor {
             .or_else(|| event.fields.get("devenv.ui.details.store_path"))
             .cloned();
 
-        let activity_event = ActivityEvent::Start {
+        self.send(ActivityEvent::Start {
             id: activity_id,
             kind,
             name,
             parent,
             detail,
             timestamp: Timestamp::now(),
-        };
-
-        model.apply_activity_event(activity_event);
+        });
     }
 
-    fn handle_event_update(&mut self, event: &TraceEvent, model: &mut devenv_tui::Model) {
+    fn handle_event_update(&mut self, event: &TraceEvent) {
         let Some(span_id) = &event.span_id else {
             return;
         };
@@ -260,20 +265,19 @@ impl EventProcessor {
         };
 
         if let Some(progress_type) = event.fields.get("devenv.ui.progress.type") {
-            self.handle_progress_update(activity_id, progress_type, event, model);
+            self.handle_progress_update(activity_id, progress_type, event);
         }
 
         if let Some(status) = event.fields.get("devenv.ui.status") {
-            self.handle_status_update(activity_id, status, model);
+            self.handle_status_update(activity_id, status);
         }
 
         if let Some(phase) = event.fields.get("devenv.ui.details.phase") {
-            let activity_event = ActivityEvent::Phase {
+            self.send(ActivityEvent::Phase {
                 id: activity_id,
                 phase: phase.clone(),
                 timestamp: Timestamp::now(),
-            };
-            model.apply_activity_event(activity_event);
+            });
         }
     }
 
@@ -282,7 +286,6 @@ impl EventProcessor {
         activity_id: u64,
         progress_type: &str,
         event: &TraceEvent,
-        model: &mut devenv_tui::Model,
     ) {
         let current = event
             .fields
@@ -316,21 +319,14 @@ impl EventProcessor {
             },
         };
 
-        let activity_event = ActivityEvent::Progress {
+        self.send(ActivityEvent::Progress {
             id: activity_id,
             progress,
             timestamp: Timestamp::now(),
-        };
-
-        model.apply_activity_event(activity_event);
+        });
     }
 
-    fn handle_status_update(
-        &mut self,
-        activity_id: u64,
-        status: &str,
-        model: &mut devenv_tui::Model,
-    ) {
+    fn handle_status_update(&mut self, activity_id: u64, status: &str) {
         let outcome = match status {
             "completed" | "success" => Some(ActivityOutcome::Success),
             "failed" | "error" => Some(ActivityOutcome::Failed),
@@ -339,34 +335,20 @@ impl EventProcessor {
         };
 
         if let Some(outcome) = outcome {
-            let activity_event = ActivityEvent::Complete {
+            self.send(ActivityEvent::Complete {
                 id: activity_id,
                 outcome,
                 timestamp: Timestamp::now(),
-            };
-            model.apply_activity_event(activity_event);
+            });
         }
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let (activity_rx, activity_handle) = devenv_activity::init();
-
-    let tui_handle = TuiHandle::init();
-
-    devenv_tui::spawn_activity_forwarder(activity_rx, tui_handle.activity_tx());
-
     use tracing_subscriber::prelude::*;
     tracing_subscriber::registry().init();
 
-    let shutdown = Shutdown::new();
-    run_replay(tui_handle, shutdown).await?;
-
-    Ok(())
-}
-
-async fn run_replay(tui_handle: TuiHandle, shutdown: std::sync::Arc<Shutdown>) -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
         info!(
@@ -384,8 +366,24 @@ async fn run_replay(tui_handle: TuiHandle, shutdown: std::sync::Arc<Shutdown>) -
     let file = File::open(&trace_path)
         .with_context(|| format!("Failed to open trace file: {}", trace_path.display()))?;
 
-    let mut stream = TraceStream::new(file);
+    // Create activity channel - replay sends events, TUI receives them
+    let (tx, rx) = mpsc::unbounded_channel();
 
+    let shutdown = Shutdown::new();
+
+    // Start TUI in background
+    let tui_task = tokio::spawn({
+        let shutdown = shutdown.clone();
+        async move {
+            match devenv_tui::app::run_app(rx, shutdown).await {
+                Ok(_) => info!("TUI exited normally"),
+                Err(e) => warn!("TUI error: {e}"),
+            }
+        }
+    });
+
+    // Process trace file and send events
+    let mut stream = TraceStream::new(file);
     let first_event = stream
         .next_event()?
         .with_context(|| "No valid trace entries found")?;
@@ -393,24 +391,11 @@ async fn run_replay(tui_handle: TuiHandle, shutdown: std::sync::Arc<Shutdown>) -
     let first_timestamp = first_event.timestamp;
     info!("Starting trace replay from: {}", trace_path.display());
 
-    let tui_task = tokio::spawn({
-        let shutdown = shutdown.clone();
-        let tui_handle_clone = tui_handle.clone();
-        async move {
-            match devenv_tui::app::run_app(tui_handle_clone, shutdown).await {
-                Ok(_) => info!("TUI exited normally"),
-                Err(e) => warn!("TUI error: {e}"),
-            }
-        }
-    });
-
     let start_time = Instant::now();
-    let mut processor = EventProcessor::new();
+    let mut processor = EventProcessor::new(tx);
     let mut event_count = 0;
 
-    if let Ok(mut model) = tui_handle.model().lock() {
-        processor.process(&first_event, &mut model);
-    }
+    processor.process(&first_event);
 
     while let Some(event) = stream.next_event()? {
         event_count += 1;
@@ -434,9 +419,7 @@ async fn run_replay(tui_handle: TuiHandle, shutdown: std::sync::Arc<Shutdown>) -
             }
         }
 
-        if let Ok(mut model) = tui_handle.model().lock() {
-            processor.process(&event, &mut model);
-        }
+        processor.process(&event);
     }
 
     info!(
