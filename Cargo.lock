@@ -1266,7 +1266,7 @@ dependencies = [
 
 [[package]]
 name = "devenv"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "async-trait",
  "blake3",
@@ -1331,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-cache-core"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "blake3",
  "miette",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-core"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "async-trait",
  "clap",
@@ -1367,7 +1367,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-eval-cache"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "blake3",
  "devenv-cache-core",
@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-generate"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "astral-tokio-tar",
  "binaryornot",
@@ -1409,7 +1409,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-run-tests"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "clap",
  "devenv",
@@ -1424,7 +1424,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-snix-backend"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "async-trait",
  "devenv-core",
@@ -1444,7 +1444,7 @@ dependencies = [
 
 [[package]]
 name = "devenv-tasks"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "blake3",
  "clap",
@@ -6152,7 +6152,7 @@ dependencies = [
 
 [[package]]
 name = "tokio-shutdown"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
  "futures",
  "nix 0.30.1",
