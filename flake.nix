@@ -45,6 +45,13 @@
       devenv.follows = "";
     };
   };
+  inputs.nixd = {
+    url = "github:nix-community/nixd";
+    inputs = {
+      nixpkgs.follows = "nixpkgs";
+      flake-parts.follows = "flake-parts";
+    };
+  };
 
   outputs =
     { self
@@ -71,6 +78,7 @@
             (final: prev: {
               inherit (inputs.cachix.packages.${system}) cachix;
               nix = inputs.nix.packages.${system}.nix;
+              nixd = inputs.nixd.packages.${system}.nixd;
             })
           ];
           pkgs = import nixpkgs { inherit overlays system; };

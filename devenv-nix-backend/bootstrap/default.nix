@@ -28,6 +28,8 @@ args@{
   secretspec ? null
 , # devenv.yaml configuration (inputs, imports, nixpkgs, devenv, etc.)
   devenv_config ? { }
+, # Pre-merged nixpkgs configuration (passed from Rust, used by LSP)
+  nixpkgs_config ? { }
 }:
 
 let
