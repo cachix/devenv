@@ -72,7 +72,7 @@ impl TasksUi {
         self.console_write_line(&format!("{:17} {}\n", "Running tasks", names))?;
 
         // start processing tasks
-        let started = std::time::Instant::now();
+        let _started = std::time::Instant::now();
 
         // Simple status logging mode (no cursor manipulation)
         let mut last_statuses = std::collections::HashMap::new();

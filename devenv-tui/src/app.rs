@@ -1,4 +1,4 @@
-use crate::{model::Model, view::view, UiSender};
+use crate::{UiSender, model::Model, view::view};
 use crossterm::{cursor, execute, terminal};
 use devenv_activity::ActivityEvent;
 use iocraft::prelude::*;

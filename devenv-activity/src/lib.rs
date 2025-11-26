@@ -32,8 +32,8 @@
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 use tokio::sync::mpsc;
 use tracing::{Level, Span, span};

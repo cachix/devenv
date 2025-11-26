@@ -22,6 +22,7 @@ pub struct NixLogBridge {
 }
 
 /// State for tracking file evaluations
+#[derive(Default)]
 struct EvaluationState {
     /// Total number of files evaluated
     total_files_evaluated: u64,
@@ -33,16 +34,6 @@ struct EvaluationState {
     activity: Option<Activity>,
 }
 
-impl Default for EvaluationState {
-    fn default() -> Self {
-        Self {
-            total_files_evaluated: 0,
-            pending_files: VecDeque::new(),
-            last_progress_update: None,
-            activity: None,
-        }
-    }
-}
 
 /// Information about an active Nix activity
 struct NixActivityInfo {
@@ -397,7 +388,7 @@ impl NixLogBridge {
                     {
                         activity_info
                             .activity
-                            .progress(*done as u64, *expected as u64);
+                            .progress(*done, *expected);
                     }
                 } else if fields.len() >= 2 {
                     // Fallback to download progress format for backward compatibility
@@ -405,7 +396,7 @@ impl NixLogBridge {
                         (fields.first(), fields.get(1))
                     {
                         let total_bytes = match total_opt {
-                            Some(Field::Int(total)) => Some(*total as u64),
+                            Some(Field::Int(total)) => Some(*total),
                             _ => None,
                         };
 
@@ -417,11 +408,11 @@ impl NixLogBridge {
                                 if let Some(total) = total_bytes {
                                     activity_info
                                         .activity
-                                        .progress_bytes(*downloaded as u64, total);
+                                        .progress_bytes(*downloaded, total);
                                 } else {
                                     activity_info
                                         .activity
-                                        .progress_indeterminate(*downloaded as u64);
+                                        .progress_indeterminate(*downloaded);
                                 }
                             }
                         }

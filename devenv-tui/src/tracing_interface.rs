@@ -1,10 +1,8 @@
-/// TUI Tracing Interface Specification
-///
-/// This defines the expected structure of tracing spans and events that TUI systems
-/// should parse and render. Systems emit these using the standard `tracing` crate,
-/// and TUI implementations parse them for display.
-
-// Re-export tracing for convenience (not currently used but available for documentation examples)
+// TUI Tracing Interface Specification
+//
+// This defines the expected structure of tracing spans and events that TUI systems
+// should parse and render. Systems emit these using the standard `tracing` crate,
+// and TUI implementations parse them for display.
 
 /// Standard span fields for operations (builds, downloads, evaluations, etc.)
 ///

@@ -9,9 +9,9 @@
 //! - activity.phase(phase) for status changes
 //! - activity.progress(current, total) for progress updates
 //! - activity.log(line) / activity.error(line) for command output
-//! However, this requires refactoring how these helpers are used throughout devenv-tasks,
-//! since Activity guards need to be stored and managed by the caller, not created
-//! transiently in helper functions.
+//!   However, this requires refactoring how these helpers are used throughout devenv-tasks,
+//!   since Activity guards need to be stored and managed by the caller, not created
+//!   transiently in helper functions.
 
 use devenv_tui::tracing_interface::{operation_fields, progress_events, status_events};
 use tracing::{debug, error, info, info_span, warn};

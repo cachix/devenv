@@ -82,4 +82,3 @@ pub(crate) fn create_ui_channel() -> (UiSender, mpsc::UnboundedReceiver<UiEvent>
     let (tx, rx) = mpsc::unbounded_channel();
     (UiSender(tx), rx)
 }
-

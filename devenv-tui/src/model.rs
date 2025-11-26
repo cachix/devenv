@@ -319,11 +319,10 @@ impl Model {
     }
 
     fn handle_activity_phase(&mut self, id: u64, phase: String) {
-        if let Some(activity) = self.activities.get_mut(&id) {
-            if let ActivityVariant::Build(ref mut build) = activity.variant {
+        if let Some(activity) = self.activities.get_mut(&id)
+            && let ActivityVariant::Build(ref mut build) = activity.variant {
                 build.phase = Some(phase);
             }
-        }
     }
 
     fn handle_activity_log(&mut self, id: u64, line: String, is_error: bool) {
@@ -333,15 +332,14 @@ impl Model {
         }
         logs.push_back(line.clone());
 
-        if let Some(activity) = self.activities.get_mut(&id) {
-            if let ActivityVariant::Build(ref mut build) = activity.variant {
+        if let Some(activity) = self.activities.get_mut(&id)
+            && let ActivityVariant::Build(ref mut build) = activity.variant {
                 if is_error {
                     build.log_stderr_lines.push(line);
                 } else {
                     build.log_stdout_lines.push(line);
                 }
             }
-        }
     }
 
     fn handle_message(&mut self, level: devenv_activity::LogLevel, text: String) {
