@@ -8,8 +8,16 @@ on:
       - "requirements.in"
       - "requirements.txt"
 
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (tag or branch) to test'
+        required: true
+        default: 'main'
+        type: string
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: "${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.ref }}"
   cancel-in-progress: true
 
 jobs:
@@ -34,3 +42,4 @@ jobs:
     with:
       system: ${{ matrix.system }}
       runs-on: ${{ matrix.runs-on }}
+      ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || '' }}
