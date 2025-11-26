@@ -8,6 +8,7 @@
 , installShellFiles
 , rustPlatform
 , cachix
+, nixd
 , gitMinimal
 , openssl
 , dbus
@@ -84,12 +85,12 @@ rustPlatform.buildRustPackage {
     in
     ''
       wrapProgram $out/bin/devenv \
-        --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
+        --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
         ${setDefaultLocaleArchive} \
 
       # TODO: problematic for our library...
       wrapProgram $out/bin/devenv-run-tests \
-        --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin" \
+        --prefix PATH ":" "$out/bin:${lib.getBin cachix}/bin:${lib.getBin nixd}/bin" \
         ${setDefaultLocaleArchive} \
 
       # Generate manpages

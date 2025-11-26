@@ -256,7 +256,7 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
         Commands::Changelogs {} => devenv.changelogs().await,
 
         // hidden
-        Commands::Assemble => devenv.assemble(false).await,
+        Commands::Assemble => devenv.assemble(false).await.map(|_| ()),
         Commands::PrintDevEnv { json } => devenv.print_dev_env(json).await,
         Commands::GenerateJSONSchema => {
             config::write_json_schema()
@@ -268,6 +268,7 @@ async fn run_devenv(shutdown: Arc<Shutdown>) -> Result<()> {
             let config = devenv.config.read().await.clone();
             devenv::mcp::run_mcp_server(config).await
         }
+        Commands::Lsp { print_config } => devenv::lsp::run(&devenv, print_config).await,
         Commands::Direnvrc => unreachable!(),
         Commands::Version => unreachable!(),
     }

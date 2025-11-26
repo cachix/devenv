@@ -129,6 +129,9 @@ pub struct Devenv {
     // Secretspec resolved data to pass to Nix
     secretspec_resolved: Arc<OnceCell<secretspec::Resolved<HashMap<String, String>>>>,
 
+    // Cached serialized NixArgs from assemble
+    nix_args_string: Arc<OnceCell<String>>,
+
     // TODO: make private.
     // Pass as an arg or have a setter.
     pub container_name: Option<String>,
@@ -243,6 +246,7 @@ impl Devenv {
             has_processes: Arc::new(OnceCell::new()),
             eval_cache_pool,
             secretspec_resolved,
+            nix_args_string: Arc::new(OnceCell::new()),
             container_name: None,
             shutdown: options.shutdown,
         }
@@ -263,6 +267,15 @@ impl Devenv {
             dot_gc: self.devenv_dot_gc.clone(),
             home_gc: self.devenv_home_gc.clone(),
         }
+
+    /// Get the root directory of the devenv project (where devenv.nix is located)
+    pub fn root(&self) -> &Path {
+        &self.devenv_root
+    }
+
+    /// Get the path to the .devenv directory
+    pub fn dotfile(&self) -> &Path {
+        &self.devenv_dotfile
     }
 
     pub fn init(&self, target: &Option<PathBuf>) -> Result<()> {
@@ -1300,9 +1313,15 @@ impl Devenv {
         Ok(())
     }
 
-    pub async fn assemble(&self, is_testing: bool) -> Result<()> {
+    /// Assemble the devenv environment and return the serialized NixArgs string.
+    /// The returned string can be used with `import bootstrap/default.nix <args>`.
+    pub async fn assemble(&self, is_testing: bool) -> Result<String> {
         if self.assembled.load(Ordering::Acquire) {
-            return Ok(());
+            return Ok(self
+                .nix_args_string
+                .get()
+                .expect("nix_args_string should be set after assemble")
+                .clone());
         }
 
         let _permit = self.assemble_lock.acquire().await.unwrap();
@@ -1494,11 +1513,19 @@ impl Devenv {
             nixpkgs_config,
         };
 
+        // Serialize NixArgs for caching and return
+        let nix_args_str = ser_nix::to_string(&args).into_diagnostic()?;
+
         // Initialise the backend (generates flake and other backend-specific files)
         self.nix.assemble(&args).await?;
 
+        // Cache the serialized args
+        self.nix_args_string
+            .set(nix_args_str.clone())
+            .map_err(|_| miette!("nix_args_string already set"))?;
+
         self.assembled.store(true, Ordering::Release);
-        Ok(())
+        Ok(nix_args_str)
     }
 
     #[instrument(skip_all,fields(devenv.user_message = "Building shell"))]

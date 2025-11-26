@@ -166,6 +166,14 @@ pub enum Commands {
 
     #[command(about = "Launch Model Context Protocol server for AI assistants")]
     Mcp {},
+
+    #[command(
+        about = "Start the nixd language server for devenv.nix. https://devenv.sh/editor-support/"
+    )]
+    Lsp {
+        #[arg(long, help = "Print nixd configuration and exit")]
+        print_config: bool,
+    },
 }
 
 #[derive(Subcommand, Clone)]

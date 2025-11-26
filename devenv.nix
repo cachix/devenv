@@ -71,6 +71,7 @@
     pkgs.cargo-edit # Adds the set-version command
     pkgs.protobuf # snix
     pkgs.dbus # secretspec
+    pkgs.nixd # LSP for devenv lsp command
   ];
 
   languages = {
