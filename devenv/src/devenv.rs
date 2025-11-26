@@ -339,9 +339,10 @@ impl Devenv {
         Ok(CommandResult::Done(()))
     }
 
-    pub async fn changelogs(&self) -> Result<()> {
+    pub async fn changelogs(&self) -> Result<CommandResult> {
         let changelog = crate::changelog::Changelog::new(&**self.nix, &self.paths());
-        changelog.show_all().await
+        changelog.show_all().await?;
+        Ok(CommandResult::Done(()))
     }
 
     pub async fn print_dev_env(&self, json: bool) -> Result<CommandResult> {

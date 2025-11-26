@@ -6,7 +6,6 @@ use devenv::{
 };
 use devenv_activity::{LogLevel, message};
 use devenv_core::config::{self, Config};
-use devenv_tui::tracing_interface::{operation_fields, operation_types};
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use std::{process::Command, sync::Arc};
 use tempfile::TempDir;
@@ -308,7 +307,7 @@ async fn run_devenv(cli: Cli, shutdown: Arc<Shutdown>) -> Result<CommandResult> 
                 devenv.inputs_add(&name, &url, &follows).await?
             }
         },
-        Commands::Changelogs {} => devenv.changelogs().await,
+        Commands::Changelogs {} => devenv.changelogs().await?,
 
         // hidden
         Commands::Assemble => devenv.assemble(false).await?,

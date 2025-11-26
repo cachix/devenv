@@ -11,7 +11,6 @@ use devenv_core::{
     nix_args::NixArgs,
     nix_backend::{DevenvPaths, NixBackend, Options},
 };
-use devenv_tui::tracing_interface::{operation_fields, operation_types};
 use futures::future;
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use nix_conf_parser::NixConf;
