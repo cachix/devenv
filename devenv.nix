@@ -72,6 +72,7 @@
     pkgs.cargo-insta # Snapshot testing for Rust
     pkgs.protobuf # snix
     pkgs.dbus # secretspec
+    pkgs.nixd # LSP for devenv lsp command
   ];
 
   languages = {

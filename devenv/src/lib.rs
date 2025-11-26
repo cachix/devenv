@@ -1,6 +1,8 @@
 pub mod changelog;
 pub mod cli;
 mod devenv;
+pub mod log;
+pub mod lsp;
 pub mod mcp;
 pub mod nix_log_bridge;
 pub mod tracing;
