@@ -7,7 +7,7 @@ draft: false
 
 # devenv 1.11: Module changelogs and SecretSpec 0.4.0
 
-[devenv 1.11](https://github.com/cachix/devenv/releases/tag/v1.11) brings two key improvements:
+[devenv 1.11](https://github.com/cachix/devenv/releases/tag/v1.11) brings the following improvements:
 
 - [Module changelogs](#module-changelogs) for communicating breaking changes
 - [Profile configuration in devenv.yaml](#profile-configuration-in-devenvyaml)
