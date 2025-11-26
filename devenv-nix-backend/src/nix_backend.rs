@@ -1022,10 +1022,11 @@ impl NixBackend for NixRustBackend {
             .to_miette()
             .wrap_err("Failed to parse derivation store path")?;
 
-        // Use the FFI function to create BuildEnvironment from derivation
-        let mut build_env = BuildEnvironment::from_derivation(&self.store, &drv_store_path)
+        // Use the FFI function to get the fully-expanded dev environment
+        // This builds a modified derivation that runs setup hooks and captures the result
+        let mut build_env = BuildEnvironment::get_dev_environment(&self.store, &drv_store_path)
             .to_miette()
-            .wrap_err("Failed to extract build environment from derivation")?;
+            .wrap_err("Failed to get dev environment from derivation")?;
 
         // Serialize to the requested format
         let output_str = if json {
