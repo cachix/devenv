@@ -79,7 +79,7 @@ in
     # to avoid infinite recursion when using config.env.* in processes conditions.
     (lib.mkIf (config.process.manager.implementation == "process-compose") {
       env = {
-        PC_CONFIG_FILES = lib.mkIf cfg.enable (toString cfg.configFile);
+        PC_CONFIG_FILES = toString cfg.configFile;
         PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
       };
     })
