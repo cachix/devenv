@@ -2668,7 +2668,7 @@ string
 
 
 *Default:*
-` "1.10" `
+` "1.11.1" `
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix](https://github.com/cachix/devenv/blob/main/src/modules/update-check.nix)
@@ -24610,6 +24610,95 @@ strings concatenated with “\\n”
 
 *Declared by:*
  - [https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nginx.nix)
+
+
+
+## services.nixseparatedebuginfod.enable
+
+
+
+Whether to enable nixseparatedebuginfod.
+
+
+
+*Type:*
+boolean
+
+
+
+*Default:*
+` false `
+
+
+
+*Example:*
+` true `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
+
+
+
+## services.nixseparatedebuginfod.package
+
+
+
+nixseparatedebuginfod package to use.
+
+
+
+*Type:*
+package
+
+
+
+*Default:*
+` <derivation nixseparatedebuginfod2-1.0.1> `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
+
+
+
+## services.nixseparatedebuginfod.host
+
+
+
+IP address for nixseparatedebuginfod to listen on.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "127.0.0.1" `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
+
+
+
+## services.nixseparatedebuginfod.port
+
+
+
+Port for nixseparatedebuginfod to listen on.
+
+
+
+*Type:*
+16 bit unsigned integer; between 0 and 65535 (both inclusive)
+
+
+
+*Default:*
+` 1949 `
+
+*Declared by:*
+ - [https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
 
 
 
