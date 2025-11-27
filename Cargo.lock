@@ -4831,9 +4831,9 @@ dependencies = [
 
 [[package]]
 name = "secretspec"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60abc6d3a2caa681f7e74d1a601e73bf96c388037cb249481e85d66ff5e5dacd"
+checksum = "2f9f808ba26251a023574dad1e098c81cac2bece84cb96b4d837720677abbb20"
 dependencies = [
  "clap",
  "colored",

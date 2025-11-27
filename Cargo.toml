@@ -69,7 +69,7 @@ schematic = { version = "0.18.12", features = [
   "renderer_json_schema",
 ] }
 secrecy = "0.10"
-secretspec = "0.4.0"
+secretspec = "0.4.1"
 serde = { version = "1.0.226", features = ["derive"] }
 serde_json = "1.0.145"
 serde_repr = "0.1.20"
