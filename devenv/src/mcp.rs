@@ -85,9 +85,10 @@ impl DevenvMcpServer {
         // Assemble the devenv to create required flake files
         devenv.assemble(true).await?;
 
-        // Use broad search term to get a wide set of packages
-        // We'll limit results later if needed
-        let search_output = devenv.nix.search(".*", None).await?;
+        // Search for common/popular packages
+        // Note: Using ".*" would match all packages but causes resource exhaustion
+        // with the FFI backend due to GC pressure. Use a reasonable search term instead.
+        let search_output = devenv.nix.search("cachix", None).await?;
 
         // Parse the search results from JSON
         #[derive(Deserialize)]

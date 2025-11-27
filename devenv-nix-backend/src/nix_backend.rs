@@ -81,110 +81,120 @@ struct PackageInfo {
 /// Matches packages against query regex and extracts metadata
 fn search_packages(
     eval_state: &mut EvalState,
-    attrset: &nix_bindings_expr::value::Value,
-    attr_path: Vec<String>,
+    root_attrset: &nix_bindings_expr::value::Value,
+    root_path: Vec<String>,
     query_regex: &Regex,
     results: &mut BTreeMap<String, PackageInfo>,
-    depth: usize,
+    _depth: usize,
     max_depth: usize,
+    max_results: usize,
 ) -> Result<()> {
-    // Stop recursing at max depth
-    if depth > max_depth {
-        return Ok(());
-    }
+    // Use iterative approach with explicit stack to avoid stack overflow
+    // Stack items: (attrset, path, depth)
+    let mut stack: Vec<(nix_bindings_expr::value::Value, Vec<String>, usize)> = vec![];
+    stack.push((root_attrset.clone(), root_path, 0));
 
-    // Get attribute names safely
-    let Ok(attr_names) = eval_state.require_attrs_names_unsorted(attrset).to_miette() else {
-        return Ok(()); // Skip non-attrsets
-    };
+    while let Some((attrset, attr_path, depth)) = stack.pop() {
+        // Stop at max depth
+        if depth > max_depth {
+            continue;
+        }
 
-    for attr_name in attr_names {
-        let mut current_path = attr_path.clone();
-        current_path.push(attr_name.clone());
-        let path_str = current_path.join(".");
+        // Stop if we have enough results
+        if results.len() >= max_results {
+            break;
+        }
 
-        // Try to get the attribute - skip if it fails
-        let value = match eval_state
-            .require_attrs_select_opt(attrset, &attr_name)
+        // Get attribute names safely
+        let Ok(attr_names) = eval_state
+            .require_attrs_names_unsorted(&attrset)
             .to_miette()
-        {
-            Ok(Some(v)) => v,
-            Ok(None) => continue,
-            Err(_) => continue, // Skip broken attributes
+        else {
+            continue; // Skip non-attrsets
         };
 
-        // Try to get the pname (indicates this is a package)
-        let pname_result = eval_state
-            .require_attrs_select_opt(&value, "pname")
-            .to_miette();
+        for attr_name in attr_names {
+            let mut current_path = attr_path.clone();
+            current_path.push(attr_name.clone());
+            let path_str = current_path.join(".");
 
-        if let Ok(Some(pname_val)) = pname_result {
-            // This looks like a derivation - extract metadata
-            if let Ok(pname_str) = eval_state.require_string(&pname_val).to_miette() {
-                // Get version
-                let version = eval_state
-                    .require_attrs_select_opt(&value, "version")
-                    .to_miette()
-                    .ok()
-                    .flatten()
-                    .and_then(|version_val| {
-                        eval_state.require_string(&version_val).to_miette().ok()
-                    })
-                    .unwrap_or_else(|| "unknown".to_string());
+            // Try to get the attribute - skip if it fails
+            let value = match eval_state
+                .require_attrs_select_opt(&attrset, &attr_name)
+                .to_miette()
+            {
+                Ok(Some(v)) => v,
+                Ok(None) => continue,
+                Err(_) => continue, // Skip broken attributes
+            };
 
-                // Get description from meta
-                let description = eval_state
-                    .require_attrs_select_opt(&value, "meta")
-                    .to_miette()
-                    .ok()
-                    .flatten()
-                    .and_then(|meta_val| {
-                        eval_state
-                            .require_attrs_select_opt(&meta_val, "description")
-                            .to_miette()
-                            .ok()
-                            .flatten()
-                    })
-                    .and_then(|desc_val| eval_state.require_string(&desc_val).to_miette().ok())
-                    .unwrap_or_default();
+            // Try to get the pname (indicates this is a package)
+            let pname_result = eval_state
+                .require_attrs_select_opt(&value, "pname")
+                .to_miette();
 
-                // Check if matches query (against path, name, or description)
-                if query_regex.is_match(&path_str)
-                    || query_regex.is_match(&pname_str)
-                    || query_regex.is_match(&description)
-                {
-                    results.insert(
-                        path_str,
-                        PackageInfo {
-                            pname: pname_str,
-                            version,
-                            description,
-                        },
-                    );
+            if let Ok(Some(pname_val)) = pname_result {
+                // This looks like a derivation - extract metadata
+                if let Ok(pname_str) = eval_state.require_string(&pname_val).to_miette() {
+                    // Get version
+                    let version = eval_state
+                        .require_attrs_select_opt(&value, "version")
+                        .to_miette()
+                        .ok()
+                        .flatten()
+                        .and_then(|version_val| {
+                            eval_state.require_string(&version_val).to_miette().ok()
+                        })
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    // Get description from meta
+                    let description = eval_state
+                        .require_attrs_select_opt(&value, "meta")
+                        .to_miette()
+                        .ok()
+                        .flatten()
+                        .and_then(|meta_val| {
+                            eval_state
+                                .require_attrs_select_opt(&meta_val, "description")
+                                .to_miette()
+                                .ok()
+                                .flatten()
+                        })
+                        .and_then(|desc_val| eval_state.require_string(&desc_val).to_miette().ok())
+                        .unwrap_or_default();
+
+                    // Check if matches query (against path, name, or description)
+                    if query_regex.is_match(&path_str)
+                        || query_regex.is_match(&pname_str)
+                        || query_regex.is_match(&description)
+                    {
+                        results.insert(
+                            path_str,
+                            PackageInfo {
+                                pname: pname_str,
+                                version,
+                                description,
+                            },
+                        );
+                    }
                 }
-            }
-        } else {
-            // Not a package, check if we should recurse into this attrset
-            if let Ok(ValueType::AttrSet) = eval_state.value_type(&value).to_miette() {
-                let should_recurse = eval_state
-                    .require_attrs_select_opt(&value, "recurseForDerivations")
-                    .to_miette()
-                    .ok()
-                    .flatten()
-                    .and_then(|recurse_val| eval_state.require_bool(&recurse_val).to_miette().ok())
-                    .unwrap_or_else(|| current_path.len() <= 2);
+            } else {
+                // Not a package, check if we should recurse into this attrset
+                if let Ok(ValueType::AttrSet) = eval_state.value_type(&value).to_miette() {
+                    let should_recurse = eval_state
+                        .require_attrs_select_opt(&value, "recurseForDerivations")
+                        .to_miette()
+                        .ok()
+                        .flatten()
+                        .and_then(|recurse_val| {
+                            eval_state.require_bool(&recurse_val).to_miette().ok()
+                        })
+                        .unwrap_or_else(|| current_path.len() <= 2);
 
-                if should_recurse {
-                    // Recursively search this attrset
-                    let _ = search_packages(
-                        eval_state,
-                        &value,
-                        current_path,
-                        query_regex,
-                        results,
-                        depth + 1,
-                        max_depth,
-                    );
+                    if should_recurse {
+                        // Push to stack for iterative processing
+                        stack.push((value, current_path, depth + 1));
+                    }
                 }
             }
         }
@@ -238,6 +248,11 @@ pub struct NixRustBackend {
     // Temp files that must live as long as the backend (e.g., NIXPKGS_CONFIG)
     #[allow(dead_code)]
     _temp_files: Vec<tempfile::NamedTempFile>,
+
+    // GC thread registration guard - must live as long as the backend
+    // The Boehm GC requires threads to be registered before using GC-allocated memory.
+    #[allow(dead_code)]
+    _gc_registration: nix_bindings_expr::eval_state::ThreadRegistrationGuard,
 }
 
 // SAFETY: This is unsafe and relies on several assumptions about the Nix C++ library:
@@ -292,6 +307,13 @@ impl NixRustBackend {
             .to_miette()
             .wrap_err("Failed to initialize Nix expression library")?;
 
+        // Register thread with garbage collector IMMEDIATELY after init()
+        // This MUST happen before any other Nix FFI calls (including settings::set)
+        // because the Boehm GC requires thread registration before allocations.
+        let gc_registration = gc_register_my_thread()
+            .to_miette()
+            .wrap_err("Failed to register thread with Nix garbage collector")?;
+
         // Set experimental features after init() to ensure they're properly configured
         settings::set("experimental-features", "flakes nix-command")
             .to_miette()
@@ -312,9 +334,6 @@ impl NixRustBackend {
             ))?;
             tracing::debug!("Applied cachix global setting: {} = {}", key, value);
         }
-
-        // Register thread with garbage collector
-        let _gc_registration = gc_register_my_thread();
 
         // Extract bootstrap directory to dotfile location
         let bootstrap_path = Self::extract_bootstrap_files(&paths.dotfile)?;
@@ -422,6 +441,7 @@ impl NixRustBackend {
             cachix_daemon: cachix_daemon.clone(),
             cached_import_expr: Arc::new(OnceCell::new()),
             _temp_files: temp_files,
+            _gc_registration: gc_registration,
         };
 
         // Register cleanup task with shutdown coordinator
@@ -1510,7 +1530,8 @@ impl NixBackend for NixRustBackend {
             &query_regex,
             &mut results,
             0,
-            5, // max_depth
+            5,   // max_depth
+            100, // max_results - limit to avoid long searches
         )
         .wrap_err("Search failed")?;
 
