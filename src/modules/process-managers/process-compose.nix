@@ -73,90 +73,82 @@ in
     };
   };
 
-  config = lib.mkMerge [
-    # Set environment variables based on the selected implementation.
-    # This must NOT depend on cfg.enable (which depends on config.processes != {})
-    # to avoid infinite recursion when using config.env.* in processes conditions.
-    (lib.mkIf (config.process.manager.implementation == "process-compose") {
-      env = {
-        PC_CONFIG_FILES = lib.mkIf cfg.enable (toString cfg.configFile);
-        PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
-      };
-    })
+  config = lib.mkIf cfg.enable {
+    env = {
+      PC_CONFIG_FILES = toString cfg.configFile;
+      PC_SOCKET_PATH = if cfg.unixSocket.enable then cfg.unixSocket.path else null;
+    };
 
-    # The rest of the config depends on cfg.enable (which requires processes to be defined)
-    (lib.mkIf cfg.enable {
-      process.manager.args = {
-        "config" = cfg.configFile;
-        "disable-dotenv" = true;
-        "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
-        # Prevent the TUI from immediately closing if all processes fail.
-        # Improves the UX by letting users inspect the logs.
-        "keep-project" = cfg.tui.enable;
-        "unix-socket" =
-          if cfg.unixSocket.enable
-          then cfg.unixSocket.path
-          else null;
-        # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
-      };
+    process.manager.args = {
+      "config" = cfg.configFile;
+      "disable-dotenv" = true;
+      "port" = if !cfg.unixSocket.enable then toString cfg.port else null;
+      # Prevent the TUI from immediately closing if all processes fail.
+      # Improves the UX by letting users inspect the logs.
+      "keep-project" = cfg.tui.enable;
+      "unix-socket" =
+        if cfg.unixSocket.enable
+        then cfg.unixSocket.path
+        else null;
+      # TODO: move -t (for tui) here. We need a newer nixpkgs for optionValueSeparator = "=".
+    };
 
-      process.manager.command = lib.mkDefault ''
-        # Ensure the log directory exists
-        mkdir -p "${config.devenv.state}/process-compose"
+    process.manager.command = lib.mkDefault ''
+      # Ensure the log directory exists
+      mkdir -p "${config.env.DEVENV_STATE}/process-compose"
 
-        ${lib.optionalString cfg.unixSocket.enable ''
-        # Attach to an existing process-compose instance if:
-        # - The unix socket is enabled
-        # - The socket file exists
-        # - The file is a unix socket
-        # - There's an active process listening on the socket
-        if ${pkgs.coreutils}/bin/timeout 1 ${lib.getExe pkgs.socat} - "UNIX-CONNECT:$PC_SOCKET_PATH" </dev/null >/dev/null 2>&1; then
-          echo "Attaching to existing process-compose server at $PC_SOCKET_PATH" >&2
-          exec ${lib.getExe cfg.package} --unix-socket "$PC_SOCKET_PATH" attach "$@"
-        fi
-        ''}
+      ${lib.optionalString cfg.unixSocket.enable ''
+      # Attach to an existing process-compose instance if:
+      # - The unix socket is enabled
+      # - The socket file exists
+      # - The file is a unix socket
+      # - There's an active process listening on the socket
+      if ${pkgs.coreutils}/bin/timeout 1 ${lib.getExe pkgs.socat} - "UNIX-CONNECT:$PC_SOCKET_PATH" </dev/null >/dev/null 2>&1; then
+        echo "Attaching to existing process-compose server at $PC_SOCKET_PATH" >&2
+        exec ${lib.getExe cfg.package} --unix-socket "$PC_SOCKET_PATH" attach "$@"
+      fi
+      ''}
 
-        # Start a new process-compose server
-        ${lib.getExe cfg.package} \
-          ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
-          -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
-          up "$@" &
-      '';
+      # Start a new process-compose server
+      ${lib.getExe cfg.package} \
+        ${lib.cli.toGNUCommandLineShell { } config.process.manager.args} \
+        -t="''${PC_TUI_ENABLED:-${lib.boolToString cfg.tui.enable}}" \
+        up "$@" &
+    '';
 
-      packages = [ cfg.package ];
+    packages = [ cfg.package ];
 
-      process.managers.process-compose = {
-        configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
-        settings = {
-          version = lib.mkDefault "0.5";
-          is_strict = lib.mkDefault true;
-          log_location = lib.mkDefault "${config.devenv.state}/process-compose/process-compose.log";
-          shell = {
-            shell_command = lib.mkDefault (lib.getExe pkgs.bashInteractive);
-            shell_argument = lib.mkDefault "-c";
-            elevated_shell_command = lib.mkDefault "sudo";
-            # Pass-through environment variables required by devenv-tasks when using elevated processes.
-            elevated_shell_argument = lib.mkDefault (lib.concatStringsSep " " [
-              "DEVENV_DOTFILE='${config.devenv.dotfile}'"
-              "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
-              "DEVENV_TASK_FILE='${config.task.config}'"
-              "-S"
-            ]);
-          };
-          processes = lib.mapAttrs
-            (name: value:
-              let
-                taskCmd = "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}";
-                command =
-                  if value.process-compose.is_elevated or false
-                  then taskCmd
-                  else "exec ${taskCmd}";
-              in
-              { inherit command; } // value.process-compose
-            )
-            config.processes;
+    process.managers.process-compose = {
+      configFile = lib.mkDefault (settingsFormat.generate "process-compose.yaml" cfg.settings);
+      settings = {
+        version = lib.mkDefault "0.5";
+        is_strict = lib.mkDefault true;
+        log_location = lib.mkDefault "${config.env.DEVENV_STATE}/process-compose/process-compose.log";
+        shell = {
+          shell_command = lib.mkDefault (lib.getExe pkgs.bashInteractive);
+          shell_argument = lib.mkDefault "-c";
+          elevated_shell_command = lib.mkDefault "sudo";
+          # Pass-through environment variables required by devenv-tasks when using elevated processes.
+          elevated_shell_argument = lib.mkDefault (lib.concatStringsSep " " [
+            "DEVENV_DOTFILE='${config.devenv.dotfile}'"
+            "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
+            "DEVENV_TASK_FILE='${config.env.DEVENV_TASK_FILE}'"
+            "-S"
+          ]);
         };
+        processes = lib.mapAttrs
+          (name: value:
+            let
+              taskCmd = "${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}";
+              command =
+                if value.process-compose.is_elevated or false
+                then taskCmd
+                else "exec ${taskCmd}";
+            in
+            { inherit command; } // value.process-compose
+          )
+          config.processes;
       };
-    })
-  ];
+    };
+  };
 }
