@@ -10,7 +10,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.nixseparatedebuginfod;
+      default = pkgs.nixseparatedebuginfod2;
       description = "nixseparatedebuginfod package to use.";
     };
 
