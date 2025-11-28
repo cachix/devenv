@@ -95,7 +95,7 @@ in
 
     process.manager.command = lib.mkDefault ''
       # Ensure the log directory exists
-      mkdir -p "${config.env.DEVENV_STATE}/process-compose"
+      mkdir -p "${config.devenv.state}/process-compose"
 
       ${lib.optionalString cfg.unixSocket.enable ''
       # Attach to an existing process-compose instance if:
@@ -123,7 +123,7 @@ in
       settings = {
         version = lib.mkDefault "0.5";
         is_strict = lib.mkDefault true;
-        log_location = lib.mkDefault "${config.env.DEVENV_STATE}/process-compose/process-compose.log";
+        log_location = lib.mkDefault "${config.devenv.state}/process-compose/process-compose.log";
         shell = {
           shell_command = lib.mkDefault (lib.getExe pkgs.bashInteractive);
           shell_argument = lib.mkDefault "-c";
@@ -132,7 +132,7 @@ in
           elevated_shell_argument = lib.mkDefault (lib.concatStringsSep " " [
             "DEVENV_DOTFILE='${config.devenv.dotfile}'"
             "DEVENV_CMDLINE=\"$DEVENV_CMDLINE\""
-            "DEVENV_TASK_FILE='${config.env.DEVENV_TASK_FILE}'"
+            "DEVENV_TASK_FILE='${config.task.config}'"
             "-S"
           ]);
         };
