@@ -6,6 +6,8 @@
 
 ### services\.nixseparatedebuginfod\.enable
 
+
+
 Whether to enable nixseparatedebuginfod\.
 
 
@@ -49,6 +51,49 @@ package
 
 
 
+### services\.nixseparatedebuginfod\.cache\.directory
+
+Override the directory where files downloaded from the substituter are stored\.
+
+Default is ` $XDG_CACHE_DIR/nixseparatedebuginfod2 `\.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+` null `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
+
+
+
+### services\.nixseparatedebuginfod\.cache\.expiration
+
+
+
+How long to keep cache entries\.
+A number followed by a unit\.
+
+
+
+*Type:*
+string
+
+
+
+*Default:*
+` "1d" `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
+
+
+
 ### services\.nixseparatedebuginfod\.host
 
 
@@ -85,6 +130,33 @@ Port for nixseparatedebuginfod to listen on\.
 
 *Default:*
 ` 1949 `
+
+*Declared by:*
+ - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
+
+
+
+### services\.nixseparatedebuginfod\.substituters
+
+
+
+Substituters to fetch debuginfo from\.
+
+
+
+*Type:*
+list of string
+
+
+
+*Default:*
+
+```
+[
+  "local:"
+  "https://cache.nixos.org"
+]
+```
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)
