@@ -42,7 +42,7 @@ package
 
 
 *Default:*
-` <derivation nixseparatedebuginfod2-1.0.1> `
+` pkgs.nixseparatedebuginfod2 `
 
 *Declared by:*
  - [https://github\.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod\.nix](https://github.com/cachix/devenv/blob/main/src/modules/services/nixseparatedebuginfod.nix)

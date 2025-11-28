@@ -11,6 +11,7 @@ in
     package = lib.mkOption {
       type = lib.types.package;
       default = pkgs.nixseparatedebuginfod2;
+      defaultText = lib.literalExpression "pkgs.nixseparatedebuginfod2";
       description = "nixseparatedebuginfod package to use.";
     };
 
