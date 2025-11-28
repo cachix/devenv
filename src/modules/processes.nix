@@ -121,74 +121,87 @@ in
     };
   };
 
-  config = lib.mkIf (config.processes != { }) {
-    assertions = [{
-      assertion =
+  config = lib.mkMerge [
+    # Always resolve and enable the correct process manager implementation.
+    # Making this conditional on processes has the potential of triggering infinite recursion.
+    #
+    # Suppose the user defines processes with a `mkIf` conditional on an env var.
+    # The module system needs to merge:
+    #
+    #   config.processes -> config.env -> any mkIf'd env in the process manager ->  config.process.managers.${implementation}.enable -> config.processes -> ...
+    #
+    # Infinite recursion, oh my!
+    {
+      assertions = [{
+        assertion =
+          let
+            enabledImplementations =
+              lib.pipe supportedImplementations [
+                (map (name: config.process.managers.${name}.enable))
+                (lib.filter lib.id)
+              ];
+          in
+          lib.length enabledImplementations == 1;
+        message = ''
+          Only a single process manager can be enabled at a time.
+        '';
+      }];
+
+      process.managers.${implementation}.enable = lib.mkDefault true;
+    }
+
+    (lib.mkIf options.processes.isDefined {
+      # Create tasks for each defined process
+      tasks = lib.mapAttrs'
+        (name: process: {
+          name = "devenv:processes:${name}";
+          value = {
+            type = "process";
+            exec = process.exec;
+            cwd = process.cwd;
+          };
+        })
+        config.processes;
+
+      procfile =
+        pkgs.writeText "procfile" (lib.concatStringsSep "\n"
+          (lib.mapAttrsToList (name: process: "${name}: exec ${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}")
+            config.processes));
+
+      procfileEnv =
         let
-          enabledImplementations =
-            lib.pipe supportedImplementations [
-              (map (name: config.process.managers.${name}.enable))
-              (lib.filter lib.id)
-            ];
+          envList =
+            lib.mapAttrsToList
+              (name: value: "${name}=${builtins.toJSON value}")
+              config.env;
         in
-        lib.length enabledImplementations == 1;
-      message = ''
-        Only a single process manager can be enabled at a time.
+        pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
+
+      procfileScript = pkgs.writeShellScript "devenv-up" ''
+        ${lib.optionalString config.devenv.debug "set -x"}
+
+        ${config.process.manager.before}
+
+        ${config.process.manager.command}
+
+        backgroundPID=$!
+
+        down() {
+          echo "Stopping processes..."
+          kill -TERM $backgroundPID
+          wait $backgroundPID
+          ${config.process.manager.after}
+          echo "Processes stopped."
+        }
+
+        trap down SIGINT SIGTERM
+
+        wait
       '';
-    }];
 
-    process.managers.${implementation}.enable = lib.mkDefault true;
+      ci = [ config.procfileScript ];
 
-    # Create tasks for each defined process
-    tasks = lib.mapAttrs'
-      (name: process: {
-        name = "devenv:processes:${name}";
-        value = {
-          type = "process";
-          exec = process.exec;
-          cwd = process.cwd;
-        };
-      })
-      config.processes;
-
-    procfile =
-      pkgs.writeText "procfile" (lib.concatStringsSep "\n"
-        (lib.mapAttrsToList (name: process: "${name}: exec ${config.task.package}/bin/devenv-tasks run --task-file ${config.task.config} --mode all devenv:processes:${name}")
-          config.processes));
-
-    procfileEnv =
-      let
-        envList =
-          lib.mapAttrsToList
-            (name: value: "${name}=${builtins.toJSON value}")
-            config.env;
-      in
-      pkgs.writeText "procfile-env" (lib.concatStringsSep "\n" envList);
-
-    procfileScript = pkgs.writeShellScript "devenv-up" ''
-      ${lib.optionalString config.devenv.debug "set -x"}
-
-      ${config.process.manager.before}
-
-      ${config.process.manager.command}
-
-      backgroundPID=$!
-
-      down() {
-        echo "Stopping processes..."
-        kill -TERM $backgroundPID
-        wait $backgroundPID
-        ${config.process.manager.after}
-        echo "Processes stopped."
-      }
-
-      trap down SIGINT SIGTERM
-
-      wait
-    '';
-
-    ci = [ config.procfileScript ];
-
-    infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") config.processes;
-  };
+      infoSections."processes" = lib.mapAttrsToList (name: process: "${name}: exec ${pkgs.writeShellScript name process.exec}") config.processes;
+    })
+  ];
 }
