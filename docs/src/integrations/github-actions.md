@@ -160,6 +160,17 @@ jobs:
         say-bye
 ```
 
+### Using with Nix Flakes
+
+If you're using devenv with [Nix Flakes](../guides/using-with-flakes.md) and `nix develop` to set the shell for a step, you may need to wrap the command in bash.
+This sets the necessary environment variables for devenv to work inside the restrictive flake shell.
+
+```yaml
+- name: Run command in flake shell
+  shell: bash -c "nix develop --impure -c bash -- {0}"
+  run: devenv test
+```
+
 [github-actions]: https://docs.github.com/actions
 [cachix]: https://cachix.org
 [nix]: https://nixos.org
