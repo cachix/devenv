@@ -1,4 +1,8 @@
-{ pkgs, lib, config, ... }:
+{ pkgs
+, lib
+, config
+, ...
+}:
 
 let
   cfg = config.services.nixseparatedebuginfod;
@@ -26,12 +30,61 @@ in
       default = 1949;
       description = "Port for nixseparatedebuginfod to listen on.";
     };
+
+    substituters = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "local:"
+        "https://cache.nixos.org"
+      ];
+      description = ''
+        Substituters to fetch debuginfo from.
+      '';
+    };
+
+    cache = {
+      directory = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Override the directory where files downloaded from the substituter are stored.
+
+          Default is `$XDG_CACHE_DIR/nixseparatedebuginfod2`.
+        '';
+      };
+
+      expiration = lib.mkOption {
+        type = lib.types.str;
+        default = "1d";
+        description = ''
+          How long to keep cache entries.
+          A number followed by a unit.
+        '';
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
-    processes.nixseparatedebuginfod.exec = ''
-      exec ${lib.getExe cfg.package} -l ${listen_address}
-    '';
+    processes.nixseparatedebuginfod.exec =
+      let
+        args = [
+          "--expiration"
+          cfg.cache.expiration
+          "--cache-dir"
+          cfg.cache.directory
+          "--listen-address"
+          listen_address
+        ]
+        ++ (lib.lists.concatMap
+          (s: [
+            "--substituter"
+            s
+          ])
+          cfg.substituters);
+      in
+      ''
+        exec ${lib.getExe cfg.package} ${lib.escapeShellArgs args}
+      '';
 
     enterShell = ''
       export DEBUGINFOD_URLS="http://${listen_address}''${DEBUGINFOD_URLS:+ $DEBUGINFOD_URLS}"
