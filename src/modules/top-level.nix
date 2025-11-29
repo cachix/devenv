@@ -215,7 +215,6 @@ in
       root = lib.mkOption {
         type = types.str;
         internal = true;
-        default = builtins.getEnv "PWD";
       };
 
       dotfile = lib.mkOption {
@@ -248,12 +247,6 @@ in
       tmpdir = lib.mkOption {
         type = types.str;
         internal = true;
-        default =
-          let
-            xdg = builtins.getEnv "XDG_RUNTIME_DIR";
-            tmp = builtins.getEnv "TMPDIR";
-          in
-          if xdg != "" then xdg else if tmp != "" then tmp else "/tmp";
       };
 
       profile = lib.mkOption {
@@ -290,14 +283,6 @@ in
 
   config = {
     assertions = [
-      {
-        assertion = config.devenv.root != "";
-        message = ''
-          devenv was not able to determine the current directory.
-
-          See https://devenv.sh/guides/using-with-flakes/ how to use it with flakes.
-        '';
-      }
       {
         assertion = config.devenv.flakesIntegration || config.overlays == [ ] || lib.versionAtLeast config.devenv.cliVersion "1.4.2";
         message = ''
