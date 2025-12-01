@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use clap::Parser;
 use devenv_activity::{
@@ -210,10 +210,7 @@ impl EventProcessor {
             _ => ActivityKind::Operation,
         };
 
-        let name = fields
-            .name
-            .clone()
-            .unwrap_or_else(|| "Unknown".to_string());
+        let name = fields.name.clone().unwrap_or_else(|| "Unknown".to_string());
 
         self.send(ActivityEvent::Start {
             id,

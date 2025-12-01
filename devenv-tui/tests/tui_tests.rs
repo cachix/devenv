@@ -4,7 +4,7 @@
 //! the TUI renders the expected output.
 
 use devenv_activity::{ActivityEvent, ActivityKind, ProgressState, ProgressUnit, Timestamp};
-use devenv_tui::{view::view, Model};
+use devenv_tui::{Model, view::view};
 use iocraft::prelude::*;
 
 const TEST_WIDTH: u16 = 80;

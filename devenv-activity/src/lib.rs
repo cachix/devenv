@@ -365,7 +365,9 @@ impl Activity {
 
     /// Start a build activity with detail
     pub fn build_with_detail(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Build, name).detail(detail).start()
+        Self::builder(ActivityKind::Build, name)
+            .detail(detail)
+            .start()
     }
 
     /// Start a fetch activity
@@ -385,7 +387,9 @@ impl Activity {
 
     /// Start a command activity
     pub fn command(name: impl Into<String>, cmd: impl Into<String>) -> Self {
-        Self::builder(ActivityKind::Command, name).detail(cmd).start()
+        Self::builder(ActivityKind::Command, name)
+            .detail(cmd)
+            .start()
     }
 
     /// Start a generic operation

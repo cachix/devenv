@@ -105,7 +105,10 @@ pub fn view(model: &Model) -> impl Into<AnyElement<'static>> {
         // Build and evaluation activities use early return with custom height - account for it
         if is_selected
             && (matches!(display_activity.activity.variant, ActivityVariant::Build(_))
-                || matches!(display_activity.activity.variant, ActivityVariant::Evaluating(_)))
+                || matches!(
+                    display_activity.activity.variant,
+                    ActivityVariant::Evaluating(_)
+                ))
             && let Some(logs) = selected_logs.as_ref()
         {
             let logs_component = BuildLogsComponent::new(Some(logs), show_expanded_logs);

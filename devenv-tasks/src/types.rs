@@ -14,7 +14,6 @@ pub enum TaskType {
     Process,
 }
 
-
 /// Dependency kind: wait for ready state or completion
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -30,7 +29,6 @@ pub enum DependencyKind {
     /// - For process tasks: wait for process to shut down
     Complete,
 }
-
 
 /// Dependency specification with optional suffix
 #[derive(Debug, Clone, PartialEq, Eq)]

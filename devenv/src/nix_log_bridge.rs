@@ -25,7 +25,6 @@ struct EvaluationState {
     activity: Option<Activity>,
 }
 
-
 /// Information about an active Nix activity
 struct NixActivityInfo {
     #[allow(dead_code)]
@@ -91,7 +90,6 @@ impl NixLogBridge {
             bridge.process_internal_log(log);
         }
     }
-
 
     /// Process a Nix internal log line and emit appropriate tracing events
     pub fn process_log_line(&self, line: &str) {
@@ -264,11 +262,12 @@ impl NixLogBridge {
                 if let Some(store_path) = fields.first().and_then(Self::extract_string_field) {
                     let package_name = extract_package_name(&store_path);
 
-                    let activity = Activity::builder(ActivityKind::Fetch, format!("Query {}", package_name))
-                        .id(activity_id)
-                        .detail(store_path)
-                        .parent(parent_id)
-                        .start();
+                    let activity =
+                        Activity::builder(ActivityKind::Fetch, format!("Query {}", package_name))
+                            .id(activity_id)
+                            .detail(store_path)
+                            .parent(parent_id)
+                            .start();
 
                     self.insert_activity(activity_id, operation_id, activity_type, activity);
                 }
@@ -329,9 +328,7 @@ impl NixLogBridge {
                         && let Ok(activities) = self.active_activities.lock()
                         && let Some(activity_info) = activities.get(&activity_id)
                     {
-                        activity_info
-                            .activity
-                            .progress(*done, *expected);
+                        activity_info.activity.progress(*done, *expected);
                     }
                 } else if fields.len() >= 2 {
                     // Fallback to download progress format for backward compatibility
@@ -349,13 +346,9 @@ impl NixLogBridge {
                             // Only CopyPath activities have byte-based download progress
                             if activity_info.activity_type == ActivityType::CopyPath {
                                 if let Some(total) = total_bytes {
-                                    activity_info
-                                        .activity
-                                        .progress_bytes(*downloaded, total);
+                                    activity_info.activity.progress_bytes(*downloaded, total);
                                 } else {
-                                    activity_info
-                                        .activity
-                                        .progress_indeterminate(*downloaded);
+                                    activity_info.activity.progress_indeterminate(*downloaded);
                                 }
                             }
                         }

@@ -345,9 +345,10 @@ impl Model {
 
     fn handle_activity_phase(&mut self, id: u64, phase: String) {
         if let Some(activity) = self.activities.get_mut(&id)
-            && let ActivityVariant::Build(ref mut build) = activity.variant {
-                build.phase = Some(phase);
-            }
+            && let ActivityVariant::Build(ref mut build) = activity.variant
+        {
+            build.phase = Some(phase);
+        }
     }
 
     fn handle_activity_log(&mut self, id: u64, line: String, is_error: bool) {
